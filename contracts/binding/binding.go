@@ -92,6 +92,20 @@ var (
 				Artisan,
 				Config,
 			},
+			Drivers: []Driver{
+				{
+					Name:    "OpenAI",
+					Package: "github.com/goravel/openai",
+				},
+				{
+					Name:    "Anthropic",
+					Package: "github.com/goravel/anthropic",
+				},
+				{
+					Name:    "Gemini",
+					Package: "github.com/goravel/gemini",
+				},
+			},
 		},
 		Auth: {
 			Description: "Provides support for JWT and Session drivers.",
@@ -291,11 +305,13 @@ var (
 			Description: "Routing system, which supports multiple web frameworks.",
 			PkgPath:     "github.com/goravel/framework/route",
 			Dependencies: []string{
-				Artisan,
+				Cache,
 				Config,
+				Hash,
 				Http,
 				RateLimiter,
 				Session,
+				Storage,
 				Validation,
 				View,
 			},

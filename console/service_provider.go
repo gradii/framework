@@ -32,7 +32,10 @@ func (r *ServiceProvider) Register(app foundation.Application) {
 
 func (r *ServiceProvider) Boot(app foundation.Application) {
 	artisanFacade := app.MakeArtisan()
-	artisanFacade.Register([]consolecontract.Command{
+	if artisanFacade == nil {
+		return
+	}
+	artisanFacade.Register(FilterCommandsByAllowlist([]consolecontract.Command{
 		console.NewListCommand(),
-	})
+		}, app.CommandsFilter()))
 }

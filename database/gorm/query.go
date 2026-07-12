@@ -19,6 +19,7 @@ import (
 	contractsdriver "github.com/goravel/framework/contracts/database/driver"
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
 	"github.com/goravel/framework/contracts/log"
+	contractstelemetry "github.com/goravel/framework/contracts/telemetry"
 	"github.com/goravel/framework/database/db"
 	databasedriver "github.com/goravel/framework/database/driver"
 	"github.com/goravel/framework/database/utils"
@@ -30,16 +31,17 @@ import (
 )
 
 type Query struct {
-	config          config.Config
-	ctx             context.Context
-	grammar         contractsdriver.Grammar
-	log             log.Log
-	instance        *gormio.DB
-	queries         map[string]*Query
-	modelToObserver []contractsorm.ModelToObserver
-	conditions      Conditions
-	dbConfig        contractsdatabase.Config
-	mutex           sync.Mutex
+	config            config.Config
+	ctx               context.Context
+	grammar           contractsdriver.Grammar
+	log               log.Log
+	instance          *gormio.DB
+	queries           map[string]*Query
+	modelToObserver   []contractsorm.ModelToObserver
+	conditions        Conditions
+	dbConfig          contractsdatabase.Config
+	mutex             sync.Mutex
+	telemetryResolver contractstelemetry.Resolver
 }
 
 func NewQuery(
@@ -51,16 +53,18 @@ func NewQuery(
 	log log.Log,
 	modelToObserver []contractsorm.ModelToObserver,
 	conditions *Conditions,
+	telemetryResolver contractstelemetry.Resolver,
 ) *Query {
 	queryImpl := &Query{
-		config:          config,
-		ctx:             ctx,
-		dbConfig:        dbConfig,
-		instance:        db,
-		grammar:         grammar,
-		log:             log,
-		modelToObserver: modelToObserver,
-		queries:         make(map[string]*Query),
+		config:            config,
+		ctx:               ctx,
+		dbConfig:          dbConfig,
+		instance:          db,
+		grammar:           grammar,
+		log:               log,
+		modelToObserver:   modelToObserver,
+		queries:           make(map[string]*Query),
+		telemetryResolver: telemetryResolver,
 	}
 
 	if conditions != nil {
@@ -70,7 +74,7 @@ func NewQuery(
 	return queryImpl
 }
 
-func BuildQuery(ctx context.Context, config config.Config, connection string, log log.Log, modelToObserver []contractsorm.ModelToObserver) (*Query, contractsdatabase.Config, error) {
+func BuildQuery(ctx context.Context, config config.Config, connection string, log log.Log, modelToObserver []contractsorm.ModelToObserver, telemetryResolver contractstelemetry.Resolver) (*Query, contractsdatabase.Config, error) {
 	driverCallback, exist := config.Get(fmt.Sprintf("database.connections.%s.via", connection)).(func() (contractsdriver.Driver, error))
 	if !exist {
 		return nil, contractsdatabase.Config{}, errors.DatabaseConfigNotFound
@@ -83,12 +87,12 @@ func BuildQuery(ctx context.Context, config config.Config, connection string, lo
 
 	pool := driver.Pool()
 	logger := db.NewLogger(config, log).ToGorm()
-	gorm, err := databasedriver.BuildGorm(config, logger, pool, connection)
+	gorm, _, err := databasedriver.BuildGorm(config, logger, pool, connection, telemetryResolver)
 	if err != nil {
 		return nil, pool.Writers[0], err
 	}
 
-	return NewQuery(ctx, config, pool.Writers[0], gorm, driver.Grammar(), log, modelToObserver, nil), pool.Writers[0], nil
+	return NewQuery(ctx, config, pool.Writers[0], gorm, driver.Grammar(), log, modelToObserver, nil, telemetryResolver), pool.Writers[0], nil
 }
 
 // DEPRECATED Use BeginTransaction instead.
@@ -826,7 +830,7 @@ func (r *Query) SelectRaw(query any, args ...any) contractsorm.Query {
 func (r *Query) WithContext(ctx context.Context) contractsorm.Query {
 	instance := r.instance.WithContext(ctx)
 
-	return NewQuery(ctx, r.config, r.dbConfig, instance, r.grammar, r.log, r.modelToObserver, nil)
+	return NewQuery(ctx, r.config, r.dbConfig, instance, r.grammar, r.log, r.modelToObserver, nil, r.telemetryResolver)
 }
 
 func (r *Query) SharedLock() contractsorm.Query {
@@ -1452,7 +1456,7 @@ func (r *Query) buildSharedLock(db *gormio.DB) *gormio.DB {
 
 func (r *Query) buildSubquery(sub func(contractsorm.Query) contractsorm.Query) *gormio.DB {
 	db := r.instance.Session(&gormio.Session{NewDB: true, Initialized: true})
-	queryImpl := NewQuery(r.ctx, r.config, r.dbConfig, db, r.grammar, r.log, r.modelToObserver, nil)
+	queryImpl := NewQuery(r.ctx, r.config, r.dbConfig, db, r.grammar, r.log, r.modelToObserver, nil, r.telemetryResolver)
 	query := sub(queryImpl)
 	var ok bool
 	if queryImpl, ok = query.(*Query); ok {
@@ -1719,7 +1723,7 @@ func (r *Query) getObserver(dest any) contractsorm.Observer {
 }
 
 func (r *Query) new(db *gormio.DB) *Query {
-	return NewQuery(r.ctx, r.config, r.dbConfig, db, r.grammar, r.log, r.modelToObserver, &r.conditions)
+	return NewQuery(r.ctx, r.config, r.dbConfig, db, r.grammar, r.log, r.modelToObserver, &r.conditions, r.telemetryResolver)
 }
 
 func (r *Query) omitCreate(value any) error {
@@ -1757,7 +1761,7 @@ func (r *Query) refreshConnection() (*Query, error) {
 	query, ok := r.queries[connection]
 	if !ok {
 		var err error
-		query, _, err = BuildQuery(r.ctx, r.config, connection, r.log, r.modelToObserver)
+		query, _, err = BuildQuery(r.ctx, r.config, connection, r.log, r.modelToObserver, r.telemetryResolver)
 		if err != nil {
 			return nil, err
 		}

@@ -790,7 +790,7 @@ func (r *Query) freshSession() *gormio.DB {
 // wrap turns a fresh GORM DB into a Goravel Query wrapper so user callbacks can use the
 // familiar Where/OrWhere/etc. surface.
 func (r *Query) wrap(db *gormio.DB) *Query {
-	return NewQuery(r.ctx, r.config, r.dbConfig, db, r.grammar, r.log, r.modelToObserver, nil)
+	return NewQuery(r.ctx, r.config, r.dbConfig, db, r.grammar, r.log, r.modelToObserver, nil, r.telemetryResolver)
 }
 
 func (r *Query) parentModel() any {

@@ -7,6 +7,7 @@ import (
 	"maps"
 	"os"
 	"os/signal"
+	stdpath "path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -20,7 +21,9 @@ import (
 	"google.golang.org/grpc/stats"
 
 	"github.com/goravel/framework/config"
+	frameworkconsole "github.com/goravel/framework/console"
 	"github.com/goravel/framework/console/console"
+	"github.com/goravel/framework/contracts/binding"
 	contractsconsole "github.com/goravel/framework/contracts/console"
 	"github.com/goravel/framework/contracts/foundation"
 	"github.com/goravel/framework/contracts/validation"
@@ -73,6 +76,7 @@ type Application struct {
 	publishGroups      map[string]map[string]string
 	json               foundation.Json
 	bootedRunners      []string
+	commandsFilter     []string
 	runnerWg           sync.WaitGroup
 	runnersToRun       []*RunnerWithInfo
 }
@@ -109,10 +113,13 @@ func (r *Application) Build() foundation.Application {
 	r.setTimezone()
 	r.configurePaths()
 	r.configureCustomConfig()
+	if r.builder.commandsFilter != nil {
+		r.commandsFilter = r.builder.commandsFilter()
+	}
 	r.configureServiceProviders()
 	r.providerRepository.Register(r)
-	r.providerRepository.Boot(r)
 	r.configureMiddleware()
+	r.providerRepository.Boot(r)
 	r.configureEventListeners()
 	r.configureCommands()
 	r.configureSchedule()
@@ -229,6 +236,9 @@ func (r *Application) Start() {
 		errs   []error
 	)
 
+	// Restart replaces r.cancel; an erroring runner must cancel the context it was started with.
+	cancel := r.cancel
+
 	run := func(runner *RunnerWithInfo) {
 		r.runnerWg.Add(1)
 
@@ -244,30 +254,9 @@ func (r *Application) Start() {
 					log.Errorf("failed to run %s: %v\n", runner.signature, err)
 				}
 
-				r.cancel()
+				cancel()
 			}
 			// Run may be a blocking call, so don't write anything after it.
-		}()
-
-		go func() {
-			defer runner.doneOnce.Do(func() {
-				r.runnerWg.Done()
-			})
-
-			<-r.ctx.Done()
-
-			// Only call Shutdown if the runner is still running (Run didn't error)
-			if !runner.running.Load() {
-				return
-			}
-
-			if err := runner.runner.Shutdown(); err != nil {
-				if log := r.MakeLog(); log != nil {
-					log.Errorf("failed to shutdown %s: %v\n", runner.signature, err)
-				}
-			}
-
-			runner.running.Store(false)
 		}()
 	}
 
@@ -275,17 +264,85 @@ func (r *Application) Start() {
 		run(runner)
 	}
 
+	if len(r.runnersToRun) > 0 {
+		go r.shutdownRunners()
+	}
+
 	r.runnerWg.Wait()
+
+	// Run may error after its shutdown completed, so reading errs still needs the lock.
+	errsMu.Lock()
+	defer errsMu.Unlock()
 
 	if len(errs) > 0 {
 		panic(errors.Join(errs...))
 	}
 }
 
+func (r *Application) shutdownRunners() {
+	<-r.ctx.Done()
+
+	for _, group := range r.runnersByShutdownPriority() {
+		var wg sync.WaitGroup
+
+		for _, runner := range group {
+			wg.Add(1)
+
+			go func(runner *RunnerWithInfo) {
+				defer wg.Done()
+				defer runner.doneOnce.Do(func() {
+					r.runnerWg.Done()
+				})
+
+				// Only call Shutdown if the runner is still running (Run didn't error)
+				if !runner.running.Load() {
+					return
+				}
+
+				if err := runner.runner.Shutdown(); err != nil {
+					if log := r.MakeLog(); log != nil {
+						log.Errorf("failed to shutdown %s: %v\n", runner.signature, err)
+					}
+				}
+
+				runner.running.Store(false)
+			}(runner)
+		}
+
+		wg.Wait()
+	}
+}
+
+func (r *Application) runnersByShutdownPriority() [][]*RunnerWithInfo {
+	groups := map[int][]*RunnerWithInfo{}
+	for _, runner := range r.runnersToRun {
+		priority := 0
+		if p, ok := runner.runner.(foundation.RunnerWithShutdownPriority); ok {
+			priority = p.ShutdownPriority()
+		}
+		groups[priority] = append(groups[priority], runner)
+	}
+
+	ordered := make([][]*RunnerWithInfo, 0, len(groups))
+	for _, priority := range slices.Sorted(maps.Keys(groups)) {
+		ordered = append(ordered, groups[priority])
+	}
+
+	return ordered
+}
+
 func (r *Application) SetBuilder(builder foundation.ApplicationBuilder) foundation.Application {
 	r.builder = builder.(*ApplicationBuilder)
 
 	return r
+}
+
+// CommandsFilter returns the positive-list of command signatures to keep.
+// nil means no filter is applied. Used by the console service provider so
+// its own command batch goes through the same gate as the framework's
+// defaultCommands batch.
+func (r *Application) CommandsFilter() []string {
+	return r.commandsFilter
 }
 
 func (r *Application) SetJson(j foundation.Json) {
@@ -420,12 +477,7 @@ func (r *Application) configureCallback() {
 func (r *Application) configureCommands() {
 	if r.builder.commands != nil {
 		if commands := r.builder.commands(); len(commands) > 0 {
-			artisanFacade := r.MakeArtisan()
-			if artisanFacade == nil {
-				color.Errorln("Artisan facade not found, please install it first: ./artisan package:install Artisan")
-			} else {
-				artisanFacade.Register(commands)
-			}
+			r.registerCommands(commands)
 		}
 	}
 }
@@ -572,6 +624,11 @@ func (r *Application) configureRoutes() {
 }
 
 func (r *Application) configureRunners() {
+	disabledRunners := []string{}
+	if config := r.MakeConfig(); config != nil {
+		disabledRunners = config.GetStringSlice("app.disabled_runners", []string{})
+	}
+
 	for _, serviceProvider := range r.providerRepository.GetBooted() {
 		if serviceProviderWithRunners, ok := serviceProvider.(foundation.ServiceProviderWithRunners); ok {
 			for _, runner := range serviceProviderWithRunners.Runners(r) {
@@ -582,7 +639,7 @@ func (r *Application) configureRunners() {
 
 				r.bootedRunners = append(r.bootedRunners, signature)
 
-				if runner.ShouldRun() {
+				if !r.isRunnerDisabled(signature, disabledRunners) && runner.ShouldRun() {
 					r.runnersToRun = append(r.runnersToRun, &RunnerWithInfo{signature: signature, runner: runner})
 				}
 			}
@@ -598,11 +655,27 @@ func (r *Application) configureRunners() {
 
 			r.bootedRunners = append(r.bootedRunners, signature)
 
-			if runner.ShouldRun() {
+			if !r.isRunnerDisabled(signature, disabledRunners) && runner.ShouldRun() {
 				r.runnersToRun = append(r.runnersToRun, &RunnerWithInfo{signature: signature, runner: runner})
 			}
 		}
 	}
+}
+
+func (r *Application) isRunnerDisabled(signature string, disabledRunners []string) bool {
+	for _, pattern := range disabledRunners {
+		matched, err := stdpath.Match(pattern, signature)
+		if err != nil {
+			if log := r.MakeLog(); log != nil {
+				log.Warning(errors.AppInvalidDisabledRunnersPattern.Args(pattern, err).Error())
+			}
+			continue
+		}
+		if matched {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *Application) configureSchedule() {
@@ -661,16 +734,42 @@ func (r *Application) configureValidation() {
 		} else {
 			if len(rules) > 0 {
 				if err := validationFacade.AddRules(rules); err != nil {
-					color.Errorf("add validation rules error: %+v", err)
+					color.Errorf("add validation rules error: %+v\n", err)
 				}
 			}
 			if len(filters) > 0 {
 				if err := validationFacade.AddFilters(filters); err != nil {
-					color.Errorf("add validation filters error: %+v", err)
+					color.Errorf("add validation filters error: %+v\n", err)
 				}
 			}
 		}
 	}
+}
+
+func (r *Application) defaultCommands() []contractsconsole.Command {
+	commands := []contractsconsole.Command{
+		console.NewAboutCommand(r),
+		console.NewEnvEncryptCommand(),
+		console.NewEnvDecryptCommand(),
+		console.NewTestMakeCommand(),
+		console.NewPackageMakeCommand(),
+		console.NewProviderMakeCommand(),
+		console.NewPackageInstallCommand(binding.Bindings, r.MakeProcess(), r.Json()),
+		console.NewPackageUninstallCommand(binding.Bindings, r.MakeProcess(), r.Json()),
+		console.NewVendorPublishCommand(r.publishes, r.publishGroups),
+	}
+
+	if r.MakeRoute() != nil {
+		storage := r.MakeStorage()
+		view := r.MakeView()
+		hash := r.MakeHash()
+		cache := r.MakeCache()
+		config := r.MakeConfig()
+		maintenance := console.NewMaintenanceMode(config, cache, storage)
+		commands = append(commands, console.NewUpCommand(maintenance), console.NewDownCommand(view, hash, maintenance))
+	}
+
+	return commands
 }
 
 func (r *Application) baseServiceProviders() []foundation.ServiceProvider {
@@ -690,7 +789,7 @@ func (r *Application) registerCommands(commands []contractsconsole.Command) {
 		return
 	}
 
-	artisanFacade.Register(commands)
+	artisanFacade.Register(frameworkconsole.FilterCommandsByAllowlist(commands, r.commandsFilter))
 }
 
 func (r *Application) setTimezone() {

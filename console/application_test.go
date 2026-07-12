@@ -1,6 +1,7 @@
 package console
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/goravel/framework/contracts/console"
 	"github.com/goravel/framework/contracts/console/command"
+	"github.com/goravel/framework/errors"
 )
 
 var (
@@ -54,6 +56,61 @@ func TestRun_Concurrent(t *testing.T) {
 
 	assert.Equal(t, int64(100), testCommand1.Load())
 	assert.Equal(t, int64(100), testCommand2.Load())
+}
+
+func TestRun_SignalHandling(t *testing.T) {
+	tests := []struct {
+		name      string
+		command   console.Command
+		preCancel bool
+		expectErr error
+		verify    func(t *testing.T, cmd console.Command)
+	}{
+		{
+			name:      "panic in handle is recovered",
+			command:   &TestPanicCommand{},
+			expectErr: errors.ConsoleCommandPanicInHandle,
+		},
+		{
+			name:      "shutdownable command runs ShutDown on cancel",
+			command:   &TestShutdownableCommand{},
+			preCancel: true,
+			verify: func(t *testing.T, cmd console.Command) {
+				assert.True(t, cmd.(*TestShutdownableCommand).shutdownCalled)
+			},
+		},
+		{
+			name:      "non-shutdownable command returns ctx error on cancel",
+			command:   &TestBlockingCommand{},
+			preCancel: true,
+			expectErr: context.Canceled,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cliApp := NewApplication("test", "test", "test", "test", true)
+			cliApp.Register([]console.Command{tt.command})
+
+			if tt.preCancel {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				cliApp.ctx = ctx
+			}
+
+			err := cliApp.Call(tt.command.Signature())
+
+			if tt.expectErr != nil {
+				assert.ErrorIs(t, err, tt.expectErr)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			if tt.verify != nil {
+				tt.verify(t, tt.command)
+			}
+		})
+	}
 }
 
 func TestFlagsToCliFlags(t *testing.T) {
@@ -485,3 +542,165 @@ func (receiver *TestCommand2) Handle(ctx console.Context) error {
 
 	return nil
 }
+
+type TestPanicCommand struct {
+}
+
+func (receiver *TestPanicCommand) Signature() string {
+	return "panic-command"
+}
+
+func (receiver *TestPanicCommand) Description() string {
+	return "Test panic command"
+}
+
+func (receiver *TestPanicCommand) Extend() command.Extend {
+	return command.Extend{}
+}
+
+func (receiver *TestPanicCommand) Handle(_ console.Context) error {
+	panic("oops")
+}
+
+type TestShutdownableCommand struct {
+	shutdownCalled bool
+}
+
+func (receiver *TestShutdownableCommand) Signature() string {
+	return "shutdown-cmd"
+}
+
+func (receiver *TestShutdownableCommand) Description() string {
+	return "Test shutdownable command"
+}
+
+func (receiver *TestShutdownableCommand) Extend() command.Extend {
+	return command.Extend{}
+}
+
+func (receiver *TestShutdownableCommand) Handle(ctx console.Context) error {
+	<-ctx.Done()
+	return nil
+}
+
+func (receiver *TestShutdownableCommand) Shutdown(_ console.Context) error {
+	receiver.shutdownCalled = true
+	return nil
+}
+
+type TestBlockingCommand struct {
+}
+
+func (receiver *TestBlockingCommand) Signature() string {
+	return "blocking-cmd"
+}
+
+func (receiver *TestBlockingCommand) Description() string {
+	return "Test blocking command"
+}
+
+func (receiver *TestBlockingCommand) Extend() command.Extend {
+	return command.Extend{}
+}
+
+func (receiver *TestBlockingCommand) Handle(ctx console.Context) error {
+	<-ctx.Done()
+	return nil
+}
+
+func TestFilterCommandsByAllowlist(t *testing.T) {
+	mkCmd := func(sig string) console.Command {
+		return &filterTestCommand{signature: sig}
+	}
+	commands := []console.Command{
+		mkCmd("env:encrypt"),
+		mkCmd("env:decrypt"),
+		mkCmd("make:controller"),
+		mkCmd("make:job"),
+		mkCmd("make:test"),
+		mkCmd("package:install"),
+		mkCmd("vendor:publish"),
+		mkCmd("up"),
+		mkCmd("down"),
+	}
+
+	tests := []struct {
+		name     string
+		allow    []string
+		expected []string
+	}{
+		{
+			name:     "nil allowlist returns the input slice as-is",
+			allow:    nil,
+			expected: []string{"env:encrypt", "env:decrypt", "make:controller", "make:job", "make:test", "package:install", "vendor:publish", "up", "down"},
+		},
+		{
+			name:     "empty allowlist drops everything",
+			allow:    []string{},
+			expected: []string{},
+		},
+		{
+			name:     "exact signature",
+			allow:    []string{"env:encrypt"},
+			expected: []string{"env:encrypt"},
+		},
+		{
+			name:     "glob prefix matches sub-commands",
+			allow:    []string{"env:*"},
+			expected: []string{"env:encrypt", "env:decrypt"},
+		},
+		{
+			name:     "glob prefix matches bare signature too",
+			allow:    []string{"make*"},
+			expected: []string{"make:controller", "make:job", "make:test"},
+		},
+		{
+			name:     "mixed exact and glob",
+			allow:    []string{"vendor:publish", "env:*"},
+			expected: []string{"env:encrypt", "env:decrypt", "vendor:publish"},
+		},
+		{
+			name:     "question mark is literal, not a wildcard",
+			allow:    []string{"env:?ncrypt"},
+			expected: []string{},
+		},
+		{
+			name:     "whitespace-only and empty entries are ignored",
+			allow:    []string{"  ", ""},
+			expected: []string{},
+		},
+		{
+			name:     "category is not consulted",
+			allow:    []string{"make"},
+			expected: []string{},
+		},
+		{
+			name:     "wildcard star matches everything",
+			allow:    []string{"*"},
+			expected: []string{"env:encrypt", "env:decrypt", "make:controller", "make:job", "make:test", "package:install", "vendor:publish", "up", "down"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := FilterCommandsByAllowlist(commands, tt.allow)
+			gotSigs := make([]string, 0, len(got))
+			for _, c := range got {
+				gotSigs = append(gotSigs, c.Signature())
+			}
+			assert.Equal(t, tt.expected, gotSigs)
+		})
+	}
+}
+
+type filterTestCommand struct {
+	console.Command
+	signature string
+}
+
+func (f *filterTestCommand) Signature() string  { return f.signature }
+func (f *filterTestCommand) Description() string { return f.signature }
+func (f *filterTestCommand) Extend() command.Extend {
+	return command.Extend{}
+}
+func (f *filterTestCommand) Handle(_ console.Context) error { return nil }

@@ -44,7 +44,3 @@ func (r *ServiceProvider) Boot(app foundation.Application) {
 		routeconsole.NewList(route),
 	})
 }
-
-func (r *ServiceProvider) Runners(app foundation.Application) []foundation.Runner {
-	return []foundation.Runner{NewRouteRunner(app.MakeConfig(), app.MakeRoute())}
-}

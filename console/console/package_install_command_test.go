@@ -93,6 +93,7 @@ func (s *PackageInstallCommandTestSuite) TestHandle() {
 				s.mockContext.EXPECT().Arguments().Return([]string{pkg}).Once()
 				s.mockContext.EXPECT().OptionBool("dev").Return(false).Once()
 				s.mockProcess.EXPECT().Run("go", "get", pkg).Return(mockSuccessResult(s.T())).Once()
+				s.mockProcess.EXPECT().Run("go", "mod", "download", "all").Return(mockSuccessResult(s.T())).Once()
 				failedResult := mockFailedResult(s.T(), assert.AnError)
 				s.mockProcess.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(failedResult).Once()
 				s.mockProcess.EXPECT().WithSpinner("Installing " + pkg).Return(s.mockProcess).Once()
@@ -106,6 +107,7 @@ func (s *PackageInstallCommandTestSuite) TestHandle() {
 				s.mockContext.EXPECT().Arguments().Return([]string{pkg}).Once()
 				s.mockContext.EXPECT().OptionBool("dev").Return(false).Once()
 				s.mockProcess.EXPECT().Run("go", "get", pkg).Return(mockSuccessResult(s.T())).Once()
+				s.mockProcess.EXPECT().Run("go", "mod", "download", "all").Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().WithSpinner("Installing " + pkg).Return(s.mockProcess).Once()
 				failedResult := mockFailedResult(s.T(), assert.AnError)
@@ -119,6 +121,7 @@ func (s *PackageInstallCommandTestSuite) TestHandle() {
 				s.mockContext.EXPECT().Arguments().Return([]string{pkg}).Once()
 				s.mockContext.EXPECT().OptionBool("dev").Return(false).Once()
 				s.mockProcess.EXPECT().Run("go", "get", pkg).Return(mockSuccessResult(s.T())).Once()
+				s.mockProcess.EXPECT().Run("go", "mod", "download", "all").Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().WithSpinner("Installing " + pkg).Return(s.mockProcess).Once()
 				s.mockProcess.EXPECT().Run("go", "mod", "tidy").Return(mockSuccessResult(s.T())).Once()
@@ -233,6 +236,7 @@ func (s *PackageInstallCommandTestSuite) TestHandle() {
 
 				s.mockContext.EXPECT().OptionBool("dev").Return(false).Once()
 				s.mockProcess.EXPECT().Run("go", "get", pkg).Return(mockSuccessResult(s.T())).Once()
+				s.mockProcess.EXPECT().Run("go", "mod", "download", "all").Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().WithSpinner("Installing " + pkg).Return(s.mockProcess).Once()
 				s.mockProcess.EXPECT().Run("go", "mod", "tidy").Return(mockSuccessResult(s.T())).Once()
@@ -313,6 +317,7 @@ func (s *PackageInstallCommandTestSuite) Test_installFacade_TwoFacadesHaveTheSam
 	}).Return(pkg, nil).Once()
 	s.mockContext.EXPECT().OptionBool("dev").Return(false).Once()
 	s.mockProcess.EXPECT().Run("go", "get", pkg).Return(mockSuccessResult(s.T())).Once()
+	s.mockProcess.EXPECT().Run("go", "mod", "download", "all").Return(mockSuccessResult(s.T())).Once()
 	s.mockProcess.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
 	s.mockProcess.EXPECT().WithSpinner("Installing " + pkg).Return(s.mockProcess).Once()
 	s.mockProcess.EXPECT().Run("go", "mod", "tidy").Return(mockSuccessResult(s.T())).Once()
@@ -465,6 +470,7 @@ func (s *PackageInstallCommandTestSuite) Test_installDriver() {
 				}).Return(pkg, nil).Once()
 				s.mockContext.EXPECT().OptionBool("dev").Return(false).Once()
 				s.mockProcess.EXPECT().Run("go", "get", pkg).Return(mockSuccessResult(s.T())).Once()
+				s.mockProcess.EXPECT().Run("go", "mod", "download", "all").Return(mockSuccessResult(s.T())).Once()
 				mockProcessWithSpinner := mocksprocess.NewProcess(s.T())
 				mockProcessWithSpinner.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().WithSpinner("Installing " + pkg).Return(mockProcessWithSpinner).Once()
@@ -574,9 +580,11 @@ func TestGetDependencyBindings(t *testing.T) {
 			binding.Cache,
 			binding.Schema,
 			binding.Orm,
+			binding.Hash,
 			binding.Http,
 			binding.RateLimiter,
 			binding.Session,
+			binding.Storage,
 			binding.Validation,
 			binding.View,
 			binding.Route,
@@ -597,9 +605,11 @@ func TestGetDependencyBindings(t *testing.T) {
 			binding.Log,
 			binding.Cache,
 			binding.Orm,
+			binding.Hash,
 			binding.Http,
 			binding.RateLimiter,
 			binding.Session,
+			binding.Storage,
 			binding.Validation,
 			binding.View,
 			binding.Route,
@@ -686,6 +696,7 @@ func (s *PackageInstallCommandTestSuite) Test_installDriver_WithDefaultFlag() {
 				s.mockContext.EXPECT().OptionBool("default").Return(true).Once()
 				s.mockContext.EXPECT().OptionBool("dev").Return(false).Once()
 				s.mockProcess.EXPECT().Run("go", "get", pkg).Return(mockSuccessResult(s.T())).Once()
+				s.mockProcess.EXPECT().Run("go", "mod", "download", "all").Return(mockSuccessResult(s.T())).Once()
 				mockProcessWithSpinner := mocksprocess.NewProcess(s.T())
 				mockProcessWithSpinner.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().WithSpinner("Installing " + pkg).Return(mockProcessWithSpinner).Once()
@@ -763,6 +774,7 @@ func (s *PackageInstallCommandTestSuite) Test_installPackage_WithDevFlag() {
 			setup: func() {
 				s.mockContext.EXPECT().OptionBool("dev").Return(true).Once()
 				s.mockProcess.EXPECT().Run("go", "get", pkg+"@master").Return(mockSuccessResult(s.T())).Once()
+				s.mockProcess.EXPECT().Run("go", "mod", "download", "all").Return(mockSuccessResult(s.T())).Once()
 				mockProcessWithSpinner := mocksprocess.NewProcess(s.T())
 				mockProcessWithSpinner.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().WithSpinner("Installing " + pkg + "@master").Return(mockProcessWithSpinner).Once()
@@ -775,6 +787,7 @@ func (s *PackageInstallCommandTestSuite) Test_installPackage_WithDevFlag() {
 			pkg:  pkg + "@v1.0.0",
 			setup: func() {
 				s.mockProcess.EXPECT().Run("go", "get", pkg+"@v1.0.0").Return(mockSuccessResult(s.T())).Once()
+				s.mockProcess.EXPECT().Run("go", "mod", "download", "all").Return(mockSuccessResult(s.T())).Once()
 				mockProcessWithSpinner := mocksprocess.NewProcess(s.T())
 				mockProcessWithSpinner.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().WithSpinner("Installing " + pkg + "@v1.0.0").Return(mockProcessWithSpinner).Once()
@@ -788,6 +801,7 @@ func (s *PackageInstallCommandTestSuite) Test_installPackage_WithDevFlag() {
 			setup: func() {
 				s.mockContext.EXPECT().OptionBool("dev").Return(false).Once()
 				s.mockProcess.EXPECT().Run("go", "get", pkg).Return(mockSuccessResult(s.T())).Once()
+				s.mockProcess.EXPECT().Run("go", "mod", "download", "all").Return(mockSuccessResult(s.T())).Once()
 				mockProcessWithSpinner := mocksprocess.NewProcess(s.T())
 				mockProcessWithSpinner.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().WithSpinner("Installing " + pkg).Return(mockProcessWithSpinner).Once()

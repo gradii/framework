@@ -22,6 +22,22 @@ type ApplicationBuilder interface {
 	WithCallback(func()) ApplicationBuilder
 	// WithCommands sets the application's commands.
 	WithCommands(func() []console.Command) ApplicationBuilder
+	// WithCommandsFilter registers a callback that returns the positive list of
+	// command signatures to keep when the framework registers Artisan commands.
+	// The callback runs once at Build() time.
+	//
+	// Matching is signature-only (category never consulted):
+	//   - Entries without '*' are exact-matched against command.Signature().
+	//   - Entries containing '*' use glob matching via path.Match against
+	//     command.Signature() (only '*' triggers the glob path; '?' is
+	//     matched literally as an exact match).
+	//
+	// Semantics:
+	//   - Method not called           → keep every command (default).
+	//   - Callback returns nil        → keep every command (no filter).
+	//   - Callback returns []string{} → drop every command.
+	//   - Callback returns entries    → keep only commands matching an entry.
+	WithCommandsFilter(func() []string) ApplicationBuilder
 	// WithConfig sets a callback function to configure the application.
 	WithConfig(func()) ApplicationBuilder
 	// WithEvents sets event listeners for the application.
@@ -29,7 +45,7 @@ type ApplicationBuilder interface {
 	// WithFilters sets the application's validation filters.
 	WithFilters(func() []validation.Filter) ApplicationBuilder
 	// WithGrpcClientCredentials registers groups of gRPC client transport credentials
-	// (e.g. mTLS). Keys are referenced via `grpc.servers.<name>.creds` to
+	// (e.g. mTLS). Keys are referenced via `grpc.clients.<name>.creds` to
 	// override the default insecure credentials on matching connections.
 	WithGrpcClientCredentials(func() map[string]credentials.TransportCredentials) ApplicationBuilder
 	// WithGrpcClientInterceptors sets the grouped gRPC client interceptors.

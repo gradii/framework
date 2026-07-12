@@ -115,7 +115,7 @@ func TestExtractKeysDeduplicatesAndSkipsZero(t *testing.T) {
 	idField := s.FieldsByDBName["id"]
 	assert.NotNil(t, idField)
 
-	q := NewQuery(context.Background(), nil, contractsdatabase.Config{}, db, nil, nil, nil, &Conditions{})
+	q := NewQuery(context.Background(), nil, contractsdatabase.Config{}, db, nil, nil, nil, &Conditions{}, nil)
 
 	parents := []reflect.Value{
 		reflect.ValueOf(relUser{ID: 1}),
@@ -497,7 +497,7 @@ func TestExtractKeys_EmptyInput(t *testing.T) {
 	assert.NoError(t, err)
 	idField := s.FieldsByDBName["id"]
 
-	q := NewQuery(context.Background(), nil, contractsdatabase.Config{}, db, nil, nil, nil, &Conditions{})
+	q := NewQuery(context.Background(), nil, contractsdatabase.Config{}, db, nil, nil, nil, &Conditions{}, nil)
 	keys := extractKeys(q, []reflect.Value{}, idField)
 	assert.Empty(t, keys)
 }

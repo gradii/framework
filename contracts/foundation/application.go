@@ -41,6 +41,15 @@ type Runner interface {
 	Shutdown() error
 }
 
+type RunnerWithShutdownPriority interface {
+	Runner
+
+	// ShutdownPriority determines the shutdown order; groups are shut down in
+	// ascending order, runners within a group concurrently. Runners without
+	// this interface default to 0.
+	ShutdownPriority() int
+}
+
 type AboutItem struct {
 	Key   string
 	Value string
@@ -56,6 +65,9 @@ type Application interface {
 	Build() Application
 	// Commands register the given commands with the console application.
 	Commands([]console.Command)
+	// CommandsFilter returns the positive-list of command signatures to keep
+	// (set via WithCommandsFilter). nil means no filter.
+	CommandsFilter() []string
 	// Context gets the application context.
 	Context() context.Context
 	// GetJson get the JSON implementation.

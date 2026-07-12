@@ -38,8 +38,6 @@ func TestWriter(t *testing.T) {
 	)
 
 	beforeEach := func() {
-		// Clear handler cache to ensure each test starts fresh
-		clearChannelCache()
 		mockConfig = initMockConfig(t)
 	}
 
@@ -368,8 +366,6 @@ func TestWriter(t *testing.T) {
 }
 
 func TestWriter_WithContext(t *testing.T) {
-	// Clear handler cache
-	clearChannelCache()
 
 	// First NewApplication call reads config and creates handlers which are then cached.
 	// WithContext creates a new Application, but reuses the cached handlers,
@@ -415,8 +411,6 @@ func TestWriter_WithContext(t *testing.T) {
 }
 
 func TestWriter_LevelNotMatch(t *testing.T) {
-	// Clear handler cache
-	clearChannelCache()
 
 	mockConfig := mocksconfig.NewConfig(t)
 	mockConfig.EXPECT().GetString("logging.default").Return("stack").Once()
@@ -444,9 +438,42 @@ func TestWriter_LevelNotMatch(t *testing.T) {
 	assert.False(t, file.Contains(dailyLog, "test.debug: No Debug Goravel"))
 }
 
+func TestWriter_SingleChannelLevelNotMatch(t *testing.T) {
+
+	// This test verifies that with a single channel (no FanoutHandler wrapping),
+	// the Enabled() check in Writer.log() correctly filters log levels.
+	// This covers the exact scenario from issue #977: LOG_LEVEL=error but
+	// info logs still appear when the stack has only one channel.
+
+	mockConfig := mocksconfig.NewConfig(t)
+	mockConfig.EXPECT().GetString("logging.channels.daily.driver").Return("daily").Once()
+	mockConfig.EXPECT().GetString("logging.channels.daily.path").Return(singleLog).Once()
+	mockConfig.EXPECT().GetInt("logging.channels.daily.days").Return(7).Once()
+	mockConfig.EXPECT().GetBool("logging.channels.daily.print").Return(false).Once()
+	mockConfig.EXPECT().GetString("logging.channels.daily.level").Return("error").Once()
+	mockConfig.EXPECT().GetString("logging.channels.daily.formatter", "text").Return("text").Once()
+	// app.env is only called when Error is actually logged
+	mockConfig.EXPECT().GetString("app.env").Return("test").Once()
+
+	log, err := NewApplication(context.Background(), []string{"daily"}, mockConfig, json.New(), nil)
+	assert.Nil(t, err)
+
+	// Debug should be filtered out (level error > debug)
+	log.Debug("No Debug Goravel")
+	assert.False(t, file.Contains(dailyLog, "test.debug: No Debug Goravel"))
+
+	// Info should be filtered out (level error > info)
+	log.Info("No Info Goravel")
+	assert.False(t, file.Contains(dailyLog, "test.info: No Info Goravel"))
+
+	// Error should pass through (level error == error)
+	log.Error("Error Goravel")
+	assert.True(t, file.Contains(dailyLog, "test.error: Error Goravel"))
+
+	_ = file.Remove("storage")
+}
+
 func TestWriter_DailyLogWithDifferentDays(t *testing.T) {
-	// Clear handler cache
-	clearChannelCache()
 
 	mockConfig := initMockConfig(t)
 	// app.env is called twice per log write (once for each handler: single + daily)
@@ -481,8 +508,6 @@ func TestWriter_DailyLogWithDifferentDays(t *testing.T) {
 }
 
 func TestWriterWithCustomLogger(t *testing.T) {
-	// Clear handler cache
-	clearChannelCache()
 
 	mockConfig := mocksconfig.NewConfig(t)
 	mockConfig.EXPECT().GetString("logging.default").Return("customLogger").Once()
@@ -512,8 +537,6 @@ func TestWriterWithCustomLogger(t *testing.T) {
 }
 
 func TestWriter_Fatal(t *testing.T) {
-	// Clear handler cache
-	clearChannelCache()
 
 	mockConfig := initMockConfig(t)
 	log, err := NewApplication(context.Background(), nil, mockConfig, json.New(), nil)
@@ -537,8 +560,6 @@ func TestWriter_Fatal(t *testing.T) {
 }
 
 func TestWriter_Fatalf(t *testing.T) {
-	// Clear handler cache
-	clearChannelCache()
 
 	mockConfig := initMockConfig(t)
 	log, err := NewApplication(context.Background(), nil, mockConfig, json.New(), nil)
@@ -562,8 +583,6 @@ func TestWriter_Fatalf(t *testing.T) {
 }
 
 func TestWriter_ConcurrentAccess(t *testing.T) {
-	// Clear handler cache
-	clearChannelCache()
 
 	// This test verifies that concurrent access to the same log.Writer
 	// does not cause data races or entry contamination.
@@ -667,8 +686,6 @@ func TestWriter_ConcurrentAccess(t *testing.T) {
 }
 
 func TestWriter_NoEntryContamination(t *testing.T) {
-	// Clear handler cache
-	clearChannelCache()
 
 	// This test verifies that calling fluent methods on the base writer
 	// returns a new writer and does not affect the original.
@@ -691,8 +708,6 @@ func TestWriter_NoEntryContamination(t *testing.T) {
 }
 
 func TestWriter_FluentChainIsolation(t *testing.T) {
-	// Clear handler cache
-	clearChannelCache()
 
 	// This test verifies that multiple fluent chains are isolated from each other.
 	mockConfig := initMockConfig(t)

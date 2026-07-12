@@ -18,7 +18,7 @@ func newRelQuery(t *testing.T) *Query {
 	t.Helper()
 	db := newStubGormDB(t)
 	conditions := Conditions{}
-	return NewQuery(context.Background(), nil, contractsdatabase.Config{}, db, nil, nil, nil, &conditions)
+	return NewQuery(context.Background(), nil, contractsdatabase.Config{}, db, nil, nil, nil, &conditions, nil)
 }
 
 func toQuery(q contractsorm.Query) *Query {

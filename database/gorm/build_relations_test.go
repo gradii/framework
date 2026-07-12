@@ -18,7 +18,7 @@ func newRelQueryWith(t *testing.T, model any) *Query {
 	t.Helper()
 	db := newStubGormDB(t)
 	conditions := Conditions{model: model}
-	return NewQuery(context.Background(), nil, contractsdatabase.Config{}, db, nil, nil, nil, &conditions)
+	return NewQuery(context.Background(), nil, contractsdatabase.Config{}, db, nil, nil, nil, &conditions, nil)
 }
 
 func dryRunSQL(t *testing.T, db *gormio.DB) string {
