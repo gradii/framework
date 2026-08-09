@@ -52,6 +52,11 @@ func (r *QueueMail) Queue() *mail.Queue {
 	return r.queue
 }
 
+// With returns the data passed to every view of the mail
+func (r *QueueMail) With() map[string]any {
+	return map[string]any{}
+}
+
 func (r *QueueMail) OnConnection(connection string) *QueueMail {
 	r.queue.Connection = connection
 

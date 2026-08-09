@@ -32,9 +32,10 @@ type Application struct {
 	params   Params
 	clone    int
 
-	htmlView string
-	textView string
-	with     map[string]any
+	htmlView    string
+	textView    string
+	subjectView string
+	with        map[string]any
 }
 
 func NewApplication(config config.Config, queue contractsqueue.Queue) (*Application, error) {
@@ -77,7 +78,13 @@ func (r *Application) Content(content mail.Content) mail.Mail {
 	instance.params.Text = content.Text
 	instance.htmlView = content.HtmlView
 	instance.textView = content.TextView
-	instance.with = content.With
+
+	return instance
+}
+
+func (r *Application) With(data map[string]any) mail.Mail {
+	instance := r.instance()
+	instance.with = data
 
 	return instance
 }
@@ -212,7 +219,12 @@ func (r *Application) setUsingMailable(mailable mail.Mailable) {
 		}
 		r.htmlView = content.HtmlView
 		r.textView = content.TextView
-		r.with = content.With
+	}
+
+	// Read once, outside Content: With now feeds the body views and the
+	// subject view alike.
+	if with := mailable.With(); len(with) > 0 {
+		r.with = with
 	}
 
 	if attachments := mailable.Attachments(); len(attachments) > 0 {
@@ -240,10 +252,24 @@ func (r *Application) setUsingMailable(mailable mail.Mailable) {
 		if envelope.Subject != "" {
 			r.params.Subject = envelope.Subject
 		}
+		r.subjectView = envelope.SubjectView
 	}
 }
 
 func (r *Application) renderViewTemplate() error {
+	if r.subjectView != "" && r.template != nil {
+		subject, err := r.template.Render(r.subjectView, r.with)
+		if err != nil {
+			return err
+		}
+		// A subject becomes a header, so a CR or LF in the render would start
+		// a new header. Keep the first non-empty line. Templates end in a
+		// newline, so this is the common case, not just the hostile one.
+		if subject = sanitizeSubject(subject); subject != "" {
+			r.params.Subject = subject
+		}
+	}
+
 	if r.htmlView != "" && r.template != nil {
 		html, err := r.template.Render(r.htmlView, r.with)
 		if err != nil {

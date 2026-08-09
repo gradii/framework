@@ -86,12 +86,8 @@ func (s *ApplicationTestSuite) TestSendMailViaTemplate() {
 		Bcc([]string{testBcc}).
 		Attach([]string{"../logo.png"}).
 		Subject("Goravel Test template").
-		Content(mail.Content{
-			HtmlView: "test.tmpl",
-			With: map[string]any{
-				"name": "Goravel",
-			},
-		}).
+		Content(mail.Content{HtmlView: "test.tmpl"}).
+		With(map[string]any{"name": "Goravel"}).
 		Headers(map[string]string{"Test-Mailer-Port": "465"}).
 		Send())
 }
@@ -267,12 +263,17 @@ func (m *TestMailable) Queue() *mail.Queue {
 	return &mail.Queue{}
 }
 
+func (m *TestMailable) With() map[string]any {
+	return map[string]any{}
+}
+
 type stubMailable struct {
 	attachments []string
 	content     *mail.Content
 	envelope    *mail.Envelope
 	headers     map[string]string
 	queue       *mail.Queue
+	with        map[string]any
 }
 
 func (s *stubMailable) Attachments() []string      { return s.attachments }
@@ -280,6 +281,7 @@ func (s *stubMailable) Content() *mail.Content     { return s.content }
 func (s *stubMailable) Envelope() *mail.Envelope   { return s.envelope }
 func (s *stubMailable) Headers() map[string]string { return s.headers }
 func (s *stubMailable) Queue() *mail.Queue         { return s.queue }
+func (s *stubMailable) With() map[string]any       { return s.with }
 
 func matchWithID(data any) bool {
 	with, ok := data.(map[string]any)
@@ -307,8 +309,8 @@ func TestApplicationBuilderMethodsCloneAndMutate(t *testing.T) {
 			Text:     "Hello",
 			HtmlView: "mail.tmpl",
 			TextView: "mail.txt",
-			With:     contentWith,
-		}).(*Application)
+		}).
+		With(contentWith).(*Application)
 
 	// Builder methods should keep returning the same cloned instance for fluent chaining.
 	assert.Same(t, instance, chained)
@@ -336,8 +338,8 @@ func TestApplicationSetUsingMailable(t *testing.T) {
 			Text:     "new-text",
 			HtmlView: "email.tmpl",
 			TextView: "email.txt",
-			With:     map[string]any{"name": "goravel"},
 		},
+		with: map[string]any{"name": "goravel"},
 		envelope: &mail.Envelope{
 			From:    mail.Address{Address: "from@example.com", Name: "Mailer"},
 			To:      []string{"to@example.com"},
@@ -471,7 +473,10 @@ func TestApplicationSendRenderError(t *testing.T) {
 	template.EXPECT().Render("mail.tmpl", mock.MatchedBy(matchWithID)).Return("", errors.New("render failed")).Once()
 
 	app := &Application{template: template}
-	err := app.Send(&stubMailable{content: &mail.Content{HtmlView: "mail.tmpl", With: map[string]any{"id": 1}}})
+	err := app.Send(&stubMailable{
+		content: &mail.Content{HtmlView: "mail.tmpl"},
+		with:    map[string]any{"id": 1},
+	})
 
 	assert.ErrorContains(t, err, "render failed")
 }

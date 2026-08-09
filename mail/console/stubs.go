@@ -28,6 +28,11 @@ func (receiver *DummyMail) Content() *mail.Content {
 	return &mail.Content{}
 }
 
+// With set the data passed to every view of the mail
+func (receiver *DummyMail) With() map[string]any {
+	return map[string]any{}
+}
+
 // Envelope set the envelope of the mail
 func (receiver *DummyMail) Envelope() *mail.Envelope {
     return &mail.Envelope{}

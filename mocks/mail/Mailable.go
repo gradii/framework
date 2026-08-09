@@ -255,6 +255,53 @@ func (_c *Mailable_Queue_Call) RunAndReturn(run func() *mail.Queue) *Mailable_Qu
 	return _c
 }
 
+// With provides a mock function with no fields
+func (_m *Mailable) With() map[string]interface{} {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for With")
+	}
+
+	var r0 map[string]interface{}
+	if rf, ok := ret.Get(0).(func() map[string]interface{}); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[string]interface{})
+		}
+	}
+
+	return r0
+}
+
+// Mailable_With_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'With'
+type Mailable_With_Call struct {
+	*mock.Call
+}
+
+// With is a helper method to define mock.On call
+func (_e *Mailable_Expecter) With() *Mailable_With_Call {
+	return &Mailable_With_Call{Call: _e.mock.On("With")}
+}
+
+func (_c *Mailable_With_Call) Run(run func()) *Mailable_With_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *Mailable_With_Call) Return(_a0 map[string]interface{}) *Mailable_With_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Mailable_With_Call) RunAndReturn(run func() map[string]interface{}) *Mailable_With_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // NewMailable creates a new instance of Mailable. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
 func NewMailable(t interface {

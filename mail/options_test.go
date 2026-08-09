@@ -26,7 +26,7 @@ func TestQueueMail(t *testing.T) {
 		assert.Empty(t, mail.Content().Text)
 		assert.Empty(t, mail.Content().HtmlView)
 		assert.Empty(t, mail.Content().TextView)
-		assert.Nil(t, mail.Content().With)
+		assert.Empty(t, mail.With())
 		assert.Equal(t, "", mail.Envelope().Subject)
 		assert.Empty(t, mail.Envelope().To)
 		assert.Empty(t, mail.Headers())

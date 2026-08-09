@@ -21,6 +21,8 @@ type Mail interface {
 	Subject(subject string) Mail
 	// To set the recipients of Mail.
 	To(addresses []string) Mail
+	// With sets the data passed to every view of the Mail.
+	With(data map[string]any) Mail
 }
 
 type Mailable interface {
@@ -34,6 +36,9 @@ type Mailable interface {
 	Headers() map[string]string
 	// Queue set the queue of Mailable.
 	Queue() *Queue
+	// With returns the data passed to every view of the Mailable: the body
+	// views of Content and the SubjectView of Envelope alike.
+	With() map[string]any
 }
 
 type Content struct {
@@ -41,7 +46,6 @@ type Content struct {
 	Text     string
 	HtmlView string
 	TextView string
-	With     map[string]any
 }
 
 type Queue struct {
@@ -55,9 +59,14 @@ type Address struct {
 }
 
 type Envelope struct {
-	Bcc     []string
-	Cc      []string
-	From    Address
+	Bcc  []string
+	Cc   []string
+	From Address
+	// Subject is the literal subject. It is used as-is, and acts as the
+	// fallback when SubjectView is empty or fails to render.
 	Subject string
-	To      []string
+	// SubjectView is the path of a template rendered with With() to produce
+	// the subject. A successful non-empty render overrides Subject.
+	SubjectView string
+	To          []string
 }
