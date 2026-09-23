@@ -367,6 +367,85 @@ func TestApplicationSetUsingMailable(t *testing.T) {
 	assert.Equal(t, map[string]any{"name": "goravel"}, app.with)
 }
 
+// SubjectView is carried from the envelope so renderViewTemplate can resolve it
+// with the same data as the body views.
+func TestApplicationSetUsingMailableSubjectView(t *testing.T) {
+	app := &Application{}
+
+	app.setUsingMailable(&stubMailable{
+		envelope: &mail.Envelope{Subject: "literal", SubjectView: "mail.subject.txt"},
+	})
+
+	assert.Equal(t, "literal", app.params.Subject)
+	assert.Equal(t, "mail.subject.txt", app.subjectView)
+}
+
+func TestApplicationRenderSubjectView(t *testing.T) {
+	t.Run("rendered subject overrides the literal one", func(t *testing.T) {
+		template := mocksmail.NewTemplate(t)
+		template.EXPECT().Render("mail.subject.txt", map[string]any{"Site": "Goravel"}).
+			Return("Goravel security code", nil).Once()
+
+		app := &Application{
+			template:    template,
+			subjectView: "mail.subject.txt",
+			with:        map[string]any{"Site": "Goravel"},
+			params:      Params{Subject: "literal"},
+		}
+
+		assert.NoError(t, app.renderViewTemplate())
+		assert.Equal(t, "Goravel security code", app.params.Subject)
+	})
+
+	// Templates end with a newline, and a CR/LF in a subject would start a new
+	// mail header.
+	t.Run("rendered subject is flattened to one line", func(t *testing.T) {
+		template := mocksmail.NewTemplate(t)
+		template.EXPECT().Render("mail.subject.txt", mock.Anything).
+			Return("Your code\nBcc: attacker@example.com", nil).Once()
+
+		app := &Application{template: template, subjectView: "mail.subject.txt"}
+
+		assert.NoError(t, app.renderViewTemplate())
+		assert.Equal(t, "Your code", app.params.Subject)
+	})
+
+	// A blank subject is worse than a generic one, so an empty render leaves the
+	// literal Subject in place.
+	t.Run("empty render keeps the literal subject", func(t *testing.T) {
+		template := mocksmail.NewTemplate(t)
+		template.EXPECT().Render("mail.subject.txt", mock.Anything).Return("  \n\t\n", nil).Once()
+
+		app := &Application{
+			template:    template,
+			subjectView: "mail.subject.txt",
+			params:      Params{Subject: "literal"},
+		}
+
+		assert.NoError(t, app.renderViewTemplate())
+		assert.Equal(t, "literal", app.params.Subject)
+	})
+
+	t.Run("subject render failed", func(t *testing.T) {
+		template := mocksmail.NewTemplate(t)
+		template.EXPECT().Render("mail.subject.txt", mock.Anything).
+			Return("", errors.New("subject render failed")).Once()
+
+		app := &Application{template: template, subjectView: "mail.subject.txt"}
+
+		assert.ErrorContains(t, app.renderViewTemplate(), "subject render failed")
+	})
+
+	// No SubjectView at all must not touch the subject the caller set.
+	t.Run("no subject view leaves the subject untouched", func(t *testing.T) {
+		template := mocksmail.NewTemplate(t)
+		app := &Application{template: template, params: Params{Subject: "literal"}}
+
+		assert.NoError(t, app.renderViewTemplate())
+		assert.Equal(t, "literal", app.params.Subject)
+	})
+}
+
 func TestApplicationRenderViewTemplate(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		template := mocksmail.NewTemplate(t)

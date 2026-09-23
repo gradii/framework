@@ -6,6 +6,30 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// A subject becomes a header, so a bare CR or LF in a rendered subject is
+// header injection: everything after it is read as a new header. Keeping the
+// first non-empty line drops the injected remainder. Template files end with a
+// newline, so the flattening is the common case, not only the hostile one.
+func TestSanitizeSubject(t *testing.T) {
+	tests := map[string]string{
+		"Your code":                              "Your code",
+		"Your code\n":                            "Your code",
+		"Your code\r\n":                          "Your code",
+		"\n\nYour code":                          "Your code",
+		"  Your code  ":                          "Your code",
+		"Your code\nBcc: attacker@example.com":   "Your code",
+		"Your code\r\nBcc: attacker@example.com": "Your code",
+		"  \n  Your code  \n  second line":       "Your code",
+		"":                                       "",
+		"   ":                                    "",
+		"\r\n":                                   "",
+	}
+
+	for input, want := range tests {
+		assert.Equal(t, want, sanitizeSubject(input), "sanitizeSubject(%q)", input)
+	}
+}
+
 func TestConvertMapHeadersToSlice(t *testing.T) {
 	tests := []struct {
 		name    string
