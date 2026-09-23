@@ -34,6 +34,7 @@ type ApplicationBuilder struct {
 	grpcClientStatsHandlers    func() map[string][]stats.Handler
 	grpcServerCredentials      func() credentials.TransportCredentials
 	grpcServerInterceptors     func() []grpc.UnaryServerInterceptor
+	grpcServerOptions          func() []grpc.ServerOption
 	grpcServerStatsHandlers    func() []stats.Handler
 	jobs                       func() []queue.Job
 	middleware                 func(middleware contractsconfiguration.Middleware)
@@ -133,6 +134,12 @@ func (r *ApplicationBuilder) WithGrpcServerCredentials(fn func() credentials.Tra
 
 func (r *ApplicationBuilder) WithGrpcServerInterceptors(fn func() []grpc.UnaryServerInterceptor) foundation.ApplicationBuilder {
 	r.grpcServerInterceptors = fn
+
+	return r
+}
+
+func (r *ApplicationBuilder) WithGrpcServerOptions(fn func() []grpc.ServerOption) foundation.ApplicationBuilder {
+	r.grpcServerOptions = fn
 
 	return r
 }

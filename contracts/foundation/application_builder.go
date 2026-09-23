@@ -56,6 +56,10 @@ type ApplicationBuilder interface {
 	WithGrpcServerCredentials(func() credentials.TransportCredentials) ApplicationBuilder
 	// WithGrpcServerInterceptors sets the list of gRPC server interceptors.
 	WithGrpcServerInterceptors(func() []grpc.UnaryServerInterceptor) ApplicationBuilder
+	// WithGrpcServerOptions appends raw gRPC server options, for settings the
+	// other WithGrpcServer methods do not cover — keepalive parameters, message
+	// size limits, and any future grpc.ServerOption.
+	WithGrpcServerOptions(func() []grpc.ServerOption) ApplicationBuilder
 	// WithGrpcServerStatsHandlers sets the list of gRPC server stats handlers.
 	WithGrpcServerStatsHandlers(func() []stats.Handler) ApplicationBuilder
 	// WithJobs registers the application's jobs.

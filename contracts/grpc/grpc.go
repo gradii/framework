@@ -30,6 +30,11 @@ type Grpc interface {
 	// ServerCredentials sets the gRPC server transport credentials (e.g. TLS/mTLS).
 	// When nil, the server listens without TLS.
 	ServerCredentials(credentials.TransportCredentials)
+	// ServerOptions appends raw gRPC server options, for settings the other
+	// methods do not cover — keepalive parameters, message size limits, and any
+	// future grpc.ServerOption. Applied after credentials, interceptors and
+	// stats handlers, and ignored once the server has been initialized.
+	ServerOptions([]grpc.ServerOption)
 	// ServerStatsHandlers sets the gRPC server stats handlers.
 	ServerStatsHandlers([]stats.Handler)
 	// Shutdown stops the gRPC server.

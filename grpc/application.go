@@ -25,6 +25,7 @@ type Application struct {
 	// Server Options
 	unaryServerInterceptors []grpc.UnaryServerInterceptor
 	serverCredentials       credentials.TransportCredentials
+	serverOptions           []grpc.ServerOption
 	serverStatsHandlers     []stats.Handler
 
 	// Client Options
@@ -181,6 +182,8 @@ func (r *Application) Server() *grpc.Server {
 		opts = append(opts, grpc.StatsHandler(h))
 	}
 
+	opts = append(opts, r.serverOptions...)
+
 	r.server = grpc.NewServer(opts...)
 	return r.server
 }
@@ -221,6 +224,14 @@ func (r *Application) ServerCredentials(creds credentials.TransportCredentials) 
 		return
 	}
 	r.serverCredentials = creds
+}
+
+func (r *Application) ServerOptions(options []grpc.ServerOption) {
+	if r.server != nil {
+		color.Warningln("[GRPC] Server already initialized; server option registration ignored.")
+		return
+	}
+	r.serverOptions = append(r.serverOptions, options...)
 }
 
 func (r *Application) ServerStatsHandlers(handlers []stats.Handler) {

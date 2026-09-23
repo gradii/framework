@@ -397,6 +397,39 @@ func (_c *Grpc_ServerCredentials_Call) RunAndReturn(run func(credentials.Transpo
 	return _c
 }
 
+// ServerOptions provides a mock function with given fields: _a0
+func (_m *Grpc) ServerOptions(_a0 []grpc.ServerOption) {
+	_m.Called(_a0)
+}
+
+// Grpc_ServerOptions_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ServerOptions'
+type Grpc_ServerOptions_Call struct {
+	*mock.Call
+}
+
+// ServerOptions is a helper method to define mock.On call
+//   - _a0 []grpc.ServerOption
+func (_e *Grpc_Expecter) ServerOptions(_a0 interface{}) *Grpc_ServerOptions_Call {
+	return &Grpc_ServerOptions_Call{Call: _e.mock.On("ServerOptions", _a0)}
+}
+
+func (_c *Grpc_ServerOptions_Call) Run(run func(_a0 []grpc.ServerOption)) *Grpc_ServerOptions_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].([]grpc.ServerOption))
+	})
+	return _c
+}
+
+func (_c *Grpc_ServerOptions_Call) Return() *Grpc_ServerOptions_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *Grpc_ServerOptions_Call) RunAndReturn(run func([]grpc.ServerOption)) *Grpc_ServerOptions_Call {
+	_c.Run(run)
+	return _c
+}
+
 // ServerStatsHandlers provides a mock function with given fields: _a0
 func (_m *Grpc) ServerStatsHandlers(_a0 []stats.Handler) {
 	_m.Called(_a0)

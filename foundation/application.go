@@ -507,6 +507,7 @@ func (r *Application) configureGrpc() {
 		grpcClientInterceptors  map[string][]grpc.UnaryClientInterceptor
 		grpcServerCredentials   credentials.TransportCredentials
 		grpcServerInterceptors  []grpc.UnaryServerInterceptor
+		grpcServerOptions       []grpc.ServerOption
 		grpcClientStatsHandlers map[string][]stats.Handler
 		grpcServerStatsHandlers []stats.Handler
 	)
@@ -527,6 +528,10 @@ func (r *Application) configureGrpc() {
 		grpcServerInterceptors = r.builder.grpcServerInterceptors()
 	}
 
+	if r.builder.grpcServerOptions != nil {
+		grpcServerOptions = r.builder.grpcServerOptions()
+	}
+
 	if r.builder.grpcClientStatsHandlers != nil {
 		grpcClientStatsHandlers = r.builder.grpcClientStatsHandlers()
 	}
@@ -537,6 +542,7 @@ func (r *Application) configureGrpc() {
 
 	if len(grpcClientCredentials) > 0 || len(grpcClientInterceptors) > 0 ||
 		grpcServerCredentials != nil || len(grpcServerInterceptors) > 0 ||
+		len(grpcServerOptions) > 0 ||
 		len(grpcClientStatsHandlers) > 0 || len(grpcServerStatsHandlers) > 0 {
 		grpcFacade := r.MakeGrpc()
 		if grpcFacade == nil {
@@ -553,6 +559,9 @@ func (r *Application) configureGrpc() {
 			}
 			if grpcServerCredentials != nil {
 				grpcFacade.ServerCredentials(grpcServerCredentials)
+			}
+			if len(grpcServerOptions) > 0 {
+				grpcFacade.ServerOptions(grpcServerOptions)
 			}
 			if len(grpcClientStatsHandlers) > 0 {
 				grpcFacade.ClientStatsHandlerGroups(grpcClientStatsHandlers)
