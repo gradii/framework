@@ -74,7 +74,8 @@ func (f *FileLoaderTestSuite) TestLoad() {
 	paths = []string{"./lang"}
 	loader = NewFileLoader(paths, f.json)
 	translations, err = loader.Load("en", "restricted/test")
-	if env.IsWindows() {
+	// chmod 0000 doesn't stop Windows or root from reading the file.
+	if env.IsWindows() || os.Geteuid() == 0 {
 		f.NoError(err)
 		f.NotNil(translations)
 		f.Equal("restricted", translations["foo"])

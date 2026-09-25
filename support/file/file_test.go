@@ -205,10 +205,12 @@ func TestPutContent(t *testing.T) {
 	if !env.IsWindows() {
 		// directory creation failure
 		assert.Error(t, PutContent("/proc/invalid/file.txt", "content"))
-		// write failure (create read-only dir)
-		readOnlyDir := path.Join(t.TempDir(), "readonly")
-		assert.NoError(t, os.Mkdir(readOnlyDir, 0444))
-		assert.Error(t, PutContent(path.Join(readOnlyDir, "file.txt"), "content"))
+		// write failure (create read-only dir), root bypasses the permission check
+		if os.Geteuid() != 0 {
+			readOnlyDir := path.Join(t.TempDir(), "readonly")
+			assert.NoError(t, os.Mkdir(readOnlyDir, 0444))
+			assert.Error(t, PutContent(path.Join(readOnlyDir, "file.txt"), "content"))
+		}
 	}
 	// create a file and put content
 	filePath := path.Join(t.TempDir(), "goravel.txt")
