@@ -53,13 +53,13 @@ func (b *Builder) Text(text string) *Builder {
 
 func (b *Builder) HtmlView(view string, with map[string]any) *Builder {
 	b.msg.Content.HtmlView = view
-	b.msg.Content.With = with
+	b.msg.With = with
 	return b
 }
 
 func (b *Builder) TextView(view string, with map[string]any) *Builder {
 	b.msg.Content.TextView = view
-	b.msg.Content.With = with
+	b.msg.With = with
 	return b
 }
 

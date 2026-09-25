@@ -154,7 +154,7 @@ func TestMailChannel_Send_MapsHtmlViewAndTextView(t *testing.T) {
 		if content == nil {
 			return false
 		}
-		with, _ := content.With["amount"].(string)
+		with, _ := m.With()["amount"].(string)
 		return content.HtmlView == "emails.invoice" &&
 			content.TextView == "emails.invoice_text" &&
 			with == "99.99"
@@ -339,7 +339,7 @@ var _ contractsmail.Mailable = (*channels.NotificationMailable)(nil)
 
 // TestMailChannel_Send_MailableExposesAllContractFields exercises every
 // accessor on the internal NotificationMailable adapter (Envelope,
-// Content, Attachments, Headers, Queue) directly — mocksmail.NewMail's
+// Content, With, Attachments, Headers, Queue) directly — mocksmail.NewMail's
 // Send expectation intercepts before the real mail package would ever
 // call these itself, so nothing else in this test file reaches them.
 func TestMailChannel_Send_MailableExposesAllContractFields(t *testing.T) {
@@ -370,6 +370,7 @@ func TestMailChannel_Send_MailableExposesAllContractFields(t *testing.T) {
 	assert.Equal(t, "Invoice Paid", captured.Envelope().Subject)
 	assert.NotNil(t, captured.Content())
 	assert.Equal(t, "paid", captured.Content().Text)
+	assert.Nil(t, captured.With())
 	assert.Equal(t, []string{"invoice.pdf"}, captured.Attachments())
 	assert.Equal(t, map[string]string{"X-Test": "1"}, captured.Headers())
 	assert.Nil(t, captured.Queue())

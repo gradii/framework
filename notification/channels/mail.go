@@ -155,6 +155,7 @@ func (c *MailChannel) Deliver(route string, payload []byte) error {
 			Subject: subject,
 		},
 		content:     &content,
+		with:        msg.With,
 		attachments: msg.Attachments,
 		headers:     msg.Headers,
 	}
@@ -180,12 +181,14 @@ func (c *MailChannel) defaultMessage(n contractsnotification.Notification) contr
 type NotificationMailable struct {
 	envelope    *contractsmail.Envelope
 	content     *contractsmail.Content
+	with        map[string]any
 	attachments []string
 	headers     map[string]string
 }
 
 func (m *NotificationMailable) Envelope() *contractsmail.Envelope { return m.envelope }
 func (m *NotificationMailable) Content() *contractsmail.Content   { return m.content }
+func (m *NotificationMailable) With() map[string]any              { return m.with }
 func (m *NotificationMailable) Attachments() []string             { return m.attachments }
 func (m *NotificationMailable) Headers() map[string]string        { return m.headers }
 func (m *NotificationMailable) Queue() *contractsmail.Queue       { return nil }

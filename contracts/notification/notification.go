@@ -199,6 +199,8 @@ type MailMessage struct {
 	// facades.Mail() itself uses, so nothing is lost or re-mapped between
 	// a notification's mail representation and a plain Mailable's.
 	Content contractsmail.Content
+	// With is the data passed to the HtmlView / TextView templates.
+	With map[string]any
 	// Attachments is a list of absolute file paths to attach.
 	Attachments []string
 	// Headers are arbitrary additional email headers.
