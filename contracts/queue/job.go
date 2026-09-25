@@ -25,7 +25,14 @@ type PendingJob interface {
 }
 
 type ReservedJob interface {
+	// Attempts returns the number of times the job has been attempted so far.
+	Attempts() int
+	// Delete removes the job from the queue.
 	Delete() error
+	// Release makes the job available again after the given delay so it can
+	// be retried, incrementing attempts on the next pop.
+	Release(delay time.Duration) error
+	// Task returns the task to execute.
 	Task() Task
 }
 
@@ -47,5 +54,10 @@ type ChainJob struct {
 
 type JobWithShouldRetry interface {
 	// ShouldRetry determines if the job should be retried based on the error.
-	ShouldRetry(err error, attempt int) (retryable bool, delay time.Duration)
+	// maxTries is the queue worker's configured tries: queue.Args.Tries for
+	// Worker(args), or 1 for the no-argument Worker() (which hardcodes it).
+	// Note that leaving Args.Tries unset passes the zero value 0; both 0 and 1
+	// yield a single-shot fallback for jobs without their own retry policy.
+	// Implementations without their own retry policy fall back to maxTries.
+	ShouldRetry(err error, attempt, maxTries int) (retryable bool, delay time.Duration)
 }

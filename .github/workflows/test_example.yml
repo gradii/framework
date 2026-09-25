@@ -12,7 +12,7 @@ jobs:
   unit:
     strategy:
       matrix:
-        go: [ "1.25", "1.26" ]
+        go: [ "1.26", "1.27" ]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout framework
@@ -30,7 +30,7 @@ jobs:
           path: example
 
       - name: Set up Go ${{ matrix.go }}
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: ${{ matrix.go }}
 
@@ -57,7 +57,7 @@ jobs:
   integration:
     strategy:
       matrix:
-        go: [ "1.25", "1.26" ]
+        go: [ "1.26", "1.27" ]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout framework
@@ -75,12 +75,12 @@ jobs:
           path: example
 
       - name: Set up Go ${{ matrix.go }}
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: ${{ matrix.go }}
 
       - name: Go mod cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cache/go-build

@@ -30,6 +30,12 @@ func (r *Paths) Bootstrap(path string) configuration.Paths {
 	return r
 }
 
+func (r *Paths) Broadcasting(path string) configuration.Paths {
+	support.Config.Paths.Broadcasting = path
+
+	return r
+}
+
 func (r *Paths) Commands(path string) configuration.Paths {
 	support.Config.Paths.Commands = path
 
@@ -116,6 +122,12 @@ func (r *Paths) Migrations(path string) configuration.Paths {
 
 func (r *Paths) Models(path string) configuration.Paths {
 	support.Config.Paths.Models = path
+
+	return r
+}
+
+func (r *Paths) Notifications(path string) configuration.Paths {
+	support.Config.Paths.Notifications = path
 
 	return r
 }

@@ -119,7 +119,8 @@ func (s *WorkerTestSuite) Test_call() {
 
 		s.mockJob.EXPECT().Call(task.Job.Signature(), utils.ConvertArgs(task.Args)).Return(nil).Once()
 
-		err := s.worker.call(task)
+		released, err := s.worker.call(task, nil)
+		s.False(released)
 		s.NoError(err)
 	})
 
@@ -143,8 +144,96 @@ func (s *WorkerTestSuite) Test_call() {
 			},
 		}).Return("{\"signature\":\"test_job_one\",\"args\":[{\"type\":\"string\",\"value\":\"test\"}],\"delay\":null,\"uuid\":\"test\",\"chain\":[{\"signature\":\"test_job_two\",\"args\":[{\"type\":\"int\",\"value\":1}],\"delay\":null,\"uuid\":\"test\",\"chain\":[]}]}", nil).Once()
 
-		err := s.worker.call(task)
+		released, err := s.worker.call(task, nil)
+		s.False(released)
 		s.Equal(errors.QueueFailedToCallJob, err)
+	})
+
+	s.Run("main job released on retry", func() {
+		s.SetupTest()
+		s.worker.tries = 3
+
+		errorTask := contractsqueue.Task{
+			ChainJob: contractsqueue.ChainJob{
+				Job: &TestJobErr{},
+			},
+			UUID: "test",
+		}
+
+		mockReservedJob := mocksqueue.NewReservedJob(s.T())
+		s.mockJob.EXPECT().Call(errorTask.Job.Signature(), make([]any, 0)).Return(assert.AnError).Once()
+		mockReservedJob.EXPECT().Attempts().Return(1).Once()
+		mockReservedJob.EXPECT().Release(time.Duration(0)).Return(nil).Once()
+
+		released, err := s.worker.call(errorTask, mockReservedJob)
+		s.True(released)
+		s.NoError(err)
+	})
+
+	s.Run("release error treated as released", func() {
+		s.SetupTest()
+		s.worker.tries = 3
+
+		errorTask := contractsqueue.Task{
+			ChainJob: contractsqueue.ChainJob{
+				Job: &TestJobErr{},
+			},
+			UUID: "test",
+		}
+
+		mockReservedJob := mocksqueue.NewReservedJob(s.T())
+		s.mockJob.EXPECT().Call(errorTask.Job.Signature(), make([]any, 0)).Return(assert.AnError).Once()
+		mockReservedJob.EXPECT().Attempts().Return(1).Once()
+		mockReservedJob.EXPECT().Release(time.Duration(0)).Return(assert.AnError).Once()
+		s.mockLog.EXPECT().Error(errors.QueueFailedToReleaseReservedJob.Args(mockReservedJob, assert.AnError)).Once()
+
+		released, err := s.worker.call(errorTask, mockReservedJob)
+		s.True(released)
+		s.NoError(err)
+	})
+
+	s.Run("attempt count from reservation", func() {
+		s.SetupTest()
+
+		retryTask := contractsqueue.Task{
+			ChainJob: contractsqueue.ChainJob{
+				Job: &TestJobRetry{},
+			},
+			UUID: "test",
+		}
+
+		mockReservedJob := mocksqueue.NewReservedJob(s.T())
+		s.mockJob.EXPECT().Call(retryTask.Job.Signature(), make([]any, 0)).Return(assert.AnError).Once()
+		mockReservedJob.EXPECT().Attempts().Return(3).Once()
+		mockReservedJob.EXPECT().Release(time.Duration(0)).Return(nil).Once()
+
+		released, err := s.worker.call(retryTask, mockReservedJob)
+		s.True(released)
+		s.NoError(err)
+		s.Equal(3, retryTask.Job.(*TestJobRetry).attempt)
+		s.Equal(1, retryTask.Job.(*TestJobRetry).maxTries) // default worker tries
+	})
+
+	s.Run("worker tries reaches ShouldRetry", func() {
+		s.SetupTest()
+		s.worker.tries = 3
+
+		retryTask := contractsqueue.Task{
+			ChainJob: contractsqueue.ChainJob{
+				Job: &TestJobRetry{},
+			},
+			UUID: "test",
+		}
+
+		mockReservedJob := mocksqueue.NewReservedJob(s.T())
+		s.mockJob.EXPECT().Call(retryTask.Job.Signature(), make([]any, 0)).Return(assert.AnError).Once()
+		mockReservedJob.EXPECT().Attempts().Return(1).Once()
+		mockReservedJob.EXPECT().Release(time.Duration(0)).Return(nil).Once()
+
+		released, err := s.worker.call(retryTask, mockReservedJob)
+		s.True(released)
+		s.NoError(err)
+		s.Equal(3, retryTask.Job.(*TestJobRetry).maxTries) // worker's tries handed to ShouldRetry
 	})
 }
 
@@ -283,6 +372,7 @@ func (s *WorkerTestSuite) Test_run() {
 		mockReservedJob := mocksqueue.NewReservedJob(s.T())
 		s.mockDriver.EXPECT().Pop(queue).Return(mockReservedJob, nil).Once()
 		mockReservedJob.EXPECT().Task().Return(errorTask).Once()
+		mockReservedJob.EXPECT().Attempts().Return(1).Once()
 
 		// call
 		s.mockJob.EXPECT().Call(errorTask.Job.Signature(), make([]any, 0)).Return(assert.AnError).Once()
@@ -317,6 +407,7 @@ func (s *WorkerTestSuite) Test_run() {
 		mockReservedJob := mocksqueue.NewReservedJob(s.T())
 		s.mockDriver.EXPECT().Pop(queue).Return(mockReservedJob, nil).Once()
 		mockReservedJob.EXPECT().Task().Return(errorTask).Once()
+		mockReservedJob.EXPECT().Attempts().Return(1).Once()
 
 		// call
 		s.mockJob.EXPECT().Call(errorTask.Job.Signature(), make([]any, 0)).Return(assert.AnError).Once()
@@ -764,6 +855,7 @@ func (s *WorkerTestSuite) Test_runWithReceive() {
 
 		mockReservedJob := mocksqueue.NewReservedJob(s.T())
 		mockReservedJob.EXPECT().Task().Return(errorTask).Once()
+		mockReservedJob.EXPECT().Attempts().Return(1).Once()
 		mockReservedJob.EXPECT().Delete().Return(nil).Once()
 
 		mockDriverWithReceive.EXPECT().Receive(mock.Anything, queue, s.worker.concurrent).
@@ -972,6 +1064,7 @@ func (s *WorkerTestSuite) TestShutdown() {
 		mockReservedJob := mocksqueue.NewReservedJob(s.T())
 		s.mockDriver.EXPECT().Pop(s.worker.queue).Return(mockReservedJob, nil).Once()
 		mockReservedJob.EXPECT().Task().Return(errorTask).Once()
+		mockReservedJob.EXPECT().Attempts().Return(1).Once()
 
 		s.mockJob.EXPECT().Call(errorTask.Job.Signature(), make([]any, 0)).Return(assert.AnError).Once()
 		s.mockJson.EXPECT().MarshalString(utils.Task{
@@ -1018,6 +1111,7 @@ func (s *WorkerTestSuite) TestShutdown() {
 		mockReservedJob := mocksqueue.NewReservedJob(s.T())
 		s.mockDriver.EXPECT().Pop(s.worker.queue).Return(mockReservedJob, nil).Once()
 		mockReservedJob.EXPECT().Task().Return(errorTask).Once()
+		mockReservedJob.EXPECT().Attempts().Return(1).Once()
 
 		s.mockJob.EXPECT().Call(errorTask.Job.Signature(), make([]any, 0)).RunAndReturn(func(s string, i []any) error {
 			time.Sleep(500 * time.Millisecond)
@@ -1107,7 +1201,8 @@ func matchFailedJob(uuid string) interface{} {
 }
 
 type TestJobRetry struct {
-	attempt int
+	attempt  int
+	maxTries int
 }
 
 // Signature The name and signature of the job.
@@ -1123,7 +1218,8 @@ func (r *TestJobRetry) Handle(args ...any) error {
 	return assert.AnError
 }
 
-func (r *TestJobRetry) ShouldRetry(err error, attempt int) (bool, time.Duration) {
+func (r *TestJobRetry) ShouldRetry(err error, attempt, maxTries int) (bool, time.Duration) {
 	r.attempt = attempt
+	r.maxTries = maxTries
 	return true, 0
 }

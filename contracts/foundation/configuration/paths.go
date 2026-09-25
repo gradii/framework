@@ -7,6 +7,8 @@ type Paths interface {
 	Agents(path string) Paths
 	// Bootstrap sets the path for the bootstrap directory, default is "bootstrap".
 	Bootstrap(path string) Paths
+	// Broadcasting sets the path for the broadcasting directory, default is "app/broadcasting".
+	Broadcasting(path string) Paths
 	// Commands sets the path for the commands directory, default is "app/console/commands".
 	Commands(path string) Paths
 	// Config sets the path for the configuration directory, default is "config".
@@ -37,6 +39,8 @@ type Paths interface {
 	Migrations(path string) Paths
 	// Models sets the path for the models directory, default is "app/models".
 	Models(path string) Paths
+	// Notifications sets the path for the notifications directory, default is "app/notifications".
+	Notifications(path string) Paths
 	// Observers sets the path for the observers directory, default is "app/observers".
 	Observers(path string) Paths
 	// Packages sets the path for the packages directory, default is "packages".

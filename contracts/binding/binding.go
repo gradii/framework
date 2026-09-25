@@ -1,35 +1,37 @@
 package binding
 
 const (
-	AI          = "goravel.ai"
-	Artisan     = "goravel.artisan"
-	Auth        = "goravel.auth"
-	Cache       = "goravel.cache"
-	Config      = "goravel.config"
-	Crypt       = "goravel.crypt"
-	DB          = "goravel.db"
-	Event       = "goravel.event"
-	Gate        = "goravel.gate"
-	Grpc        = "goravel.grpc"
-	Hash        = "goravel.hash"
-	Http        = "goravel.http"
-	Lang        = "goravel.lang"
-	Log         = "goravel.log"
-	Mail        = "goravel.mail"
-	Orm         = "goravel.orm"
-	Process     = "goravel.process"
-	Queue       = "goravel.queue"
-	RateLimiter = "goravel.rate_limiter"
-	Route       = "goravel.route"
-	Schedule    = "goravel.schedule"
-	Schema      = "goravel.schema"
-	Seeder      = "goravel.seeder"
-	Session     = "goravel.session"
-	Storage     = "goravel.storage"
-	Telemetry   = "goravel.telemetry"
-	Testing     = "goravel.testing"
-	Validation  = "goravel.validation"
-	View        = "goravel.view"
+	AI           = "goravel.ai"
+	Artisan      = "goravel.artisan"
+	Auth         = "goravel.auth"
+	Broadcast    = "goravel.broadcast"
+	Cache        = "goravel.cache"
+	Config       = "goravel.config"
+	Crypt        = "goravel.crypt"
+	DB           = "goravel.db"
+	Event        = "goravel.event"
+	Gate         = "goravel.gate"
+	Grpc         = "goravel.grpc"
+	Hash         = "goravel.hash"
+	Http         = "goravel.http"
+	Lang         = "goravel.lang"
+	Log          = "goravel.log"
+	Mail         = "goravel.mail"
+	Notification = "goravel.notification"
+	Orm          = "goravel.orm"
+	Process      = "goravel.process"
+	Queue        = "goravel.queue"
+	RateLimiter  = "goravel.rate_limiter"
+	Route        = "goravel.route"
+	Schedule     = "goravel.schedule"
+	Schema       = "goravel.schema"
+	Seeder       = "goravel.seeder"
+	Session      = "goravel.session"
+	Storage      = "goravel.storage"
+	Telemetry    = "goravel.telemetry"
+	Testing      = "goravel.testing"
+	Validation   = "goravel.validation"
+	View         = "goravel.view"
 )
 
 type Relationship struct {
@@ -117,6 +119,11 @@ var (
 				Log,
 				Orm,
 			},
+		},
+		Broadcast: {
+			Description:  "Real-time event broadcasting with WebSocket support via Pusher protocol.",
+			PkgPath:      "github.com/goravel/framework/broadcasting",
+			Dependencies: []string{Config, Log, Queue, Auth, Http, Route},
 		},
 		Cache: {
 			Description: "Gets and sets cached items.",
@@ -233,6 +240,16 @@ var (
 			Dependencies: []string{
 				Artisan,
 				Config,
+				Queue,
+			},
+		},
+		Notification: {
+			Description: "Send notifications across mail, database, and other channels.",
+			PkgPath:     "github.com/goravel/framework/notification",
+			Dependencies: []string{
+				Log,
+				Mail,
+				Orm,
 				Queue,
 			},
 		},

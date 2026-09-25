@@ -164,6 +164,54 @@ func (_c *Paths_Bootstrap_Call) RunAndReturn(run func(string) configuration.Path
 	return _c
 }
 
+// Broadcasting provides a mock function with given fields: path
+func (_m *Paths) Broadcasting(path string) configuration.Paths {
+	ret := _m.Called(path)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Broadcasting")
+	}
+
+	var r0 configuration.Paths
+	if rf, ok := ret.Get(0).(func(string) configuration.Paths); ok {
+		r0 = rf(path)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(configuration.Paths)
+		}
+	}
+
+	return r0
+}
+
+// Paths_Broadcasting_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Broadcasting'
+type Paths_Broadcasting_Call struct {
+	*mock.Call
+}
+
+// Broadcasting is a helper method to define mock.On call
+//   - path string
+func (_e *Paths_Expecter) Broadcasting(path interface{}) *Paths_Broadcasting_Call {
+	return &Paths_Broadcasting_Call{Call: _e.mock.On("Broadcasting", path)}
+}
+
+func (_c *Paths_Broadcasting_Call) Run(run func(path string)) *Paths_Broadcasting_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *Paths_Broadcasting_Call) Return(_a0 configuration.Paths) *Paths_Broadcasting_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Paths_Broadcasting_Call) RunAndReturn(run func(string) configuration.Paths) *Paths_Broadcasting_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Commands provides a mock function with given fields: path
 func (_m *Paths) Commands(path string) configuration.Paths {
 	ret := _m.Called(path)
@@ -880,6 +928,54 @@ func (_c *Paths_Models_Call) Return(_a0 configuration.Paths) *Paths_Models_Call 
 }
 
 func (_c *Paths_Models_Call) RunAndReturn(run func(string) configuration.Paths) *Paths_Models_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Notifications provides a mock function with given fields: path
+func (_m *Paths) Notifications(path string) configuration.Paths {
+	ret := _m.Called(path)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Notifications")
+	}
+
+	var r0 configuration.Paths
+	if rf, ok := ret.Get(0).(func(string) configuration.Paths); ok {
+		r0 = rf(path)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(configuration.Paths)
+		}
+	}
+
+	return r0
+}
+
+// Paths_Notifications_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Notifications'
+type Paths_Notifications_Call struct {
+	*mock.Call
+}
+
+// Notifications is a helper method to define mock.On call
+//   - path string
+func (_e *Paths_Expecter) Notifications(path interface{}) *Paths_Notifications_Call {
+	return &Paths_Notifications_Call{Call: _e.mock.On("Notifications", path)}
+}
+
+func (_c *Paths_Notifications_Call) Run(run func(path string)) *Paths_Notifications_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *Paths_Notifications_Call) Return(_a0 configuration.Paths) *Paths_Notifications_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Paths_Notifications_Call) RunAndReturn(run func(string) configuration.Paths) *Paths_Notifications_Call {
 	_c.Call.Return(run)
 	return _c
 }

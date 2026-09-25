@@ -7,6 +7,8 @@ type Paths struct {
 	Agents string
 	// The bootstrap directory path, default is "bootstrap".
 	Bootstrap string
+	// The broadcasting directory path, default is "app/broadcasting".
+	Broadcasting string
 	// The commands directory path, default is "app/console/commands".
 	Commands string
 	// The config directory path, default is "config".
@@ -37,6 +39,8 @@ type Paths struct {
 	Migrations string
 	// The models directory path, default is "app/models".
 	Models string
+	// The notifications directory path, default is "app/notifications".
+	Notifications string
 	// The observers directory path, default is "app/observers".
 	Observers string
 	// The packages directory path, default is "packages".
@@ -83,38 +87,40 @@ var (
 
 	Config = Configuration{
 		Paths: Paths{
-			App:         "app",
-			Agents:      "app/ai/agents",
-			Bootstrap:   "bootstrap",
-			Commands:    "app/console/commands",
-			Config:      "config",
-			Controllers: "app/http/controllers",
-			Database:    "database",
-			Events:      "app/events",
-			Facades:     "app/facades",
-			Factories:   "database/factories",
-			Filters:     "app/filters",
-			Jobs:        "app/jobs",
-			Lang:        "lang",
-			Listeners:   "app/listeners",
-			Mails:       "app/mails",
-			Middleware:  "app/http/middleware",
-			Migrations:  "database/migrations",
-			Models:      "app/models",
-			Observers:   "app/observers",
-			Packages:    "packages",
-			Policies:    "app/policies",
-			Providers:   "app/providers",
-			Public:      "public",
-			Requests:    "app/http/requests",
-			Resources:   "resources",
-			Routes:      "routes",
-			Rules:       "app/rules",
-			Seeders:     "database/seeders",
-			Storage:     "storage",
-			Tests:       "tests",
-			Tools:       "app/ai/tools",
-			Views:       "resources/views",
+			App:           "app",
+			Agents:        "app/ai/agents",
+			Bootstrap:     "bootstrap",
+			Broadcasting:  "app/broadcasting",
+			Commands:      "app/console/commands",
+			Config:        "config",
+			Controllers:   "app/http/controllers",
+			Database:      "database",
+			Events:        "app/events",
+			Facades:       "app/facades",
+			Factories:     "database/factories",
+			Filters:       "app/filters",
+			Jobs:          "app/jobs",
+			Lang:          "lang",
+			Listeners:     "app/listeners",
+			Mails:         "app/mails",
+			Middleware:    "app/http/middleware",
+			Migrations:    "database/migrations",
+			Models:        "app/models",
+			Notifications: "app/notifications",
+			Observers:     "app/observers",
+			Packages:      "packages",
+			Policies:      "app/policies",
+			Providers:     "app/providers",
+			Public:        "public",
+			Requests:      "app/http/requests",
+			Resources:     "resources",
+			Routes:        "routes",
+			Rules:         "app/rules",
+			Seeders:       "database/seeders",
+			Storage:       "storage",
+			Tests:         "tests",
+			Tools:         "app/ai/tools",
+			Views:         "resources/views",
 		},
 	}
 )

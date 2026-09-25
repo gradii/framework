@@ -6,6 +6,7 @@ import (
 	"github.com/goravel/framework/contracts/ai"
 	"github.com/goravel/framework/contracts/auth"
 	"github.com/goravel/framework/contracts/auth/access"
+	"github.com/goravel/framework/contracts/broadcasting"
 	"github.com/goravel/framework/contracts/cache"
 	"github.com/goravel/framework/contracts/config"
 	"github.com/goravel/framework/contracts/console"
@@ -23,6 +24,7 @@ import (
 	"github.com/goravel/framework/contracts/http/client"
 	"github.com/goravel/framework/contracts/log"
 	"github.com/goravel/framework/contracts/mail"
+	"github.com/goravel/framework/contracts/notification"
 	"github.com/goravel/framework/contracts/process"
 	"github.com/goravel/framework/contracts/queue"
 	"github.com/goravel/framework/contracts/route"
@@ -55,6 +57,10 @@ func Artisan() console.Artisan {
 
 func Auth(ctx ...http.Context) auth.Auth {
 	return App().MakeAuth(ctx...)
+}
+
+func Broadcast() broadcasting.Broadcast {
+	return App().MakeBroadcast()
 }
 
 func Cache() cache.Cache {
@@ -103,6 +109,10 @@ func Log() log.Log {
 
 func Mail() mail.Mail {
 	return App().MakeMail()
+}
+
+func Notification() notification.Manager {
+	return App().MakeNotification()
 }
 
 func Orm() orm.Orm {
