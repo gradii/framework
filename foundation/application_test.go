@@ -29,6 +29,7 @@ import (
 	mocksconfig "github.com/goravel/framework/mocks/config"
 	mocksconsole "github.com/goravel/framework/mocks/console"
 	mocksfoundation "github.com/goravel/framework/mocks/foundation"
+	mocksgrpc "github.com/goravel/framework/mocks/grpc"
 	mocksroute "github.com/goravel/framework/mocks/route"
 	"github.com/goravel/framework/support"
 )
@@ -74,6 +75,36 @@ func (s *ApplicationTestSuite) TestAddPublishGroup() {
 
 func (s *ApplicationTestSuite) TestBasePath() {
 	s.Contains(s.app.BasePath("goravel.go"), filepath.Join("framework", "goravel.go"))
+}
+
+func (s *ApplicationTestSuite) TestBuild_ConfiguresGrpcBeforeProvidersBoot() {
+	// Registering gRPC services in a provider's Boot creates the server, and
+	// server options are ignored once it exists.
+	optionsApplied := false
+	mockGrpc := mocksgrpc.NewGrpc(s.T())
+	mockGrpc.EXPECT().ServerOptions(mock.Anything).Run(func([]grpc.ServerOption) {
+		optionsApplied = true
+	}).Once()
+	s.app.Singleton(binding.Grpc, func(foundation.Application) (any, error) {
+		return mockGrpc, nil
+	})
+
+	mockRepo := mocksfoundation.NewProviderRepository(s.T())
+	mockRepo.EXPECT().Register(s.app).Return(nil).Once()
+	mockRepo.EXPECT().Boot(s.app).Run(func(foundation.Application) {
+		s.True(optionsApplied, "gRPC server options must be applied before providers boot")
+	}).Once()
+	mockRepo.EXPECT().GetBooted().Return(nil).Once()
+	s.app.providerRepository = mockRepo
+
+	builder := NewApplicationBuilder(s.app)
+	builder.grpcServerOptions = func() []grpc.ServerOption {
+		return []grpc.ServerOption{grpc.MaxRecvMsgSize(1 << 20)}
+	}
+	s.app.builder = builder
+
+	s.app.Build()
+	s.app.cancel()
 }
 
 func (s *ApplicationTestSuite) TestConfigPath() {
