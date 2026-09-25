@@ -1,0 +1,105 @@
+# Port of the GitHub test workflows:
+#   Test          .github/workflows/test.yml, test_pr.yml (goravel/.github test.yml)
+#   Test External .github/workflows/test_external.yml
+#
+# CNB has no matrix, so every Go version is its own pipeline, and the pipelines
+# of an event run in parallel. The windows job of Test is not ported, the hosted
+# CNB runners are Linux only.
+
+# The counterpart of the actions/setup-go cache. Pushes to master update it,
+# pull requests only read it, so untrusted PR code can't poison it.
+.go-cache: &go-cache
+  - master:/go/pkg/mod:copy-on-write
+  - master:/root/.cache/go-build:copy-on-write
+
+.go-cache-read-only: &go-cache-read-only
+  - master:/go/pkg/mod:copy-on-write-read-only
+  - master:/root/.cache/go-build:copy-on-write-read-only
+
+.go: &go
+  runner:
+    # Same as ubuntu-latest, the integration tests only run SQL Server on x86.
+    tags: cnb:arch:amd64
+  env:
+    # proxy.golang.org may be unreachable from the CNB runners in China.
+    GOPROXY: https://mirrors.cloud.tencent.com/go/,direct
+
+.test: &test
+  <<: *go
+  stages:
+    - name: install dependencies
+      script: go mod tidy
+    - name: run tests
+      script: go test -timeout 10m ./...
+
+.test-external: &test-external
+  <<: *go
+  services:
+    # docker-in-docker for the database containers, their ports are published
+    # on 127.0.0.1 like on the GitHub runners.
+    - docker
+  stages:
+    - name: install dependencies
+      script: go mod tidy && cd tests && go mod tidy
+    - name: pull database images
+      # The images the goravel/postgres, mysql and sqlserver drivers start.
+      # Pulled inside go test they eat into its 10m, and CNB may pull from
+      # Docker Hub and MCR slower than GitHub does. A large layer downloads
+      # without output, so the 10m no-output timeout of CNB is raised too.
+      timeout: 30m
+      script:
+        - docker pull postgres:latest
+        - docker pull mysql:latest
+        - docker pull mcr.microsoft.com/mssql/server:latest
+    - name: run tests
+      # go test prints nothing until its only package finishes, which can take
+      # longer than the 10m no-output timeout of CNB once compiling is counted.
+      timeout: 30m
+      script: cd tests && go test -timeout 10m ./...
+
+master:
+  push:
+    - name: Test (go 1.26)
+      <<: *test
+      docker:
+        image: golang:1.26
+        volumes: *go-cache
+    - name: Test (go 1.27)
+      <<: *test
+      docker:
+        image: golang:1.27
+        volumes: *go-cache
+    - name: Test External (go 1.26)
+      <<: *test-external
+      docker:
+        image: golang:1.26
+        volumes: *go-cache
+    - name: Test External (go 1.27)
+      <<: *test-external
+      docker:
+        image: golang:1.27
+        volumes: *go-cache
+
+# Pull requests into any branch, like the unfiltered pull_request of GitHub.
+"**":
+  pull_request:
+    - name: Test (go 1.26)
+      <<: *test
+      docker:
+        image: golang:1.26
+        volumes: *go-cache-read-only
+    - name: Test (go 1.27)
+      <<: *test
+      docker:
+        image: golang:1.27
+        volumes: *go-cache-read-only
+    - name: Test External (go 1.26)
+      <<: *test-external
+      docker:
+        image: golang:1.26
+        volumes: *go-cache-read-only
+    - name: Test External (go 1.27)
+      <<: *test-external
+      docker:
+        image: golang:1.27
+        volumes: *go-cache-read-only
