@@ -21,41 +21,54 @@
     # Same as ubuntu-latest, the integration tests only run SQL Server on x86.
     tags: cnb:arch:amd64
   env:
-    # proxy.golang.org may be unreachable from the CNB runners in China.
-    GOPROXY: https://mirrors.cloud.tencent.com/go/,direct
+    # proxy.golang.org may be unreachable from the CNB runners in China, so the
+    # module cache is fetched from mirrors. Each mirror is kept ahead of
+    # `direct` (a direct VCS fetch is usually unreachable from the runners too)
+    # and the list has more than one entry of the same kind on purpose: a single
+    # mirror returns 500 spuriously now and then
+    # (`mirrors.cloud.tencent.com ... 500 Internal Server Error`), which would
+    # fail `go mod tidy` before it ever reaches `direct`. `go` falls through to
+    # the next entry on a 5xx, so the mirrors back each other up.
+    GOPROXY: https://mirrors.cloud.tencent.com/go/,https://goproxy.cn,https://goproxy.io,direct
 
 .test: &test
   <<: *go
   stages:
     - name: install dependencies
-      script: go mod tidy
+      # `go mod tidy` rewrites go.mod/go.sum, so a retry is safe (it is
+      # idempotent) and it rescues the build from a one-off network hiccup.
+      script: go mod tidy || (sleep 5 && go mod tidy)
     - name: run tests
       script: go test -timeout 10m ./...
 
 .test-external: &test-external
   <<: *go
   services:
-    # docker-in-docker for the database containers, their ports are published
-    # on 127.0.0.1 like on the GitHub runners.
+    # The database containers of the goravel/* drivers run on a Docker daemon of
+    # the platform. `docker context inspect` of the job reports
+    # unix:///var/run/docker.sock, so the job shares the socket of the daemon and
+    # the ports its containers publish are reachable on the loopback of the job,
+    # like on the GitHub runners.
     - docker
   stages:
     - name: install dependencies
-      script: go mod tidy && cd tests && go mod tidy
-    - name: pull database images
-      # The images the goravel/postgres, mysql and sqlserver drivers start.
-      # Pulled inside go test they eat into its 10m, and CNB may pull from
-      # Docker Hub and MCR slower than GitHub does. A large layer downloads
-      # without output, so the 10m no-output timeout of CNB is raised too.
-      timeout: 30m
-      script:
-        - docker pull postgres:latest
-        - docker pull mysql:latest
-        - docker pull mcr.microsoft.com/mssql/server:latest
+      # Idempotent and retried, same reason as the `Test` pipeline above.
+      script: (go mod tidy && cd tests && go mod tidy) || (sleep 5 && go mod tidy && cd tests && go mod tidy)
     - name: run tests
       # go test prints nothing until its only package finishes, which can take
       # longer than the 10m no-output timeout of CNB once compiling is counted.
+      #
+      # No pull or check stage in front of it, on purpose:
+      # - the images the drivers start (postgres, mysql
+      #   and mcr.microsoft.com/mssql/server) are pulled on demand and fit into
+      #   the 30m budget below even on a cold cache;
+      # - the check that was tried here before reports the published port of a
+      #   container it started itself with `docker port`, which CNB cannot
+      #   answer (the daemon drops `-p` of a container on the host network), so
+      #   that check fails on the CI system no matter what the tests do.
       timeout: 30m
-      script: cd tests && go test -timeout 10m ./...
+      script:
+        - cd tests && go test -timeout 10m ./...
 
 master:
   push:

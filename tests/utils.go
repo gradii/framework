@@ -15,6 +15,14 @@ const (
 	testUsername = "goravel"
 	testPassword = "Framework!123"
 	testSchema   = "goravel"
+
+	// testSqlserverImageTag pins the SQL Server image the tests start. The
+	// driver defaults to `:latest`, which resolves to SQL Server 2025 now, and
+	// its SQLPAL layer aborts on kernels older than 5.10 (the CNB runners run
+	// 5.4) with `ASSERT ... sqlpalstubs.cpp Line=887`, so the container exits
+	// before it ever accepts a connection. 2022 is the newest release that
+	// still starts on those runners.
+	testSqlserverImageTag = "2022-latest"
 )
 
 func newSchema(testQuery *TestQuery, connectionToTestQuery map[string]*TestQuery) *schema.Schema {

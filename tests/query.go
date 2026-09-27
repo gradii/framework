@@ -312,6 +312,18 @@ func (r *TestQueryBuilder) single(driver, prefix, timezone string, singular bool
 	case sqlserver.Name:
 		dockerDriver = sqlserver.NewDocker(sqlserver.NewConfig(mockConfig, connection), process.New(), testDatabase, testUsername, testPassword)
 		databaseDriver = sqlserver.NewSqlserver(mockConfig, utils.NewTestLog(), process.New(), connection)
+		// The driver defaults to `:latest`, which now resolves to SQL Server
+		// 2025. Its SQLPAL layer needs a newer kernel than the 5.4 of the CNB
+		// runners, where the container aborts with
+		// `ASSERT ... sqlpalstubs.cpp Line=887` and never opens its port, so
+		// the tests wait out the whole retry budget and panic. Pin the tag to a
+		// release whose SQLPAL still supports that kernel.
+		dockerDriver.Image(contractsdocker.Image{
+			Repository:   "mcr.microsoft.com/mssql/server",
+			Tag:          testSqlserverImageTag,
+			Env:          []string{"ACCEPT_EULA=Y", "MSSQL_SA_PASSWORD=" + testPassword},
+			ExposedPorts: []string{"1433"},
+		})
 	}
 
 	container := NewContainer(dockerDriver)
