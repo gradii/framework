@@ -193,11 +193,28 @@ func (g *SqliteGrammar) CompileUpsert(b *Builder, values []map[string]any, uniqu
 }
 
 // CompileTruncate mirrors SQLiteGrammar::compileTruncate(): the sequence table is reset too.
+//
+// Laravel asks the connection's schema builder for parseSchemaAndTable. That method only splits the
+// reference on ".", so the same split is done here: a schema-qualified table keeps its schema on the
+// sqlite_sequence delete, and only the bare table name is prefixed in the binding.
 func (g *SqliteGrammar) CompileTruncate(b *Builder) []Statement {
-	bare := aliasOf(b.from)
+	reference := asString(b.from)
+	schema := ""
+	table := reference
+	if index := strings.LastIndex(reference, "."); index >= 0 {
+		schema = reference[:index]
+		table = reference[index+1:]
+	}
+
+	// Mirrors `$schema = $schema ? $this->wrapValue($schema).'.' : ''`: sqlite_sequence itself is
+	// never prefixed, whatever prefix the connection carries.
+	sequence := "delete from "
+	if schema != "" {
+		sequence += g.WrapValue(schema) + "."
+	}
 
 	return []Statement{
-		{SQL: "delete from sqlite_sequence where name = ?", Bindings: []any{g.Prefix() + bare}},
+		{SQL: sequence + "sqlite_sequence where name = ?", Bindings: []any{g.Prefix() + table}},
 		{SQL: "delete from " + g.WrapTable(b.from)},
 	}
 }

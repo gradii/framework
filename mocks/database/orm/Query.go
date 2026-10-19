@@ -4636,7 +4636,7 @@ func (_c *Query_Sum_Call) RunAndReturn(run func(string, interface{}) error) *Que
 }
 
 // Table provides a mock function with given fields: name, args
-func (_m *Query) Table(name string, args ...interface{}) orm.Query {
+func (_m *Query) Table(name interface{}, args ...interface{}) orm.Query {
 	var _ca []interface{}
 	_ca = append(_ca, name)
 	_ca = append(_ca, args...)
@@ -4647,7 +4647,7 @@ func (_m *Query) Table(name string, args ...interface{}) orm.Query {
 	}
 
 	var r0 orm.Query
-	if rf, ok := ret.Get(0).(func(string, ...interface{}) orm.Query); ok {
+	if rf, ok := ret.Get(0).(func(interface{}, ...interface{}) orm.Query); ok {
 		r0 = rf(name, args...)
 	} else {
 		if ret.Get(0) != nil {
@@ -4664,14 +4664,14 @@ type Query_Table_Call struct {
 }
 
 // Table is a helper method to define mock.On call
-//   - name string
+//   - name interface{}
 //   - args ...interface{}
 func (_e *Query_Expecter) Table(name interface{}, args ...interface{}) *Query_Table_Call {
 	return &Query_Table_Call{Call: _e.mock.On("Table",
 		append([]interface{}{name}, args...)...)}
 }
 
-func (_c *Query_Table_Call) Run(run func(name string, args ...interface{})) *Query_Table_Call {
+func (_c *Query_Table_Call) Run(run func(name interface{}, args ...interface{})) *Query_Table_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		variadicArgs := make([]interface{}, len(args)-1)
 		for i, a := range args[1:] {
@@ -4679,7 +4679,7 @@ func (_c *Query_Table_Call) Run(run func(name string, args ...interface{})) *Que
 				variadicArgs[i] = a.(interface{})
 			}
 		}
-		run(args[0].(string), variadicArgs...)
+		run(args[0].(interface{}), variadicArgs...)
 	})
 	return _c
 }
@@ -4689,7 +4689,7 @@ func (_c *Query_Table_Call) Return(_a0 orm.Query) *Query_Table_Call {
 	return _c
 }
 
-func (_c *Query_Table_Call) RunAndReturn(run func(string, ...interface{}) orm.Query) *Query_Table_Call {
+func (_c *Query_Table_Call) RunAndReturn(run func(interface{}, ...interface{}) orm.Query) *Query_Table_Call {
 	_c.Call.Return(run)
 	return _c
 }

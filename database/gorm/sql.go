@@ -188,8 +188,9 @@ func (r *Query) compileUpdateScoped(values map[string]any, byDest bool) (string,
 // like.
 //
 // The subqueries are appended to whatever columns the caller already asked for, so the parent's own
-// columns still come first and the row can be scanned into the model, and the aliases match the ones
-// the relation layer gives GORM.
+// columns still come first and the row can be scanned into the model. Each alias is the one fixed when
+// the sub-select was queued: aggregateAlias' `<relation>_<fn>[_<column>]` shape, or the explicit alias
+// of a contractsorm.RelationCount, so the column comes back under the name the caller expects.
 func (r *Query) applySelectSubAggregates(builder *querybuilder.Builder) error {
 	if len(r.conditions.selectSubs) == 0 {
 		return nil

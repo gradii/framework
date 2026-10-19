@@ -81,7 +81,11 @@ func (r *Query) insertRecords(value any) ([]map[string]any, error) {
 // does not have to demand TableName() as well.
 func (r *Query) declaredTable() string {
 	if r.conditions.table != nil {
-		return r.conditions.table.name
+		if name, ok := r.conditions.table.name.(string); ok {
+			return name
+		}
+		// An already-qualified table is named by an expression; its raw SQL is the name.
+		return querybuilder.ExpressionValue(r.conditions.table.name)
 	}
 
 	return ""

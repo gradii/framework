@@ -88,13 +88,15 @@ type Where struct {
 // HavingType matches Laravel's $having['type'] strings.
 type HavingType string
 
+// HavingBitType carries Laravel's "Bitwise" string, the type Builder::having() stamps on a bitwise
+// operator (Builder.php:2507); the Go identifier keeps the descriptive name.
 const (
 	HavingBasic          HavingType = "Basic"
 	HavingRawType        HavingType = "Raw"
 	HavingBetweenType    HavingType = "between"
 	HavingNullType       HavingType = "Null"
 	HavingNotNullType    HavingType = "NotNull"
-	HavingBitType        HavingType = "bit"
+	HavingBitType        HavingType = "Bitwise"
 	HavingExpressionType HavingType = "Expression"
 	HavingNestedType     HavingType = "Nested"
 )

@@ -73,6 +73,37 @@ func TestInterpolateNumberedFormIgnoresQuotedDollar(t *testing.T) {
 		Explain(`insert into t (a, b, c) values ($1, $2, '$3')`, "x", "y", "z"))
 }
 
+// TestInterpolateSqlServerPlaceholders pins the SQL Server form the facade executes and traces:
+// querybuilder.ReplacePlaceholders rewrites "?" into "@p1", "@p2" …, which interpolate did not
+// recognise, so a ToRawSql-style render of a SQL Server statement left every binding uninterpolated.
+func TestInterpolateSqlServerPlaceholders(t *testing.T) {
+	assert.Equal(t,
+		`insert into [users] ([name], [age]) values ('John', 25)`,
+		Explain(`insert into [users] ([name], [age]) values (@p1, @p2)`, "John", 25))
+
+	// The placeholders are rendered by their own number, not by order of appearance.
+	assert.Equal(t,
+		`select * from [t] where [b] = 2 and [a] = 1`,
+		Explain(`select * from [t] where [b] = @p2 and [a] = @p1`, 1, 2))
+}
+
+// TestInterpolateSqlServerPlaceholderScope pins the edges of the "@pN" recognition: a marker inside
+// a quoted literal is literal text, a "@p" with no number is not a placeholder, and a "?"-form
+// statement quoting "@p1" stays on the positional form.
+func TestInterpolateSqlServerPlaceholderScope(t *testing.T) {
+	assert.Equal(t,
+		`insert into [t] (a) values ('x', '@p2')`,
+		Explain(`insert into [t] (a) values (@p1, '@p2')`, "x", "y"))
+
+	assert.Equal(t,
+		`select * from [t] where a = 1 and b = @p`,
+		Explain(`select * from [t] where a = @p1 and b = @p`, 1))
+
+	assert.Equal(t,
+		`select * from [t] where note = '@p1' and id = 7`,
+		Explain(`select * from [t] where note = '@p1' and id = ?`, 7))
+}
+
 // TestInterpolateOrdinaryStatementsUnchanged guards that quote tracking does not alter the rendering
 // of ordinary statements: the interpolated form is display-only and must match the literals the
 // compiled statement runs with.

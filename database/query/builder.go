@@ -475,6 +475,11 @@ func (b *Builder) PrepareValueAndOperator(value, operator any, useDefault bool) 
 }
 
 // InvalidOperatorAndValue mirrors Builder::invalidOperatorAndValue().
+//
+// The membership test is case-sensitive, as Laravel's in_array() is: "LIKE" with a null value is
+// not an illegal combination, so it falls through to whereNull and renders "is not null", while
+// lowercase "like" is refused. InvalidOperator lowercases separately, so both spellings still
+// pass operator validation; only this null-value guard distinguishes them.
 func (b *Builder) InvalidOperatorAndValue(operator, value any) bool {
 	if value != nil {
 		return false
@@ -483,7 +488,7 @@ func (b *Builder) InvalidOperatorAndValue(operator, value any) bool {
 	if !ok {
 		return false
 	}
-	if !inStrings(strings.ToLower(op), operators) {
+	if !inStrings(op, operators) {
 		return false
 	}
 	return !inStrings(op, []string{"=", "<=>", "<>", "!="})

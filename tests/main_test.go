@@ -20,5 +20,12 @@ func TestMain(m *testing.M) {
 	sqlite.App = mockApp
 	sqlserver.App = mockApp
 
-	os.Exit(m.Run())
+	code := m.Run()
+
+	// The containers outlive the test binary, so the databases this run created
+	// are dropped once the tests are over; without that every run leaves about
+	// a hundred behind and the container's catalog grows without bound.
+	dropCreatedDatabases()
+
+	os.Exit(code)
 }

@@ -226,6 +226,7 @@ func (r *TestQueryBuilder) Sqlite(prefix string, singular bool) *TestQuery {
 	if err != nil {
 		panic(err)
 	}
+	recordCreatedDatabase(docker.Config())
 
 	mockDatabaseConfig(mockConfig, database.Config{
 		Driver:     sqlite.Name,
@@ -253,6 +254,7 @@ func (r *TestQueryBuilder) SqliteWithTimezone(timezone string) *TestQuery {
 	if err != nil {
 		panic(err)
 	}
+	recordCreatedDatabase(docker.Config())
 
 	mockDatabaseConfig(mockConfig, database.Config{
 		Driver:     sqlite.Name,
@@ -338,6 +340,7 @@ func (r *TestQueryBuilder) single(driver, prefix, timezone string, singular bool
 	if err != nil {
 		panic(err)
 	}
+	recordCreatedDatabase(containerInstance.Config())
 
 	// goravel/*:docker.go#resetConfigPort
 	mockConfig.EXPECT().Get(fmt.Sprintf("database.connections.%s.write", connection)).Return(nil)

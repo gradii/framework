@@ -24,7 +24,7 @@ func TestImageToCommand(t *testing.T) {
 		Tag:        "latest",
 	})
 
-	assert.Equal(t, "docker run --rm -d redis:latest", command)
+	assert.Equal(t, "docker run --rm -d --shm-size 1g redis:latest", command)
 	assert.True(t, len(exposedPorts) == 0)
 
 	command, exposedPorts = ImageToCommand(&docker.Image{
@@ -33,7 +33,7 @@ func TestImageToCommand(t *testing.T) {
 		ExposedPorts: []string{"6379"},
 		Env:          []string{"a=b"},
 	})
-	assert.Equal(t, fmt.Sprintf("docker run --rm -d -e a=b -p %s:6379 redis:latest", ExposedPort(exposedPorts, "6379")), command)
+	assert.Equal(t, fmt.Sprintf("docker run --rm -d --shm-size 1g -e a=b -p %s:6379 redis:latest", ExposedPort(exposedPorts, "6379")), command)
 	assert.NotEmpty(t, ExposedPort(exposedPorts, "6379"))
 
 	command, exposedPorts = ImageToCommand(&docker.Image{
@@ -43,7 +43,7 @@ func TestImageToCommand(t *testing.T) {
 		Env:          []string{"a=b"},
 		Args:         []string{"--a=b"},
 	})
-	assert.Equal(t, "docker run --rm -d -e a=b -p 1234:6379 redis:latest --a=b", command)
+	assert.Equal(t, "docker run --rm -d --shm-size 1g -e a=b -p 1234:6379 redis:latest --a=b", command)
 	assert.Equal(t, []string{"1234:6379"}, exposedPorts)
 
 	command, _ = ImageToCommand(&docker.Image{
@@ -54,7 +54,16 @@ func TestImageToCommand(t *testing.T) {
 		Args:         []string{"--a=b"},
 		Cmd:          []string{"sleep", "1000"},
 	})
-	assert.Equal(t, "docker run --rm -d -e a=b -p 1234:6379 redis:latest --a=b sleep 1000", command)
+	assert.Equal(t, "docker run --rm -d --shm-size 1g -e a=b -p 1234:6379 redis:latest --a=b sleep 1000", command)
+
+	// A caller can choose the size, which is what a database image needs when
+	// the default is not generous enough for its workload.
+	command, _ = ImageToCommand(&docker.Image{
+		Repository: "postgres",
+		Tag:        "latest",
+		ShmSize:    "2g",
+	})
+	assert.Equal(t, "docker run --rm -d --shm-size 2g postgres:latest", command)
 }
 
 func TestValidPort(t *testing.T) {

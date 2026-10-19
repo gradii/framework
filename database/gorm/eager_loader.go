@@ -823,7 +823,7 @@ func (r *Query) runChunkedRelatedQueryCompiled(keys []any, desc *relationDescrip
 // oneOfManyJoin renders the join an OfMany callback asks for: a grouped subquery holding the
 // per-parent aggregate, so only the row reaching it is kept. It returns the UNKEYED join fragment —
 // "(sub) alias ON ..." with no join keyword — because conditions.join is rendered with a keyword
-// prefix appended (see the loop in compileFrom over conditions.join, which calls JoinRaw(..., "inner")).
+// prefix appended (see the loop in newBuilder over conditions.join, which calls JoinRaw(..., "inner")).
 // Carrying an "INNER JOIN " prefix here would render the keyword twice.
 func (r *Query) oneOfManyJoin(desc *relationDescriptor, cfg *oneOfManyConfig) (string, []any, error) {
 	if cfg == nil || len(desc.references) == 0 {

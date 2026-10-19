@@ -193,67 +193,100 @@ not modified.
 
 ## 7. Builder surface
 
-Grouped checklist. Boxes are ticked as the port lands.
+Grouped checklist. Convention: `- [x]` means the named entry point exists on `Builder` with the
+Laravel signature adapted as recorded in section 8; `- [ ]` means it is not ported yet. A row is
+split into several rows when only part of a group has landed, so a partially ported group never
+reads as done. The execution half of the builder (`get`, `first`, `chunk`, `insert`, `update`,
+`delete`, ...) lives in `database/db` as the thin adapter over this builder and is ticked only when
+the method is on `Builder` itself.
 
 **Construction and state**
-- [ ] `select` `selectSub` `selectRaw` `addSelect` `distinct`
-- [ ] `from` `fromSub` `fromRaw`
-- [ ] `useIndex` `forceIndex` `ignoreIndex`
-- [ ] `newQuery` `clone` `cloneWithout` `cloneWithoutBindings`
-- [ ] `getColumns` `getLimit` `getOffset` `getBindings` `getRawBindings` `setBindings`
-- [x] `getConnection` `getProcessor` `getGrammar` `useWritePdo` `raw`
+- [x] `select` `selectSub` `selectRaw` `addSelect` `distinct`
+- [x] `from` `fromSub` `fromRaw`
+- [x] `useIndex` `forceIndex` `ignoreIndex`
+- [x] `newQuery` `clone` `cloneWithout` `cloneWithoutBindings`
+- [ ] `getColumns` `getLimit` `getOffset` `getRawBindings`
+- [x] `getBindings` `setBindings` (`limit`/`offset` are read through `LimitValue`/`OffsetValue`
+      and the raw binding map through `RawBindings`; the PHP getter names themselves are not ported)
+- [ ] `getConnection` `getProcessor` `getGrammar` `useWritePdo` `raw`
+- [x] `rawValue`
 
 **Joins**
-- [x] `join` `joinWhere` `joinSub` `joinLateral`
-- [ ] `leftJoin` `leftJoinWhere` `leftJoinSub`
-- [ ] `rightJoin` `rightJoinWhere` `rightJoinSub`
+- [x] `join` `joinWhere` `joinSub` `joinLateral` `leftJoinLateral`
 - [x] `crossJoin` `crossJoinSub`
-- [ ] JoinClause `on` `orOn`
+- [x] `leftJoin` `leftJoinSub`
+- [ ] `leftJoinWhere`
+- [x] `rightJoin` `rightJoinSub`
+- [ ] `rightJoinWhere`
+- [x] JoinClause `on` `orOn`
 
 **Where**
 - [x] `where` `orWhere` `whereNot` `orWhereNot` `prepareValueAndOperator` `mergeWheres`
-- [ ] `whereColumn` `orWhereColumn` `whereRaw` `orWhereRaw`
-- [ ] `whereLike` `orWhereLike` `whereNotLike` `orWhereNotLike`
-- [ ] `whereIn` `orWhereIn` `whereNotIn` `orWhereNotIn`
-- [ ] `whereIntegerInRaw` `orWhereIntegerInRaw` `whereIntegerNotInRaw` `orWhereIntegerNotInRaw`
-- [ ] `whereNull` `orWhereNull` `whereNotNull` `orWhereNotNull`
-- [ ] `whereBetween` `whereBetweenColumns` `orWhereBetween` `orWhereBetweenColumns`
-- [ ] `whereNotBetween` `whereNotBetweenColumns` `orWhereNotBetween` `orWhereNotBetweenColumns`
-- [ ] `whereValueBetween` `orWhereValueBetween` `whereValueNotBetween` `orWhereValueNotBetween`
-- [ ] `whereDate` `whereTime` `whereDay` `whereMonth` `whereYear` and `or` variants
-- [ ] `whereNested` `forNestedWhere` `addNestedWhereQuery`
-- [ ] `whereExists` `orWhereExists` `whereNotExists` `orWhereNotExists` `addWhereExistsQuery`
-- [ ] `whereRowValues` `orWhereRowValues`
-- [ ] `whereJsonContains` `whereJsonDoesntContain` `whereJsonOverlaps` `whereJsonDoesntOverlap`
-- [ ] `whereJsonContainsKey` `whereJsonDoesntContainKey` `whereJsonLength` and `or` variants
-- [ ] `whereFullText` `orWhereFullText`
-- [ ] `whereAll` `whereAny` `whereNone` and `or` variants, `dynamicWhere`
+- [x] `whereColumn` `orWhereColumn` `whereRaw` `orWhereRaw`
+- [x] `whereLike` `whereNotLike`
+- [ ] `orWhereLike` `orWhereNotLike`
+- [x] `whereIn` `orWhereIn` `whereNotIn` `orWhereNotIn`
+- [x] `whereIntegerInRaw`
+- [ ] `orWhereIntegerInRaw` `whereIntegerNotInRaw` `orWhereIntegerNotInRaw`
+- [x] `whereNull` `orWhereNull` `whereNotNull` `orWhereNotNull`
+- [x] `whereBetween` `whereBetweenColumns` `orWhereBetween`
+- [ ] `orWhereBetweenColumns`
+- [x] `whereNotBetween`
+- [ ] `whereNotBetweenColumns` `orWhereNotBetween` `orWhereNotBetweenColumns`
+- [x] `whereValueBetween`
+- [ ] `orWhereValueBetween` `whereValueNotBetween` `orWhereValueNotBetween`
+- [x] `whereDate` `whereTime` `orWhereTime` `whereDay` `orWhereDay` `whereMonth` `orWhereMonth`
+      `whereYear` `orWhereYear`
+- [ ] `orWhereDate`
+- [x] `whereNested` `forNestedWhere` `addNestedWhereQuery`
+- [x] `whereExists` `orWhereExists` `whereNotExists` `addWhereExistsQuery`
+- [ ] `orWhereNotExists`
+- [x] `whereRowValues`
+- [ ] `orWhereRowValues`
+- [x] `whereJsonContains` `whereJsonDoesntContain` `whereJsonOverlaps` `whereJsonContainsKey`
+      `whereJsonDoesntContainKey` `whereJsonLength` and the `or` variants of the contains,
+      contains-key and length forms
+- [ ] `whereJsonDoesntOverlap` `orWhereJsonOverlaps` `orWhereJsonDoesntOverlap`
+- [x] `whereFullText`
+- [ ] `orWhereFullText`
+- [x] `whereAll` `whereAny` `whereNone` and `or` variants, `dynamicWhere`
 
 **Grouping, having, order, limit, union, lock**
-- [ ] `groupBy` `groupByRaw` `having` `orHaving` `havingNested` `addNestedHavingQuery`
-- [ ] `havingNull` `havingNotNull` `havingBetween` `havingRaw` `orHavingRaw`
-- [ ] `orderBy` `orderByDesc` `latest` `oldest` `inRandomOrder` `orderByRaw`
-- [ ] `reorder` `reorderDesc` `skip` `offset` `take` `limit` `groupLimit`
-- [ ] `forPage` `forPageBeforeId` `forPageAfterId`
-- [ ] `union` `unionAll` `lock` `lockForUpdate` `sharedLock`
+- [x] `groupBy` `groupByRaw` `having` `orHaving` `havingNested` `addNestedHavingQuery`
+- [x] `havingNull` `havingNotNull` `havingBetween` `havingRaw` `orHavingRaw`
+- [x] `orderBy` `orderByDesc` `latest` `oldest` `inRandomOrder` `orderByRaw`
+- [x] `reorder` `skip` `offset` `take` `limit` `groupLimit`
+- [ ] `reorderDesc`
+- [x] `forPage` `forPageBeforeId` `forPageAfterId`
+- [x] `union` `unionAll` `lock` `lockForUpdate` `sharedLock`
 
 **Reads and aggregates**
-- [ ] `toSql` `toRawSql` `find` `findOr` `value` `soleValue` `get`
-- [x] `rawValue`
-- [x] `cursor` `pluck` `implode` `exists` `doesntExist` `existsOr` `doesntExistOr`
-- [ ] `count` `min` `max` `sum` `avg` `aggregate` `numericAggregate`
-- [x] `paginate` `simplePaginate` `cursorPaginate` `getCountForPagination`
+- [x] `toSql` (`toRawSql` is not ported: placeholders stay `?` and identifiers are rendered per
+      dialect, so there is no interpolated form to return)
+- [ ] `find` `findOr` `value` `soleValue` `get`
+- [x] `aggregate`
+- [ ] `numericAggregate`
+- [x] `getCountForPagination` `cursorPaginate`
+- [ ] `paginate` `simplePaginate`
 - [x] `beforeQuery` `applyBeforeQueryCallbacks`
 - [ ] `afterQuery` `applyAfterQueryCallbacks`
 
-**Writes**
-- [ ] `insert` `insertOrIgnore` `insertGetId` `insertUsing` `insertOrIgnoreUsing`
+**Writes (compile half)**
+- [x] `insertUsing` `insertOrIgnoreUsing`
+- [ ] `insert` `insertOrIgnore` `insertGetId`
 - [ ] `update` `updateFrom` `updateOrInsert` `upsert`
 - [ ] `increment` `incrementEach` `decrement` `decrementEach` `delete` `truncate`
 
+`incrementEach` validates and prepares its entries; the SQL is compiled by `ToUpdateSQL`.
+`toInsertSql`, `toUpdateSql`, `toDeleteSql`, `toUpsertSql`, `toTruncateSql`, `toInsertGetIdSql`,
+`toInsertOrIgnoreSql`, `toExistsSql` and `toAggregateSql` are the compile entry points and are all
+ported (`ToInsertSQL`, `ToUpdateSQL`, `ToDeleteSQL`, `ToUpsertSQL`, `ToTruncateSQL`,
+`ToInsertGetIdSQL`, `ToInsertOrIgnoreSQL`, `ToExistsSQL`, `ToAggregateSQL`).
+
 **Traits mixed into the builder (`Concerns/BuildsQueries`)**
 - [ ] `chunk` `chunkMap` `each` `chunkById` `chunkByIdDesc` `eachById`
-- [ ] `lazy` `lazyById` `lazyByIdDesc` `first` `firstOrFail` `sole` `tap` `pipe`
+- [ ] `lazy` `lazyById` `lazyByIdDesc` `first` `firstOrFail` `sole`
+- [x] `tap` `pipe`
 
 ## 8. Deliberate Go deviations
 
@@ -269,6 +302,8 @@ These are intentional and must be documented in code, not treated as gaps.
 | `Collection` type | out of scope | scope decision |
 | Laravel-style `Relation` objects | existing descriptor system stays | scope decision |
 | `$component` presence via `isset` | explicit nil or presence flag | Go fields always exist |
+| `forPage($page, $perPage = 15)` | `ForPage(page int, perPage ...int)` | Go has no default arguments, so the default is a variadic. A surplus argument is ignored: `ForPage(2, 15, 20)` is `ForPage(2, 15)`. The builder has no error return, and a fluent call is the wrong place to panic on an arity slip |
+| `forPageBeforeId($perPage = 15, ...)` / `forPageAfterId($perPage = 15, ...)` | `ForPageBeforeId(perPage int, lastID any, column string)` | A leading default cannot be variadic in Go, so the caller passes the framework default explicitly; a passed zero is never replaced |
 
 ## 9. Verification notes
 
@@ -282,3 +317,8 @@ These are intentional and must be documented in code, not treated as gaps.
 - **Golden strings to preserve or change deliberately**, for example from `tests/to_sql_test.go`:
   `SELECT count(*) FROM "users" WHERE "id" = $1 AND "users"."deleted_at" IS NULL`.
 - **Coverage proof:** every row above is ticked against the Laravel file named in the header table.
+- **Known redundant assertion:** the three perPage-0 rows of the corpus `testForPage` are pinned in
+  both `TestForPage` (`laravel_port_gap_pagination_gap_test.go`) and
+  `TestLaravelPortFixForPageZeroPerPage` (`laravel_port_fix_fix_forpage_zero_perpage_test.go`). The
+  second file adds the regression context for the removed zero substitution; the duplication is
+  deliberate, not a weakened assertion.

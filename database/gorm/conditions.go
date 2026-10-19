@@ -53,7 +53,10 @@ type Select struct {
 }
 
 type Table struct {
-	name string
+	// name is a bare table name, which the grammar prefixes at render time, or a
+	// querybuilder.Expression naming a table that is already qualified. An expression is rendered
+	// verbatim, so the connection prefix is not applied to it.
+	name any
 	args []any
 }
 

@@ -234,7 +234,13 @@ type Query interface {
 	// Max calculates the maximum value of a column.
 	Max(column string, dest any) error
 	// Table specifies the table for the query.
-	Table(name string, args ...any) Query
+	//
+	// A string is a bare table name, and the connection prefix is applied to it when the statement
+	// is rendered. Pass a query.Raw expression to name a table that is already qualified — for
+	// example a catalog name that must be addressed verbatim — and it is rendered as given, with no
+	// prefix added. That mirrors Laravel's withoutTablePrefix(), which the query builder itself does
+	// not expose.
+	Table(name any, args ...any) Query
 	// ToSql returns the query as a SQL string.
 	ToSql() ToSql
 	// ToRawSql returns the query as a raw SQL string.

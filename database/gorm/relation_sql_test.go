@@ -162,8 +162,13 @@ func TestCompileExistenceSubquery_HasOneThrough_SQL(t *testing.T) {
 
 func runAggregateSQL(t *testing.T, sub selectSub) string {
 	t.Helper()
-	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(q.instance, &relUser{}, "Books")
+	return runAggregateRelationSQL(t, &relUser{}, "Books", sub)
+}
+
+func runAggregateRelationSQL(t *testing.T, model any, relation string, sub selectSub) string {
+	t.Helper()
+	q := newRelQueryWith(t, model)
+	desc, err := resolveRelation(q.instance, model, relation)
 	assert.NoError(t, err)
 	inner, err := q.compileAggregateSubquery(desc, sub)
 	assert.NoError(t, err)
@@ -199,6 +204,51 @@ func TestCompileAggregateSubquery_Avg_SQL(t *testing.T) {
 func TestCompileAggregateSubquery_Exists_SQL(t *testing.T) {
 	sql := runAggregateSQL(t, selectSub{relation: "Books", column: "*", function: "exists"})
 	assert.Equal(t, `select 1 from "rel_books" where "rel_users"."id" = "rel_books"."user_id"`, sql)
+}
+
+// The aggregate subquery (WithCount / WithExists / WithMax / WithMin / WithSum / WithAvg) is
+// compiled through compileExistenceSubquery, so applySubquerySoftDelete's predicate must appear
+// there too. Nothing pinned that path when the predicate was introduced: disabling
+// applySubquerySoftDelete left the whole aggregate suite green while only the existence pins
+// failed, so a regression would have silently counted soft-deleted rows.
+func TestCompileAggregateSubquery_FrameworkSoftDeletePredicate(t *testing.T) {
+	sql := runAggregateRelationSQL(t, &relSoftOwner{}, "Books", selectSub{relation: "Books", column: "*", function: "count"})
+	assert.Equal(t, `select count(*) from "rel_soft_books" where "rel_soft_owners"."id" = "rel_soft_books"."user_id" and "rel_soft_books"."deleted_at" IS NULL`, sql)
+}
+
+// The same aggregate path for a morph relation must carry both the morph type predicate and the
+// soft-delete predicate.
+func TestCompileAggregateSubquery_MorphFrameworkSoftDeletePredicate(t *testing.T) {
+	sql := runAggregateRelationSQL(t, &relSoftOwner{}, "Houses", selectSub{relation: "Houses", column: "*", function: "count"})
+	assert.Equal(t, `select count(*) from "rel_soft_houses" where "rel_soft_owners"."id" = "rel_soft_houses"."houseable_id" and "rel_soft_houses"."houseable_type" = ? and "rel_soft_houses"."deleted_at" IS NULL`, sql)
+}
+
+// The pin above is exercised end to end through the public WithCount / WithExists entry points, so
+// it covers applySelectSubAggregates too - not only the inner builder.
+func TestWithCount_FrameworkSoftDeleteRelation(t *testing.T) {
+	q := newRelQueryWith(t, &relSoftOwner{})
+	builder, err := toQuery(q.WithCount("Books")).newBuilder()
+	require.NoError(t, err)
+	sql, _ := builder.ToSelectSQL()
+
+	assert.Equal(t, `select "rel_soft_owners".*, (select count(*) from "rel_soft_books" where "rel_soft_owners"."id" = "rel_soft_books"."user_id" and "rel_soft_books"."deleted_at" IS NULL) AS "books_count" from "rel_soft_owners"`, sql)
+}
+
+func TestWithExists_FrameworkSoftDeleteRelation(t *testing.T) {
+	q := newRelQueryWith(t, &relSoftOwner{})
+	builder, err := toQuery(q.WithExists("Books")).newBuilder()
+	require.NoError(t, err)
+	sql, _ := builder.ToSelectSQL()
+
+	assert.Equal(t, `select "rel_soft_owners".*, CASE WHEN EXISTS (select 1 from "rel_soft_books" where "rel_soft_owners"."id" = "rel_soft_books"."user_id" and "rel_soft_books"."deleted_at" IS NULL) THEN 1 ELSE 0 END AS "books_exists" from "rel_soft_owners"`, sql)
+}
+
+// A related model still declaring gorm.DeletedAt gets no predicate on the aggregate path either,
+// matching the existence path and the pre-conversion renderer.
+func TestCompileAggregateSubquery_LegacyGormSoftDeleteNotPredicated(t *testing.T) {
+	sql := runAggregateRelationSQL(t, &relSoftOwner{}, "GBooks", selectSub{relation: "GBooks", column: "*", function: "count"})
+	assert.Equal(t, `select count(*) from "rel_gorm_books" where "rel_soft_owners"."id" = "rel_gorm_books"."user_id"`, sql)
+	assert.NotContains(t, sql, "deleted_at")
 }
 
 // ---------------------------------------------------------------------------
@@ -366,6 +416,16 @@ var existenceEqPair = regexp.MustCompile(`([a-z_][a-z0-9_.]*) = ([a-z_][a-z0-9_.
 // quoting, and equality operand order - so the differential test compares the parts that must be
 // identical: the tables, joins and predicates. Any other difference is a real parity break and makes
 // the equality fail.
+//
+// Operand order is folded deliberately, because it cannot be compared against this fixture: the old
+// GORM chain wrote `foreign = primary` for has-one/has-many/morph and `primary = foreign` for
+// belongs-to, while the framework builder (like Laravel's whereColumn in
+// Relation::getRelationExistenceQuery) always writes the parent key first. Equality is symmetric in
+// SQL, so either rendering is correct, but a direction swap would fail the differential test for
+// reasons that are not parity breaks. Operand order is therefore pinned where it is meaningful: the
+// exact-SQL tests above assert the full string, direction included, for every relation kind. The fold
+// only ever touches `identifier = identifier` pairs, so a missing, extra or changed predicate still
+// makes the differential test fail.
 func normalizeExistenceSQL(sql string) string {
 	sql = strings.ToLower(sql)
 	sql = strings.NewReplacer(`"`, "", "`", "").Replace(sql)
@@ -378,6 +438,28 @@ func normalizeExistenceSQL(sql string) string {
 	})
 
 	return strings.Join(strings.Fields(sql), " ")
+}
+
+// normalizeExistenceSQL's contract, stated as a test: it folds case, quoting and equality operand
+// order; it does NOT fold a predicate. This is what lets the differential test below stay sensitive
+// to a missing or extra predicate while tolerating the fixture's reversed operand order.
+func TestNormalizeExistenceSQL_FoldsOnlyCosmetics(t *testing.T) {
+	const newSQL = `select 1 from "rel_books" where "rel_users"."id" = "rel_books"."user_id" and "rel_books"."deleted_at" IS NULL`
+
+	assert.Equal(t,
+		normalizeExistenceSQL(newSQL),
+		normalizeExistenceSQL(`SELECT 1 FROM rel_books WHERE rel_books.user_id = rel_users.id AND rel_books.deleted_at IS NULL`),
+		"case, quoting and operand order are cosmetic")
+
+	assert.NotEqual(t,
+		normalizeExistenceSQL(newSQL),
+		normalizeExistenceSQL(`select 1 from "rel_books" where "rel_users"."id" = "rel_books"."user_id"`),
+		"a missing predicate must survive normalisation")
+
+	assert.NotEqual(t,
+		normalizeExistenceSQL(newSQL),
+		normalizeExistenceSQL(`select 1 from "rel_books" where "rel_users"."id" = "rel_books"."user_id" and "rel_books"."deleted_at" IS NULL and "rel_books"."x" = ?`),
+		"an extra predicate must survive normalisation")
 }
 
 // For every relation kind the pre-conversion GORM rendering and the framework-builder rendering must

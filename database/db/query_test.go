@@ -73,32 +73,85 @@ func (s *QueryTestSuite) SetupTest() {
 	s.query = NewQuery(s.ctx, s.mockReadBuilder, s.mockWriteBuilder, s.grammar, querybuilder.DialectMySQL, s.mockLogger, "users", nil)
 }
 
+// TestWhereAnyGroupConnector pins the connector that joins WhereAny's OR-group to the clauses
+// before it, for every grammar the facade can run on. Laravel's whereAny($columns, $operator,
+// $value, $boolean = 'and') puts the "or" inside the column loop and joins the group with "and", so
+// a preceding clause must survive; the port was re-joining the whole group with "or", which dropped
+// that clause. WhereAll/WhereNone already used "and" and are pinned here for contrast.
+//
+// The connector lives in the shared whereNested/compileWheres path, so it is dialect-independent by
+// construction - but the unit test that guards it was built on a single MySQL grammar, so a
+// dialect-specific regression in the group's wrap, negation or placeholder rendering would have
+// gone unnoticed until the integration suite. Each expectation below is the phrase Laravel's own
+// grammar produces for that dialect (illuminate/database v12.55.1); the placeholders are the only
+// per-dialect difference: `?` on MySQL/SQLite, `$n` on PostgreSQL, `@pn` on SQL Server.
+func (s *QueryTestSuite) TestWhereAnyGroupConnector() {
+	tests := []struct {
+		name     string
+		grammar  querybuilder.Grammar
+		driver   string
+		where    string
+		all      string
+		none     string
+		adjacent string
+	}{
+		{
+			name:     "mysql",
+			grammar:  querybuilder.NewMySqlGrammar(""),
+			driver:   querybuilder.DialectMySQL,
+			where:    "select * from `users` where `name` = ? and (`email` = ? or `phone` = ?)",
+			all:      "select * from `users` where `name` = ? and (`email` = ? and `phone` = ?)",
+			none:     "select * from `users` where `name` = ? and not (`email` = ? or `phone` = ?)",
+			adjacent: "select * from `users` where (`weight` >= ?) and (`height` <= ?)",
+		},
+		{
+			name:     "postgres",
+			grammar:  querybuilder.NewPostgresGrammar(""),
+			driver:   querybuilder.DialectPostgres,
+			where:    `select * from "users" where "name" = $1 and ("email" = $2 or "phone" = $3)`,
+			all:      `select * from "users" where "name" = $1 and ("email" = $2 and "phone" = $3)`,
+			none:     `select * from "users" where "name" = $1 and not ("email" = $2 or "phone" = $3)`,
+			adjacent: `select * from "users" where ("weight" >= $1) and ("height" <= $2)`,
+		},
+		{
+			name:     "sqlite",
+			grammar:  querybuilder.NewSqliteGrammar(""),
+			driver:   querybuilder.DialectSqlite,
+			where:    `select * from "users" where "name" = ? and ("email" = ? or "phone" = ?)`,
+			all:      `select * from "users" where "name" = ? and ("email" = ? and "phone" = ?)`,
+			none:     `select * from "users" where "name" = ? and not ("email" = ? or "phone" = ?)`,
+			adjacent: `select * from "users" where ("weight" >= ?) and ("height" <= ?)`,
+		},
+		{
+			name:     "sqlserver",
+			grammar:  querybuilder.NewSqlServerGrammar(""),
+			driver:   querybuilder.DialectSqlServer,
+			where:    "select * from [users] where [name] = @p1 and ([email] = @p2 or [phone] = @p3)",
+			all:      "select * from [users] where [name] = @p1 and ([email] = @p2 and [phone] = @p3)",
+			none:     "select * from [users] where [name] = @p1 and not ([email] = @p2 or [phone] = @p3)",
+			adjacent: "select * from [users] where ([weight] >= @p1) and ([height] <= @p2)",
+		},
+	}
+
+	for _, test := range tests {
+		s.Run(test.name, func() {
+			// A fresh query per case: a builder carries the accumulated wheres, so reusing s.query
+			// would chain the cases together.
+			newQuery := func() *Query {
+				return NewQuery(s.ctx, nil, nil, test.grammar, test.driver, nil, "users", nil)
+			}
+
+			s.Equal(test.where, newQuery().Where("name", "John").WhereAny([]string{"email", "phone"}, "=", "x").ToSql().First())
+			s.Equal(test.all, newQuery().Where("name", "John").WhereAll([]string{"email", "phone"}, "=", "x").ToSql().First())
+			s.Equal(test.none, newQuery().Where("name", "John").WhereNone([]string{"email", "phone"}, "=", "x").ToSql().First())
+			s.Equal(test.adjacent, newQuery().WhereAny([]string{"weight"}, ">=", 200).WhereAny([]string{"height"}, "<=", 150).ToSql().First())
+		})
+	}
+}
+
 // TestCompiledSQL asserts the SQL every public method produces. The grammars are covered by
 // database/query's own tests, so this table is the facade's contract: each method must reach the
 // builder that produces the Laravel-shaped clause.
-// TestWhereAnyGroupConnector pins the connector that joins WhereAny's OR-group to the clauses
-// before it. Laravel's whereAny($columns, $operator, $value, $boolean = 'and') puts the "or" inside
-// the column loop and joins the group with "and", so a preceding clause must survive; the port was
-// re-joining the whole group with "or", which dropped that clause. WhereAll/WhereNone already used
-// "and" and are pinned here for contrast.
-func (s *QueryTestSuite) TestWhereAnyGroupConnector() {
-	s.Equal(
-		"select * from `users` where `name` = ? and (`email` = ? or `phone` = ?)",
-		s.query.Where("name", "John").WhereAny([]string{"email", "phone"}, "=", "x").ToSql().First(),
-	)
-	s.Equal(
-		"select * from `users` where `name` = ? and (`email` = ? and `phone` = ?)",
-		s.query.Where("name", "John").WhereAll([]string{"email", "phone"}, "=", "x").ToSql().First(),
-	)
-	s.Equal(
-		"select * from `users` where `name` = ? and not (`email` = ? or `phone` = ?)",
-		s.query.Where("name", "John").WhereNone([]string{"email", "phone"}, "=", "x").ToSql().First(),
-	)
-	s.Equal(
-		"select * from `users` where (`weight` >= ?) and (`height` <= ?)",
-		s.query.WhereAny([]string{"weight"}, ">=", 200).WhereAny([]string{"height"}, "<=", 150).ToSql().First(),
-	)
-}
 
 func (s *QueryTestSuite) TestCompiledSQL() {
 	tests := []struct {

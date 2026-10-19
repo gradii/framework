@@ -1,6 +1,7 @@
 # Port of the GitHub test workflows:
 #   Test          .github/workflows/test.yml, test_pr.yml (goravel/.github test.yml)
 #   Test External .github/workflows/test_external.yml
+#   Test Database (added here only: no upstream counterpart)
 #
 # CNB has no matrix, so every Go version is its own pipeline, and the pipelines
 # of an event run in parallel. The windows job of Test is not ported, the hosted
@@ -40,6 +41,17 @@
       script: go mod tidy || (sleep 5 && go mod tidy)
     - name: run tests
       script: go test -timeout 10m ./...
+
+.test-database: &test-database
+  <<: *go
+  stages:
+    - name: install dependencies
+      script: go mod tidy || (sleep 5 && go mod tidy)
+    - name: run database tests
+      # Every package under database/ is stub-backed: no database, no Docker, no
+      # services block. That is why this can be its own pipeline rather than a
+      # step of Test External, and why it is safe on the Linux-only CNB runners.
+      script: go test -timeout 10m ./database/...
 
 .test-external: &test-external
   <<: *go
@@ -82,6 +94,11 @@ master:
       docker:
         image: golang:1.27
         volumes: *go-cache
+    - name: Test Database (go 1.26)
+      <<: *test-database
+      docker:
+        image: golang:1.26
+        volumes: *go-cache
     - name: Test External (go 1.26)
       <<: *test-external
       docker:
@@ -105,6 +122,11 @@ master:
       <<: *test
       docker:
         image: golang:1.27
+        volumes: *go-cache-read-only
+    - name: Test Database (go 1.26)
+      <<: *test-database
+      docker:
+        image: golang:1.26
         volumes: *go-cache-read-only
     - name: Test External (go 1.26)
       <<: *test-external

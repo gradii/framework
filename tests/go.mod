@@ -8,12 +8,15 @@ godebug x509negativeserial=1
 
 require (
 	github.com/brianvoe/gofakeit/v7 v7.17.1
+	github.com/go-sql-driver/mysql v1.9.3
 	github.com/google/uuid v1.6.0
 	github.com/goravel/framework v1.18.0
 	github.com/goravel/mysql v1.18.0
 	github.com/goravel/postgres v1.18.0
 	github.com/goravel/sqlite v1.18.0
 	github.com/goravel/sqlserver v1.18.0
+	github.com/jackc/pgx/v5 v5.7.5
+	github.com/microsoft/go-mssqldb v1.9.2
 	github.com/spf13/cast v1.10.0
 	github.com/stretchr/testify v1.12.1
 	gorm.io/gorm v1.31.2
@@ -47,7 +50,6 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.15 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/go-sql-driver/mysql v1.9.3 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
 	github.com/golang-sql/sqlexp v0.1.0 // indirect
@@ -55,7 +57,6 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgx/v5 v5.7.5 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
@@ -67,7 +68,6 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
 	github.com/mattn/go-runewidth v0.0.30 // indirect
-	github.com/microsoft/go-mssqldb v1.9.2 // indirect
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect

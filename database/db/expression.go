@@ -38,13 +38,14 @@ func Raw(expr string, args ...any) any {
 // interpolate replaces each placeholder with a literal rendering of the argument.
 //
 // The grammars emit "?" for every dialect, and that is the form database/gorm and Raw() pass, so a
-// "?" is rendered positionally. Postgres is the one dialect whose placeholders are rewritten before
-// execution: the db facade runs and traces querybuilder.ReplacePlaceholders' "$1", "$2" … form, which
-// this did not recognise, so the facade's query log recorded "values ($1)" while the ORM's recorded
-// the same statement inlined. A statement carrying numbered placeholders is therefore rendered in
-// that form — by each placeholder's own number — and its "?" characters are left alone, because once
-// ReplacePlaceholders has run a surviving "?" is an escaped literal (an operator such as postgres's
-// "?"), not a binding.
+// "?" is rendered positionally. Postgres and SQL Server are the dialects whose placeholders are
+// rewritten before execution: the db facade runs and traces querybuilder.ReplacePlaceholders' "$1",
+// "$2" … form for postgres and its "@p1", "@p2" … form for SQL Server. Neither form was recognised
+// here, so the facade's query log recorded "values ($1)" or left every "@pN" binding in place while
+// the ORM's recorded the same statement inlined. A statement carrying either numbered form is
+// therefore rendered by each placeholder's own number, and its "?" characters are left alone,
+// because once ReplacePlaceholders has run a surviving "?" is an escaped literal (an operator such
+// as postgres's "?"), not a binding.
 //
 // A placeholder inside a single- or double-quoted literal is part of the literal's text, not a
 // binding, so the scan tracks quoting and leaves it untouched. This is the same rule
@@ -56,8 +57,8 @@ func interpolate(expr string, args []any) string {
 		return expr
 	}
 
-	if hasNumberedPlaceholder(expr) {
-		return interpolateNumbered(expr, args)
+	if prefix := numberedPlaceholderPrefix(expr); prefix != "" {
+		return interpolateNumbered(expr, args, prefix)
 	}
 
 	var out strings.Builder
@@ -93,14 +94,15 @@ func interpolate(expr string, args []any) string {
 	return out.String()
 }
 
-// hasNumberedPlaceholder reports whether expr carries a "$<digits>" placeholder, the postgres form
-// querybuilder.ReplacePlaceholders produces. A "$<digits>" inside a quoted literal is literal text
-// rather than a placeholder, so quoting is tracked and those are ignored; otherwise a "?"-form
-// statement embedding, say, 'costs $5' would be mistaken for the numbered form and lose every
-// binding.
-func hasNumberedPlaceholder(expr string) bool {
+// numberedPlaceholderPrefix reports the numbered placeholder form expr carries: "$" for the postgres
+// form querybuilder.ReplacePlaceholders produces, "@p" for the SQL Server form it produces for
+// go-mssqldb (whose ordinal parameters are named "@p1", "@p2" and so on), or "" for the "?" form. A
+// marker inside a quoted literal is literal text rather than a placeholder, so quoting is tracked
+// and those are ignored; otherwise a "?"-form statement embedding, say, 'costs $5' would be mistaken
+// for the numbered form and lose every binding.
+func numberedPlaceholderPrefix(expr string) string {
 	var quote byte
-	for i := 0; i+1 < len(expr); i++ {
+	for i := 0; i < len(expr); i++ {
 		char := expr[i]
 
 		if quote != 0 {
@@ -115,19 +117,29 @@ func hasNumberedPlaceholder(expr string) bool {
 			continue
 		}
 
-		if char == '$' && expr[i+1] >= '0' && expr[i+1] <= '9' {
-			return true
+		if char == '$' && i+1 < len(expr) && isDigit(expr[i+1]) {
+			return "$"
+		}
+
+		if char == '@' && i+2 < len(expr) && expr[i+1] == 'p' && isDigit(expr[i+2]) {
+			return "@p"
 		}
 	}
 
-	return false
+	return ""
 }
 
-// interpolateNumbered renders "$<n>" placeholders by their own number, which is the order
-// ReplacePlaceholders numbered them in. A "$" that is not followed by a usable number is left as it
-// stands, and a "$<n>" inside a quoted literal is literal text rather than a placeholder, so quoting
-// is tracked and those are left intact instead of being overwritten and having their quotes doubled.
-func interpolateNumbered(expr string, args []any) string {
+// isDigit reports whether char is an ASCII decimal digit.
+func isDigit(char byte) bool {
+	return char >= '0' && char <= '9'
+}
+
+// interpolateNumbered renders the prefix form's placeholders ("$<n>" or "@p<n>") by their own
+// number, which is the order ReplacePlaceholders numbered them in. A marker that is not followed by
+// a usable number is left as it stands, and a placeholder inside a quoted literal is literal text
+// rather than a binding, so quoting is tracked and those are left intact instead of being
+// overwritten and having their quotes doubled.
+func interpolateNumbered(expr string, args []any, prefix string) string {
 	var out strings.Builder
 
 	var quote byte
@@ -148,17 +160,25 @@ func interpolateNumbered(expr string, args []any) string {
 			continue
 		}
 
-		if char != '$' {
+		if !strings.HasPrefix(expr[i:], prefix) {
 			out.WriteByte(char)
 			continue
 		}
 
-		end := i + 1
-		for end < len(expr) && expr[end] >= '0' && expr[end] <= '9' {
+		end := i + len(prefix)
+		for end < len(expr) && isDigit(expr[end]) {
 			end++
 		}
 
-		number, err := strconv.Atoi(expr[i+1 : end])
+		if end == i+len(prefix) {
+			// The prefix is not followed by a number, so it is not a placeholder: write it
+			// through as text rather than consuming a binding.
+			out.WriteString(prefix)
+			i = end - 1
+			continue
+		}
+
+		number, err := strconv.Atoi(expr[i+len(prefix) : end])
 		if err != nil || number < 1 || number > len(args) {
 			out.WriteString(expr[i:end])
 			i = end - 1

@@ -1,0 +1,33 @@
+# A named pipeline for the database packages.
+#
+# The root module already tests them: the reusable Test workflow
+# (`goravel/.github/.github/workflows/test.yml`) runs `go test ./...`, and every
+# package under database/ is part of that root module. What this adds is
+# attribution — a database failure shows up as its own check instead of as
+# "Test / ubuntu (1.27)" with the cause buried in a 235-package log.
+#
+# They are cheap: 12 of the 15 packages carry tests, none needs Docker or a
+# database (the ORM and query suites are stub-backed), and the whole run is
+# about ten seconds. `tests/` is a separate Go module, so it is not included
+# here; test_external.yml covers it.
+name: Test Database
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+jobs:
+  ubuntu:
+    strategy:
+      matrix:
+        go: [ "1.26", "1.27" ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ matrix.go }}
+      - name: Install dependencies
+        run: go mod tidy
+      - name: Run database tests
+        run: go test -timeout 10m ./database/...

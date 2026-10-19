@@ -51,7 +51,7 @@ func (s *ImageDriverTestSuite) TestBuildConfigShutdown() {
 		mockProcessResult.EXPECT().Failed().Return(false).Once()
 		mockProcessResult.EXPECT().Output().Return(containerID).Once()
 		s.mockProcess.EXPECT().Run(mock.MatchedBy(func(command string) bool {
-			return strings.Contains(command, "docker run --rm -d -p ") && strings.Contains(command, ":6379 redis:latest")
+			return strings.Contains(command, "docker run --rm -d --shm-size 1g -p ") && strings.Contains(command, ":6379 redis:latest")
 		})).Return(mockProcessResult).Once()
 
 		driver := NewImageDriver(s.image, s.mockProcess)
@@ -76,7 +76,7 @@ func (s *ImageDriverTestSuite) TestBuildConfigShutdown() {
 		mockProcessResult.EXPECT().Failed().Return(false).Once()
 		mockProcessResult.EXPECT().Output().Return(containerID).Once()
 		s.mockProcess.EXPECT().Run(mock.MatchedBy(func(command string) bool {
-			return strings.Contains(command, "docker run --rm -d -p ") && strings.Contains(command, ":6379 redis:latest")
+			return strings.Contains(command, "docker run --rm -d --shm-size 1g -p ") && strings.Contains(command, ":6379 redis:latest")
 		})).Return(mockProcessResult).Once()
 
 		driver := NewImageDriver(s.image, s.mockProcess)
@@ -101,7 +101,7 @@ func (s *ImageDriverTestSuite) TestBuildConfigShutdown() {
 		mockProcessResult.EXPECT().Failed().Return(false).Once()
 		mockProcessResult.EXPECT().Output().Return("").Once()
 		s.mockProcess.EXPECT().Run(mock.MatchedBy(func(command string) bool {
-			return strings.Contains(command, "docker run --rm -d -p ") && strings.Contains(command, ":6379 redis:latest")
+			return strings.Contains(command, "docker run --rm -d --shm-size 1g -p ") && strings.Contains(command, ":6379 redis:latest")
 		})).Return(mockProcessResult).Once()
 
 		driver := NewImageDriver(s.image, s.mockProcess)
@@ -115,7 +115,7 @@ func (s *ImageDriverTestSuite) TestBuildConfigShutdown() {
 		mockProcessResult.EXPECT().Failed().Return(true).Once()
 		mockProcessResult.EXPECT().Error().Return(assert.AnError).Once()
 		s.mockProcess.EXPECT().Run(mock.MatchedBy(func(command string) bool {
-			return strings.Contains(command, "docker run --rm -d -p ") && strings.Contains(command, ":6379 redis:latest")
+			return strings.Contains(command, "docker run --rm -d --shm-size 1g -p ") && strings.Contains(command, ":6379 redis:latest")
 		})).Return(mockProcessResult).Once()
 
 		driver := NewImageDriver(s.image, s.mockProcess)

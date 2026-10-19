@@ -2,7 +2,6 @@ package console
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/spf13/cast"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/goravel/framework/contracts/console/command"
 	"github.com/goravel/framework/contracts/database/driver"
 	"github.com/goravel/framework/contracts/database/schema"
+	querybuilder "github.com/goravel/framework/database/query"
 	"github.com/goravel/framework/support/str"
 )
 
@@ -139,13 +139,13 @@ func (r *ShowCommand) display(ctx console.Context, info databaseInfo) {
 		ctx.TwoColumnDetail("<fg=green;op=bold>Views</>", "<fg=yellow;op=bold>Rows</>")
 		for i := range info.Views {
 			if !str.Of(info.Views[i].Name).StartsWith("pg_catalog", "information_schema", "spt_") {
-				// GetViews reports the name as it stands in the database catalog, so it already
-				// carries the connection prefix. Table() applies the prefix once when the statement
-				// is rendered, so passing that catalog name verbatim would address
-				// "<prefix><prefix><view>". Laravel counts a view's rows with the table prefix
-				// disabled (Connection::withoutTablePrefix), so strip the connection prefix here to
-				// let the renderer put it back exactly once.
-				count, err := r.schema.Orm().Query().Table(strings.TrimPrefix(info.Views[i].Name, info.Prefix)).Count()
+				// GetViews reports the name exactly as it stands in the database catalog, so it is
+				// already qualified: it may carry the connection prefix, and a view created outside
+				// the framework need not. Laravel counts a view's rows with the table prefix
+				// disabled (Connection::withoutTablePrefix) and addresses that catalog name
+				// verbatim; an expression is rendered as given and never prefixed, so passing the
+				// name this way reproduces that without having to guess whether to strip.
+				count, err := r.schema.Orm().Query().Table(querybuilder.Raw(info.Views[i].Name)).Count()
 				if err != nil {
 					ctx.Error(err.Error())
 					return

@@ -521,11 +521,12 @@ func (b *Builder) ForPage(page int, perPage ...int) *Builder {
 	return b.Offset((page - 1) * size).Limit(size)
 }
 
-// ForPageBeforeId constrains to the page before an id. Mirrors Builder::forPageBeforeId().
+// ForPageBeforeId constrains to the page before an id. Mirrors Builder::forPageBeforeId(), whose
+// signature is forPageBeforeId($perPage = 15, $lastId = 0, $column = 'id'). As with ForPage, the 15
+// is a default for an omitted argument, never a substitute for a zero that was passed: Laravel's
+// body is limit($perPage) with no zero substitution, so an explicit 0 keeps a limit of 0. Go cannot
+// default a leading parameter, so callers that want the framework default pass 15 themselves.
 func (b *Builder) ForPageBeforeId(perPage int, lastID any, column string) *Builder {
-	if perPage == 0 {
-		perPage = 15
-	}
 	if column == "" {
 		column = "id"
 	}
@@ -541,11 +542,10 @@ func (b *Builder) ForPageBeforeId(perPage int, lastID any, column string) *Build
 	return b.OrderBy(column, "desc").Limit(perPage)
 }
 
-// ForPageAfterId constrains to the page after an id. Mirrors Builder::forPageAfterId().
+// ForPageAfterId constrains to the page after an id. Mirrors Builder::forPageAfterId(), whose
+// signature is forPageAfterId($perPage = 15, $lastId = 0, $column = 'id'). The 15 defaults an omitted
+// argument only, never a passed zero; see ForPageBeforeId for why callers supply the default.
 func (b *Builder) ForPageAfterId(perPage int, lastID any, column string) *Builder {
-	if perPage == 0 {
-		perPage = 15
-	}
 	if column == "" {
 		column = "id"
 	}

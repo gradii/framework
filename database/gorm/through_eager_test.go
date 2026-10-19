@@ -13,6 +13,26 @@ import (
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
 )
 
+// hasOneThroughCountry declares a HasOneThrough whose relation field is slice-shaped. The shape is
+// the point: a pointer field takes the first row whether or not the loader cut the match, while a
+// slice keeps every row it is handed, so only this fixture shows which isMany the dispatch chose.
+type hasOneThroughCountry struct {
+	ID        uint
+	Name      string
+	FirstPost []*relPost `gorm:"-"`
+}
+
+func (hasOneThroughCountry) TableName() string { return "through_scope_countries" }
+
+func (hasOneThroughCountry) Relations() map[string]contractsorm.Relation {
+	return map[string]contractsorm.Relation{
+		"FirstPost": contractsorm.HasOneThrough{
+			Related: &relPost{},
+			Through: &relUser{},
+		},
+	}
+}
+
 // throughScopeCountry declares a HasManyThrough to relPost through relUser with an OnQuery scope,
 // so the test can pin that the related read carries the relation's own scope rather than dropping it.
 type throughScopeCountry struct {
@@ -247,4 +267,141 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 		// The second-key IN clause first, then the scope's own binding.
 		assert.Equal(t, []driver.Value{int64(7), int64(1)}, related.args)
 	})
+}
+
+// TestLoadThrough_HasOneBranch drives the isMany=false side of loadThrough — the HasOneThrough
+// relation — with canned through and related rows, so the assignment runs rather than just the
+// statement: the parent gets the single related row as a pointer-shaped value, and when several
+// related rows come back through different through rows only the first is attached.
+func TestLoadThrough_HasOneBranch(t *testing.T) {
+	t.Run("assigns the single related row", func(t *testing.T) {
+		q, recorder := newRecordingRelQuery(t, &relCountry{})
+		desc, err := resolveRelation(q.instance, &relCountry{}, "FirstPost")
+		assert.NoError(t, err)
+		if err != nil {
+			return
+		}
+		assert.Equal(t, relKindHasOneThrough, desc.kind)
+
+		// One through row links parent 1 to user 7; one related row hangs off user 7.
+		recorder.returnRows(`from "`+desc.throughTable+`"`,
+			[]string{desc.firstKey, desc.secondLocalKey},
+			[]driver.Value{int64(1), int64(7)},
+		)
+		recorder.returnRows(`from "`+desc.relatedTable+`"`,
+			[]string{"id", "title", "user_id", desc.secondKey},
+			[]driver.Value{int64(70), "only", int64(9), int64(7)},
+		)
+
+		country := &relCountry{ID: 1}
+		parents := []reflect.Value{reflect.ValueOf(country).Elem()}
+
+		assert.NoError(t, q.loadThrough(parents, &relCountry{}, desc, eagerLoadEntry{relation: "FirstPost"}, nil, false))
+
+		assert.Equal(t, 2, recorder.count(), "the loader reads the through table and then the related table")
+		if assert.NotNil(t, country.FirstPost, "a has-one-through parent gets the related row itself, not a slice") {
+			assert.Equal(t, uint(70), country.FirstPost.ID)
+			assert.Equal(t, "only", country.FirstPost.Title)
+		}
+		assert.Empty(t, country.Posts, "the has-many field is not the one a has-one-through relation assigns")
+	})
+
+	t.Run("keeps the first of several related rows", func(t *testing.T) {
+		q, recorder := newRecordingRelQuery(t, &relCountry{})
+		desc, err := resolveRelation(q.instance, &relCountry{}, "FirstPost")
+		assert.NoError(t, err)
+		if err != nil {
+			return
+		}
+
+		// The same parent reaches two users through the through table, each with its own post: a
+		// HasOneThrough keeps one, and it is the first in through-row order.
+		recorder.returnRows(`from "`+desc.throughTable+`"`,
+			[]string{desc.firstKey, desc.secondLocalKey},
+			[]driver.Value{int64(1), int64(7)},
+			[]driver.Value{int64(1), int64(8)},
+		)
+		recorder.returnRows(`from "`+desc.relatedTable+`"`,
+			[]string{"id", "title", "user_id", desc.secondKey},
+			[]driver.Value{int64(70), "first", int64(9), int64(7)},
+			[]driver.Value{int64(80), "second", int64(9), int64(8)},
+		)
+
+		country := &relCountry{ID: 1}
+		parents := []reflect.Value{reflect.ValueOf(country).Elem()}
+
+		assert.NoError(t, q.loadThrough(parents, &relCountry{}, desc, eagerLoadEntry{relation: "FirstPost"}, nil, false))
+
+		if assert.NotNil(t, country.FirstPost) {
+			assert.Equal(t, uint(70), country.FirstPost.ID, "a has-one-through keeps the first related row")
+		}
+	})
+
+	t.Run("unmatched parent is cleared", func(t *testing.T) {
+		q, recorder := newRecordingRelQuery(t, &relCountry{})
+		desc, err := resolveRelation(q.instance, &relCountry{}, "FirstPost")
+		assert.NoError(t, err)
+		if err != nil {
+			return
+		}
+
+		recorder.returnRows(`from "`+desc.throughTable+`"`,
+			[]string{desc.firstKey, desc.secondLocalKey},
+			[]driver.Value{int64(1), int64(7)},
+		)
+		recorder.returnRows(`from "`+desc.relatedTable+`"`,
+			[]string{"id", "title", "user_id", desc.secondKey},
+			[]driver.Value{int64(70), "first", int64(9), int64(7)},
+		)
+
+		matched := &relCountry{ID: 1}
+		// A parent the through read did not return: the field is cleared, even if it held a stale row.
+		unmatched := &relCountry{ID: 2, FirstPost: &relPost{ID: 999, Title: "stale"}}
+		parents := []reflect.Value{reflect.ValueOf(matched).Elem(), reflect.ValueOf(unmatched).Elem()}
+
+		assert.NoError(t, q.loadThrough(parents, &relCountry{}, desc, eagerLoadEntry{relation: "FirstPost"}, nil, false))
+
+		if assert.NotNil(t, matched.FirstPost) {
+			assert.Equal(t, "first", matched.FirstPost.Title)
+		}
+		assert.Nil(t, unmatched.FirstPost, "a has-one-through parent with no through row has its relation cleared")
+	})
+}
+
+// TestLoadOneRelation_HasOneThroughFixture pins the dispatch, not just loadThrough: a country whose
+// FirstPost field is slice-shaped must still reach the isMany=false branch of loadThrough. It drives
+// the public With + Get path, because loadOneRelation is reached only through runEagerLoads.
+//
+// The parent reaches two users through the through table, each with a post. The has-one branch cuts
+// the match to one row before it assigns it, so the slice gets exactly one element; the has-many
+// branch would have matched and assigned both.
+func TestLoadOneRelation_HasOneThroughFixture(t *testing.T) {
+	q, recorder := newRecordingRelQuery(t, &hasOneThroughCountry{})
+	q = q.With("FirstPost").(*Query)
+
+	recorder.returnRows(`from "through_scope_countries"`, []string{"id", "name"},
+		[]driver.Value{int64(1), "Ada"},
+	)
+	recorder.returnRows(`"through_scope_country_id" in (?)`,
+		[]string{"through_scope_country_id", "id"},
+		[]driver.Value{int64(1), int64(7)},
+		[]driver.Value{int64(1), int64(8)},
+	)
+	recorder.returnRows(`from "rel_posts"`,
+		[]string{"id", "title", "user_id", "rel_user_id"},
+		[]driver.Value{int64(70), "first", int64(9), int64(7)},
+		[]driver.Value{int64(80), "second", int64(9), int64(8)},
+	)
+
+	var countries []hasOneThroughCountry
+	assert.NoError(t, q.Get(&countries))
+
+	if !assert.Len(t, countries, 1) {
+		return
+	}
+	country := countries[0]
+	if assert.Len(t, country.FirstPost, 1, "a has-one-through keeps the first related row, and only it") {
+		assert.Equal(t, uint(70), country.FirstPost[0].ID)
+		assert.Equal(t, "first", country.FirstPost[0].Title)
+	}
 }

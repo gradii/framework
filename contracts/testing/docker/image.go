@@ -9,6 +9,14 @@ type Image struct {
 	Repository   string
 	Tag          string
 	Args         []string
+	// ShmSize sets the size of the container's /dev/shm, for example "1g".
+	// Postgres runs parallel workers whose shared memory segments live there,
+	// and Docker's 64 MB default is exhausted by a couple of concurrent
+	// parallel queries, which then fail with
+	// `could not resize shared memory segment ... No space left on device`.
+	// The space is tmpfs and is allocated on use, so an image that never
+	// touches /dev/shm pays nothing for a larger limit.
+	ShmSize string
 }
 
 type ImageDriver interface {

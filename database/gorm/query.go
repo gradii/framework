@@ -1440,9 +1440,10 @@ func (r *Query) aggregate(function string, column string, dest any) error {
 	return query.queryScalar(dest, statement, bindings)
 }
 
-// Table points the query at a table by name. The name is stored bare; the framework grammar applies
-// the connection prefix once when the statement is rendered.
-func (r *Query) Table(name string, args ...any) contractsorm.Query {
+// Table points the query at a table by name. A string name is stored bare and the framework grammar
+// applies the connection prefix once when the statement is rendered; a querybuilder.Expression is
+// stored as given and rendered verbatim, for a caller naming a table that is already qualified.
+func (r *Query) Table(name any, args ...any) contractsorm.Query {
 	conditions := r.conditions
 	conditions.table = &Table{
 		name: name,

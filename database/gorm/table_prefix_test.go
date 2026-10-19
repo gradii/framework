@@ -10,6 +10,7 @@ import (
 	gormschema "gorm.io/gorm/schema"
 
 	contractsdatabase "github.com/goravel/framework/contracts/database"
+	querybuilder "github.com/goravel/framework/database/query"
 )
 
 // prefixContractModel declares its own table, so the declared-name branch of tableNameFor is the one
@@ -53,4 +54,41 @@ func TestTablePrefixAppliedOnce(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, namedStatement, `from "goravel_products"`)
 	assert.NotContains(t, namedStatement, "goravel_goravel_")
+}
+
+// TestTableAcceptsAnAlreadyQualifiedName pins the entry point a caller holding a catalog name needs.
+//
+// A string names a bare table and the connection prefix is applied when the statement is rendered.
+// An expression names a table that is already qualified — a database view's catalog name, for
+// instance — and is rendered verbatim, exactly as Laravel's Grammar::wrapTable() returns an
+// Expression's value untouched, which is what Connection::withoutTablePrefix achieves by blanking
+// the prefix around the callback. Stripping the prefix by hand, which the
+// db:show command used to do, cannot reproduce it: a catalog name that does not begin with the
+// prefix went unstripped and was then prefixed anyway.
+func TestTableAcceptsAnAlreadyQualifiedName(t *testing.T) {
+	dbConfig := contractsdatabase.Config{Driver: "sqlite", Prefix: "goravel_"}
+
+	// A catalog name that does not start with the prefix still renders as it was given.
+	qualified := NewQuery(context.Background(), nil, dbConfig, nil, nil, nil, nil, nil, nil).Table(querybuilder.Raw("external_view")).(*Query)
+	statement, _, err := qualified.compileSelect()
+	require.NoError(t, err)
+	assert.Contains(t, statement, "from external_view")
+	assert.NotContains(t, statement, "goravel_external_view")
+
+	// A catalog name that does carry the prefix is not prefixed a second time.
+	prefixed := NewQuery(context.Background(), nil, dbConfig, nil, nil, nil, nil, nil, nil).Table(querybuilder.Raw("goravel_view")).(*Query)
+	prefixedStatement, _, err := prefixed.compileSelect()
+	require.NoError(t, err)
+	assert.Contains(t, prefixedStatement, "from goravel_view")
+	assert.NotContains(t, prefixedStatement, "goravel_goravel_view")
+
+	// A string is still a bare name: the prefix applies exactly once, as before.
+	bare := NewQuery(context.Background(), nil, dbConfig, nil, nil, nil, nil, nil, nil).Table("products").(*Query)
+	bareStatement, _, err := bare.compileSelect()
+	require.NoError(t, err)
+	assert.Contains(t, bareStatement, `from "goravel_products"`)
+
+	// A write through the expression reads the table back for schema resolution.
+	assert.Equal(t, "external_view", qualified.declaredTable())
+	assert.Equal(t, "products", bare.declaredTable())
 }

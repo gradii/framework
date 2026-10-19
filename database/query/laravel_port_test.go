@@ -1265,6 +1265,10 @@ func TestFromAlias(t *testing.T) {
 // TestBitwiseHavingPerDialect ports the bit-type having, whose shape only two dialects define. The
 // builder has no entry point that queues one, so the descriptor is queued directly here.
 func TestBitwiseHavingPerDialect(t *testing.T) {
+	// The descriptor's stored string is Laravel's: Builder::having() writes 'Bitwise' (Builder.php:2507)
+	// and both dialects compare against that literal.
+	assert.Equal(t, "Bitwise", string(HavingBitType))
+
 	having := Having{Type: HavingBitType, Column: "flags", Operator: "&", Value: 4, Boolean: BooleanAnd}
 
 	t.Run("postgres casts to bool", func(t *testing.T) {

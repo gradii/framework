@@ -27,12 +27,24 @@ func ExposedPort(exposedPorts []string, port string) string {
 	return ""
 }
 
+// DefaultShmSize is the /dev/shm given to a testing image that does not set
+// its own. Docker's default is 64 MB, which Postgres parallel queries exhaust:
+// every parallel worker opens a segment in /dev/shm, and a worker that cannot
+// resize its segment fails the query with `SQLSTATE 53100`. A killed worker
+// also leaves its segment behind, so a container that keeps running slowly
+// fills its 64 MB and every later query fails while it does.
+const DefaultShmSize = "1g"
+
 func ImageToCommand(image *docker.Image) (command string, exposedPorts []string) {
 	if image == nil {
 		return "", nil
 	}
 
-	commands := []string{"docker", "run", "--rm", "-d"}
+	shmSize := image.ShmSize
+	if shmSize == "" {
+		shmSize = DefaultShmSize
+	}
+	commands := []string{"docker", "run", "--rm", "-d", "--shm-size", shmSize}
 	if len(image.Env) > 0 {
 		for _, env := range image.Env {
 			commands = append(commands, "-e", env)
