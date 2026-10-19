@@ -59,7 +59,7 @@ func (s *WithTestSuite) TestWith_HasMany() {
 			var users []User
 			s.Nil(query.Query().Where("name like ?", "wr_hm_%").OrderBy("name").
 				With("Books").Get(&users))
-			s.Len(users, 2)
+			s.Require().Len(users, 2)
 			s.Equal("wr_hm_alice", users[0].Name)
 			s.Len(users[0].Books, 2)
 			s.Equal("wr_hm_bob", users[1].Name)
@@ -96,7 +96,7 @@ func (s *WithTestSuite) TestWith_BelongsTo() {
 			var addrs []Address
 			s.Nil(query.Query().Where("name = ?", "wr_bt_addr").
 				With("User").Get(&addrs))
-			s.Len(addrs, 1)
+			s.Require().Len(addrs, 1)
 			s.NotNil(addrs[0].User)
 			s.Equal("wr_bt_user", addrs[0].User.Name)
 		})
@@ -115,7 +115,7 @@ func (s *WithTestSuite) TestWith_Many2Many() {
 			var loaded User
 			s.Nil(query.Query().Where("name = ?", "wr_m2m_user").
 				With("Roles").First(&loaded))
-			s.Len(loaded.Roles, 1)
+			s.Require().Len(loaded.Roles, 1)
 			s.Equal("wr_m2m_role", loaded.Roles[0].Name)
 		})
 	}
@@ -177,8 +177,8 @@ func (s *WithTestSuite) TestWith_HasManyThrough() {
 			s.Nil(query.Query().Model(&userAuthorsThrough{}).
 				Where("name like ?", "wr_th_%").OrderBy("name").
 				With("Authors").Get(&users))
-			s.Len(users, 2)
-			s.Len(users[0].Authors, 1)
+			s.Require().Len(users, 2)
+			s.Require().Len(users[0].Authors, 1)
 			s.Equal("wr_th_a1", users[0].Authors[0].Name)
 			s.Len(users[1].Authors, 2)
 		})
@@ -197,7 +197,7 @@ func (s *WithTestSuite) TestWith_Nested() {
 			var loaded User
 			s.Nil(query.Query().Where("name = ?", "wr_n_user").
 				With("Books.Author").First(&loaded))
-			s.Len(loaded.Books, 1)
+			s.Require().Len(loaded.Books, 1)
 			s.NotNil(loaded.Books[0].Author)
 			s.Equal("wr_n_a1", loaded.Books[0].Author.Name)
 		})
@@ -217,7 +217,7 @@ func (s *WithTestSuite) TestWith_Callback() {
 			}
 			s.Nil(query.Query().Where("name = ?", "wr_cb_user").
 				With("Books", cb).First(&loaded))
-			s.Len(loaded.Books, 1)
+			s.Require().Len(loaded.Books, 1)
 			s.Equal("wr_cb_keep", loaded.Books[0].Name)
 		})
 	}
@@ -255,7 +255,7 @@ func (s *WithTestSuite) TestWith_Columns() {
 			var loaded User
 			s.Nil(query.Query().Where("name = ?", "wr_col_user").
 				With("Books:id,name").First(&loaded))
-			s.Len(loaded.Books, 1)
+			s.Require().Len(loaded.Books, 1)
 			s.Equal("wr_col_b1", loaded.Books[0].Name)
 			// The loader auto-adds the FK column (user_id) so dictionary grouping by FK works,
 			// even when the user prunes it from the column list. Other unselected columns stay
@@ -345,7 +345,7 @@ func (s *WithTestSuite) TestSQL_With_HasMany_DoesNotJoinPreload() {
 	var users []User
 	sql := q.Query().Model(&User{}).With("Books").ToRawSql().Get(&users)
 	s.Equal(
-		"SELECT * FROM `users` WHERE `users`.`deleted_at` IS NULL",
+		`select * from "users" where "users"."deleted_at" IS NULL`,
 		sql,
 	)
 }

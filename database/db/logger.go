@@ -4,8 +4,6 @@ import (
 	"context"
 	"time"
 
-	gormlogger "gorm.io/gorm/logger"
-
 	"github.com/goravel/framework/contracts/config"
 	"github.com/goravel/framework/contracts/database/logger"
 	"github.com/goravel/framework/contracts/log"
@@ -95,7 +93,7 @@ func (r *Logger) Trace(ctx context.Context, begin *carbon.Carbon, sql string, ro
 	addQueryLogToContext(ctx, sql, elapsed)
 
 	switch {
-	case err != nil && r.level >= logger.Error && !errors.Is(err, gormlogger.ErrRecordNotFound):
+	case err != nil && r.level >= logger.Error && !errors.Is(err, errors.OrmRecordNotFound):
 		if rowsAffected == -1 {
 			r.Errorf(ctx, traceErrStr, elapsed, "-", sql, err)
 		} else {
@@ -116,43 +114,6 @@ func (r *Logger) Trace(ctx context.Context, begin *carbon.Carbon, sql string, ro
 	}
 }
 
-func (r *Logger) ToGorm() gormlogger.Interface {
-	return NewGorm(r)
-}
-
-type Gorm struct {
-	logger logger.Logger
-}
-
-func NewGorm(logger logger.Logger) *Gorm {
-	return &Gorm{
-		logger: logger,
-	}
-}
-
-func (r *Gorm) LogMode(level gormlogger.LogLevel) gormlogger.Interface {
-	_ = r.logger.Level(gormLevelToLevel(level))
-
-	return r
-}
-
-func (r *Gorm) Info(ctx context.Context, msg string, data ...any) {
-	r.logger.Infof(ctx, msg, data...)
-}
-
-func (r *Gorm) Warn(ctx context.Context, msg string, data ...any) {
-	r.logger.Warningf(ctx, msg, data...)
-}
-
-func (r *Gorm) Error(ctx context.Context, msg string, data ...any) {
-	r.logger.Errorf(ctx, msg, data...)
-}
-
-func (r *Gorm) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
-	sql, rowsAffected := fc()
-	r.logger.Trace(ctx, carbon.FromStdTime(begin), sql, rowsAffected, err)
-}
-
 func addQueryLogToContext(ctx context.Context, sql string, time float64) {
 	value := ctx.Value(queryLogKey{})
 	if value == nil {
@@ -170,17 +131,4 @@ func addQueryLogToContext(ctx context.Context, sql string, time float64) {
 	})
 
 	_ = context.WithValue(ctx, queryLogKey{}, queryLogValue)
-}
-
-func gormLevelToLevel(level gormlogger.LogLevel) logger.Level {
-	switch level {
-	case gormlogger.Silent:
-		return logger.Silent
-	case gormlogger.Error:
-		return logger.Error
-	case gormlogger.Warn:
-		return logger.Warn
-	default:
-		return logger.Info
-	}
 }

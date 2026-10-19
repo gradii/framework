@@ -41,26 +41,42 @@ type Tx interface {
 type Query interface {
 	// Chunk chunks the query into smaller chunks.
 	Chunk(size uint64, callback func(rows []Row) error) error
+	// ChunkById chunks the query by comparing ids, streaming larger result sets without the offset
+	// cost. The optional column is the key column (default "id"); an optional second value names the
+	// result-key alias the id is read from (default the column itself).
+	ChunkById(size uint64, callback func(rows []Row) error, column ...string) error
+	// ChunkByIdDesc is ChunkById in descending id order.
+	ChunkByIdDesc(size uint64, callback func(rows []Row) error, column ...string) error
 	// Count retrieves the "count" result of the query.
 	Count() (int64, error)
 	// CrossJoin specifies CROSS JOIN conditions for the query.
 	CrossJoin(query string, args ...any) Query
 	// Cursor returns a cursor, use scan to iterate over the returned rows.
 	Cursor() chan Row
+	// CursorPaginate fetches a single keyset ("seek") page and scans it into dest, returning the page
+	// together with the cursors that reach its neighbours. It never counts, so the page carries no
+	// total. The method name is deliberately distinct from Cursor, which streams rows.
+	CursorPaginate(perPage int, cursor string, dest any) (CursorPaginator, error)
 	// Decrement decrements the given column's values by the given amounts.
 	Decrement(column string, value ...uint64) error
 	// Delete deletes records from the database.
 	Delete() (*Result, error)
 	// DoesntExist determines if no rows exist for the current query.
 	DoesntExist() (bool, error)
+	// DoesntExistOr reports true if no rows exist; otherwise it returns the callback's value.
+	DoesntExistOr(callback func() any) (any, error)
 	// Distinct forces the query to only return distinct results.
 	Distinct(columns ...string) Query
 	// Each executes the query and passes each row to the callback.
 	Each(callback func(row Row) error) error
 	// Exists returns true if matching records exist; otherwise, it returns false.
 	Exists() (bool, error)
+	// ExistsOr reports true if matching records exist; otherwise it returns the callback's value.
+	ExistsOr(callback func() any) (any, error)
 	// Find finds records that match given conditions.
 	Find(dest any, conds ...any) error
+	// FindOr finds the first record matching the given id, or runs the callback when there is none.
+	FindOr(dest any, id any, callback func() error) error
 	// FindOrFail finds records that match given conditions or throws an error.
 	FindOrFail(dest any, conds ...any) error
 	// First finds record that match given conditions.
@@ -78,6 +94,8 @@ type Query interface {
 	Having(query any, args ...any) Query
 	// Increment increments a column's value by a given amount.
 	Increment(column string, value ...uint64) error
+	// Implode concatenates the values of a single column into a string separated by glue.
+	Implode(column string, glue string, dest any) error
 	// InRandomOrder specifies the order randomly.
 	InRandomOrder() Query
 	// Insert a new record into the database.
@@ -118,8 +136,10 @@ type Query interface {
 	OrWhereJsonDoesntContain(column string, value any) Query
 	// OrWhereJsonDoesntContainKey add a clause that determines if a JSON path does not exist to the query.
 	OrWhereJsonDoesntContainKey(column string) Query
-	// OrWhereJsonLength add an "or where JSON length" clause to the query.
-	OrWhereJsonLength(column string, length int) Query
+	// OrWhereJsonLength add an "or where JSON length" clause to the query. Mirrors
+	// Laravel's Builder::orWhereJsonLength, so args is either (length) for an
+	// equality check or (operator, length) for a comparison.
+	OrWhereJsonLength(column string, args ...any) Query
 	// OrWhereLike adds an "or where column like" clause to the query.
 	OrWhereLike(column string, value string) Query
 	// OrWhereNot adds an "or where not" clause to the query.
@@ -140,6 +160,8 @@ type Query interface {
 	Paginate(page, limit int, dest any, total *int64) error
 	// Pluck retrieves a single column from the database.
 	Pluck(column string, dest any) error
+	// RawValue gets a single raw expression value from the first result of a query.
+	RawValue(expression string, dest any) error
 	// RightJoin specifies RIGHT JOIN conditions for the query.
 	RightJoin(query string, args ...any) Query
 	// Select specifies fields that should be retrieved from the database.
@@ -163,6 +185,11 @@ type Query interface {
 	// UpdateOrInsert finds the first record that matches the given attributes
 	// or create a new one with those attributes if none was found.
 	UpdateOrInsert(attributes any, values any) (*Result, error)
+	// UseWritePdo forces the query's reads to run on the write connection rather than the reader
+	// replica. Mirrors Laravel's Builder::useWritePdo. A read that carries a lock always runs on
+	// the write connection, so this only matters for a plain read that has to observe a write
+	// issued on the same connection.
+	UseWritePdo() Query
 	// Value gets a single column's value from the first result of a query.
 	Value(column string, dest any) error
 	// When executes the callback if the condition is true.
@@ -189,8 +216,10 @@ type Query interface {
 	WhereJsonDoesntContain(column string, value any) Query
 	// WhereJsonDoesntContainKey add a clause that determines if a JSON path does not exist to the query.
 	WhereJsonDoesntContainKey(column string) Query
-	// WhereJsonLength add a "where JSON length" clause to the query.
-	WhereJsonLength(column string, length int) Query
+	// WhereJsonLength add a "where JSON length" clause to the query. Mirrors
+	// Laravel's Builder::whereJsonLength, so args is either (length) for an
+	// equality check or (operator, length) for a comparison.
+	WhereJsonLength(column string, args ...any) Query
 	// WhereLike adds a "where like" clause to the query.
 	WhereLike(column string, value string) Query
 	// WhereNone adds a "where none of columns match" clause to the query.
@@ -209,6 +238,44 @@ type Query interface {
 	WhereNull(column string) Query
 	// WhereRaw adds a raw where clause to the query.
 	WhereRaw(raw string, args []any) Query
+}
+
+// CursorPaginator is one keyset ("seek") page: the rows fetched, the page size, and the encoded
+// cursors that reach the neighbouring pages. It mirrors database/query's CursorPaginator, but is
+// declared here because a contract package cannot import the query builder: database/query pulls in
+// database/schema, which imports contracts/database/orm, which imports this package, so naming
+// query.CursorPaginator from a contract would be an import cycle. Each facade projects its paginator
+// onto this value at the edge.
+type CursorPaginator struct {
+	// Items is the page, already trimmed to PerPage, in display order.
+	Items []map[string]any
+	// PerPage is the page size actually used.
+	PerPage int
+	// NextCursor is the encoded forward cursor, or nil when there is no next page.
+	NextCursor *string
+	// PreviousCursor is the encoded backward cursor, or nil when there is none.
+	PreviousCursor *string
+	// HasMorePages reports whether another page exists in the fetch direction.
+	HasMorePages bool
+}
+
+// ToMap renders the page as data, per_page, next_cursor and prev_cursor. There is no total (this path
+// never counts), no path and no URLs: link assembly belongs to the caller's router.
+func (p CursorPaginator) ToMap() map[string]any {
+	var nextCursor, previousCursor any
+	if p.NextCursor != nil {
+		nextCursor = *p.NextCursor
+	}
+	if p.PreviousCursor != nil {
+		previousCursor = *p.PreviousCursor
+	}
+
+	return map[string]any{
+		"data":        p.Items,
+		"per_page":    p.PerPage,
+		"next_cursor": nextCursor,
+		"prev_cursor": previousCursor,
+	}
 }
 
 type Result struct {

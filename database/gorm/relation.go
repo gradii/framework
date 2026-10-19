@@ -11,6 +11,7 @@ import (
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
 	"github.com/goravel/framework/database/orm/morphmap"
 	"github.com/goravel/framework/errors"
+	basedatabase "github.com/goravel/framework/support/database"
 	"github.com/goravel/framework/support/str"
 )
 
@@ -125,17 +126,16 @@ func resolveRelation(db *gormio.DB, parent any, relation string) (*relationDescr
 
 	head, tail, _ := strings.Cut(relation, ".")
 
-	// Parse the parent's schema using GORM's cache (avoids reparsing on every call).
-	stmt := &gormio.Statement{DB: db}
-	if err := stmt.Parse(parent); err != nil {
+	parentSchema, err := parseSchema(db, parent)
+	if err != nil {
 		return nil, err
 	}
-	parentSchema := stmt.Schema
 	parentTable := parentSchema.Table
 
-	// Detect forbidden GORM relation tags. If GORM populated a Relationships entry for the
-	// requested name, the user has a conflicting tag — error out with a pointer to Relations().
-	if _, hasGormRel := parentSchema.Relationships.Relations[head]; hasGormRel {
+	// Detect forbidden GORM relation tags. GORM used to populate a Relationships entry for the
+	// requested name, which is how the conflict was noticed; the tag itself is inspected now, so the
+	// check no longer depends on GORM parsing the model.
+	if hasRelationTag(parent, head) {
 		return nil, errors.OrmRelationTagForbidden.Args(head, parentSchema.Name)
 	}
 
@@ -158,6 +158,44 @@ func resolveRelation(db *gormio.DB, parent any, relation string) (*relationDescr
 		desc.nested = nested
 	}
 	return desc, nil
+}
+
+// hasRelationTag reports whether a model's field of the given name declares a GORM relation.
+//
+// The framework declares relations through Relations(), so a model that still carries one of GORM's
+// relation tags is rejected rather than resolved by a mechanism the model's own declaration does not
+// mention. Embedded structs are searched too, because GORM read their tags as if they were the outer
+// model's own.
+func hasRelationTag(model any, name string) bool {
+	modelType := indirectStructType(reflect.TypeOf(model))
+	if modelType == nil {
+		return false
+	}
+
+	return typeHasRelationTag(modelType, name)
+}
+
+func typeHasRelationTag(modelType reflect.Type, name string) bool {
+	for position := 0; position < modelType.NumField(); position++ {
+		field := modelType.Field(position)
+		if !field.IsExported() {
+			continue
+		}
+
+		if field.Anonymous && !isColumnType(field.Type) {
+			if embedded := indirectStructType(field.Type); embedded != nil && typeHasRelationTag(embedded, name) {
+				return true
+			}
+
+			continue
+		}
+
+		if field.Name == name {
+			return basedatabase.ParseAnnotation(field.Tag.Get("gorm")).Relation
+		}
+	}
+
+	return false
 }
 
 // descriptorFromRelations resolves a relation declared via the parent's Relations() method.
@@ -515,13 +553,45 @@ func descriptorFromThrough(db *gormio.DB, parent any, parentTable, name string, 
 	}, nil
 }
 
-// tableNameFor returns the GORM-resolved table name for any model instance.
-func tableNameFor(db *gormio.DB, model any) (string, error) {
-	stmt := &gormio.Statement{DB: db}
-	if err := stmt.Parse(model); err != nil {
-		return "", err
+// tableNameFor returns the table name for a model, without the connection prefix.
+//
+// The name is deliberately bare: every statement the ORM renders goes through the framework
+// grammar, whose WrapTable applies the prefix to a table standing alone and whose Wrap applies it
+// to the leading segment of a dotted table.column fragment. Prefixing here as well produced doubly
+// prefixed names such as "goravel_goravel_users", which address no table.
+//
+// The name comes from the model's own declaration through TableName() (see orm.ModelWithTableName)
+// and from nowhere else. There is no naming-strategy fallback left to silently pluralize a model
+// that forgot to declare its table, so a model that declares none is reported as a named error
+// naming its type and the method to add. The connection argument is kept only because every call
+// site already passes one.
+func tableNameFor(_ *gormio.DB, model any) (string, error) {
+	if name := declaredTableName(model); name != "" {
+		return name, nil
 	}
-	return stmt.Schema.Table, nil
+
+	// A slice names the model it carries, so the error names that model rather than the slice: the
+	// caller wrote the destination, and the method to add belongs on its element type.
+	modelType := reflect.TypeOf(model)
+	pointer := false
+	for modelType != nil && modelType.Kind() == reflect.Pointer {
+		pointer = true
+		modelType = modelType.Elem()
+	}
+	if modelType != nil && (modelType.Kind() == reflect.Slice || modelType.Kind() == reflect.Array) {
+		element := modelType.Elem()
+		for element.Kind() == reflect.Slice || element.Kind() == reflect.Array {
+			element = element.Elem()
+		}
+		if element.Kind() != reflect.Pointer {
+			element = reflect.PointerTo(element)
+		}
+		modelType = element
+	} else if pointer {
+		modelType = reflect.PointerTo(modelType)
+	}
+
+	return "", errors.OrmQueryTableNotSet.Args(modelType)
 }
 
 // relatedKeyFieldType returns the Go type of the related model's PK field (the column referenced
@@ -529,7 +599,7 @@ func tableNameFor(db *gormio.DB, model any) (string, error) {
 // native key type via castKey. Returns nil (no error) if the column is not a recognised field on
 // the related schema — castKey then leaves ids untouched.
 func relatedKeyFieldType(db *gormio.DB, related any, columnName string) (reflect.Type, error) {
-	schema, err := parseGormSchema(db, related)
+	schema, err := parseSchema(db, related)
 	if err != nil {
 		return nil, err
 	}
@@ -553,7 +623,7 @@ func relatedKeyFieldType(db *gormio.DB, related any, columnName string) (reflect
 func resolvePivotTimestamps(db *gormio.DB, relatedModel any, pivotFieldName string, fallbackEnabled bool) (createdCol, updatedCol string, err error) {
 	pivotStructType, ok := pivotFieldStructType(relatedModel, pivotFieldName)
 	if ok {
-		schema, schemaErr := parseGormSchema(db, reflect.New(pivotStructType).Interface())
+		schema, schemaErr := parseSchema(db, reflect.New(pivotStructType).Interface())
 		if schemaErr != nil {
 			return "", "", schemaErr
 		}

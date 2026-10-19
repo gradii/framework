@@ -15,13 +15,14 @@ func NewToSql(query *Query, raw bool) *ToSql {
 }
 
 func (r *ToSql) Count() string {
-	if err := buildSelectForCount(r.query); err != nil {
-		return r.generate(r.query.readBuilder, "", nil, err)
+	query := r.query.clone()
+	if err := buildSelectForCount(query); err != nil {
+		return r.generate(query.readBuilder, "", nil, err)
 	}
 
-	sql, args, err := r.query.buildSelect()
+	sql, args, err := query.buildSelect()
 
-	return r.generate(r.query.readBuilder, sql, args, err)
+	return r.generate(query.readBuilder, sql, args, err)
 }
 
 func (r *ToSql) Delete() string {
@@ -57,10 +58,11 @@ func (r *ToSql) Insert(data any) string {
 }
 
 func (r *ToSql) Pluck(column string, dest any) string {
-	r.query.conditions.Selects = []string{column}
-	sql, args, err := r.query.buildSelect()
+	query := r.query.clone()
+	query.builder.SetSelects([]any{column})
+	sql, args, err := query.buildSelect()
 
-	return r.generate(r.query.readBuilder, sql, args, err)
+	return r.generate(query.readBuilder, sql, args, err)
 }
 
 func (r *ToSql) Update(column any, value ...any) string {

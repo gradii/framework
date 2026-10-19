@@ -522,11 +522,15 @@ type tsTaggedPivot struct {
 	Edited  time.Time `gorm:"autoUpdateTime"`
 }
 
+func (tsTaggedPivot) TableName() string { return "ts_tagged_pivots" }
+
 type tsTaggedRole struct {
 	ID    uint
 	Name  string
 	Pivot tsTaggedPivot `gorm:"-"`
 }
+
+func (tsTaggedRole) TableName() string { return "ts_tagged_roles" }
 
 type tsConventionPivot struct {
 	UserID    uint `gorm:"column:user_id"`
@@ -535,11 +539,15 @@ type tsConventionPivot struct {
 	UpdatedAt time.Time
 }
 
+func (tsConventionPivot) TableName() string { return "ts_convention_pivots" }
+
 type tsConventionRole struct {
 	ID    uint
 	Name  string
 	Pivot tsConventionPivot `gorm:"-"`
 }
+
+func (tsConventionRole) TableName() string { return "ts_convention_roles" }
 
 type tsCreatedOnlyPivot struct {
 	UserID    uint `gorm:"column:user_id"`
@@ -547,10 +555,14 @@ type tsCreatedOnlyPivot struct {
 	CreatedAt time.Time
 }
 
+func (tsCreatedOnlyPivot) TableName() string { return "ts_created_only_pivots" }
+
 type tsCreatedOnlyRole struct {
 	ID    uint
 	Pivot tsCreatedOnlyPivot `gorm:"-"`
 }
+
+func (tsCreatedOnlyRole) TableName() string { return "ts_created_only_roles" }
 
 type tsCustomColumnPivot struct {
 	UserID  uint      `gorm:"column:user_id"`
@@ -559,10 +571,14 @@ type tsCustomColumnPivot struct {
 	Edited  time.Time `gorm:"autoUpdateTime;column:edited_at"`
 }
 
+func (tsCustomColumnPivot) TableName() string { return "ts_custom_column_pivots" }
+
 type tsCustomColumnRole struct {
 	ID    uint
 	Pivot tsCustomColumnPivot `gorm:"-"`
 }
+
+func (tsCustomColumnRole) TableName() string { return "ts_custom_column_roles" }
 
 func TestResolvePivotTimestamps_AutoCreateTimeTag(t *testing.T) {
 	db := newStubGormDB(t)
@@ -742,3 +758,19 @@ func TestCreateManyRelation_NonSlice(t *testing.T) {
 }
 
 // Additional error path coverage
+
+// TestPivotInsertStatementCarriesEveryColumnARowHolds pins that a pivot insert gives every row the
+// union of its columns. Per-id pivot attributes (AttachWithPivotRelation, and sync's attach map) let one
+// row carry a column another does not; keying the statement off the first row would drop the later
+// column and lose its value.
+func TestPivotInsertStatementCarriesEveryColumnARowHolds(t *testing.T) {
+	q := newRelQueryWith(t, &relUser{})
+
+	statement, bindings, err := q.pivotTableQuery("rel_user_roles").pivotInsertStatement([]map[string]any{
+		{"user_id": 1, "role_id": 1},
+		{"user_id": 1, "role_id": 2, "priority": "high"},
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, `insert into "rel_user_roles" ("priority", "role_id", "user_id") values (?, ?, ?), (?, ?, ?)`, statement)
+	assert.Equal(t, []any{nil, 1, 1, "high", 2, 1}, bindings)
+}

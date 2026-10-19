@@ -101,6 +101,17 @@ func TestGetID(t *testing.T) {
 				assert.Nil(t, GetID(nil), description)
 			},
 		},
+		{
+			// A slice destination carries no single model to read a key from. It must report no
+			// key rather than panic on NumField, so the batch destinations Save and ToSql.Save
+			// accept reach their insert branch.
+			description: "return nil when the destination is a slice",
+			setup: func(description string) {
+				assert.Nil(t, GetID([]Model{{ID: 1}}), description)
+				assert.Nil(t, GetID(&[]Model{{ID: 1}}), description)
+				assert.Nil(t, GetID([]map[string]any{{"id": 1}}), description)
+			},
+		},
 	}
 	for _, test := range tests {
 		test.setup(test.description)

@@ -2,16 +2,24 @@ package gorm
 
 import (
 	"context"
+	"database/sql"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	gormio "gorm.io/gorm"
 
 	contractsdatabase "github.com/goravel/framework/contracts/database"
 	contractsdriver "github.com/goravel/framework/contracts/database/driver"
+	contractslogger "github.com/goravel/framework/contracts/database/logger"
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
+	"github.com/goravel/framework/contracts/log"
+	databasedriver "github.com/goravel/framework/database/driver"
 	"github.com/goravel/framework/errors"
+	mocksconfig "github.com/goravel/framework/mocks/config"
+	"github.com/goravel/framework/support/carbon"
 	"github.com/goravel/framework/support/convert"
 )
 
@@ -317,15 +325,31 @@ func TestGetDeletedAtColumnName(t *testing.T) {
 		Deleted gormio.DeletedAt
 	}
 
-	assert.Equal(t, "Deleted", getDeletedAtColumn(Test1{}))
-	assert.Equal(t, "Deleted", getDeletedAtColumn(&Test1{}))
+	// The result is the database column, not the Go field name, because callers feed it straight
+	// into SQL.
+	assert.Equal(t, "deleted", getDeletedAtColumn(Test1{}))
+	assert.Equal(t, "deleted", getDeletedAtColumn(&Test1{}))
 
 	type Test2 struct {
 		Test1
 	}
 
-	assert.Equal(t, "Deleted", getDeletedAtColumn(Test2{}))
-	assert.Equal(t, "Deleted", getDeletedAtColumn(&Test2{}))
+	assert.Equal(t, "deleted", getDeletedAtColumn(Test2{}))
+	assert.Equal(t, "deleted", getDeletedAtColumn(&Test2{}))
+
+	// An explicit column tag wins over the snake_cased field name.
+	type Tagged struct {
+		DeletedAt gormio.DeletedAt `gorm:"column:removed_at"`
+	}
+
+	assert.Equal(t, "removed_at", getDeletedAtColumn(Tagged{}))
+
+	// A model without a soft-delete field reports no column.
+	type Plain struct {
+		ID uint
+	}
+
+	assert.Equal(t, "", getDeletedAtColumn(Plain{}))
 }
 
 func TestGetModelConnection(t *testing.T) {
@@ -1067,6 +1091,8 @@ type ModelWithGlobalScopes struct {
 	Name string
 }
 
+func (ModelWithGlobalScopes) TableName() string { return "model_with_global_scopes" }
+
 func (m *ModelWithGlobalScopes) GlobalScopes() map[string]func(contractsorm.Query) contractsorm.Query {
 	return map[string]func(contractsorm.Query) contractsorm.Query{
 		"active": func(query contractsorm.Query) contractsorm.Query {
@@ -1086,3 +1112,148 @@ type ModelWithEmptyGlobalScopes struct {
 func (m *ModelWithEmptyGlobalScopes) GlobalScopes() map[string]func(contractsorm.Query) contractsorm.Query {
 	return map[string]func(contractsorm.Query) contractsorm.Query{}
 }
+
+// getColumnsUser is the fixture for TestBasicSelectWithGetColumns: a bare model whose table is
+// "users", so the transient-columns SQL is exactly the one Laravel's corpus asserts.
+type getColumnsUser struct {
+	ID   uint
+	Name string
+}
+
+func (getColumnsUser) TableName() string { return "users" }
+
+// newGetColumnsQuery builds a query over the fixture whose connection pool records every statement
+// the compiled read executes, so the SQL Get sends can be inspected with no database behind it. The
+// connection names no driver, so the identifiers are quoted with double quotes and bindings stay "?",
+// which is Laravel's generic grammar and the shape the corpus pins.
+func newGetColumnsQuery(t *testing.T) (*Query, *recordingSQLDriver) {
+	t.Helper()
+
+	recorder := &recordingSQLDriver{}
+	sqlDB := sql.OpenDB(recordingConnector{driver: recorder})
+	t.Cleanup(func() { _ = sqlDB.Close() })
+
+	db, err := gormio.Open(stubDialector{}, &gormio.Config{
+		ConnPool:             sqlDB,
+		DisableAutomaticPing: true,
+	})
+	if err != nil {
+		t.Fatalf("open recording gorm: %v", err)
+	}
+
+	conditions := Conditions{model: &getColumnsUser{}}
+
+	return NewQuery(context.Background(), nil, contractsdatabase.Config{}, db, nil, nil, nil, &conditions, nil), recorder
+}
+
+// TestBasicSelectWithGetColumns ports Laravel's testBasicSelectWithGetColumns. A column list passed
+// to Get is used for that call only: the columns render into the statement it runs, but the query
+// keeps the selection it already had — and it only takes the columns when it had none — so a
+// statement compiled afterwards is unchanged. The corpus asserts the SQL a mocked connection
+// receives; the in-package recording driver plays that connection here.
+func TestBasicSelectWithGetColumns(t *testing.T) {
+	query, recorder := newGetColumnsQuery(t)
+
+	// get() selects the wildcard, and leaves the query's own columns unset.
+	var first []getColumnsUser
+	assert.NoError(t, query.Get(&first))
+	assert.Equal(t, `select * from "users"`, recorder.last(t).sql)
+	assert.Nil(t, query.conditions.selectColumns)
+
+	// get(['foo', 'bar']) renders the two columns transiently.
+	var second []getColumnsUser
+	assert.NoError(t, query.Get(&second, []string{"foo", "bar"}))
+	assert.Equal(t, `select "foo", "bar" from "users"`, recorder.last(t).sql)
+	assert.Nil(t, query.conditions.selectColumns)
+
+	// get('baz') wraps the single column name.
+	var third []getColumnsUser
+	assert.NoError(t, query.Get(&third, "baz"))
+	assert.Equal(t, `select "baz" from "users"`, recorder.last(t).sql)
+	assert.Nil(t, query.conditions.selectColumns)
+
+	// toSql() is unchanged: the transient columns never touched the query.
+	statement, _, err := query.compileSelect()
+	assert.NoError(t, err)
+	assert.Equal(t, `select * from "users"`, statement)
+	assert.Nil(t, query.conditions.selectColumns)
+}
+
+// TestBasicSelectUseWritePdo ports Laravel's testBasicSelectUseWritePdo. Laravel's builder carries a
+// useWritePdo flag that reaches the connection as the inverse of its $useReadPdo argument: a plain
+// get() reads through the replica ($useReadPdo = true), while useWritePdo()->get() forces the write
+// connection ($useReadPdo = false). The corpus pins that split against a mocked connection that
+// records the third argument of select(); in this port a compiled read runs on whichever of the
+// connection's pools the executor resolves, so the assertion lands on which recording pool saw the
+// statement. The SQL is the one the corpus asserts for a MySQL connection: `select * from `users“.
+func TestBasicSelectUseWritePdo(t *testing.T) {
+	t.Cleanup(databasedriver.CloseConnections)
+
+	writer := &recordingSQLDriver{}
+	reader := &recordingSQLDriver{}
+	writerPool := sql.OpenDB(recordingConnector{driver: writer})
+	readerPool := sql.OpenDB(recordingConnector{driver: reader})
+	require.NotSame(t, writerPool, readerPool)
+
+	config := mocksconfig.NewConfig(t)
+	config.EXPECT().GetInt("database.pool.max_idle_conns", 10).Return(10).Times(2)
+	config.EXPECT().GetInt("database.pool.max_open_conns", 100).Return(100).Times(2)
+	config.EXPECT().GetDuration("database.pool.conn_max_idletime", time.Duration(3600)).Return(time.Duration(3600)).Times(2)
+	config.EXPECT().GetDuration("database.pool.conn_max_lifetime", time.Duration(3600)).Return(time.Duration(3600)).Times(2)
+
+	pool := contractsdatabase.Pool{
+		Writers: []contractsdatabase.Config{{Driver: "mysql", Database: "app", Dialector: poolRecordingDialector{pool: writerPool}}},
+		Readers: []contractsdatabase.Config{{Driver: "mysql", Database: "replica", Dialector: poolRecordingDialector{pool: readerPool}}},
+	}
+
+	conn, err := databasedriver.Open(config, discardQueryLogger{}, pool, "read_write_pdo", nil)
+	require.NoError(t, err)
+	require.NotNil(t, conn)
+
+	query := NewQuery(context.Background(), config,
+		contractsdatabase.Config{Driver: "mysql", Connection: "read_write_pdo"},
+		conn.Gorm(), nil, nil, nil, &Conditions{model: &getColumnsUser{}}, nil)
+
+	// get() reads through the replica.
+	var first []getColumnsUser
+	assert.NoError(t, query.Get(&first))
+	assert.Equal(t, "select * from `users`", reader.last(t).sql)
+	assert.Equal(t, 0, writer.count())
+
+	// useWritePdo()->get() forces the write connection.
+	var second []getColumnsUser
+	assert.NoError(t, query.UseWritePdo().Get(&second))
+	assert.Equal(t, "select * from `users`", writer.last(t).sql)
+	assert.Equal(t, 1, reader.count())
+}
+
+// poolRecordingDialector is stubDialector with a real *sql.DB behind it, so a gorm.DB opened with it
+// can resolve its base pool (the connection's writer pool) rather than having none.
+type poolRecordingDialector struct {
+	stubDialector
+	pool *sql.DB
+}
+
+func (d poolRecordingDialector) Initialize(db *gormio.DB) error {
+	if err := d.stubDialector.Initialize(db); err != nil {
+		return err
+	}
+
+	db.ConnPool = d.pool
+
+	return nil
+}
+
+// discardQueryLogger satisfies the framework's database logger without recording anything; this test
+// asserts on pool routing, not on log output.
+type discardQueryLogger struct{}
+
+func (discardQueryLogger) Level(contractslogger.Level) contractslogger.Logger {
+	return discardQueryLogger{}
+}
+func (discardQueryLogger) Log() log.Log                                                { return nil }
+func (discardQueryLogger) Infof(context.Context, string, ...any)                       {}
+func (discardQueryLogger) Warningf(context.Context, string, ...any)                    {}
+func (discardQueryLogger) Errorf(context.Context, string, ...any)                      {}
+func (discardQueryLogger) Panicf(context.Context, string, ...any)                      {}
+func (discardQueryLogger) Trace(context.Context, *carbon.Carbon, string, int64, error) {}

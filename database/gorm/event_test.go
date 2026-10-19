@@ -254,27 +254,17 @@ func (s *EventTestSuite) TestValidColumn() {
 		s.True(event.validColumn("manage"))
 		s.False(event.validColumn("age"))
 
-		event.query = &Query{
-			instance: &gorm.DB{
-				Statement: &gorm.Statement{
-					Selects: []string{"name"},
-					Omits:   []string{},
-				},
-			},
-		}
+		// The filter an observer sees is the query's own, which is the one the statement being built
+		// writes by.
+		event.query = &Query{}
+		event.query.conditions.selectColumns = []string{"name"}
 		s.True(event.validColumn("Name"))
 		s.True(event.validColumn("name"))
 		s.False(event.validColumn("avatar"))
 		s.False(event.validColumn("Avatar"))
 
-		event.query = &Query{
-			instance: &gorm.DB{
-				Statement: &gorm.Statement{
-					Selects: []string{},
-					Omits:   []string{"name"},
-				},
-			},
-		}
+		event.query = &Query{}
+		event.query.conditions.omit = []string{"name"}
 		s.False(event.validColumn("Name"))
 		s.False(event.validColumn("name"))
 		s.True(event.validColumn("avatar"))

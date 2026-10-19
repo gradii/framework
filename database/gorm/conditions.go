@@ -6,6 +6,10 @@ import (
 )
 
 type Conditions struct {
+	// err carries a condition that could not be accepted — an unusable operator or value — so the
+	// error surfaces from whichever statement is eventually compiled, rather than from a query object
+	// built only to hold it.
+	err                 error
 	dest                any
 	model               any
 	having              *contractsdriver.Having
@@ -19,6 +23,7 @@ type Conditions struct {
 	scopes              []func(contractsorm.Query) contractsorm.Query
 	selectColumns       []string
 	selectRaw           *Select
+	raw                 *Select
 	selectSubs          []selectSub
 	where               []contractsdriver.Where
 	eagerLoad           []eagerLoadEntry
@@ -27,13 +32,15 @@ type Conditions struct {
 	distinct            bool
 	lockForUpdate       bool
 	sharedLock          bool
+	useWritePdo         bool
 	withoutEvents       bool
 	withoutGlobalScopes []string
 	withTrashed         bool
+	onlyTrashed         bool
 }
 
 // oneOfManyConfig captures the column + aggregate for OfMany / LatestOfMany / OldestOfMany when
-// they are called inside a With() eager-load callback. It's read by runRelatedQuery, which
+// they are called inside a With() eager-load callback. It's read by runRelatedQueryCompiled, which
 // rewrites the inner query into an INNER JOIN over a per-parent aggregate subquery.
 type oneOfManyConfig struct {
 	column    string
@@ -51,7 +58,7 @@ type Table struct {
 }
 
 // selectSub describes a deferred sub-select aggregate (WithCount / WithMax / etc.).
-// The relation is resolved at buildConditions() time, when the parent model is known.
+// The relation is resolved when the query is compiled to SQL, where the parent model is known.
 type selectSub struct {
 	relation string
 	column   string

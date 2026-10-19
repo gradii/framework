@@ -33,6 +33,7 @@ func TestModelMakeCommand(t *testing.T) {
 	mockContext.EXPECT().Argument(0).Return("User").Once()
 	mockContext.EXPECT().OptionBool("force").Return(false).Once()
 	mockContext.EXPECT().Option("table").Return("").Once()
+	mockContext.EXPECT().OptionBool("no-table-name").Return(false).Once()
 	mockContext.EXPECT().Success("Model created successfully").Once()
 	assert.Nil(t, modelMakeCommand.Handle(mockContext))
 	assert.True(t, file.Exists("app/models/user.go"))
@@ -49,6 +50,12 @@ import (
 type User struct {
 	orm.Model
 }
+
+// TableName returns the table name for the User model.
+// It was derived from the model name, please confirm it matches the real table.
+func (r *User) TableName() string {
+	return "users"
+}
 `
 	assert.Equal(t, expectedUserContent, userModel)
 
@@ -62,6 +69,7 @@ type User struct {
 	mockContext.EXPECT().Argument(0).Return("User/Phone").Once()
 	mockContext.EXPECT().OptionBool("force").Return(false).Once()
 	mockContext.EXPECT().Option("table").Return("").Once()
+	mockContext.EXPECT().OptionBool("no-table-name").Return(false).Once()
 	mockContext.EXPECT().Success("Model created successfully").Once()
 	assert.Nil(t, modelMakeCommand.Handle(mockContext))
 	assert.True(t, file.Exists("app/models/User/phone.go"))
@@ -80,8 +88,37 @@ import (
 type Phone struct {
 	orm.Model
 }
+
+// TableName returns the table name for the Phone model.
+// It was derived from the model name, please confirm it matches the real table.
+func (r *Phone) TableName() string {
+	return "phones"
+}
 `
 	assert.Equal(t, expectedPhoneContent, phoneModel)
+
+	// Test: Create model with --no-table-name (no TableName method)
+	mockContext.EXPECT().Argument(0).Return("Article").Once()
+	mockContext.EXPECT().OptionBool("force").Return(false).Once()
+	mockContext.EXPECT().Option("table").Return("").Once()
+	mockContext.EXPECT().OptionBool("no-table-name").Return(true).Once()
+	mockContext.EXPECT().Success("Model created successfully").Once()
+	assert.Nil(t, modelMakeCommand.Handle(mockContext))
+	assert.True(t, file.Exists("app/models/article.go"))
+
+	articleModel, err := file.GetContent("app/models/article.go")
+	assert.Nil(t, err)
+	expectedArticleContent := `package models
+
+import (
+	"github.com/goravel/framework/database/orm"
+)
+
+type Article struct {
+	orm.Model
+}
+`
+	assert.Equal(t, expectedArticleContent, articleModel)
 
 	// Test: Create model from table schema
 	mockContext.EXPECT().Argument(0).Return("Product").Once()
@@ -113,6 +150,7 @@ type Phone struct {
 	}
 	mockSchema.EXPECT().GoTypes().Return(goTypes).Once()
 
+	mockContext.EXPECT().OptionBool("no-table-name").Return(false).Once()
 	mockContext.EXPECT().Success("Model created successfully").Once()
 
 	assert.Nil(t, modelMakeCommand.Handle(mockContext))
@@ -258,6 +296,22 @@ func TestBuildTableNameMethod(t *testing.T) {
 	// Test with custom table name
 	result = modelMakeCommand.buildTableNameMethod("Product", "store_items")
 	expected = "func (r *Product) TableName() string {\n\treturn \"store_items\"\n}"
+	assert.Equal(t, expected, result)
+}
+
+func TestBuildGuessedTableNameMethod(t *testing.T) {
+	mockSchema := mocksschema.NewSchema(t)
+	mockArtisan := mocksconsole.NewArtisan(t)
+	modelMakeCommand := NewModelMakeCommand(mockArtisan, mockSchema)
+
+	// A single-word name is snake cased and pluralised.
+	result := modelMakeCommand.buildGuessedTableNameMethod("User")
+	expected := "// TableName returns the table name for the User model.\n// It was derived from the model name, please confirm it matches the real table.\nfunc (r *User) TableName() string {\n\treturn \"users\"\n}"
+	assert.Equal(t, expected, result)
+
+	// A multi-word name is snake cased as well.
+	result = modelMakeCommand.buildGuessedTableNameMethod("UserProfile")
+	expected = "// TableName returns the table name for the UserProfile model.\n// It was derived from the model name, please confirm it matches the real table.\nfunc (r *UserProfile) TableName() string {\n\treturn \"user_profiles\"\n}"
 	assert.Equal(t, expected, result)
 }
 

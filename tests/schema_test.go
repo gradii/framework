@@ -184,17 +184,6 @@ func (s *SchemaSuite) TestColumnExtraAttributes() {
 				table.TimestampTz("use_current_on_update").UseCurrent().UseCurrentOnUpdate()
 			}))
 
-			type ColumnExtraAttribute struct {
-				ID                 uint            `gorm:"primaryKey" json:"id"`
-				Name               string          `json:"name"`
-				Nullable           *string         `json:"nullable"`
-				StringDefault      string          `json:"string_default"`
-				IntegerDefault     int             `json:"integer_default"`
-				BoolDefault        bool            `json:"bool_default"`
-				UseCurrent         carbon.DateTime `json:"use_current"`
-				UseCurrentOnUpdate carbon.DateTime `json:"use_current_on_update"`
-			}
-
 			// SubSecond: Avoid milliseconds difference
 			carbon.SetTimezone(carbon.UTC)
 			now := carbon.Now().SubSecond()
@@ -1850,7 +1839,7 @@ func (s *SchemaSuite) TestGeneratedAs_Postgres() {
 
 	var postgresGeneratedAsList []PostgresGeneratedAs
 	s.NoError(testQuery.Query().Table(table).Find(&postgresGeneratedAsList))
-	s.Len(postgresGeneratedAsList, 3)
+	s.Require().Len(postgresGeneratedAsList, 3)
 
 	s.Equal(PostgresGeneratedAs{1, "test_1", 1, 10, 20}, postgresGeneratedAsList[0])
 	s.Equal(PostgresGeneratedAs{2, "test_2", 2, 12, 25}, postgresGeneratedAsList[1])
@@ -2022,7 +2011,7 @@ func (s *SchemaSuite) TestID_Postgres() {
 
 			columns, err := schema.GetColumns(test.table)
 			s.Require().Nil(err)
-			s.Equal(1, len(columns))
+			s.Require().Equal(1, len(columns))
 			s.Equal("id", columns[0].Name)
 			s.True(columns[0].Autoincrement)
 			s.Empty(columns[0].Collation)
@@ -2102,7 +2091,7 @@ func (s *SchemaSuite) TestID_Sqlite() {
 
 			columns, err := schema.GetColumns(test.table)
 			s.Require().Nil(err)
-			s.Equal(1, len(columns))
+			s.Require().Equal(1, len(columns))
 			s.Equal("id", columns[0].Name)
 			s.True(columns[0].Autoincrement)
 			s.Empty(columns[0].Comment)
@@ -2186,7 +2175,7 @@ func (s *SchemaSuite) TestID_Mysql() {
 
 			columns, err := schema.GetColumns(test.table)
 			s.Require().Nil(err)
-			s.Equal(1, len(columns))
+			s.Require().Equal(1, len(columns))
 			s.True(columns[0].Autoincrement)
 			s.Empty(columns[0].Collation)
 			s.Equal("This is a id column", columns[0].Comment)
@@ -2271,7 +2260,7 @@ func (s *SchemaSuite) TestID_Sqlserver() {
 
 			columns, err := schema.GetColumns(test.table)
 			s.Require().Nil(err)
-			s.Equal(1, len(columns))
+			s.Require().Equal(1, len(columns))
 			s.True(columns[0].Autoincrement)
 			s.Empty(columns[0].Collation)
 			s.Empty(columns[0].Comment)
@@ -2577,7 +2566,7 @@ func (s *SchemaSuite) TestViewMethods() {
 
 			views, err := schema.GetViews()
 			s.NoError(err)
-			s.Len(views, 1)
+			s.Require().Len(views, 1)
 			s.Equal("goravel_view", views[0].Name)
 			s.NotEmpty(views[0].Definition)
 

@@ -726,7 +726,8 @@ func TestStructToMap(t *testing.T) {
 
 	t.Run("unexported fields skipped", func(t *testing.T) {
 		type Data struct {
-			Public  string `form:"public"`
+			Public string `form:"public"`
+			//lint:ignore U1000 load-bearing: structToMap must skip this unexported field
 			private string //nolint:unused
 		}
 		rv := reflect.ValueOf(Data{Public: "yes"})

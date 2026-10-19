@@ -77,7 +77,7 @@ func (s *RepositoryTestSuite) TestRecord() {
 			migrations, err := repository.GetMigrationsByStep(2)
 
 			s.NoError(err)
-			s.Len(migrations, 2)
+			s.Require().Len(migrations, 2)
 			s.Equal("migration3", migrations[0].Migration)
 			s.Equal(2, migrations[0].Batch)
 			s.Equal("migration2", migrations[1].Migration)
@@ -86,7 +86,7 @@ func (s *RepositoryTestSuite) TestRecord() {
 			migrations, err = repository.GetMigrationsByBatch(1)
 
 			s.NoError(err)
-			s.Len(migrations, 2)
+			s.Require().Len(migrations, 2)
 			s.Equal("migration2", migrations[0].Migration)
 			s.Equal(1, migrations[0].Batch)
 			s.Equal("migration1", migrations[1].Migration)
@@ -95,7 +95,7 @@ func (s *RepositoryTestSuite) TestRecord() {
 			migrations, err = repository.GetMigrations()
 
 			s.NoError(err)
-			s.Len(migrations, 3)
+			s.Require().Len(migrations, 3)
 			s.Equal("migration3", migrations[0].Migration)
 			s.Equal(2, migrations[0].Batch)
 			s.Equal("migration2", migrations[1].Migration)
@@ -106,7 +106,7 @@ func (s *RepositoryTestSuite) TestRecord() {
 			migrations, err = repository.GetLast()
 
 			s.NoError(err)
-			s.Len(migrations, 1)
+			s.Require().Len(migrations, 1)
 			s.Equal("migration3", migrations[0].Migration)
 			s.Equal(2, migrations[0].Batch)
 

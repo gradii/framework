@@ -84,6 +84,10 @@ type Query interface {
 	Create(value any) error
 	// Cursor returns a cursor, use scan to iterate over the returned rows.
 	Cursor() chan db.Row
+	// CursorPaginate fetches a single keyset ("seek") page and scans it into dest, returning the
+	// page and its cursors. It never counts, so the page carries no total, and the name is distinct
+	// from Cursor, which streams rows.
+	CursorPaginate(perPage int, cursor string, dest any) (db.CursorPaginator, error)
 	// DB gets the underlying database connection.
 	DB() (*sql.DB, error)
 	// Delete deletes records matching given conditions, if the conditions are empty will delete all records.
@@ -98,6 +102,8 @@ type Query interface {
 	Exists() (bool, error)
 	// Find finds records that match given conditions.
 	Find(dest any, conds ...any) error
+	// FindOr finds the first record matching the given id, or runs the callback when there is none.
+	FindOr(dest any, id any, callback func() error) error
 	// FindOrFail finds records that match given conditions or throws an error.
 	FindOrFail(dest any, conds ...any) error
 	// First finds record that match given conditions.
@@ -115,8 +121,9 @@ type Query interface {
 	FirstOrNew(dest any, attributes any, values ...any) error
 	// ForceDelete forces delete records matching given conditions.
 	ForceDelete(value ...any) (*db.Result, error)
-	// Get retrieves all rows from the database.
-	Get(dest any) error
+	// Get retrieves all rows from the database. A column list may be given for this call only,
+	// mirroring Laravel's Builder::get($columns); the query's own selection is left untouched.
+	Get(dest any, columns ...any) error
 	// Group specifies the group method on the query.
 	// DEPRECATED Use GroupBy instead.
 	Group(column string) Query
@@ -184,8 +191,10 @@ type Query interface {
 	OrWhereJsonDoesntContain(column string, value any) Query
 	// OrWhereJsonDoesntContainKey add a clause that determines if a JSON path does not exist to the query.
 	OrWhereJsonDoesntContainKey(column string) Query
-	// OrWhereJsonLength add an "or where JSON length" clause to the query.
-	OrWhereJsonLength(column string, length int) Query
+	// OrWhereJsonLength add an "or where JSON length" clause to the query. Mirrors
+	// Laravel's Builder::orWhereJsonLength, so args is either (length) for an
+	// equality check or (operator, length) for a comparison.
+	OrWhereJsonLength(column string, args ...any) Query
 	// OrWhereNotBetween adds an "or where column not between x and y" clause to the query.
 	OrWhereNotBetween(column string, x, y any) Query
 	// OrWhereNotIn adds an "or where column not in" clause to the query.
@@ -235,6 +244,9 @@ type Query interface {
 	// UpdateOrCreate finds the first record that matches the given attributes
 	// or create a new one with those attributes if none was found.
 	UpdateOrCreate(dest any, attributes any, values any) error
+	// UseWritePdo forces the query's reads to run on the write connection rather than the reader
+	// replica. Mirrors Laravel's Builder::useWritePdo.
+	UseWritePdo() Query
 	// When executes the callback if the condition is true, otherwise the falseCallback if it is given.
 	When(condition bool, callback func(query Query) Query, falseCallback ...func(query Query) Query) Query
 	// Where add a "where" clause to the query.
@@ -255,8 +267,10 @@ type Query interface {
 	WhereJsonDoesntContain(column string, value any) Query
 	// WhereJsonDoesntContainKey add a clause that determines if a JSON path does not exist to the query.
 	WhereJsonDoesntContainKey(column string) Query
-	// WhereJsonLength add a "where JSON length" clause to the query.
-	WhereJsonLength(column string, length int) Query
+	// WhereJsonLength add a "where JSON length" clause to the query. Mirrors
+	// Laravel's Builder::whereJsonLength, so args is either (length) for an
+	// equality check or (operator, length) for a comparison.
+	WhereJsonLength(column string, args ...any) Query
 	// WhereNone adds a "where none of columns match" clause to the query.
 	WhereNone(columns []string, args ...any) Query
 	// WhereNotBetween adds a "where column not between x and y" clause to the query.
@@ -276,6 +290,10 @@ type Query interface {
 	Without(relations ...string) Query
 	// WithTrashed allows soft deleted models to be included in the results.
 	WithTrashed() Query
+	// OnlyTrashed restricts the results to the soft deleted models, mirroring Laravel's
+	// SoftDeletes::onlyTrashed: the automatic "not deleted" predicate is dropped and replaced by a
+	// "deleted_at is not null" one.
+	OnlyTrashed() Query
 	// With eagerly loads the given relationships using Goravel's own loader (does not
 	// delegate to GORM Preload). Accepts the union of fedaco's with(...) shapes:
 	//
@@ -325,4 +343,23 @@ type ToSql interface {
 	Save(value any) string
 	Sum(column string, dest any) string
 	Update(column any, value ...any) string
+}
+
+// ModelWithTableName is implemented by every model, which must declare the table it is stored in.
+//
+// Declaring a table is required, not optional: the ORM resolves a model's table through this method
+// and nothing else. The framework never derives a table name from the struct name and never
+// pluralises, so `type User struct{ ... }` addresses no table until TableName() says which one it
+// is. The method is the single source every part of the framework consults when it needs a model's
+// table - reads, writes, relations and the query builder alike - so there is exactly one place to
+// change it.
+//
+// A model that declares no table is a configuration error rather than something to guess around:
+// instead of falling back to a naming strategy, the ORM fails with a named error that reports the
+// offending type and names the TableName() method to add.
+//
+// `make:model` writes this method into every model it generates.
+type ModelWithTableName interface {
+	// TableName gets the table name for the model, without the connection prefix.
+	TableName() string
 }

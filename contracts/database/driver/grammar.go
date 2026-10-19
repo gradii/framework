@@ -2,12 +2,13 @@ package driver
 
 import (
 	sq "github.com/Masterminds/squirrel"
-	"gorm.io/gorm/clause"
 )
 
+// Grammar is the schema and DDL grammar a driver module supplies. Row locking and random ordering
+// are not part of it: the framework compiles those itself, so no driver module needs to import
+// GORM to describe them.
 type Grammar interface {
 	SchemaGrammar
-	GormGrammar
 	DBGrammar
 	JsonGrammar
 }
@@ -131,15 +132,6 @@ type SchemaGrammar interface {
 	TypeString(column ColumnDefinition) string
 	// TypeUuid Create the column definition for a uuid type.
 	TypeUuid(column ColumnDefinition) string
-}
-
-type GormGrammar interface {
-	// CompileLockForUpdateForGorm Compile the lock for update for gorm.
-	CompileLockForUpdateForGorm() clause.Expression
-	// CompileRandomOrderForGorm Compile the random order for gorm.
-	CompileRandomOrderForGorm() string
-	// CompileSharedLockForGorm Compile the shared lock for gorm.
-	CompileSharedLockForGorm() clause.Expression
 }
 
 type DBGrammar interface {

@@ -5,8 +5,6 @@ import (
 	"os"
 	"testing"
 
-	gormio "gorm.io/gorm"
-
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
 )
 
@@ -80,8 +78,14 @@ func TestCapture_RelationSQL(t *testing.T) {
 	for _, c := range cases {
 		q, dest := c.build(t)
 		gq := q.(*Query)
-		stmt := gq.buildConditions().instance.Session(&gormio.Session{DryRun: true}).Find(dest)
-		if _, err := fmt.Fprintf(f, "[%s]\n%s\n\n", c.name, stmt.Statement.SQL.String()); err != nil {
+		stmt, _, cerr := gq.dest(dest).addGlobalScopes().compileSelect()
+		if cerr != nil {
+			if _, err := fmt.Fprintf(f, "[%s] ERROR: %v\n\n", c.name, cerr); err != nil {
+				t.Fatal(err)
+			}
+			continue
+		}
+		if _, err := fmt.Fprintf(f, "[%s]\n%s\n\n", c.name, stmt); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -116,9 +120,15 @@ func TestCapture_RelationSQL(t *testing.T) {
 			}
 			continue
 		}
-		inner := q.compileExistenceSubquery(desc, nil)
-		stmt := inner.Session(&gormio.Session{DryRun: true}).Find(c.dest)
-		if _, err := fmt.Fprintf(f, "[%s]\n%s\n\n", c.name, stmt.Statement.SQL.String()); err != nil {
+		inner, cerr := q.compileExistenceSubquery(desc, nil)
+		if cerr != nil {
+			if _, err := fmt.Fprintf(f, "[%s] ERROR: %v\n\n", c.name, cerr); err != nil {
+				t.Fatal(err)
+			}
+			continue
+		}
+		stmt, _ := inner.ToSelectSQL()
+		if _, err := fmt.Fprintf(f, "[%s]\n%s\n\n", c.name, stmt); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -147,9 +157,15 @@ func TestCapture_RelationSQL(t *testing.T) {
 			}
 			continue
 		}
-		inner := q.compileAggregateSubquery(desc, c.sub)
-		stmt := inner.Session(&gormio.Session{DryRun: true}).Find(&relBook{})
-		if _, err := fmt.Fprintf(f, "[%s]\n%s\n\n", c.name, stmt.Statement.SQL.String()); err != nil {
+		inner, aerr := q.compileAggregateSubquery(desc, c.sub)
+		if aerr != nil {
+			if _, err := fmt.Fprintf(f, "[%s] ERROR: %v\n\n", c.name, aerr); err != nil {
+				t.Fatal(err)
+			}
+			continue
+		}
+		stmt, _ := inner.ToSelectSQL()
+		if _, err := fmt.Fprintf(f, "[%s]\n%s\n\n", c.name, stmt); err != nil {
 			t.Fatal(err)
 		}
 	}

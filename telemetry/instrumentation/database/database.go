@@ -14,11 +14,11 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 	"go.opentelemetry.io/otel/trace"
-	"gorm.io/gorm"
 
 	"github.com/goravel/framework/contracts/config"
 	contractsdatabase "github.com/goravel/framework/contracts/database"
 	contractstelemetry "github.com/goravel/framework/contracts/telemetry"
+	frameworkerrors "github.com/goravel/framework/errors"
 	"github.com/goravel/framework/support/color"
 	"github.com/goravel/framework/telemetry"
 )
@@ -73,8 +73,8 @@ func (r *Instrument) Shutdown() {
 }
 
 // SetDB stores the primary writer's *sql.DB for pool metrics.
-// Pool metrics cover the writer pool only; dbresolver replica pools are
-// internal gorm.ConnPool instances with no public sql.DBStats access.
+// Pool metrics cover the writer pool only: replica pools belong to the read/write resolver and
+// expose no sql.DBStats.
 func (r *Instrument) SetDB(db *sql.DB) {
 	if r == nil {
 		return
@@ -217,7 +217,7 @@ func (r *Instrument) endSpan(ctx context.Context, span trace.Span, start time.Ti
 }
 
 func dbSystem(driverName string) telemetry.KeyValue {
-	switch driverName {
+	switch normalizeDriverName(driverName) {
 	case "postgres", "postgresql":
 		return semconv.DBSystemNamePostgreSQL
 	case "mysql":
@@ -231,6 +231,12 @@ func dbSystem(driverName string) telemetry.KeyValue {
 	}
 }
 
+// normalizeDriverName lowercases a driver name and drops its separators, because the driver
+// modules report names such as "PostgreSQL" and "SQL Server" rather than the bare dialect.
+func normalizeDriverName(driverName string) string {
+	return strings.NewReplacer(" ", "", "_", "", "-", "").Replace(strings.ToLower(strings.TrimSpace(driverName)))
+}
+
 func operationName(query string) string {
 	query = strings.TrimLeft(query, " \t\n\r")
 	if query == "" {
@@ -242,7 +248,7 @@ func operationName(query string) string {
 	return strings.ToUpper(query)
 }
 
-var ignoredErrors = []error{gorm.ErrRecordNotFound, sql.ErrNoRows, driver.ErrSkip, io.EOF}
+var ignoredErrors = []error{frameworkerrors.OrmRecordNotFound, sql.ErrNoRows, driver.ErrSkip, io.EOF}
 
 func isRecordableError(err error) bool {
 	if err == nil {

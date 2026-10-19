@@ -76,7 +76,7 @@ func (s *QueriesRelationshipsTestSuite) TestHas_CountComparison() {
 			var users []User
 			s.Nil(rq.Has("Books", ">=", 2).
 				Where("name like ?", "rel_hasc_%").Get(&users))
-			s.Len(users, 1)
+			s.Require().Len(users, 1)
 			s.Equal("rel_hasc_alice", users[0].Name)
 		})
 	}
@@ -95,7 +95,7 @@ func (s *QueriesRelationshipsTestSuite) TestDoesntHave() {
 			var users []User
 			s.Nil(rq.DoesntHave("Books").
 				Where("name like ?", "rel_dh_%").Get(&users))
-			s.Len(users, 1)
+			s.Require().Len(users, 1)
 			s.Equal("rel_dh_without", users[0].Name)
 		})
 	}
@@ -118,7 +118,7 @@ func (s *QueriesRelationshipsTestSuite) TestWhereHas_Callback() {
 			var users []User
 			s.Nil(rq.WhereHas("Books", cb).
 				Where("name like ?", "rel_wh_%").Get(&users))
-			s.Len(users, 1)
+			s.Require().Len(users, 1)
 			s.Equal("rel_wh_match", users[0].Name)
 		})
 	}
@@ -177,7 +177,7 @@ func (s *QueriesRelationshipsTestSuite) TestHasMorph() {
 			var users []User
 			s.Nil(rq.HasMorph("House", []any{&User{}}).
 				Where("name like ?", "rel_hm_%").Get(&users))
-			s.Len(users, 1)
+			s.Require().Len(users, 1)
 			s.Equal("rel_hm_with", users[0].Name)
 		})
 	}
@@ -477,7 +477,7 @@ func (s *QueriesRelationshipsTestSuite) TestHasManyThrough_WhereHas() {
 			var users []User
 			s.Nil(rq.WhereHas("Authors", cb).
 				Where("name like ?", "rel_th_%").Get(&users))
-			s.Len(users, 1)
+			s.Require().Len(users, 1)
 			s.Equal("rel_th_u1", users[0].Name)
 		})
 	}
@@ -508,7 +508,7 @@ func (s *QueriesRelationshipsTestSuite) TestSQL_Has() {
 	var users []User
 	sql := rq.Has("Books").ToRawSql().Get(&users)
 	s.Equal(
-		"SELECT * FROM `users` WHERE EXISTS (SELECT 1 FROM `books` WHERE books.user_id = users.id) AND `users`.`deleted_at` IS NULL",
+		"select * from \"users\" where exists (select 1 from \"books\" where \"users\".\"id\" = \"books\".\"user_id\") and \"users\".\"deleted_at\" IS NULL",
 		sql,
 	)
 }
@@ -522,7 +522,7 @@ func (s *QueriesRelationshipsTestSuite) TestSQL_DoesntHave() {
 	var users []User
 	sql := rq.DoesntHave("Books").ToRawSql().Get(&users)
 	s.Equal(
-		"SELECT * FROM `users` WHERE NOT EXISTS (SELECT 1 FROM `books` WHERE books.user_id = users.id) AND `users`.`deleted_at` IS NULL",
+		"select * from \"users\" where not exists (select 1 from \"books\" where \"users\".\"id\" = \"books\".\"user_id\") and \"users\".\"deleted_at\" IS NULL",
 		sql,
 	)
 }
@@ -536,7 +536,7 @@ func (s *QueriesRelationshipsTestSuite) TestSQL_HasCount() {
 	var users []User
 	sql := rq.Has("Books", ">=", 3).ToRawSql().Get(&users)
 	s.Equal(
-		"SELECT * FROM `users` WHERE (SELECT COUNT(*) FROM `books` WHERE books.user_id = users.id) >= 3 AND `users`.`deleted_at` IS NULL",
+		"select * from \"users\" where (select count(*) from \"books\" where \"users\".\"id\" = \"books\".\"user_id\") >= 3 and \"users\".\"deleted_at\" IS NULL",
 		sql,
 	)
 }
@@ -550,7 +550,7 @@ func (s *QueriesRelationshipsTestSuite) TestSQL_NestedHas() {
 	var users []User
 	sql := rq.Has("Books.Author").ToRawSql().Get(&users)
 	s.Equal(
-		"SELECT * FROM `users` WHERE EXISTS (SELECT 1 FROM `books` WHERE books.user_id = users.id AND EXISTS (SELECT 1 FROM `authors` WHERE authors.book_id = books.id)) AND `users`.`deleted_at` IS NULL",
+		"select * from \"users\" where exists (select 1 from \"books\" where \"users\".\"id\" = \"books\".\"user_id\" and exists (select 1 from \"authors\" where \"books\".\"id\" = \"authors\".\"book_id\")) and \"users\".\"deleted_at\" IS NULL",
 		sql,
 	)
 }
@@ -567,7 +567,7 @@ func (s *QueriesRelationshipsTestSuite) TestSQL_WhereHasWithCallback() {
 	var users []User
 	sql := rq.WhereHas("Books", cb).ToRawSql().Get(&users)
 	s.Equal(
-		"SELECT * FROM `users` WHERE EXISTS (SELECT 1 FROM `books` WHERE books.user_id = users.id AND name = 'wh_target') AND `users`.`deleted_at` IS NULL",
+		"select * from \"users\" where exists (select 1 from \"books\" where \"users\".\"id\" = \"books\".\"user_id\" and name = 'wh_target') and \"users\".\"deleted_at\" IS NULL",
 		sql,
 	)
 }
@@ -581,7 +581,7 @@ func (s *QueriesRelationshipsTestSuite) TestSQL_OrHas() {
 	var users []User
 	sql := rq.Where("name = ?", "x").OrHas("Books").ToRawSql().Get(&users)
 	s.Equal(
-		"SELECT * FROM `users` WHERE (name = 'x' OR EXISTS (SELECT 1 FROM `books` WHERE books.user_id = users.id)) AND `users`.`deleted_at` IS NULL",
+		"select * from \"users\" where name = 'x' or exists (select 1 from \"books\" where \"users\".\"id\" = \"books\".\"user_id\") and \"users\".\"deleted_at\" IS NULL",
 		sql,
 	)
 }
@@ -595,7 +595,7 @@ func (s *QueriesRelationshipsTestSuite) TestSQL_OrDoesntHave() {
 	var users []User
 	sql := rq.Where("name = ?", "x").OrDoesntHave("Books").ToRawSql().Get(&users)
 	s.Equal(
-		"SELECT * FROM `users` WHERE (name = 'x' OR NOT EXISTS (SELECT 1 FROM `books` WHERE books.user_id = users.id)) AND `users`.`deleted_at` IS NULL",
+		"select * from \"users\" where name = 'x' or not exists (select 1 from \"books\" where \"users\".\"id\" = \"books\".\"user_id\") and \"users\".\"deleted_at\" IS NULL",
 		sql,
 	)
 }
@@ -612,7 +612,7 @@ func (s *QueriesRelationshipsTestSuite) TestSQL_OrWhereHas() {
 	}
 	sql := rq.Where("id = ?", 1).OrWhereHas("Books", cb).ToRawSql().Get(&users)
 	s.Equal(
-		"SELECT * FROM `users` WHERE (id = 1 OR EXISTS (SELECT 1 FROM `books` WHERE books.user_id = users.id AND name = 'target')) AND `users`.`deleted_at` IS NULL",
+		"select * from \"users\" where id = 1 or exists (select 1 from \"books\" where \"users\".\"id\" = \"books\".\"user_id\" and name = 'target') and \"users\".\"deleted_at\" IS NULL",
 		sql,
 	)
 }
@@ -629,7 +629,7 @@ func (s *QueriesRelationshipsTestSuite) TestSQL_OrWhereDoesntHave() {
 	}
 	sql := rq.Where("id = ?", 1).OrWhereDoesntHave("Books", cb).ToRawSql().Get(&users)
 	s.Equal(
-		"SELECT * FROM `users` WHERE (id = 1 OR NOT EXISTS (SELECT 1 FROM `books` WHERE books.user_id = users.id AND name = 'target')) AND `users`.`deleted_at` IS NULL",
+		"select * from \"users\" where id = 1 or not exists (select 1 from \"books\" where \"users\".\"id\" = \"books\".\"user_id\" and name = 'target') and \"users\".\"deleted_at\" IS NULL",
 		sql,
 	)
 }
@@ -643,7 +643,7 @@ func (s *QueriesRelationshipsTestSuite) TestSQL_OrHasMorph() {
 	var users []User
 	sql := rq.Where("name = ?", "x").OrHasMorph("House", []any{&User{}}).ToRawSql().Get(&users)
 	s.Equal(
-		"SELECT * FROM `users` WHERE (name = 'x' OR EXISTS (SELECT 1 FROM `houses` WHERE houses.houseable_id = users.id AND houses.houseable_type = 'users')) AND `users`.`deleted_at` IS NULL",
+		"select * from \"users\" where name = 'x' or (exists (select 1 from \"houses\" where \"users\".\"id\" = \"houses\".\"houseable_id\" and \"houses\".\"houseable_type\" = 'users')) and \"users\".\"deleted_at\" IS NULL",
 		sql,
 	)
 }
@@ -657,7 +657,7 @@ func (s *QueriesRelationshipsTestSuite) TestSQL_OrDoesntHaveMorph() {
 	var users []User
 	sql := rq.Where("name = ?", "x").OrDoesntHaveMorph("House", []any{&User{}}).ToRawSql().Get(&users)
 	s.Equal(
-		"SELECT * FROM `users` WHERE (name = 'x' OR NOT EXISTS (SELECT 1 FROM `houses` WHERE houses.houseable_id = users.id AND houses.houseable_type = 'users')) AND `users`.`deleted_at` IS NULL",
+		"select * from \"users\" where name = 'x' or (not exists (select 1 from \"houses\" where \"users\".\"id\" = \"houses\".\"houseable_id\" and \"houses\".\"houseable_type\" = 'users')) and \"users\".\"deleted_at\" IS NULL",
 		sql,
 	)
 }
@@ -674,7 +674,7 @@ func (s *QueriesRelationshipsTestSuite) TestSQL_OrWhereHasMorph() {
 	}
 	sql := rq.Where("id = ?", 1).OrWhereHasMorph("House", []any{&User{}}, cb).ToRawSql().Get(&users)
 	s.Equal(
-		"SELECT * FROM `users` WHERE (id = 1 OR EXISTS (SELECT 1 FROM `houses` WHERE houses.houseable_id = users.id AND houses.houseable_type = 'users' AND name = 'target')) AND `users`.`deleted_at` IS NULL",
+		"select * from \"users\" where id = 1 or (exists (select 1 from \"houses\" where \"users\".\"id\" = \"houses\".\"houseable_id\" and \"houses\".\"houseable_type\" = 'users' and name = 'target')) and \"users\".\"deleted_at\" IS NULL",
 		sql,
 	)
 }
@@ -691,7 +691,7 @@ func (s *QueriesRelationshipsTestSuite) TestSQL_OrWhereDoesntHaveMorph() {
 	}
 	sql := rq.Where("id = ?", 1).OrWhereDoesntHaveMorph("House", []any{&User{}}, cb).ToRawSql().Get(&users)
 	s.Equal(
-		"SELECT * FROM `users` WHERE (id = 1 OR NOT EXISTS (SELECT 1 FROM `houses` WHERE houses.houseable_id = users.id AND houses.houseable_type = 'users' AND name = 'target')) AND `users`.`deleted_at` IS NULL",
+		"select * from \"users\" where id = 1 or (not exists (select 1 from \"houses\" where \"users\".\"id\" = \"houses\".\"houseable_id\" and \"houses\".\"houseable_type\" = 'users' and name = 'target')) and \"users\".\"deleted_at\" IS NULL",
 		sql,
 	)
 }
@@ -705,7 +705,7 @@ func (s *QueriesRelationshipsTestSuite) TestSQL_WithCount() {
 	var users []User
 	sql := rq.WithCount("Books").ToRawSql().Get(&users)
 	s.Equal(
-		"SELECT users.*, (SELECT COUNT(*) FROM `books` WHERE books.user_id = users.id) AS books_count FROM `users` WHERE `users`.`deleted_at` IS NULL",
+		"select \"users\".*, (select count(*) from \"books\" where \"users\".\"id\" = \"books\".\"user_id\") AS \"books_count\" from \"users\" where \"users\".\"deleted_at\" IS NULL",
 		sql,
 	)
 }
@@ -722,7 +722,7 @@ func (s *QueriesRelationshipsTestSuite) TestSQL_WithCountAndCallback() {
 	var users []User
 	sql := rq.WithCount(contractsorm.RelationCount{Name: "Books", Callback: cb}).ToRawSql().Get(&users)
 	s.Equal(
-		"SELECT users.*, (SELECT COUNT(*) FROM `books` WHERE books.user_id = users.id AND name = 'active') AS books_count FROM `users` WHERE `users`.`deleted_at` IS NULL",
+		"select \"users\".*, (select count(*) from \"books\" where \"users\".\"id\" = \"books\".\"user_id\" and name = 'active') AS \"books_count\" from \"users\" where \"users\".\"deleted_at\" IS NULL",
 		sql,
 	)
 }
@@ -736,7 +736,7 @@ func (s *QueriesRelationshipsTestSuite) TestSQL_WithCountWithAlias() {
 	var users []User
 	sql := rq.WithCount(contractsorm.RelationCount{Name: "Books", Alias: "book_total"}).ToRawSql().Get(&users)
 	s.Equal(
-		"SELECT users.*, (SELECT COUNT(*) FROM `books` WHERE books.user_id = users.id) AS book_total FROM `users` WHERE `users`.`deleted_at` IS NULL",
+		"select \"users\".*, (select count(*) from \"books\" where \"users\".\"id\" = \"books\".\"user_id\") AS \"book_total\" from \"users\" where \"users\".\"deleted_at\" IS NULL",
 		sql,
 	)
 }
@@ -791,7 +791,7 @@ func (s *QueriesRelationshipsTestSuite) TestWithCount_Retrieve() {
 				WithCount("Books.Author").
 				Get(&rows))
 
-			s.Len(rows, 3)
+			s.Require().Len(rows, 3)
 			s.Equal(int64(2), rows[0].BooksCount, "u1 has 2 books")
 			s.Equal(int64(0), rows[1].BooksCount, "u2 has 0 books")
 			s.Equal(int64(1), rows[2].BooksCount, "u3 has 1 book")
@@ -817,7 +817,7 @@ func (s *QueriesRelationshipsTestSuite) TestWithCount_CustomAliasAndCallback() {
 				WithCount(contractsorm.RelationCount{Name: "Books", Alias: "popular_books", Callback: cb}).
 				Get(&rows))
 
-			s.Len(rows, 1)
+			s.Require().Len(rows, 1)
 			s.Equal(int64(2), rows[0].PopularBooks, "callback filters to 2 books named pop_*")
 		})
 	}
@@ -839,7 +839,7 @@ func (s *QueriesRelationshipsTestSuite) TestWithMaxMinSumAvg_Retrieve() {
 				WithAvg("Books", "id").
 				Get(&rows))
 
-			s.Len(rows, 1)
+			s.Require().Len(rows, 1)
 			s.NotNil(rows[0].BooksMaxID)
 			s.NotNil(rows[0].BooksMinID)
 			s.NotNil(rows[0].BooksSumID)
@@ -867,7 +867,7 @@ func (s *QueriesRelationshipsTestSuite) TestWithExists_Retrieve() {
 				WithExists("Books").
 				Get(&rows))
 
-			s.Len(rows, 2)
+			s.Require().Len(rows, 2)
 			s.False(rows[0].BooksExists, "agg_exist_no has no books")
 			s.True(rows[1].BooksExists, "agg_exist_yes has books")
 		})

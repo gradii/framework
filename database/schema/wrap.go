@@ -13,6 +13,9 @@ var (
 	escapeQuoteRegex = regexp.MustCompile(`(\\+)?'`)
 	jsonPathRegex    = regexp.MustCompile(`(\[[^]]+])+$`)
 	jsonKeyRegex     = regexp.MustCompile(`\[([^]]+)]`)
+	// aliasSplitRegex mirrors Laravel Grammar::wrapAliasedTable()'s preg_split('/\s+as\s+/i', $value):
+	// the "as" connector is matched case-insensitively and surrounded by any run of whitespace.
+	aliasSplitRegex = regexp.MustCompile(`(?i)\s+as\s+`)
 )
 
 type Wrap struct {
@@ -69,12 +72,17 @@ func (r *Wrap) JsonPath(value string) string {
 	value = escapeQuoteRegex.ReplaceAllString(value, "''")
 	segments := strings.Split(value, "->")
 	for i := range segments {
+		// Mirrors CompilesJsonPaths::wrapJsonPathSegment(): a trailing run of array
+		// brackets is rendered verbatim, with the key before it quoted and the brackets
+		// left unquoted; a segment that is all brackets is emitted unquoted too. Any
+		// other segment is a quoted key.
 		if parts := jsonPathRegex.FindString(segments[i]); parts != "" {
 			if key := strings.TrimSuffix(segments[i], parts); len(key) > 0 {
 				segments[i] = fmt.Sprintf(`"%s"%s`, key, parts)
-				continue
+			} else {
+				segments[i] = parts
 			}
-			segments[i] = parts
+			continue
 		}
 		segments[i] = fmt.Sprintf(`"%s"`, segments[i])
 	}
@@ -166,7 +174,8 @@ func (r *Wrap) SetValueWrapper(wrapper func(string) string) {
 }
 
 func (r *Wrap) Table(table string) string {
-	if strings.Contains(table, " as ") {
+	// Grammar::wrapTable() looks for the connector with stripos(), so "services AS t" aliases too.
+	if strings.Contains(strings.ToLower(table), " as ") {
 		return r.aliasedTable(table)
 	}
 	if strings.Contains(table, ".") {
@@ -191,7 +200,7 @@ func (r *Wrap) Value(value string) string {
 }
 
 func (r *Wrap) aliasedTable(table string) string {
-	segments := strings.Split(table, " as ")
+	segments := aliasSplitRegex.Split(table, 2)
 
 	return r.Table(segments[0]) + " as " + r.Value(r.prefix+segments[1])
 }

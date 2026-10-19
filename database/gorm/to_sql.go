@@ -1,12 +1,17 @@
 package gorm
 
 import (
-	"gorm.io/gorm"
-
 	"github.com/goravel/framework/contracts/log"
+	basedb "github.com/goravel/framework/database/db"
+	querybuilder "github.com/goravel/framework/database/query"
 	"github.com/goravel/framework/support/database"
 )
 
+// ToSql reports the statement a query would run, without running it.
+//
+// GORM used to report these by running its own builder in a dry-run session, so what a caller saw was
+// GORM's idea of the statement. They are compiled here instead, through the same path the ORM executes,
+// so the reported statement is the one that would actually run — dialect placeholders and all.
 type ToSql struct {
 	log   log.Log
 	query *Query
@@ -23,15 +28,27 @@ func NewToSql(query *Query, log log.Log, raw bool) *ToSql {
 
 func (r *ToSql) Count() string {
 	query := buildSelectForCount(r.query)
-	var count int64
 
-	return r.sql(query.instance.Session(&gorm.Session{DryRun: true}).Count(&count))
+	statement, bindings, err := query.compileAggregate("count", countColumns(query))
+
+	return r.render(statement, bindings, err)
 }
 
 func (r *ToSql) Create(value any) string {
+	// The value names the table and carries the primary key, exactly as it does when Create runs, so
+	// the model has to be resolved before the statement is compiled. Without it the insert renders
+	// "insert into <nil>", and the auto-increment column cannot be recognised either, so a zero key
+	// stays in the column list.
 	query := r.query.dest(value).buildConditions()
 
-	return r.sql(query.instance.Session(&gorm.Session{DryRun: true}).Create(value))
+	records, err := query.insertRecords(value)
+	if err != nil {
+		return r.render("", nil, err)
+	}
+
+	statement, bindings, err := query.compileInsertAll(records)
+
+	return r.render(statement, bindings, err)
 }
 
 func (r *ToSql) Delete(dests ...any) string {
@@ -47,19 +64,39 @@ func (r *ToSql) Delete(dests ...any) string {
 		query = r.query.addGlobalScopes().buildConditions()
 	}
 
-	return r.sql(query.instance.Session(&gorm.Session{DryRun: true}).Delete(dest))
+	// A soft-delete model is not removed: the statement the ORM runs is the update that stamps the
+	// deleted_at column, built from the same assignments the executing path builds.
+	if column, ok := query.softDeleteColumn(); ok {
+		assignments, err := query.updateAssignments(map[string]any{column: query.softDeleteValue()})
+		if err != nil {
+			return r.render("", nil, err)
+		}
+
+		statement, bindings, err := query.compileSoftDeleteUpdate(assignments)
+
+		return r.render(statement, bindings, err)
+	}
+
+	statement, bindings, err := query.compileDelete()
+
+	return r.render(statement, bindings, err)
 }
 
 func (r *ToSql) Find(dest any, conds ...any) string {
 	query := r.query.dest(dest).addGlobalScopes().buildConditions()
+	query = query.withFindConditions(conds)
 
-	return r.sql(query.instance.Session(&gorm.Session{DryRun: true}).Find(dest, conds...))
+	statement, bindings, err := query.compileSelect()
+
+	return r.render(statement, bindings, err)
 }
 
 func (r *ToSql) First(dest any) string {
 	query := r.query.dest(dest).addGlobalScopes().buildConditions()
 
-	return r.sql(query.instance.Session(&gorm.Session{DryRun: true}).First(dest))
+	statement, bindings, err := query.compileFirst()
+
+	return r.render(statement, bindings, err)
 }
 
 func (r *ToSql) ForceDelete(dests ...any) string {
@@ -70,72 +107,112 @@ func (r *ToSql) ForceDelete(dests ...any) string {
 
 	if len(dests) > 0 {
 		dest = dests[0]
-		query = r.query.dest(dest).addGlobalScopes().buildConditions()
+		query = r.query.dest(dest).WithTrashed().(*Query).addGlobalScopes().buildConditions()
 	} else {
-		query = r.query.addGlobalScopes().buildConditions()
+		query = r.query.WithTrashed().(*Query).addGlobalScopes().buildConditions()
 	}
 
-	return r.sql(query.instance.Session(&gorm.Session{DryRun: true}).Unscoped().Delete(dest))
+	statement, bindings, err := query.compileDelete()
+
+	return r.render(statement, bindings, err)
 }
 
+// Get looks a model up, which is the same statement Find reports without conditions.
 func (r *ToSql) Get(dest any) string {
-	query := r.query.dest(dest).addGlobalScopes().buildConditions()
-
-	return r.sql(query.instance.Session(&gorm.Session{DryRun: true}).Find(dest))
+	return r.Find(dest)
 }
 
 func (r *ToSql) Pluck(column string, dest any) string {
-	query := r.query.addGlobalScopes().buildConditions()
+	// dest names the model the plucked column belongs to, exactly as it does when the ORM runs
+	// Pluck through the model: without it the select compiles with no FROM clause.
+	query := r.query.dest(dest).addGlobalScopes().buildConditions()
 
-	return r.sql(query.instance.Session(&gorm.Session{DryRun: true}).Pluck(column, dest))
+	// The column replaces whatever select list the query carried, which is what the executed form does.
+	conditions := query.conditions
+	conditions.selectColumns = []string{column}
+	conditions.selectRaw = nil
+	conditions.raw = nil
+
+	statement, bindings, err := query.setConditions(conditions).compileSelect()
+
+	return r.render(statement, bindings, err)
 }
 
 func (r *ToSql) Save(dest any) string {
-	id := database.GetID(dest)
-	update := id != nil
+	if database.GetID(dest) == nil {
+		// Same resolution as Create: the insert branch of Save needs the model to name the table and
+		// to recognise the auto-increment column.
+		query := r.query.dest(dest).buildConditions()
 
-	var query *Query
-	if update {
-		query = r.query.dest(dest).addGlobalScopes().buildConditions()
-	} else {
-		query = r.query.dest(dest).buildConditions()
+		records, err := query.insertRecords(dest)
+		if err != nil {
+			return r.render("", nil, err)
+		}
+
+		statement, bindings, err := query.compileInsertAll(records)
+
+		return r.render(statement, bindings, err)
 	}
 
-	return r.sql(query.instance.Session(&gorm.Session{DryRun: true}).Save(dest))
+	// A model that carries a key is written column by column, addressed by that key, which is the
+	// statement Save runs.
+	query := r.query.dest(dest).addGlobalScopes().buildConditions()
+
+	assignments, err := query.saveAssignments(dest)
+	if err != nil {
+		return r.render("", nil, err)
+	}
+
+	statement, bindings, err := query.compileUpdateScoped(assignments, true)
+
+	return r.render(statement, bindings, err)
 }
 
 func (r *ToSql) Sum(column string, dest any) string {
-	query := r.query.addGlobalScopes().buildConditions()
+	// dest names the model the summed column belongs to, exactly as it does when the ORM runs Sum
+	// through the model: without it the aggregate compiles with no FROM clause.
+	query := r.query.dest(dest).addGlobalScopes().buildConditions()
 
-	return r.sql(query.instance.Session(&gorm.Session{DryRun: true}).Select("SUM(" + column + ")").Find(dest))
+	statement, bindings, err := query.compileAggregate("sum", []any{column})
+
+	return r.render(statement, bindings, err)
 }
 
 func (r *ToSql) Update(column any, value ...any) string {
-	query := r.query.addGlobalScopes().buildConditions()
 	if _, ok := column.(string); !ok && len(value) > 0 {
 		return ""
 	}
 
-	if c, ok := column.(string); ok && len(value) > 0 {
-		query.instance.Statement.Dest = map[string]any{c: value[0]}
-	}
-	if len(value) == 0 {
-		query.instance.Statement.Dest = column
+	query := r.query.addGlobalScopes().buildConditions()
+
+	values := column
+	if name, ok := column.(string); ok && len(value) > 0 {
+		values = map[string]any{name: value[0]}
 	}
 
-	return r.sql(query.instance.Session(&gorm.Session{DryRun: true}).Updates(query.instance.Statement.Dest))
+	assignments, err := query.updateAssignments(values)
+	if err != nil {
+		return r.render("", nil, err)
+	}
+
+	statement, bindings, err := query.compileUpdateScoped(assignments, false)
+
+	return r.render(statement, bindings, err)
 }
 
-func (r *ToSql) sql(db *gorm.DB) string {
-	sql := db.Statement.SQL.String()
-	if db.Statement.Error != nil {
-		r.log.Errorf("failed to get sql: %v", db.Statement.Error)
-	}
-	if !r.raw {
-		return sql
+// render returns the statement in the form the caller asked for, or reports why it could not be built.
+func (r *ToSql) render(statement string, bindings []any, err error) string {
+	if err != nil {
+		if r.log != nil {
+			r.log.Errorf("failed to get sql: %v", err)
+		}
+
+		return ""
 	}
 
-	return r.query.instance.ToSQL(func(tx *gorm.DB) *gorm.DB {
-		return tx.Raw(sql, db.Statement.Vars...)
-	})
+	if r.raw {
+		return basedb.Explain(statement, bindings...)
+	}
+
+	return querybuilder.ReplacePlaceholders(statement, r.query.dbConfig.Driver)
 }

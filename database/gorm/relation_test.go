@@ -55,6 +55,8 @@ type relUser struct {
 	Logo    *relLogo    `gorm:"-"`
 }
 
+func (relUser) TableName() string { return "rel_users" }
+
 func (relUser) Relations() map[string]contractsorm.Relation {
 	return map[string]contractsorm.Relation{
 		"Books":   contractsorm.HasMany{Related: &relBook{}, ForeignKey: "user_id"},
@@ -73,6 +75,8 @@ type relBook struct {
 	Author   *relUser `gorm:"-"`
 }
 
+func (relBook) TableName() string { return "rel_books" }
+
 func (relBook) Relations() map[string]contractsorm.Relation {
 	return map[string]contractsorm.Relation{
 		"Author": contractsorm.BelongsTo{Related: &relUser{}, ForeignKey: "author_id"},
@@ -85,10 +89,14 @@ type relProfile struct {
 	UserID uint
 }
 
+func (relProfile) TableName() string { return "rel_profiles" }
+
 type relRole struct {
 	ID   uint
 	Name string
 }
+
+func (relRole) TableName() string { return "rel_roles" }
 
 type relHouse struct {
 	ID            uint
@@ -97,6 +105,8 @@ type relHouse struct {
 	HouseableType string
 }
 
+func (relHouse) TableName() string { return "rel_houses" }
+
 type relLogo struct {
 	ID           uint
 	URL          string
@@ -104,11 +114,21 @@ type relLogo struct {
 	LogoableType string
 }
 
+func (relLogo) TableName() string { return "rel_logos" }
+
 // relCountry / relPost via relUser participate in a HasManyThrough setup.
 type relCountry struct {
 	ID   uint
 	Name string
+
+	// Posts / FirstPost back the through relations declared below. The eager loader writes the
+	// related rows onto these fields, so driving loadThrough needs them on the fixture; the SQL
+	// tests never reached the assignment and left them off.
+	Posts     []*relPost `gorm:"-"`
+	FirstPost *relPost   `gorm:"-"`
 }
+
+func (relCountry) TableName() string { return "rel_countries" }
 
 func (relCountry) Relations() map[string]contractsorm.Relation {
 	return map[string]contractsorm.Relation{
@@ -136,7 +156,14 @@ type relPost struct {
 	ID     uint
 	Title  string
 	UserID uint
+	// RelUserID is the FK to rel_users the through relations resolve on: the convention names
+	// the related side's second key "<through-singular>_id" = "rel_user_id", and loadThrough
+	// looks the related model's field up by that DB name. The SQL tests only render the join,
+	// so the column went unmodelled until the through loader was driven directly.
+	RelUserID uint
 }
+
+func (relPost) TableName() string { return "rel_posts" }
 
 // --- Pure helpers ----------------------------------------------------------
 
@@ -144,13 +171,94 @@ type relPost struct {
 
 func TestTableNameFor(t *testing.T) {
 	db := newStubGormDB(t)
-	name, err := tableNameFor(db, &relUser{})
-	assert.NoError(t, err)
-	assert.Equal(t, "rel_users", name)
 
-	// Invalid (non-struct) model surfaces parse error.
+	// A model that declares no table is a named error naming its type and the method to add: there
+	// is no naming-strategy fallback left to name it silently.
+	_, err := tableNameFor(db, &undeclaredTableModel{})
+	assert.True(t, errors.Is(err, errors.OrmQueryTableNotSet))
+	assert.EqualError(t, err, "*gorm.undeclaredTableModel: Table not set, please add a TableName() method returning the table name")
+
+	// A non-struct value is rejected with the same named error, naming the type it was handed.
 	_, err = tableNameFor(db, "not-a-model")
-	assert.Error(t, err)
+	assert.True(t, errors.Is(err, errors.OrmQueryTableNotSet))
+}
+
+// undeclaredTableModel declares no table of its own, so resolving it exercises the enforcement
+// error rather than a naming strategy.
+type undeclaredTableModel struct {
+	ID uint
+}
+
+// declaredTableModel states its own table through TableName(), the convention make:model writes.
+type declaredTableModel struct {
+	ID uint
+}
+
+func (declaredTableModel) TableName() string { return "declared_things" }
+
+// pointerReceiverTableModel declares TableName on the pointer receiver. GORM's schema.Parse rejects
+// a value argument for this shape, so resolving it proves the framework reads the name itself
+// rather than handing the model to GORM.
+type pointerReceiverTableModel struct {
+	ID uint
+}
+
+func (*pointerReceiverTableModel) TableName() string { return "pointer_receiver_things" }
+
+// TestTableNameFor_SliceDestination pins the other shape a query's destination takes: Paginate
+// records the slice it was handed as the query's model, and the table belongs to the element type.
+// Without that unwrapping the count that Paginate runs first fails with "Table not set" for a model
+// that declares its table.
+func TestTableNameFor_SliceDestination(t *testing.T) {
+	db := newStubGormDB(t)
+
+	name, err := tableNameFor(db, &[]declaredTableModel{})
+	assert.NoError(t, err)
+	assert.Equal(t, "declared_things", name)
+
+	name, err = tableNameFor(db, []declaredTableModel{})
+	assert.NoError(t, err)
+	assert.Equal(t, "declared_things", name)
+
+	// The enforcement still holds for a slice of a model that declares no table: the error names
+	// the model type, not the slice.
+	_, err = tableNameFor(db, &[]undeclaredTableModel{})
+	assert.True(t, errors.Is(err, errors.OrmQueryTableNotSet))
+	assert.EqualError(t, err, "*gorm.undeclaredTableModel: Table not set, please add a TableName() method returning the table name")
+}
+
+func TestTableNameFor_DeclaredNameWins(t *testing.T) {
+	db := newStubGormDB(t)
+
+	// A model that declares TableName() resolves to exactly that name, with no pluralization
+	// applied to it.
+	name, err := tableNameFor(db, &declaredTableModel{})
+	assert.NoError(t, err)
+	assert.Equal(t, "declared_things", name)
+
+	// The declared name is returned bare even when the connection carries a prefix: applying the
+	// prefix belongs to the renderer, which applies it exactly once (see TestTablePrefixAppliedOnce).
+	prefixed, err := gormio.Open(stubDialector{}, &gormio.Config{
+		NamingStrategy: gormschema.NamingStrategy{TablePrefix: "app_"},
+	})
+	assert.NoError(t, err)
+
+	name, err = tableNameFor(prefixed, &declaredTableModel{})
+	assert.NoError(t, err)
+	assert.Equal(t, "declared_things", name)
+}
+
+func TestTableNameFor_PointerReceiver(t *testing.T) {
+	db := newStubGormDB(t)
+
+	name, err := tableNameFor(db, &pointerReceiverTableModel{})
+	assert.NoError(t, err)
+	assert.Equal(t, "pointer_receiver_things", name)
+
+	// A value argument reaches the pointer-receiver method through an addressable copy.
+	name, err = tableNameFor(db, pointerReceiverTableModel{})
+	assert.NoError(t, err)
+	assert.Equal(t, "pointer_receiver_things", name)
 }
 
 // --- resolveRelation across all kinds -------------------------------------
@@ -294,6 +402,8 @@ type morphImage struct {
 	Imageable     any `gorm:"-"`
 }
 
+func (morphImage) TableName() string { return "morph_images" }
+
 func (morphImage) Relations() map[string]contractsorm.Relation {
 	return map[string]contractsorm.Relation{
 		"Imageable": contractsorm.MorphTo{Name: "imageable"},
@@ -305,6 +415,8 @@ type morphPost struct {
 	Title string
 	Tags  []*morphTag `gorm:"-"`
 }
+
+func (morphPost) TableName() string { return "morph_posts" }
 
 func (morphPost) Relations() map[string]contractsorm.Relation {
 	return map[string]contractsorm.Relation{
@@ -318,6 +430,8 @@ type morphTag struct {
 	Posts []*morphPost `gorm:"-"`
 }
 
+func (morphTag) TableName() string { return "morph_tags" }
+
 func (morphTag) Relations() map[string]contractsorm.Relation {
 	return map[string]contractsorm.Relation{
 		"Posts": contractsorm.MorphedByMany{Related: &morphPost{}, Name: "taggable"},
@@ -326,6 +440,8 @@ func (morphTag) Relations() map[string]contractsorm.Relation {
 
 type morphBadKind struct{}
 
+func (morphBadKind) TableName() string { return "morph_bad_kinds" }
+
 func (morphBadKind) Relations() map[string]contractsorm.Relation {
 	return map[string]contractsorm.Relation{
 		"X": unknownRelation{},
@@ -333,6 +449,8 @@ func (morphBadKind) Relations() map[string]contractsorm.Relation {
 }
 
 type morphMissingRelated struct{}
+
+func (morphMissingRelated) TableName() string { return "morph_missing_relateds" }
 
 func (morphMissingRelated) Relations() map[string]contractsorm.Relation {
 	return map[string]contractsorm.Relation{
@@ -396,30 +514,42 @@ type forbiddenPolymorphicParent struct {
 	Houses []*forbiddenPolymorphicChild `gorm:"polymorphic:Houseable"`
 }
 
+func (forbiddenPolymorphicParent) TableName() string { return "forbidden_polymorphic_parents" }
+
 type forbiddenPolymorphicChild struct {
 	ID            uint
 	HouseableID   uint
 	HouseableType string
 }
 
+func (forbiddenPolymorphicChild) TableName() string { return "forbidden_polymorphic_children" }
+
 type forbiddenForeignKeyParent struct {
 	ID    uint
 	Books []*forbiddenForeignKeyChild `gorm:"foreignKey:ParentID"`
 }
+
+func (forbiddenForeignKeyParent) TableName() string { return "forbidden_foreign_key_parents" }
 
 type forbiddenForeignKeyChild struct {
 	ID       uint
 	ParentID uint
 }
 
+func (forbiddenForeignKeyChild) TableName() string { return "forbidden_foreign_key_children" }
+
 type forbiddenMany2ManyParent struct {
 	ID    uint
 	Roles []*forbiddenMany2ManyChild `gorm:"many2many:parent_roles"`
 }
 
+func (forbiddenMany2ManyParent) TableName() string { return "forbidden_many_2_many_parents" }
+
 type forbiddenMany2ManyChild struct {
 	ID uint
 }
+
+func (forbiddenMany2ManyChild) TableName() string { return "forbidden_many_2_many_children" }
 
 func TestResolveRelation_ForbidsPolymorphicTag(t *testing.T) {
 	db := newStubGormDB(t)

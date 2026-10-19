@@ -4,3 +4,5 @@
 /vendor
 coverage.out
 .opencode
+# SQLite scratch databases the tests module creates per run
+tests/goravel_*

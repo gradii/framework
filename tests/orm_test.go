@@ -160,11 +160,11 @@ func (s *OrmSuite) TestQueryLog() {
 	s.True(role1.ID > 0)
 
 	queryLogs := databasedb.GetQueryLog(ctx)
-	s.Equal(2, len(queryLogs))
-	s.Contains(queryLogs[0].Query, "INSERT INTO \"roles\" (\"created_at\",\"updated_at\",\"name\",\"avatar\") VALUES ('")
-	s.Contains(queryLogs[0].Query, "'query_log_product','') RETURNING \"id\"")
+	s.Require().Equal(2, len(queryLogs))
+	s.Contains(queryLogs[0].Query, "insert into \"roles\" (\"avatar\", \"created_at\", \"name\", \"updated_at\") values ('")
+	s.Contains(queryLogs[0].Query, "'query_log_product', '")
 	s.True(queryLogs[0].Time > 0)
-	s.Equal("SELECT * FROM \"roles\" WHERE \"name\" = 'query_log_product' ORDER BY \"roles\".\"id\" LIMIT 1", queryLogs[1].Query)
+	s.Equal("select * from \"roles\" where \"name\" = 'query_log_product' order by \"roles\".\"id\" limit 1", queryLogs[1].Query)
 	s.True(queryLogs[1].Time > 0)
 
 	ctx = databasedb.DisableQueryLog(ctx)

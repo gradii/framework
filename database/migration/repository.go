@@ -106,10 +106,17 @@ func (r *Repository) RepositoryExists() bool {
 }
 
 func (r *Repository) GetLastBatchNumber() (int, error) {
-	var batch int
-	if err := r.schema.Orm().Query().Table(r.table).OrderByDesc("batch").Limit(1).Pluck("batch", &batch); err != nil {
+	// Laravel reads the batch with max('batch'), which is NULL on an empty repository and is then
+	// read as batch 0. Scanning through a *int keeps that NULL meaningful instead of turning it
+	// into an error, unlike a plain int destination.
+	var batch *int
+	if err := r.schema.Orm().Query().Table(r.table).Max("batch", &batch); err != nil {
 		return 0, err
 	}
 
-	return batch, nil
+	if batch == nil {
+		return 0, nil
+	}
+
+	return *batch, nil
 }

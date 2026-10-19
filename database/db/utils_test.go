@@ -5,10 +5,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"gorm.io/gorm"
 
 	"github.com/goravel/framework/support/carbon"
 	"github.com/goravel/framework/support/convert"
+	basedatabase "github.com/goravel/framework/support/database"
 )
 
 type Body struct {
@@ -45,7 +45,7 @@ type User struct {
 }
 
 type TestSoftDeletes struct {
-	DeletedAt gorm.DeletedAt `gorm:"column:deleted_at" db:"deleted_at"`
+	DeletedAt basedatabase.DeletedAt `gorm:"column:deleted_at" db:"deleted_at"`
 }
 
 type TestTimestamps struct {
@@ -55,7 +55,7 @@ type TestTimestamps struct {
 
 func TestConvertToSliceMap(t *testing.T) {
 	testNow := time.Now()
-	deletedAt := gorm.DeletedAt{Time: testNow, Valid: true}
+	deletedAt := basedatabase.DeletedAt{Time: testNow, Valid: true}
 	dateTime := carbon.NewDateTime(carbon.FromStdTime(testNow))
 	head := "head"
 

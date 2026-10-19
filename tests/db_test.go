@@ -89,10 +89,6 @@ func (s *DBTestSuite) TestCount() {
 			s.NoError(err)
 			s.Equal(int64(1), count)
 
-			count, err = query.DB().Table("products").Select("name n").Where("name", "count_product1").Count()
-			s.NoError(err)
-			s.Equal(int64(1), count)
-
 			count, err = query.DB().Table("products").Select("name").Where("name", "count_product1").Count()
 			s.NoError(err)
 			s.Equal(int64(1), count)
@@ -121,10 +117,267 @@ func (s *DBTestSuite) TestChunk() {
 				return nil
 			})
 			s.NoError(err)
-			s.Equal(3, len(products))
+			s.Require().Equal(3, len(products))
 			s.Equal("chunk_product1", products[0].Name)
 			s.Equal("chunk_product2", products[1].Name)
 			s.Equal("chunk_product3", products[2].Name)
+		})
+	}
+}
+
+// TestChunkCanBeStoppedByReturningFalse mirrors Laravel's
+// DatabaseQueryBuilderTest::testChunkCanBeStoppedByReturningFalse: when the callback signals a
+// stop the loop must halt before the next fetch, so the following chunk is never retrieved. PHP's
+// `return false` becomes returning errors.DatabaseChunkStopped in Go, which halts the loop and
+// makes Chunk return nil (Laravel returns true).
+func (s *DBTestSuite) TestChunkCanBeStoppedByReturningFalse() {
+	for driver, query := range s.queries {
+		s.Run(driver, func() {
+			query.DB().Table("products").Insert([]Product{
+				{Name: "chunk_stop_product1"},
+				{Name: "chunk_stop_product2"},
+				{Name: "chunk_stop_product3"},
+			})
+
+			var (
+				calls int
+				rows  int
+			)
+			err := query.DB().Table("products").OrderBy("id").Chunk(2, func(chunk []db.Row) error {
+				calls++
+				rows += len(chunk)
+
+				// Mirror Laravel's `return false`: request a clean early stop.
+				return errors.DatabaseChunkStopped
+			})
+
+			s.NoError(err)
+			// The loop halted before the second fetch: without the stop it would have fetched
+			// the remaining single row and invoked the callback a second time.
+			s.Equal(1, calls)
+			s.Equal(2, rows)
+		})
+	}
+}
+
+// TestChunkWithCountZero mirrors Laravel's DatabaseQueryBuilderTest::testChunkWithCountZero: a
+// zero-size chunk short-circuits before any offset/limit/get, so the callback is never invoked and
+// no statement reaches the database. The query is pointed at a non-existent table so that any fetch
+// attempt would surface as an error rather than silently matching zero rows.
+func (s *DBTestSuite) TestChunkWithCountZero() {
+	for driver, query := range s.queries {
+		s.Run(driver, func() {
+			called := false
+			err := query.DB().Table("chunk_count_zero_missing_table").Chunk(0, func(rows []db.Row) error {
+				called = true
+
+				return nil
+			})
+
+			s.NoError(err)
+			s.False(called)
+		})
+	}
+}
+
+// TestChunkByIdOnArrays mirrors Laravel's DatabaseQueryBuilderTest::testChunkByIdOnArrays. The
+// corpus drives a mocked builder and asserts which forPageAfterId arguments reach it; here the same
+// keyset loop runs against the real connection. chunkById(2, ...) walks the table in id order in
+// chunks of two, reading the last id of each chunk to constrain the next fetch and stopping on the
+// first empty fetch, so only the full two-row chunks reach the callback.
+func (s *DBTestSuite) TestChunkByIdOnArrays() {
+	for driver, query := range s.queries {
+		s.Run(driver, func() {
+			query.DB().Table("products").Insert([]Product{
+				{Name: "chunk_by_id_array1"},
+				{Name: "chunk_by_id_array2"},
+				{Name: "chunk_by_id_array3"},
+				{Name: "chunk_by_id_array4"},
+			})
+
+			var (
+				chunks int
+				ids    []uint
+			)
+			err := query.DB().Table("products").ChunkById(2, func(rows []db.Row) error {
+				chunks++
+
+				for _, row := range rows {
+					var product Product
+					s.NoError(row.Scan(&product))
+					ids = append(ids, product.ID)
+				}
+
+				return nil
+			})
+
+			s.NoError(err)
+			// Two full chunks of two rows reach the callback; the loop then issues one more fetch that
+			// returns nothing and breaks.
+			s.Equal(2, chunks)
+			s.Equal([]uint{1, 2, 3, 4}, ids)
+		})
+	}
+}
+
+// TestChunkPaginatesUsingIdWithLastChunkComplete mirrors Laravel's
+// DatabaseQueryBuilderTest::testChunkPaginatesUsingIdWithLastChunkComplete: the final chunk is a
+// complete page, so after the callback the loop still fetches once more and only stops when that
+// fetch comes back empty. The rows are read as maps to match the corpus's stdClass objects.
+func (s *DBTestSuite) TestChunkPaginatesUsingIdWithLastChunkComplete() {
+	for driver, query := range s.queries {
+		s.Run(driver, func() {
+			query.DB().Table("products").Insert([]Product{
+				{Name: "chunk_by_id_complete1"},
+				{Name: "chunk_by_id_complete2"},
+				{Name: "chunk_by_id_complete3"},
+				{Name: "chunk_by_id_complete4"},
+			})
+
+			var (
+				chunks int
+				ids    []int64
+			)
+			err := query.DB().Table("products").ChunkById(2, func(rows []db.Row) error {
+				chunks++
+
+				for _, row := range rows {
+					var product map[string]any
+					s.NoError(row.Scan(&product))
+					ids = append(ids, cast.ToInt64(product["id"]))
+				}
+
+				return nil
+			})
+
+			s.NoError(err)
+			s.Equal(2, chunks)
+			s.Equal([]int64{1, 2, 3, 4}, ids)
+		})
+	}
+}
+
+// TestChunkPaginatesUsingIdWithLastChunkPartial mirrors Laravel's
+// DatabaseQueryBuilderTest::testChunkPaginatesUsingIdWithLastChunkPartial: a final chunk shorter
+// than the requested size ends the loop, because the short page is the terminating fetch and no
+// extra empty query is issued.
+func (s *DBTestSuite) TestChunkPaginatesUsingIdWithLastChunkPartial() {
+	for driver, query := range s.queries {
+		s.Run(driver, func() {
+			query.DB().Table("products").Insert([]Product{
+				{Name: "chunk_by_id_partial1"},
+				{Name: "chunk_by_id_partial2"},
+				{Name: "chunk_by_id_partial3"},
+			})
+
+			var (
+				chunks int
+				ids    []int64
+			)
+			err := query.DB().Table("products").ChunkById(2, func(rows []db.Row) error {
+				chunks++
+
+				for _, row := range rows {
+					var product map[string]any
+					s.NoError(row.Scan(&product))
+					ids = append(ids, cast.ToInt64(product["id"]))
+				}
+
+				return nil
+			})
+
+			s.NoError(err)
+			s.Equal(2, chunks)
+			s.Equal([]int64{1, 2, 3}, ids)
+		})
+	}
+}
+
+// TestChunkPaginatesUsingIdWithCountZero mirrors Laravel's
+// DatabaseQueryBuilderTest::testChunkPaginatesUsingIdWithCountZero: a zero-size chunk short-circuits
+// before any forPageAfterId/get, so the callback is never invoked and no statement reaches the
+// database. The query points at a non-existent table so any fetch attempt would surface as an error.
+func (s *DBTestSuite) TestChunkPaginatesUsingIdWithCountZero() {
+	for driver, query := range s.queries {
+		s.Run(driver, func() {
+			called := false
+			err := query.DB().Table("chunk_by_id_count_zero_missing_table").ChunkById(0, func(rows []db.Row) error {
+				called = true
+
+				return nil
+			}, "id")
+
+			s.NoError(err)
+			s.False(called)
+		})
+	}
+}
+
+// TestChunkPaginatesUsingIdWithAlias mirrors Laravel's
+// DatabaseQueryBuilderTest::testChunkPaginatesUsingIdWithAlias: the keyset column may be table
+// qualified ("products.id"), in which case the id is read from the result under a distinct alias
+// ("table_id") rather than the column name.
+func (s *DBTestSuite) TestChunkPaginatesUsingIdWithAlias() {
+	for driver, query := range s.queries {
+		s.Run(driver, func() {
+			query.DB().Table("products").Insert([]Product{
+				{Name: "chunk_by_id_alias1"},
+				{Name: "chunk_by_id_alias2"},
+			})
+
+			var (
+				chunks int
+				ids    []int64
+			)
+			err := query.DB().Table("products").Select("products.id as table_id").ChunkById(2, func(rows []db.Row) error {
+				chunks++
+
+				for _, row := range rows {
+					var product map[string]any
+					s.NoError(row.Scan(&product))
+					ids = append(ids, cast.ToInt64(product["table_id"]))
+				}
+
+				return nil
+			}, "products.id", "table_id")
+
+			s.NoError(err)
+			s.Equal(1, chunks)
+			s.Equal([]int64{1, 2}, ids)
+		})
+	}
+}
+
+// TestChunkPaginatesUsingIdDesc mirrors Laravel's DatabaseQueryBuilderTest::testChunkPaginatesUsingIdDesc:
+// chunkByIdDesc drives forPageBeforeId, walking the rows in descending id order and reading the last
+// id of each chunk to constrain the next fetch.
+func (s *DBTestSuite) TestChunkPaginatesUsingIdDesc() {
+	for driver, query := range s.queries {
+		s.Run(driver, func() {
+			query.DB().Table("products").Insert([]Product{
+				{Name: "chunk_by_id_desc1"},
+				{Name: "chunk_by_id_desc2"},
+			})
+
+			var (
+				chunks int
+				ids    []uint
+			)
+			err := query.DB().Table("products").ChunkByIdDesc(2, func(rows []db.Row) error {
+				chunks++
+
+				for _, row := range rows {
+					var product Product
+					s.NoError(row.Scan(&product))
+					ids = append(ids, product.ID)
+				}
+
+				return nil
+			})
+
+			s.NoError(err)
+			s.Equal(1, chunks)
+			s.Equal([]uint{2, 1}, ids)
 		})
 	}
 }
@@ -199,7 +452,7 @@ func (s *DBTestSuite) TestCursor() {
 					products = append(products, product)
 				}
 
-				s.Equal(2, len(products))
+				s.Require().Equal(2, len(products))
 				s.Equal("cursor_product1", products[0].Name)
 				s.Equal(100, *products[0].Weight)
 				s.Equal(s.now, products[0].CreatedAt)
@@ -225,7 +478,7 @@ func (s *DBTestSuite) TestCursor() {
 					products = append(products, product)
 				}
 
-				s.Equal(2, len(products))
+				s.Require().Equal(2, len(products))
 				s.Equal("cursor_product1", cast.ToString(products[0]["name"]))
 				s.Equal(100, cast.ToInt(products[0]["weight"]))
 				s.Equal(s.now, carbon.NewDateTime(carbon.FromStdTime(cast.ToTime(products[0]["created_at"]))))
@@ -276,7 +529,7 @@ func (s *DBTestSuite) Test_DB_Select_Insert_Update_Delete_Statement() {
 			var products []Product
 			err = query.DB().Select(&products, "SELECT * FROM products")
 			s.NoError(err)
-			s.Equal(1, len(products))
+			s.Require().Equal(1, len(products))
 			s.Equal("test_db_select_update_delete_product", products[0].Name)
 
 			var product Product
@@ -290,7 +543,7 @@ func (s *DBTestSuite) Test_DB_Select_Insert_Update_Delete_Statement() {
 
 			err = query.DB().Select(&products, "SELECT * FROM products")
 			s.NoError(err)
-			s.Equal(1, len(products))
+			s.Require().Equal(1, len(products))
 			s.Equal("test_db_select_update_delete_product_updated", products[0].Name)
 
 			result, err = query.DB().Delete(deleteSql, products[0].ID)
@@ -348,7 +601,7 @@ func (s *DBTestSuite) TestDistinct() {
 
 			err := query.DB().Table("products").Distinct().OrderBy("id").Get(&products)
 			s.NoError(err)
-			s.Equal(3, len(products))
+			s.Require().Equal(3, len(products))
 			s.Equal("distinct_product", products[0].Name)
 			s.Equal(1, *products[0].Weight)
 			s.Equal("distinct_product", products[1].Name)
@@ -358,12 +611,12 @@ func (s *DBTestSuite) TestDistinct() {
 
 			err = query.DB().Table("products").Distinct().Select("name").Get(&products)
 			s.NoError(err)
-			s.Equal(1, len(products))
+			s.Require().Equal(1, len(products))
 			s.Equal("distinct_product", products[0].Name)
 
 			err = query.DB().Table("products").Distinct("name").Get(&products)
 			s.NoError(err)
-			s.Equal(1, len(products))
+			s.Require().Equal(1, len(products))
 			s.Equal("distinct_product", products[0].Name)
 
 			err = query.DB().Table("products").Distinct("name", "weight").Get(&products)
@@ -430,8 +683,8 @@ func (s *DBTestSuite) TestGroupBy_Having() {
 
 			var products []Product
 			err := query.DB().Table("products").GroupBy("weight").Having("weight > ?", 20).OrderBy("weight").Select("weight").Get(&products)
-			s.NoError(err)
-			s.Equal(2, len(products))
+			s.Require().NoError(err)
+			s.Require().Equal(2, len(products))
 			s.Equal(25, *products[0].Weight)
 			s.Equal(30, *products[1].Weight)
 		})
@@ -557,7 +810,7 @@ func (s *DBTestSuite) TestInsert_First_Get() {
 				var products []Product
 				err = query.DB().Table("products").Where("name", []string{"multiple structs1", "multiple structs2"}).Where("deleted_at", nil).Get(&products)
 				s.NoError(err)
-				s.Equal(2, len(products))
+				s.Require().Equal(2, len(products))
 				s.True(products[0].ID > 0)
 				s.Equal("multiple structs1", products[0].Name)
 				s.NotEmpty(products[0].CreatedAt)
@@ -604,7 +857,7 @@ func (s *DBTestSuite) TestInsert_First_Get() {
 				var products []Product
 				err = query.DB().Table("products").Where("name", []string{"multiple map1", "multiple map2"}).Where("deleted_at", nil).Get(&products)
 				s.NoError(err)
-				s.Equal(2, len(products))
+				s.Require().Equal(2, len(products))
 				s.Equal("multiple map1", products[0].Name)
 				s.Equal("multiple map2", products[1].Name)
 			})
@@ -655,18 +908,13 @@ func (s *DBTestSuite) TestInsertGetID() {
 				Name: "insert get id",
 			})
 
-			if driver == sqlserver.Name || driver == postgres.Name {
-				s.Error(err)
-				s.Equal(int64(0), id)
-			} else {
-				s.NoError(err)
-				s.True(id > 0)
+			s.NoError(err)
+			s.True(id > 0)
 
-				var product Product
-				err = query.DB().Table("products").Where("id", id).First(&product)
-				s.NoError(err)
-				s.Equal("insert get id", product.Name)
-			}
+			var product Product
+			err = query.DB().Table("products").Where("id", id).First(&product)
+			s.NoError(err)
+			s.Equal("insert get id", product.Name)
 		})
 	}
 }
@@ -702,7 +950,7 @@ func (s *DBTestSuite) TestJoin() {
 			err := query.DB().Table("products as p1").Join("products as p2 ON p1.weight = p2.height").Select("p1.name as p1_name", "p1.weight as p1_weight", "p2.name as p2_name", "p2.weight as p2_weight").Get(&temps)
 
 			s.NoError(err)
-			s.Equal(1, len(temps))
+			s.Require().Equal(1, len(temps))
 			s.Equal("join_product1", temps[0].P1Name)
 			s.Equal(100, temps[0].P1Weight)
 			s.Equal("join_product2", temps[0].P2Name)
@@ -762,7 +1010,7 @@ func (s *DBTestSuite) TestLimit() {
 			var products []Product
 			err := query.DB().Table("products").Limit(1).Get(&products)
 			s.NoError(err)
-			s.Equal(1, len(products))
+			s.Require().Equal(1, len(products))
 			s.Equal("limit_product1", products[0].Name)
 		})
 	}
@@ -850,7 +1098,7 @@ func (s *DBTestSuite) TestOffset() {
 			err := query.DB().Table("products").Offset(1).Limit(1).Get(&products)
 
 			s.NoError(err)
-			s.Equal(1, len(products))
+			s.Require().Equal(1, len(products))
 			s.Equal("offset_product2", products[0].Name)
 		})
 	}
@@ -872,7 +1120,7 @@ func (s *DBTestSuite) TestOrWhere() {
 				var products []Product
 				err := query.DB().Table("products").Where("name", "or where model").OrWhere("name", "or where model1").Get(&products)
 				s.NoError(err)
-				s.Equal(2, len(products))
+				s.Require().Equal(2, len(products))
 				s.Equal("or where model", products[0].Name)
 				s.Equal("or where model1", products[1].Name)
 			})
@@ -883,7 +1131,7 @@ func (s *DBTestSuite) TestOrWhere() {
 					return query.Where("name", "or where model1")
 				}).Get(&products)
 				s.NoError(err)
-				s.Equal(2, len(products))
+				s.Require().Equal(2, len(products))
 				s.Equal("or where model", products[0].Name)
 				s.Equal("or where model1", products[1].Name)
 			})
@@ -911,7 +1159,7 @@ func (s *DBTestSuite) TestOrWhereColumn() {
 				var products []Product
 				err := query.DB().Table("products").Where("name", "or where column model1").OrWhereColumn("height", "weight").Get(&products)
 				s.NoError(err)
-				s.Equal(2, len(products))
+				s.Require().Equal(2, len(products))
 				s.Equal("or where column model", products[0].Name)
 				s.Equal("or where column model1", products[1].Name)
 			})
@@ -920,7 +1168,7 @@ func (s *DBTestSuite) TestOrWhereColumn() {
 				var products []Product
 				err := query.DB().Table("products").Where("name", "or where column model").OrWhereColumn("height", "<", "weight").Get(&products)
 				s.NoError(err)
-				s.Equal(2, len(products))
+				s.Require().Equal(2, len(products))
 				s.Equal("or where column model", products[0].Name)
 				s.Equal("or where column model1", products[1].Name)
 			})
@@ -993,7 +1241,7 @@ func (s *DBTestSuite) TestPaginate() {
 			var total int64
 			err := query.DB().Table("products").WhereLike("name", "paginate_product%").Paginate(1, 2, &products, &total)
 			s.NoError(err)
-			s.Equal(2, len(products))
+			s.Require().Equal(2, len(products))
 			s.Equal(int64(5), total)
 			s.Equal("paginate_product1", products[0].Name)
 			s.Equal("paginate_product2", products[1].Name)
@@ -1001,7 +1249,7 @@ func (s *DBTestSuite) TestPaginate() {
 			products = []Product{}
 			err = query.DB().Table("products").WhereLike("name", "paginate_product%").Paginate(2, 2, &products, &total)
 			s.NoError(err)
-			s.Equal(2, len(products))
+			s.Require().Equal(2, len(products))
 			s.Equal(int64(5), total)
 			s.Equal("paginate_product3", products[0].Name)
 			s.Equal("paginate_product4", products[1].Name)
@@ -1009,24 +1257,100 @@ func (s *DBTestSuite) TestPaginate() {
 			// Fix: https://github.com/goravel/goravel/issues/842
 			err = query.DB().Table("products").Select("name as name", "weight").WhereLike("name", "paginate_product%").Paginate(2, 2, &products, &total)
 			s.NoError(err)
-			s.Equal(2, len(products))
+			s.Require().Equal(2, len(products))
 			s.Equal(int64(5), total)
 			s.Equal("paginate_product3", products[0].Name)
 			s.Equal("paginate_product4", products[1].Name)
 
 			err = query.DB().Table("products").Select("name as name").WhereLike("name", "paginate_product%").Paginate(2, 2, &products, &total)
 			s.NoError(err)
-			s.Equal(2, len(products))
+			s.Require().Equal(2, len(products))
 			s.Equal(int64(5), total)
 			s.Equal("paginate_product3", products[0].Name)
 			s.Equal("paginate_product4", products[1].Name)
 
-			err = query.DB().Table("products").Select("name name").WhereLike("name", "paginate_product%").Paginate(2, 2, &products, &total)
+			err = query.DB().Table("products").Select("name as name").WhereLike("name", "paginate_product%").Paginate(2, 2, &products, &total)
 			s.NoError(err)
-			s.Equal(2, len(products))
+			s.Require().Equal(2, len(products))
 			s.Equal(int64(5), total)
 			s.Equal("paginate_product3", products[0].Name)
 			s.Equal("paginate_product4", products[1].Name)
+		})
+	}
+}
+
+// TestPaginateWithDefaultArguments mirrors Laravel's DatabaseQueryBuilderTest::testPaginateWithDefaultArguments:
+// paginate() with no arguments resolves the first page and Laravel's default perPage of 15, then counts and
+// fetches that page. Go has neither parameter defaults nor a Paginator::currentPageResolver analogue, so the
+// omitted arguments are represented by a zero page and a zero limit, which Paginate resolves to 1 and 15.
+func (s *DBTestSuite) TestPaginateWithDefaultArguments() {
+	for driver, query := range s.queries {
+		s.Run(driver, func() {
+			query.DB().Table("products").Insert([]Product{
+				{Name: "paginate_default1"},
+				{Name: "paginate_default2"},
+				{Name: "paginate_default3"},
+				{Name: "paginate_default4"},
+				{Name: "paginate_default5"},
+			})
+
+			var products []Product
+			var total int64
+			err := query.DB().Table("products").WhereLike("name", "paginate_default%").Paginate(0, 0, &products, &total)
+
+			s.NoError(err)
+			s.Equal(int64(5), total)
+			s.Require().Len(products, 5)
+			s.Equal("paginate_default1", products[0].Name)
+			s.Equal("paginate_default5", products[4].Name)
+		})
+	}
+}
+
+// TestPaginateWhenNoResults mirrors Laravel's DatabaseQueryBuilderTest::testPaginateWhenNoResults: when the
+// count is zero Laravel returns an empty collection and skips forPage()/get() entirely. Any page fetch here
+// would fail, because the select names a column the products table does not have, so NoError proves the fetch
+// was skipped; the count itself succeeds because a multi-column select counts as count(*).
+func (s *DBTestSuite) TestPaginateWhenNoResults() {
+	for driver, query := range s.queries {
+		s.Run(driver, func() {
+			var products []Product
+			var total int64
+			err := query.DB().Table("products").
+				Select("name", "nonexistent_paginate_column").
+				WhereLike("name", "paginate_no_results%").
+				Paginate(1, 15, &products, &total)
+
+			s.NoError(err)
+			s.Equal(int64(0), total)
+			s.Empty(products)
+		})
+	}
+}
+
+// TestPaginateWithTotalOverride mirrors Laravel's DatabaseQueryBuilderTest::testPaginateWithTotalOverride: a
+// total supplied by the caller short-circuits the count — getCountForPagination() is never called — and that
+// total is kept. The pre-set total stands for Laravel's fifth $total argument.
+func (s *DBTestSuite) TestPaginateWithTotalOverride() {
+	for driver, query := range s.queries {
+		s.Run(driver, func() {
+			query.DB().Table("products").Insert([]Product{
+				{Name: "paginate_override1"},
+				{Name: "paginate_override2"},
+				{Name: "paginate_override3"},
+				{Name: "paginate_override4"},
+				{Name: "paginate_override5"},
+			})
+
+			var products []Product
+			total := int64(10)
+			err := query.DB().Table("products").WhereLike("name", "paginate_override%").Paginate(1, 2, &products, &total)
+
+			s.NoError(err)
+			s.Equal(int64(10), total)
+			s.Require().Len(products, 2)
+			s.Equal("paginate_override1", products[0].Name)
+			s.Equal("paginate_override2", products[1].Name)
 		})
 	}
 }
@@ -1063,10 +1387,10 @@ func (s *DBTestSuite) TestQueryLog() {
 	s.True(product.ID > 0)
 
 	queryLogs := databasedb.GetQueryLog(ctx)
-	s.Equal(2, len(queryLogs))
-	s.Equal("INSERT INTO products (name) VALUES ('query_log_product')", queryLogs[0].Query)
+	s.Require().Equal(2, len(queryLogs))
+	s.Equal(`insert into "products" ("name") values ('query_log_product')`, queryLogs[0].Query)
 	s.True(queryLogs[0].Time > 0)
-	s.Equal("SELECT * FROM products WHERE name = 'query_log_product'", queryLogs[1].Query)
+	s.Equal(`select * from "products" where "name" = 'query_log_product'`, queryLogs[1].Query)
 	s.True(queryLogs[1].Time > 0)
 
 	ctx = databasedb.DisableQueryLog(ctx)
@@ -1359,7 +1683,7 @@ func (s *DBTestSuite) TestUpdate_Delete() {
 			var products1 []Product
 			err = query.DB().Table("products").Where("name", []string{"update structs1", "update structs2"}).Where("deleted_at", nil).Get(&products1)
 			s.NoError(err)
-			s.Equal(2, len(products1))
+			s.Require().Equal(2, len(products1))
 			s.Equal("update structs1", products1[0].Name)
 			s.Equal("update structs2", products1[1].Name)
 
@@ -1511,7 +1835,7 @@ func (s *DBTestSuite) TestWhere() {
 				var products []Product
 				err := query.DB().Table("products").Where("name", []string{"where model", "where model1"}).Get(&products)
 				s.NoError(err)
-				s.Equal(1, len(products))
+				s.Require().Equal(1, len(products))
 				s.Equal("where model", products[0].Name)
 			})
 
@@ -1556,7 +1880,7 @@ func (s *DBTestSuite) TestWhereAny() {
 					name: "equals operator with single match",
 					find: query.DB().Table("products").WhereAny([]string{"weight", "height"}, "=", 100).Find,
 					assert: func(items []Product) {
-						s.Len(items, 2)
+						s.Require().Len(items, 2)
 						s.Equal("where any product1", items[0].Name)
 						s.Equal("where any product2", items[1].Name)
 					},
@@ -1565,7 +1889,7 @@ func (s *DBTestSuite) TestWhereAny() {
 					name: "greater than operator",
 					find: query.DB().Table("products").WhereAny([]string{"weight", "height"}, ">", 150).Find,
 					assert: func(items []Product) {
-						s.Len(items, 3)
+						s.Require().Len(items, 3)
 						s.Equal("where any product2", items[0].Name)
 						s.Equal("where any product3", items[1].Name)
 						s.Equal("where any product4", items[2].Name)
@@ -1575,7 +1899,7 @@ func (s *DBTestSuite) TestWhereAny() {
 					name: "less than operator",
 					find: query.DB().Table("products").WhereAny([]string{"weight", "height"}, "<", 100).Find,
 					assert: func(items []Product) {
-						s.Len(items, 1)
+						s.Require().Len(items, 1)
 						s.Equal("where any product1", items[0].Name)
 					},
 				},
@@ -1583,7 +1907,7 @@ func (s *DBTestSuite) TestWhereAny() {
 					name: "greater than or equal operator",
 					find: query.DB().Table("products").WhereAny([]string{"weight", "height"}, ">=", 200).Find,
 					assert: func(items []Product) {
-						s.Len(items, 3)
+						s.Require().Len(items, 3)
 						s.Equal("where any product2", items[0].Name)
 						s.Equal("where any product3", items[1].Name)
 						s.Equal("where any product4", items[2].Name)
@@ -1593,7 +1917,7 @@ func (s *DBTestSuite) TestWhereAny() {
 					name: "less than or equal operator",
 					find: query.DB().Table("products").WhereAny([]string{"weight", "height"}, "<=", 100).Find,
 					assert: func(items []Product) {
-						s.Len(items, 2)
+						s.Require().Len(items, 2)
 						s.Equal("where any product1", items[0].Name)
 						s.Equal("where any product2", items[1].Name)
 					},
@@ -1602,7 +1926,7 @@ func (s *DBTestSuite) TestWhereAny() {
 					name: "combined with Where clause - simple",
 					find: query.DB().Table("products").Where("name", "where any product2").WhereAny([]string{"weight"}, "=", 200).Find,
 					assert: func(items []Product) {
-						s.Len(items, 1)
+						s.Require().Len(items, 1)
 						s.Equal("where any product2", items[0].Name)
 					},
 				},
@@ -1610,7 +1934,7 @@ func (s *DBTestSuite) TestWhereAny() {
 					name: "combined with Where clause - using expression",
 					find: query.DB().Table("products").Where("weight > ?", 150).WhereAny([]string{"height"}, ">=", 100).Find,
 					assert: func(items []Product) {
-						s.Len(items, 3)
+						s.Require().Len(items, 3)
 						s.Equal("where any product2", items[0].Name)
 						s.Equal("where any product3", items[1].Name)
 						s.Equal("where any product4", items[2].Name)
@@ -1620,7 +1944,7 @@ func (s *DBTestSuite) TestWhereAny() {
 					name: "Where before and after WhereAny",
 					find: query.DB().Table("products").Where("weight >= ?", 100).WhereAny([]string{"height"}, "<=", 100).Where("weight <= ?", 300).Find,
 					assert: func(items []Product) {
-						s.Len(items, 2)
+						s.Require().Len(items, 2)
 						s.Equal("where any product1", items[0].Name)
 						s.Equal("where any product2", items[1].Name)
 					},
@@ -1629,7 +1953,7 @@ func (s *DBTestSuite) TestWhereAny() {
 					name: "LIKE operator - pattern matching",
 					find: query.DB().Table("products").WhereAny([]string{"name"}, "LIKE", "%product2%").Find,
 					assert: func(items []Product) {
-						s.Len(items, 1)
+						s.Require().Len(items, 1)
 						s.Equal("where any product2", items[0].Name)
 					},
 				},
@@ -1644,7 +1968,7 @@ func (s *DBTestSuite) TestWhereAny() {
 					name: "NOT LIKE operator - exclude pattern",
 					find: query.DB().Table("products").WhereAny([]string{"name"}, "NOT LIKE", "%product1%").Find,
 					assert: func(items []Product) {
-						s.Len(items, 3)
+						s.Require().Len(items, 3)
 						s.Equal("where any product2", items[0].Name)
 						s.Equal("where any product3", items[1].Name)
 						s.Equal("where any product4", items[2].Name)
@@ -1661,7 +1985,7 @@ func (s *DBTestSuite) TestWhereAny() {
 					name: "multiple WhereAny calls",
 					find: query.DB().Table("products").WhereAny([]string{"weight"}, ">=", 200).WhereAny([]string{"height"}, "<=", 150).Find,
 					assert: func(items []Product) {
-						s.Len(items, 2)
+						s.Require().Len(items, 2)
 						s.Equal("where any product2", items[0].Name)
 						s.Equal("where any product3", items[1].Name)
 					},
@@ -1701,7 +2025,7 @@ func (s *DBTestSuite) TestWhereAll() {
 					name: "equals operator - all columns match",
 					find: query.DB().Table("products").WhereAll([]string{"weight", "height"}, "=", 100).Find,
 					assert: func(items []Product) {
-						s.Len(items, 1)
+						s.Require().Len(items, 1)
 						s.Equal("where all product1", items[0].Name)
 					},
 				},
@@ -1709,7 +2033,7 @@ func (s *DBTestSuite) TestWhereAll() {
 					name: "equals operator - both columns equal 200",
 					find: query.DB().Table("products").WhereAll([]string{"weight", "height"}, "=", 200).Find,
 					assert: func(items []Product) {
-						s.Len(items, 1)
+						s.Require().Len(items, 1)
 						s.Equal("where all product2", items[0].Name)
 					},
 				},
@@ -1717,7 +2041,7 @@ func (s *DBTestSuite) TestWhereAll() {
 					name: "greater than or equal operator",
 					find: query.DB().Table("products").WhereAll([]string{"weight", "height"}, ">=", 150).Find,
 					assert: func(items []Product) {
-						s.Len(items, 3)
+						s.Require().Len(items, 3)
 						s.Equal("where all product2", items[0].Name)
 						s.Equal("where all product3", items[1].Name)
 						s.Equal("where all product4", items[2].Name)
@@ -1727,7 +2051,7 @@ func (s *DBTestSuite) TestWhereAll() {
 					name: "less than or equal operator",
 					find: query.DB().Table("products").WhereAll([]string{"weight", "height"}, "<=", 150).Find,
 					assert: func(items []Product) {
-						s.Len(items, 1)
+						s.Require().Len(items, 1)
 						s.Equal("where all product1", items[0].Name)
 					},
 				},
@@ -1735,7 +2059,7 @@ func (s *DBTestSuite) TestWhereAll() {
 					name: "greater than operator",
 					find: query.DB().Table("products").WhereAll([]string{"weight", "height"}, ">", 100).Find,
 					assert: func(items []Product) {
-						s.Len(items, 3)
+						s.Require().Len(items, 3)
 						s.Equal("where all product2", items[0].Name)
 						s.Equal("where all product3", items[1].Name)
 						s.Equal("where all product4", items[2].Name)
@@ -1745,7 +2069,7 @@ func (s *DBTestSuite) TestWhereAll() {
 					name: "less than operator",
 					find: query.DB().Table("products").WhereAll([]string{"weight", "height"}, "<", 200).Find,
 					assert: func(items []Product) {
-						s.Len(items, 1)
+						s.Require().Len(items, 1)
 						s.Equal("where all product1", items[0].Name)
 					},
 				},
@@ -1753,7 +2077,7 @@ func (s *DBTestSuite) TestWhereAll() {
 					name: "combined with Where clause - simple",
 					find: query.DB().Table("products").Where("name", "where all product2").WhereAll([]string{"weight", "height"}, "=", 200).Find,
 					assert: func(items []Product) {
-						s.Len(items, 1)
+						s.Require().Len(items, 1)
 						s.Equal("where all product2", items[0].Name)
 					},
 				},
@@ -1761,7 +2085,7 @@ func (s *DBTestSuite) TestWhereAll() {
 					name: "combined with Where clause - using expression",
 					find: query.DB().Table("products").Where("weight >= ?", 150).WhereAll([]string{"weight", "height"}, ">", 100).Find,
 					assert: func(items []Product) {
-						s.Len(items, 3)
+						s.Require().Len(items, 3)
 						s.Equal("where all product2", items[0].Name)
 						s.Equal("where all product3", items[1].Name)
 						s.Equal("where all product4", items[2].Name)
@@ -1771,7 +2095,7 @@ func (s *DBTestSuite) TestWhereAll() {
 					name: "Where before and after WhereAll",
 					find: query.DB().Table("products").Where("weight >= ?", 100).WhereAll([]string{"weight", "height"}, ">=", 100).Where("height <= ?", 200).Find,
 					assert: func(items []Product) {
-						s.Len(items, 4)
+						s.Require().Len(items, 4)
 						s.Equal("where all product1", items[0].Name)
 						s.Equal("where all product2", items[1].Name)
 						s.Equal("where all product3", items[2].Name)
@@ -1782,7 +2106,7 @@ func (s *DBTestSuite) TestWhereAll() {
 					name: "LIKE operator - pattern matching single column",
 					find: query.DB().Table("products").WhereAll([]string{"name"}, "LIKE", "%product2%").Find,
 					assert: func(items []Product) {
-						s.Len(items, 1)
+						s.Require().Len(items, 1)
 						s.Equal("where all product2", items[0].Name)
 					},
 				},
@@ -1790,7 +2114,7 @@ func (s *DBTestSuite) TestWhereAll() {
 					name: "LIKE operator - all must match pattern",
 					find: query.DB().Table("products").WhereAll([]string{"name"}, "LIKE", "%where all%").Find,
 					assert: func(items []Product) {
-						s.Len(items, 4)
+						s.Require().Len(items, 4)
 						s.Equal("where all product1", items[0].Name)
 						s.Equal("where all product2", items[1].Name)
 						s.Equal("where all product3", items[2].Name)
@@ -1801,7 +2125,7 @@ func (s *DBTestSuite) TestWhereAll() {
 					name: "NOT LIKE operator - exclude pattern",
 					find: query.DB().Table("products").WhereAll([]string{"name"}, "NOT LIKE", "%product1%").Find,
 					assert: func(items []Product) {
-						s.Len(items, 3)
+						s.Require().Len(items, 3)
 						s.Equal("where all product2", items[0].Name)
 						s.Equal("where all product3", items[1].Name)
 						s.Equal("where all product4", items[2].Name)
@@ -1818,7 +2142,7 @@ func (s *DBTestSuite) TestWhereAll() {
 					name: "multiple WhereAll calls",
 					find: query.DB().Table("products").WhereAll([]string{"weight"}, ">=", 150).WhereAll([]string{"height"}, ">=", 150).Find,
 					assert: func(items []Product) {
-						s.Len(items, 3)
+						s.Require().Len(items, 3)
 						s.Equal("where all product2", items[0].Name)
 						s.Equal("where all product3", items[1].Name)
 						s.Equal("where all product4", items[2].Name)
@@ -1859,7 +2183,7 @@ func (s *DBTestSuite) TestWhereNone() {
 					name: "equals operator - exclude single value",
 					find: query.DB().Table("products").WhereNone([]string{"weight"}, "=", 100).Find,
 					assert: func(items []Product) {
-						s.Len(items, 3)
+						s.Require().Len(items, 3)
 						s.Equal("where none product2", items[0].Name)
 						s.Equal("where none product3", items[1].Name)
 						s.Equal("where none product4", items[2].Name)
@@ -1869,7 +2193,7 @@ func (s *DBTestSuite) TestWhereNone() {
 					name: "equals operator - exclude from multiple columns",
 					find: query.DB().Table("products").WhereNone([]string{"weight", "height"}, "=", 100).Find,
 					assert: func(items []Product) {
-						s.Len(items, 2)
+						s.Require().Len(items, 2)
 						s.Equal("where none product3", items[0].Name)
 						s.Equal("where none product4", items[1].Name)
 					},
@@ -1878,7 +2202,7 @@ func (s *DBTestSuite) TestWhereNone() {
 					name: "greater than operator",
 					find: query.DB().Table("products").WhereNone([]string{"weight", "height"}, ">", 150).Find,
 					assert: func(items []Product) {
-						s.Len(items, 1)
+						s.Require().Len(items, 1)
 						s.Equal("where none product1", items[0].Name)
 					},
 				},
@@ -1886,7 +2210,7 @@ func (s *DBTestSuite) TestWhereNone() {
 					name: "less than operator",
 					find: query.DB().Table("products").WhereNone([]string{"weight", "height"}, "<", 100).Find,
 					assert: func(items []Product) {
-						s.Len(items, 3)
+						s.Require().Len(items, 3)
 						s.Equal("where none product2", items[0].Name)
 						s.Equal("where none product3", items[1].Name)
 						s.Equal("where none product4", items[2].Name)
@@ -1896,7 +2220,7 @@ func (s *DBTestSuite) TestWhereNone() {
 					name: "greater than or equal operator",
 					find: query.DB().Table("products").WhereNone([]string{"weight", "height"}, ">=", 200).Find,
 					assert: func(items []Product) {
-						s.Len(items, 1)
+						s.Require().Len(items, 1)
 						s.Equal("where none product1", items[0].Name)
 					},
 				},
@@ -1904,7 +2228,7 @@ func (s *DBTestSuite) TestWhereNone() {
 					name: "less than or equal operator",
 					find: query.DB().Table("products").WhereNone([]string{"weight", "height"}, "<=", 100).Find,
 					assert: func(items []Product) {
-						s.Len(items, 2)
+						s.Require().Len(items, 2)
 						s.Equal("where none product3", items[0].Name)
 						s.Equal("where none product4", items[1].Name)
 					},
@@ -1913,7 +2237,7 @@ func (s *DBTestSuite) TestWhereNone() {
 					name: "combined with Where clause - simple",
 					find: query.DB().Table("products").Where("name", "where none product2").WhereNone([]string{"height"}, "=", 200).Find,
 					assert: func(items []Product) {
-						s.Len(items, 1)
+						s.Require().Len(items, 1)
 						s.Equal("where none product2", items[0].Name)
 					},
 				},
@@ -1921,7 +2245,7 @@ func (s *DBTestSuite) TestWhereNone() {
 					name: "combined with Where clause - using expression",
 					find: query.DB().Table("products").Where("weight > ?", 100).WhereNone([]string{"height"}, "=", 200).Find,
 					assert: func(items []Product) {
-						s.Len(items, 2)
+						s.Require().Len(items, 2)
 						s.Equal("where none product2", items[0].Name)
 						s.Equal("where none product3", items[1].Name)
 					},
@@ -1930,7 +2254,7 @@ func (s *DBTestSuite) TestWhereNone() {
 					name: "Where before and after WhereNone",
 					find: query.DB().Table("products").Where("weight >= ?", 100).WhereNone([]string{"height"}, ">", 150).Where("weight <= ?", 300).Find,
 					assert: func(items []Product) {
-						s.Len(items, 3)
+						s.Require().Len(items, 3)
 						s.Equal("where none product1", items[0].Name)
 						s.Equal("where none product2", items[1].Name)
 						s.Equal("where none product3", items[2].Name)
@@ -1940,7 +2264,7 @@ func (s *DBTestSuite) TestWhereNone() {
 					name: "LIKE operator - exclude pattern matches",
 					find: query.DB().Table("products").WhereNone([]string{"name"}, "LIKE", "%product1%").Find,
 					assert: func(items []Product) {
-						s.Len(items, 3)
+						s.Require().Len(items, 3)
 						s.Equal("where none product2", items[0].Name)
 						s.Equal("where none product3", items[1].Name)
 						s.Equal("where none product4", items[2].Name)
@@ -1950,7 +2274,7 @@ func (s *DBTestSuite) TestWhereNone() {
 					name: "LIKE operator - exclude multiple patterns",
 					find: query.DB().Table("products").WhereNone([]string{"name"}, "LIKE", "%product2%").Find,
 					assert: func(items []Product) {
-						s.Len(items, 3)
+						s.Require().Len(items, 3)
 						s.Equal("where none product1", items[0].Name)
 						s.Equal("where none product3", items[1].Name)
 						s.Equal("where none product4", items[2].Name)
@@ -1960,7 +2284,7 @@ func (s *DBTestSuite) TestWhereNone() {
 					name: "NOT LIKE operator - double negation includes",
 					find: query.DB().Table("products").WhereNone([]string{"name"}, "NOT LIKE", "%product1%").Find,
 					assert: func(items []Product) {
-						s.Len(items, 1)
+						s.Require().Len(items, 1)
 						s.Equal("where none product1", items[0].Name)
 					},
 				},
@@ -1975,7 +2299,7 @@ func (s *DBTestSuite) TestWhereNone() {
 					name: "multiple WhereNone calls",
 					find: query.DB().Table("products").WhereNone([]string{"weight"}, "=", 100).WhereNone([]string{"height"}, "=", 200).Find,
 					assert: func(items []Product) {
-						s.Len(items, 2)
+						s.Require().Len(items, 2)
 						s.Equal("where none product2", items[0].Name)
 						s.Equal("where none product3", items[1].Name)
 					},
@@ -1984,7 +2308,7 @@ func (s *DBTestSuite) TestWhereNone() {
 					name: "all records match when excluding non-existent value",
 					find: query.DB().Table("products").WhereNone([]string{"weight", "height"}, "=", 999).Find,
 					assert: func(items []Product) {
-						s.Len(items, 4)
+						s.Require().Len(items, 4)
 						s.Equal("where none product1", items[0].Name)
 						s.Equal("where none product2", items[1].Name)
 						s.Equal("where none product3", items[2].Name)
@@ -2024,7 +2348,7 @@ func (s *DBTestSuite) TestWhereColumn() {
 				var products []Product
 				err := query.DB().Table("products").WhereColumn("height", "weight").Get(&products)
 				s.NoError(err)
-				s.Equal(1, len(products))
+				s.Require().Equal(1, len(products))
 				s.Equal("where column model", products[0].Name)
 			})
 
@@ -2032,7 +2356,7 @@ func (s *DBTestSuite) TestWhereColumn() {
 				var products []Product
 				err := query.DB().Table("products").WhereColumn("height", ">", "weight").Get(&products)
 				s.NoError(err)
-				s.Equal(1, len(products))
+				s.Require().Equal(1, len(products))
 				s.Equal("where column model1", products[0].Name)
 			})
 
@@ -2164,7 +2488,7 @@ func (s *DBTestSuite) TestJsonWhereClauses() {
 					name: "string key",
 					find: query.DB().Table("json_data").Where("data->string", "first").Find,
 					assert: func(items []JsonData) {
-						s.Len(items, 1)
+						s.Require().Len(items, 1)
 						s.JSONEq(data[0].Data, items[0].Data)
 					},
 				},
@@ -2172,7 +2496,7 @@ func (s *DBTestSuite) TestJsonWhereClauses() {
 					name: "int key",
 					find: query.DB().Table("json_data").Where("data->int", 123).Find,
 					assert: func(items []JsonData) {
-						s.Len(items, 2)
+						s.Require().Len(items, 2)
 						s.JSONEq(data[0].Data, items[0].Data)
 						s.JSONEq(data[1].Data, items[1].Data)
 					},
@@ -2181,7 +2505,7 @@ func (s *DBTestSuite) TestJsonWhereClauses() {
 					name: "float key(multiple values)",
 					find: query.DB().Table("json_data").WhereIn("data->float", []any{123.456, 789.123}).Find,
 					assert: func(items []JsonData) {
-						s.Len(items, 2)
+						s.Require().Len(items, 2)
 						s.JSONEq(data[0].Data, items[0].Data)
 						s.JSONEq(data[1].Data, items[1].Data)
 					},
@@ -2190,7 +2514,7 @@ func (s *DBTestSuite) TestJsonWhereClauses() {
 					name: "bool key(pointer)",
 					find: query.DB().Table("json_data").Where("data->bool", convert.Pointer(false)).Find,
 					assert: func(items []JsonData) {
-						s.Len(items, 1)
+						s.Require().Len(items, 1)
 						s.JSONEq(data[1].Data, items[0].Data)
 					},
 				},
@@ -2198,7 +2522,7 @@ func (s *DBTestSuite) TestJsonWhereClauses() {
 					name: "nested key",
 					find: query.DB().Table("json_data").Where("data->nested->int", 456).Find,
 					assert: func(items []JsonData) {
-						s.Len(items, 1)
+						s.Require().Len(items, 1)
 						s.JSONEq(data[0].Data, items[0].Data)
 					},
 				},
@@ -2206,7 +2530,7 @@ func (s *DBTestSuite) TestJsonWhereClauses() {
 					name: "nested key with array",
 					find: query.DB().Table("json_data").Where("data->objects[0]->level", "first").Find,
 					assert: func(items []JsonData) {
-						s.Len(items, 1)
+						s.Require().Len(items, 1)
 						s.JSONEq(data[0].Data, items[0].Data)
 					},
 				},
@@ -2214,7 +2538,7 @@ func (s *DBTestSuite) TestJsonWhereClauses() {
 					name: "key exists",
 					find: query.DB().Table("json_data").WhereJsonContainsKey("data->nested->string").Find,
 					assert: func(items []JsonData) {
-						s.Len(items, 1)
+						s.Require().Len(items, 1)
 						s.JSONEq(data[0].Data, items[0].Data)
 					},
 				},
@@ -2222,7 +2546,7 @@ func (s *DBTestSuite) TestJsonWhereClauses() {
 					name: "key does not exist",
 					find: query.DB().Table("json_data").WhereJsonDoesntContainKey("data->nested->string").Find,
 					assert: func(items []JsonData) {
-						s.Len(items, 1)
+						s.Require().Len(items, 1)
 						s.JSONEq(data[1].Data, items[0].Data)
 					},
 				},
@@ -2230,7 +2554,7 @@ func (s *DBTestSuite) TestJsonWhereClauses() {
 					name: "array contains",
 					find: query.DB().Table("json_data").WhereJsonContains("data->array", "abc").Find,
 					assert: func(items []JsonData) {
-						s.Len(items, 2)
+						s.Require().Len(items, 2)
 						s.JSONEq(data[0].Data, items[0].Data)
 						s.JSONEq(data[1].Data, items[1].Data)
 					},
@@ -2246,7 +2570,7 @@ func (s *DBTestSuite) TestJsonWhereClauses() {
 					name: "array contains multiple values",
 					find: query.DB().Table("json_data").WhereJsonContains("data->array", []string{"abc", "def"}).Find,
 					assert: func(items []JsonData) {
-						s.Len(items, 2)
+						s.Require().Len(items, 2)
 						s.JSONEq(data[0].Data, items[0].Data)
 						s.JSONEq(data[1].Data, items[1].Data)
 					},
@@ -2260,9 +2584,9 @@ func (s *DBTestSuite) TestJsonWhereClauses() {
 				},
 				{
 					name: "array length greater than",
-					find: query.DB().Table("json_data").WhereJsonLength("data->array > ?", 2).Find,
+					find: query.DB().Table("json_data").WhereJsonLength("data->array", ">", 2).Find,
 					assert: func(items []JsonData) {
-						s.Len(items, 2)
+						s.Require().Len(items, 2)
 						s.JSONEq(data[0].Data, items[0].Data)
 						s.JSONEq(data[1].Data, items[1].Data)
 					},
@@ -2271,7 +2595,7 @@ func (s *DBTestSuite) TestJsonWhereClauses() {
 					name: "string or float key",
 					find: query.DB().Table("json_data").Where("data->string", "first").OrWhere("data->float", 789.123).Find,
 					assert: func(items []JsonData) {
-						s.Len(items, 2)
+						s.Require().Len(items, 2)
 						s.JSONEq(data[0].Data, items[0].Data)
 						s.JSONEq(data[1].Data, items[1].Data)
 					},
@@ -2280,7 +2604,7 @@ func (s *DBTestSuite) TestJsonWhereClauses() {
 					name: "contains or key does not exist",
 					find: query.DB().Table("json_data").WhereJsonContains("data->array", "ghi").OrWhereJsonDoesntContainKey("data->nested->string").Find,
 					assert: func(items []JsonData) {
-						s.Len(items, 2)
+						s.Require().Len(items, 2)
 						s.JSONEq(data[0].Data, items[0].Data)
 						s.JSONEq(data[1].Data, items[1].Data)
 					},

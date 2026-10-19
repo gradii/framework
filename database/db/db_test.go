@@ -10,6 +10,7 @@ import (
 
 	contractsdatabase "github.com/goravel/framework/contracts/database"
 	contractsdb "github.com/goravel/framework/contracts/database/db"
+	"github.com/goravel/framework/errors"
 	mocksdb "github.com/goravel/framework/mocks/database/db"
 	mocksdriver "github.com/goravel/framework/mocks/database/driver"
 	mockslogger "github.com/goravel/framework/mocks/database/logger"
@@ -97,4 +98,56 @@ func TestConnection_ConcurrentSafe(t *testing.T) {
 		require.True(t, ok, "goroutine %d: result is not *DB", i)
 		assert.Same(t, cache, resultDB.queries, "goroutine %d: child queries not aliased", i)
 	}
+}
+
+func TestTx_UnconfiguredConnection(t *testing.T) {
+	t.Run("readBuilder reports the declared error instead of dereferencing a nil connection", func(t *testing.T) {
+		tx := &Tx{ctx: context.Background()}
+
+		builder, err := tx.readBuilder()
+
+		assert.Nil(t, builder)
+		assert.ErrorIs(t, err, errors.DatabaseConnectionIsNil)
+	})
+
+	t.Run("writeBuilder reports the declared error instead of dereferencing a nil connection", func(t *testing.T) {
+		tx := &Tx{ctx: context.Background()}
+
+		builder, err := tx.writeBuilder()
+
+		assert.Nil(t, builder)
+		assert.ErrorIs(t, err, errors.DatabaseConnectionIsNil)
+	})
+
+	t.Run("Table surfaces the declared error through the logger rather than dereferencing the connection", func(t *testing.T) {
+		mockLogger := mockslogger.NewLogger(t)
+		tx := &Tx{ctx: context.Background(), logger: mockLogger}
+		mockLogger.EXPECT().Panicf(context.Background(), errors.DatabaseConnectionIsNil.Error()).Return().Once()
+
+		assert.Nil(t, tx.Table("users"))
+	})
+}
+
+func TestDB_BeginTransactionUnconfiguredConnection(t *testing.T) {
+	// A connection opened without a database name has no pool to build a transaction
+	// against; BeginTransaction must report the declared error rather than dereference it.
+	db := &DB{ctx: context.Background()}
+
+	tx, err := db.BeginTransaction()
+
+	assert.Nil(t, tx)
+	assert.ErrorIs(t, err, errors.DatabaseConnectionIsNil)
+}
+
+func TestDB_TransactionUnconfiguredConnection(t *testing.T) {
+	db := &DB{ctx: context.Background()}
+	called := false
+
+	err := db.Transaction(func(tx contractsdb.Tx) error {
+		called = true
+		return nil
+	})
+
+	assert.ErrorIs(t, err, errors.DatabaseConnectionIsNil)
+	assert.False(t, called, "callback must not run when the transaction cannot start")
 }

@@ -145,15 +145,14 @@ func (r *Query) newMany2ManyQuery(parent any, desc *relationDescriptor, isMorph 
 	pivotTable := desc.pivotTable
 
 	q := r.relatedQuery(desc.relatedModel).
-		Join(fmt.Sprintf("INNER JOIN %s ON %s.%s = %s.%s",
-			quoteIdent(pivotTable),
-			quoteIdent(pivotTable), quoteIdent(desc.pivotRelatedRef.foreignColumn),
-			quoteIdent(relatedTable), quoteIdent(desc.pivotRelatedRef.primaryColumn))).
-		Where(fmt.Sprintf("%s.%s = ?", quoteIdent(pivotTable), quoteIdent(desc.pivotParentRef.foreignColumn)), parentVal)
+		Join(r.tableRef(pivotTable)+" ON "+
+			r.ident(pivotTable, desc.pivotRelatedRef.foreignColumn)+" = "+
+			r.ident(relatedTable, desc.pivotRelatedRef.primaryColumn)).
+		Where(r.ident(pivotTable, desc.pivotParentRef.foreignColumn)+" = ?", parentVal)
 	if isMorph {
-		q = q.Where(fmt.Sprintf("%s.%s = ?", quoteIdent(pivotTable), quoteIdent(desc.morphTypeColumn)), desc.morphValue)
+		q = q.Where(r.ident(pivotTable, desc.morphTypeColumn)+" = ?", desc.morphValue)
 	}
-	return applyOnPivotQueryToQuery(q, desc)
+	return applyOnPivotQueryToQuery(r.queryGrammar, q, desc)
 }
 
 // newThroughQuery:
@@ -167,11 +166,10 @@ func (r *Query) newThroughQuery(parent any, desc *relationDescriptor) contractso
 		return r.guardedQuery(err)
 	}
 	return r.relatedQuery(desc.relatedModel).
-		Join(fmt.Sprintf("INNER JOIN %s ON %s.%s = %s.%s",
-			quoteIdent(desc.throughTable),
-			quoteIdent(desc.relatedTable), quoteIdent(desc.secondKey),
-			quoteIdent(desc.throughTable), quoteIdent(desc.secondLocalKey))).
-		Where(fmt.Sprintf("%s.%s = ?", quoteIdent(desc.throughTable), quoteIdent(desc.firstKey)), parentVal)
+		Join(r.tableRef(desc.throughTable)+" ON "+
+			r.ident(desc.relatedTable, desc.secondKey)+" = "+
+			r.ident(desc.throughTable, desc.secondLocalKey)).
+		Where(r.ident(desc.throughTable, desc.firstKey)+" = ?", parentVal)
 }
 
 // --- helpers ---------------------------------------------------------------
@@ -184,12 +182,10 @@ func (r *Query) relatedQuery(related any) contractsorm.Query {
 	return q.Model(related)
 }
 
-// guardedQuery returns a Query guarded so subsequent terminals (Get/First/Count/...) immediately
-// surface err to the caller.
+// guardedQuery returns a fresh Query that reports err from whichever terminal runs on it, without a
+// database round-trip. The error travels on the query rather than on the connection handle.
 func (r *Query) guardedQuery(err error) contractsorm.Query {
-	q := r.wrap(r.freshSession())
-	_ = q.instance.AddError(err)
-	return q
+	return r.wrap(r.freshSession()).withError(err)
 }
 
 // zeroRowQuery returns a Query whose Get/First yields no rows without a database round-trip —
@@ -200,7 +196,7 @@ func (r *Query) zeroRowQuery() contractsorm.Query {
 
 // readParentColumn reads the value of the given DB column from parent via GORM's parsed schema.
 func readParentColumn(r *Query, parent any, dbColumn string) (any, error) {
-	parentSchema, err := parseGormSchema(r.instance, parent)
+	parentSchema, err := parseSchema(r.instance, parent)
 	if err != nil {
 		return nil, err
 	}

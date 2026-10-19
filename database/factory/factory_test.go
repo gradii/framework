@@ -6,10 +6,10 @@ import (
 
 	"github.com/brianvoe/gofakeit/v7"
 	"github.com/stretchr/testify/assert"
-	gormio "gorm.io/gorm"
 
 	"github.com/goravel/framework/contracts/database/factory"
 	"github.com/goravel/framework/support/carbon"
+	basedatabase "github.com/goravel/framework/support/database"
 )
 
 type Model struct {
@@ -18,7 +18,7 @@ type Model struct {
 }
 
 type SoftDeletes struct {
-	DeletedAt gormio.DeletedAt `gorm:"column:deleted_at" json:"deleted_at"`
+	DeletedAt basedatabase.DeletedAt `gorm:"column:deleted_at" json:"deleted_at"`
 }
 
 type Timestamps struct {
@@ -47,7 +47,7 @@ func (u *UserFactory) Definition() map[string]any {
 		"Avatar":    faker.Email(),
 		"CreatedAt": carbon.NewDateTime(carbon.Now()),
 		"UpdatedAt": carbon.NewDateTime(carbon.Now()),
-		"DeletedAt": gormio.DeletedAt{Time: time.Now(), Valid: true},
+		"DeletedAt": basedatabase.DeletedAt{Time: time.Now(), Valid: true},
 	}
 }
 

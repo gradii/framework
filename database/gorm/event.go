@@ -4,11 +4,11 @@ import (
 	"context"
 	"maps"
 	"reflect"
-	"strings"
 
 	"gorm.io/gorm"
 
 	"github.com/goravel/framework/contracts/database/orm"
+	basedatabase "github.com/goravel/framework/support/database"
 	"github.com/goravel/framework/support/str"
 )
 
@@ -92,6 +92,9 @@ func (e *Event) IsDirty(columns ...string) bool {
 	return false
 }
 
+// Query returns a fresh query for the handler to build on. It is seeded from the same GORM connection
+// as the query that raised the event, because a query is a wrapper around one, so this is the one place
+// the event layer still depends on the connection type.
 func (e *Event) Query() orm.Query {
 	return NewQuery(e.query.ctx, e.query.config, e.query.dbConfig, e.query.instance.Session(&gorm.Session{NewDB: true}), e.query.grammar, e.query.log, e.query.modelToObserver, nil, e.query.telemetryResolver)
 }
@@ -122,8 +125,9 @@ func (e *Event) SetAttribute(key string, value any) {
 		if !destValue.CanAddr() {
 			destValueCanAddr := reflect.New(destValue.Type())
 			destValueCanAddr.Elem().Set(destValue)
+			// The copy is kept on the event; the caller reads it back from there, so nothing has to be
+			// written into a statement for the change to survive.
 			e.dest = destValueCanAddr.Interface()
-			e.query.instance.Statement.Dest = e.dest
 			destValue = destValueCanAddr.Elem()
 		}
 
@@ -235,8 +239,10 @@ func (e *Event) validColumn(name string) bool {
 		return false
 	}
 
-	selectColumns := e.query.instance.Statement.Selects
-	omitColumns := e.query.instance.Statement.Omits
+	// The filter is read from the query's own conditions rather than from GORM's statement, so an
+	// observer sees exactly the columns the statement being built will write.
+	selectColumns := e.query.conditions.selectColumns
+	omitColumns := e.query.conditions.omit
 	if len(selectColumns) > 0 {
 		for _, selectColumn := range selectColumns {
 			dbSelectColumn := e.toDBColumnName(selectColumn)
@@ -275,7 +281,7 @@ func (e *Event) validValue(name string, value any) bool {
 		return false
 	}
 
-	selectColumns := e.query.instance.Statement.Selects
+	selectColumns := e.query.conditions.selectColumns
 	if len(selectColumns) > 0 {
 		return e.validColumn(name)
 	}
@@ -362,14 +368,14 @@ func structToMap(data any) map[string]any {
 	return res
 }
 
+// structNameToDbColumnName maps a struct field to its database column: the column the `gorm` tag
+// names, otherwise the snake_cased field name.
+//
+// Column naming has a single implementation, support/database.ParseAnnotation, so the ORM, the
+// event helpers and support/database.GetID can never disagree about a model's columns.
 func structNameToDbColumnName(structName, tag string) string {
-	if strings.Contains(tag, "column:") {
-		tags := strings.Split(tag, ";")
-		for _, item := range tags {
-			if strings.Contains(item, "column:") {
-				return strings.Trim(strings.ReplaceAll(item, "column:", ""), " ")
-			}
-		}
+	if column := basedatabase.ParseAnnotation(tag).Column; column != "" {
+		return column
 	}
 
 	return str.Of(structName).Snake().String()

@@ -427,6 +427,64 @@ func (_c *Query_Cursor_Call) RunAndReturn(run func() chan db.Row) *Query_Cursor_
 	return _c
 }
 
+// CursorPaginate provides a mock function with given fields: perPage, cursor, dest
+func (_m *Query) CursorPaginate(perPage int, cursor string, dest interface{}) (db.CursorPaginator, error) {
+	ret := _m.Called(perPage, cursor, dest)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CursorPaginate")
+	}
+
+	var r0 db.CursorPaginator
+	var r1 error
+	if rf, ok := ret.Get(0).(func(int, string, interface{}) (db.CursorPaginator, error)); ok {
+		return rf(perPage, cursor, dest)
+	}
+	if rf, ok := ret.Get(0).(func(int, string, interface{}) db.CursorPaginator); ok {
+		r0 = rf(perPage, cursor, dest)
+	} else {
+		r0 = ret.Get(0).(db.CursorPaginator)
+	}
+
+	if rf, ok := ret.Get(1).(func(int, string, interface{}) error); ok {
+		r1 = rf(perPage, cursor, dest)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// Query_CursorPaginate_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CursorPaginate'
+type Query_CursorPaginate_Call struct {
+	*mock.Call
+}
+
+// CursorPaginate is a helper method to define mock.On call
+//   - perPage int
+//   - cursor string
+//   - dest interface{}
+func (_e *Query_Expecter) CursorPaginate(perPage interface{}, cursor interface{}, dest interface{}) *Query_CursorPaginate_Call {
+	return &Query_CursorPaginate_Call{Call: _e.mock.On("CursorPaginate", perPage, cursor, dest)}
+}
+
+func (_c *Query_CursorPaginate_Call) Run(run func(perPage int, cursor string, dest interface{})) *Query_CursorPaginate_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(int), args[1].(string), args[2].(interface{}))
+	})
+	return _c
+}
+
+func (_c *Query_CursorPaginate_Call) Return(_a0 db.CursorPaginator, _a1 error) *Query_CursorPaginate_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Query_CursorPaginate_Call) RunAndReturn(run func(int, string, interface{}) (db.CursorPaginator, error)) *Query_CursorPaginate_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // DB provides a mock function with no fields
 func (_m *Query) DB() (*sql.DB, error) {
 	ret := _m.Called()
@@ -957,6 +1015,54 @@ func (_c *Query_Find_Call) RunAndReturn(run func(interface{}, ...interface{}) er
 	return _c
 }
 
+// FindOr provides a mock function with given fields: dest, id, callback
+func (_m *Query) FindOr(dest interface{}, id interface{}, callback func() error) error {
+	ret := _m.Called(dest, id, callback)
+
+	if len(ret) == 0 {
+		panic("no return value specified for FindOr")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(interface{}, interface{}, func() error) error); ok {
+		r0 = rf(dest, id, callback)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Query_FindOr_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'FindOr'
+type Query_FindOr_Call struct {
+	*mock.Call
+}
+
+// FindOr is a helper method to define mock.On call
+//   - dest interface{}
+//   - id interface{}
+//   - callback func() error
+func (_e *Query_Expecter) FindOr(dest interface{}, id interface{}, callback interface{}) *Query_FindOr_Call {
+	return &Query_FindOr_Call{Call: _e.mock.On("FindOr", dest, id, callback)}
+}
+
+func (_c *Query_FindOr_Call) Run(run func(dest interface{}, id interface{}, callback func() error)) *Query_FindOr_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(interface{}), args[1].(interface{}), args[2].(func() error))
+	})
+	return _c
+}
+
+func (_c *Query_FindOr_Call) Return(_a0 error) *Query_FindOr_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Query_FindOr_Call) RunAndReturn(run func(interface{}, interface{}, func() error) error) *Query_FindOr_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // FindOrFail provides a mock function with given fields: dest, conds
 func (_m *Query) FindOrFail(dest interface{}, conds ...interface{}) error {
 	var _ca []interface{}
@@ -1335,17 +1441,20 @@ func (_c *Query_ForceDelete_Call) RunAndReturn(run func(...interface{}) (*db.Res
 	return _c
 }
 
-// Get provides a mock function with given fields: dest
-func (_m *Query) Get(dest interface{}) error {
-	ret := _m.Called(dest)
+// Get provides a mock function with given fields: dest, columns
+func (_m *Query) Get(dest interface{}, columns ...interface{}) error {
+	var _ca []interface{}
+	_ca = append(_ca, dest)
+	_ca = append(_ca, columns...)
+	ret := _m.Called(_ca...)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Get")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(interface{}) error); ok {
-		r0 = rf(dest)
+	if rf, ok := ret.Get(0).(func(interface{}, ...interface{}) error); ok {
+		r0 = rf(dest, columns...)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -1360,13 +1469,21 @@ type Query_Get_Call struct {
 
 // Get is a helper method to define mock.On call
 //   - dest interface{}
-func (_e *Query_Expecter) Get(dest interface{}) *Query_Get_Call {
-	return &Query_Get_Call{Call: _e.mock.On("Get", dest)}
+//   - columns ...interface{}
+func (_e *Query_Expecter) Get(dest interface{}, columns ...interface{}) *Query_Get_Call {
+	return &Query_Get_Call{Call: _e.mock.On("Get",
+		append([]interface{}{dest}, columns...)...)}
 }
 
-func (_c *Query_Get_Call) Run(run func(dest interface{})) *Query_Get_Call {
+func (_c *Query_Get_Call) Run(run func(dest interface{}, columns ...interface{})) *Query_Get_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(interface{}))
+		variadicArgs := make([]interface{}, len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(interface{})
+			}
+		}
+		run(args[0].(interface{}), variadicArgs...)
 	})
 	return _c
 }
@@ -1376,7 +1493,7 @@ func (_c *Query_Get_Call) Return(_a0 error) *Query_Get_Call {
 	return _c
 }
 
-func (_c *Query_Get_Call) RunAndReturn(run func(interface{}) error) *Query_Get_Call {
+func (_c *Query_Get_Call) RunAndReturn(run func(interface{}, ...interface{}) error) *Query_Get_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -2452,6 +2569,53 @@ func (_c *Query_Omit_Call) RunAndReturn(run func(...string) orm.Query) *Query_Om
 	return _c
 }
 
+// OnlyTrashed provides a mock function with no fields
+func (_m *Query) OnlyTrashed() orm.Query {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for OnlyTrashed")
+	}
+
+	var r0 orm.Query
+	if rf, ok := ret.Get(0).(func() orm.Query); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(orm.Query)
+		}
+	}
+
+	return r0
+}
+
+// Query_OnlyTrashed_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'OnlyTrashed'
+type Query_OnlyTrashed_Call struct {
+	*mock.Call
+}
+
+// OnlyTrashed is a helper method to define mock.On call
+func (_e *Query_Expecter) OnlyTrashed() *Query_OnlyTrashed_Call {
+	return &Query_OnlyTrashed_Call{Call: _e.mock.On("OnlyTrashed")}
+}
+
+func (_c *Query_OnlyTrashed_Call) Run(run func()) *Query_OnlyTrashed_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *Query_OnlyTrashed_Call) Return(_a0 orm.Query) *Query_OnlyTrashed_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Query_OnlyTrashed_Call) RunAndReturn(run func() orm.Query) *Query_OnlyTrashed_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // OrDoesntHave provides a mock function with given fields: relation, args
 func (_m *Query) OrDoesntHave(relation string, args ...interface{}) orm.Query {
 	var _ca []interface{}
@@ -3280,17 +3444,20 @@ func (_c *Query_OrWhereJsonDoesntContainKey_Call) RunAndReturn(run func(string) 
 	return _c
 }
 
-// OrWhereJsonLength provides a mock function with given fields: column, length
-func (_m *Query) OrWhereJsonLength(column string, length int) orm.Query {
-	ret := _m.Called(column, length)
+// OrWhereJsonLength provides a mock function with given fields: column, args
+func (_m *Query) OrWhereJsonLength(column string, args ...interface{}) orm.Query {
+	var _ca []interface{}
+	_ca = append(_ca, column)
+	_ca = append(_ca, args...)
+	ret := _m.Called(_ca...)
 
 	if len(ret) == 0 {
 		panic("no return value specified for OrWhereJsonLength")
 	}
 
 	var r0 orm.Query
-	if rf, ok := ret.Get(0).(func(string, int) orm.Query); ok {
-		r0 = rf(column, length)
+	if rf, ok := ret.Get(0).(func(string, ...interface{}) orm.Query); ok {
+		r0 = rf(column, args...)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(orm.Query)
@@ -3307,14 +3474,21 @@ type Query_OrWhereJsonLength_Call struct {
 
 // OrWhereJsonLength is a helper method to define mock.On call
 //   - column string
-//   - length int
-func (_e *Query_Expecter) OrWhereJsonLength(column interface{}, length interface{}) *Query_OrWhereJsonLength_Call {
-	return &Query_OrWhereJsonLength_Call{Call: _e.mock.On("OrWhereJsonLength", column, length)}
+//   - args ...interface{}
+func (_e *Query_Expecter) OrWhereJsonLength(column interface{}, args ...interface{}) *Query_OrWhereJsonLength_Call {
+	return &Query_OrWhereJsonLength_Call{Call: _e.mock.On("OrWhereJsonLength",
+		append([]interface{}{column}, args...)...)}
 }
 
-func (_c *Query_OrWhereJsonLength_Call) Run(run func(column string, length int)) *Query_OrWhereJsonLength_Call {
+func (_c *Query_OrWhereJsonLength_Call) Run(run func(column string, args ...interface{})) *Query_OrWhereJsonLength_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(string), args[1].(int))
+		variadicArgs := make([]interface{}, len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(interface{})
+			}
+		}
+		run(args[0].(string), variadicArgs...)
 	})
 	return _c
 }
@@ -3324,7 +3498,7 @@ func (_c *Query_OrWhereJsonLength_Call) Return(_a0 orm.Query) *Query_OrWhereJson
 	return _c
 }
 
-func (_c *Query_OrWhereJsonLength_Call) RunAndReturn(run func(string, int) orm.Query) *Query_OrWhereJsonLength_Call {
+func (_c *Query_OrWhereJsonLength_Call) RunAndReturn(run func(string, ...interface{}) orm.Query) *Query_OrWhereJsonLength_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -4731,6 +4905,53 @@ func (_c *Query_UpdateOrCreate_Call) RunAndReturn(run func(interface{}, interfac
 	return _c
 }
 
+// UseWritePdo provides a mock function with no fields
+func (_m *Query) UseWritePdo() orm.Query {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for UseWritePdo")
+	}
+
+	var r0 orm.Query
+	if rf, ok := ret.Get(0).(func() orm.Query); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(orm.Query)
+		}
+	}
+
+	return r0
+}
+
+// Query_UseWritePdo_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UseWritePdo'
+type Query_UseWritePdo_Call struct {
+	*mock.Call
+}
+
+// UseWritePdo is a helper method to define mock.On call
+func (_e *Query_Expecter) UseWritePdo() *Query_UseWritePdo_Call {
+	return &Query_UseWritePdo_Call{Call: _e.mock.On("UseWritePdo")}
+}
+
+func (_c *Query_UseWritePdo_Call) Run(run func()) *Query_UseWritePdo_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *Query_UseWritePdo_Call) Return(_a0 orm.Query) *Query_UseWritePdo_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Query_UseWritePdo_Call) RunAndReturn(run func() orm.Query) *Query_UseWritePdo_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // When provides a mock function with given fields: condition, callback, falseCallback
 func (_m *Query) When(condition bool, callback func(orm.Query) orm.Query, falseCallback ...func(orm.Query) orm.Query) orm.Query {
 	_va := make([]interface{}, len(falseCallback))
@@ -5503,17 +5724,20 @@ func (_c *Query_WhereJsonDoesntContainKey_Call) RunAndReturn(run func(string) or
 	return _c
 }
 
-// WhereJsonLength provides a mock function with given fields: column, length
-func (_m *Query) WhereJsonLength(column string, length int) orm.Query {
-	ret := _m.Called(column, length)
+// WhereJsonLength provides a mock function with given fields: column, args
+func (_m *Query) WhereJsonLength(column string, args ...interface{}) orm.Query {
+	var _ca []interface{}
+	_ca = append(_ca, column)
+	_ca = append(_ca, args...)
+	ret := _m.Called(_ca...)
 
 	if len(ret) == 0 {
 		panic("no return value specified for WhereJsonLength")
 	}
 
 	var r0 orm.Query
-	if rf, ok := ret.Get(0).(func(string, int) orm.Query); ok {
-		r0 = rf(column, length)
+	if rf, ok := ret.Get(0).(func(string, ...interface{}) orm.Query); ok {
+		r0 = rf(column, args...)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(orm.Query)
@@ -5530,14 +5754,21 @@ type Query_WhereJsonLength_Call struct {
 
 // WhereJsonLength is a helper method to define mock.On call
 //   - column string
-//   - length int
-func (_e *Query_Expecter) WhereJsonLength(column interface{}, length interface{}) *Query_WhereJsonLength_Call {
-	return &Query_WhereJsonLength_Call{Call: _e.mock.On("WhereJsonLength", column, length)}
+//   - args ...interface{}
+func (_e *Query_Expecter) WhereJsonLength(column interface{}, args ...interface{}) *Query_WhereJsonLength_Call {
+	return &Query_WhereJsonLength_Call{Call: _e.mock.On("WhereJsonLength",
+		append([]interface{}{column}, args...)...)}
 }
 
-func (_c *Query_WhereJsonLength_Call) Run(run func(column string, length int)) *Query_WhereJsonLength_Call {
+func (_c *Query_WhereJsonLength_Call) Run(run func(column string, args ...interface{})) *Query_WhereJsonLength_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(string), args[1].(int))
+		variadicArgs := make([]interface{}, len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(interface{})
+			}
+		}
+		run(args[0].(string), variadicArgs...)
 	})
 	return _c
 }
@@ -5547,7 +5778,7 @@ func (_c *Query_WhereJsonLength_Call) Return(_a0 orm.Query) *Query_WhereJsonLeng
 	return _c
 }
 
-func (_c *Query_WhereJsonLength_Call) RunAndReturn(run func(string, int) orm.Query) *Query_WhereJsonLength_Call {
+func (_c *Query_WhereJsonLength_Call) RunAndReturn(run func(string, ...interface{}) orm.Query) *Query_WhereJsonLength_Call {
 	_c.Call.Return(run)
 	return _c
 }

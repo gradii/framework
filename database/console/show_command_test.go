@@ -2,6 +2,7 @@ package console
 
 import (
 	"database/sql"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -44,6 +45,11 @@ func TestShowCommand(t *testing.T) {
 		{"<fg=green;op=bold>Views</>", "<fg=yellow;op=bold>Rows</>"},
 		{"test", "0"},
 	}
+
+	// The same detail lines for the case below, whose catalog view name already carries the
+	// connection prefix: the view row shows the name exactly as the catalog reports it.
+	prefixedViewCaseExpected := slices.Clone(successCaseExpected)
+	prefixedViewCaseExpected[len(prefixedViewCaseExpected)-1] = [2]string{"goravel_view", "0"}
 	tests := []struct {
 		name  string
 		setup func()
@@ -141,6 +147,49 @@ func TestShowCommand(t *testing.T) {
 				mockContext.EXPECT().NewLine().Times(4)
 				for i := range successCaseExpected {
 					mockContext.EXPECT().TwoColumnDetail(successCaseExpected[i][0], successCaseExpected[i][1]).Once()
+				}
+			},
+		},
+		{
+			name: "success with a prefixed catalog view name",
+			setup: func() {
+				mockContext.EXPECT().Argument(0).Return("").Once()
+				mockContext.EXPECT().Option("database").Return("test").Once()
+				mockSchema.EXPECT().Connection("test").Return(mockSchema).Once()
+				mockSchema.EXPECT().Orm().Return(mockOrm).Once()
+				mockOrm.EXPECT().Config().Return(database.Config{
+					Database: "db",
+					Driver:   "test",
+					Host:     "host",
+					Port:     1234,
+					Username: "username",
+					Prefix:   "goravel_",
+				}).Once()
+
+				// getDataBaseInfo
+				mockSchema.EXPECT().Orm().Return(mockOrm).Once()
+				mockOrm.EXPECT().DB().Return(&sql.DB{}, nil).Once()
+
+				// Handle
+				mockSchema.EXPECT().GetTables().Return([]driver.Table{
+					{Name: "test", Size: 1024},
+				}, nil).Once()
+				mockContext.EXPECT().OptionBool("views").Return(true).Once()
+				// GetViews reports the DB-catalog name, which already carries the connection prefix
+				// (tests/schema_test.go asserts views[0].Name == "goravel_view").
+				mockSchema.EXPECT().GetViews().Return([]driver.View{
+					{Name: "goravel_view"},
+				}, nil).Once()
+				mockSchema.EXPECT().Orm().Return(mockOrm).Once()
+				mockOrm.EXPECT().Query().Return(mockQuery).Once()
+				// The connection prefix is stripped before Table() so the renderer applies it exactly
+				// once; passing "goravel_view" verbatim would render "goravel_goravel_view".
+				mockQuery.EXPECT().Table("view").Return(mockQuery).Once()
+
+				mockQuery.EXPECT().Count().Return(int64(0), nil).Once()
+				mockContext.EXPECT().NewLine().Times(4)
+				for i := range prefixedViewCaseExpected {
+					mockContext.EXPECT().TwoColumnDetail(prefixedViewCaseExpected[i][0], prefixedViewCaseExpected[i][1]).Once()
 				}
 			},
 		},

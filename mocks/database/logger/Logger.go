@@ -7,8 +7,6 @@ import (
 
 	carbon "github.com/dromara/carbon/v2"
 
-	gormlogger "gorm.io/gorm/logger"
-
 	log "github.com/goravel/framework/contracts/log"
 
 	logger "github.com/goravel/framework/contracts/database/logger"
@@ -256,53 +254,6 @@ func (_c *Logger_Panicf_Call) Return() *Logger_Panicf_Call {
 
 func (_c *Logger_Panicf_Call) RunAndReturn(run func(context.Context, string, ...interface{})) *Logger_Panicf_Call {
 	_c.Run(run)
-	return _c
-}
-
-// ToGorm provides a mock function with no fields
-func (_m *Logger) ToGorm() gormlogger.Interface {
-	ret := _m.Called()
-
-	if len(ret) == 0 {
-		panic("no return value specified for ToGorm")
-	}
-
-	var r0 gormlogger.Interface
-	if rf, ok := ret.Get(0).(func() gormlogger.Interface); ok {
-		r0 = rf()
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(gormlogger.Interface)
-		}
-	}
-
-	return r0
-}
-
-// Logger_ToGorm_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ToGorm'
-type Logger_ToGorm_Call struct {
-	*mock.Call
-}
-
-// ToGorm is a helper method to define mock.On call
-func (_e *Logger_Expecter) ToGorm() *Logger_ToGorm_Call {
-	return &Logger_ToGorm_Call{Call: _e.mock.On("ToGorm")}
-}
-
-func (_c *Logger_ToGorm_Call) Run(run func()) *Logger_ToGorm_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *Logger_ToGorm_Call) Return(_a0 gormlogger.Interface) *Logger_ToGorm_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *Logger_ToGorm_Call) RunAndReturn(run func() gormlogger.Interface) *Logger_ToGorm_Call {
-	_c.Call.Return(run)
 	return _c
 }
 

@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/spf13/cast"
+
 	"github.com/goravel/framework/contracts/config"
 	"github.com/goravel/framework/contracts/database/driver"
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
@@ -209,15 +211,57 @@ func (r *Schema) GetColumnListing(table string) []string {
 	return names
 }
 
+// rawDBColumn mirrors driver.DBColumn for the schema-column scan. The drivers
+// report Nullable and Extra with the database's own type - a bool on PostgreSQL
+// and SQL Server (`not a.attnotnull` / `col.is_nullable`), an int64 on SQLite
+// (`not "notnull"`, `hidden`) and a string on MySQL (`is_nullable`, `extra`) -
+// so they are scanned as any and coerced to the string the processor reads.
+// driver.DBColumn cannot declare that union: the released driver modules read
+// the fields as strings, so widening the contract would not compile against them.
+type rawDBColumn struct {
+	Collation     string
+	Comment       string
+	Default       string
+	Extra         any
+	Name          string
+	Nullable      any
+	Type          string
+	TypeName      string
+	Length        int
+	Places        int
+	Precision     int
+	Autoincrement bool
+	Primary       bool
+}
+
 func (r *Schema) GetColumns(table string) ([]driver.Column, error) {
-	var dbColumns []driver.DBColumn
+	var rawColumns []rawDBColumn
 	sql, err := r.grammar.CompileColumns(r.schema, table)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := r.orm.Query().Raw(sql).Scan(&dbColumns); err != nil {
+	if err := r.orm.Query().Raw(sql).Scan(&rawColumns); err != nil {
 		return nil, err
+	}
+
+	dbColumns := make([]driver.DBColumn, 0, len(rawColumns))
+	for _, raw := range rawColumns {
+		dbColumns = append(dbColumns, driver.DBColumn{
+			Autoincrement: raw.Autoincrement,
+			Collation:     raw.Collation,
+			Comment:       raw.Comment,
+			Default:       raw.Default,
+			Extra:         cast.ToString(raw.Extra),
+			Length:        raw.Length,
+			Name:          raw.Name,
+			Nullable:      cast.ToString(raw.Nullable),
+			Places:        raw.Places,
+			Precision:     raw.Precision,
+			Primary:       raw.Primary,
+			Type:          raw.Type,
+			TypeName:      raw.TypeName,
+		})
 	}
 
 	return r.processor.ProcessColumns(dbColumns), nil

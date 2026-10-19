@@ -67,6 +67,10 @@ func (r *ModelMakeCommand) Extend() command.Extend {
 				Aliases: []string{"t"},
 				Usage:   "Create the model from existing table schema",
 			},
+			&command.BoolFlag{
+				Name:  "no-table-name",
+				Usage: "Create the model without a TableName method",
+			},
 		},
 	}
 }
@@ -101,6 +105,15 @@ func (r *ModelMakeCommand) Handle(ctx console.Context) error {
 			ctx.Error(err.Error())
 			return nil
 		}
+	} else {
+		// A model must declare its own table, so generate a TableName method
+		// from the model name by default; the caller can opt out with
+		// --no-table-name when the table is declared elsewhere.
+		model.TableNameMethod = r.buildGuessedTableNameMethod(structName)
+	}
+
+	if ctx.OptionBool("no-table-name") {
+		model.TableNameMethod = ""
 	}
 
 	stubContent, err := r.populateStub(r.getStub(), m.GetPackageName(), m.GetStructName(), model)
@@ -214,6 +227,16 @@ func (r *ModelMakeCommand) buildTableNameMethod(structName, tableName string) st
 	}
 
 	return fmt.Sprintf("func (r *%s) TableName() string {\n\treturn \"%s\"\n}", structName, tableName)
+}
+
+// buildGuessedTableNameMethod returns a TableName method whose table name is
+// derived from the model name (snake case, pluralised) the way the ORM's naming
+// strategy used to. The generated comment asks the user to confirm the name,
+// because the derivation is a best guess rather than a measured table name.
+func (r *ModelMakeCommand) buildGuessedTableNameMethod(structName string) string {
+	tableName := str.Of(structName).Snake().Plural().String()
+
+	return fmt.Sprintf("// TableName returns the table name for the %s model.\n// It was derived from the model name, please confirm it matches the real table.\nfunc (r *%s) TableName() string {\n\treturn \"%s\"\n}", structName, structName, tableName)
 }
 
 func (r *ModelMakeCommand) buildField(name, goType, tags string) string {

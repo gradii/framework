@@ -1,8 +1,6 @@
 package auth
 
 import (
-	"gorm.io/gorm/clause"
-
 	contractsauth "github.com/goravel/framework/contracts/auth"
 	"github.com/goravel/framework/contracts/database/orm"
 	"github.com/goravel/framework/contracts/http"
@@ -34,6 +32,9 @@ func (r *OrmUserProvider) GetID(user any) (any, error) {
 }
 
 // RetriveByID implements auth.UserProvider.
+//
+// The id is passed as a bare value, which the ORM resolves against the model's primary key. That is
+// the same shape the relation writers use, and it keeps this package free of GORM's clause types.
 func (r *OrmUserProvider) RetriveByID(user any, id any) error {
-	return r.orm.WithContext(r.ctx).Query().FindOrFail(user, clause.Eq{Column: clause.PrimaryColumn, Value: id})
+	return r.orm.WithContext(r.ctx).Query().FindOrFail(user, id)
 }

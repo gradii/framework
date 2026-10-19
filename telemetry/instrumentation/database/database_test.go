@@ -19,10 +19,10 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 	oteltrace "go.opentelemetry.io/otel/trace"
-	"gorm.io/gorm"
 
 	contractsdatabase "github.com/goravel/framework/contracts/database"
 	contractstelemetry "github.com/goravel/framework/contracts/telemetry"
+	frameworkerrors "github.com/goravel/framework/errors"
 	mocksconfig "github.com/goravel/framework/mocks/config"
 	"github.com/goravel/framework/telemetry"
 )
@@ -237,7 +237,7 @@ func (s *InstrumentTestSuite) TestEndSpan() {
 			query:          "SELECT * FROM users",
 			table:          "users",
 			rows:           -1,
-			err:            gorm.ErrRecordNotFound,
+			err:            frameworkerrors.OrmRecordNotFound,
 			expectedName:   "SELECT users",
 			expectedStatus: codes.Unset,
 			hasCollection:  true,
@@ -398,7 +398,7 @@ func (s *InstrumentTestSuite) TestIsRecordableError() {
 		expected bool
 	}{
 		{"nil", nil, false},
-		{"record not found", gorm.ErrRecordNotFound, false},
+		{"record not found", frameworkerrors.OrmRecordNotFound, false},
 		{"no rows", sql.ErrNoRows, false},
 		{"driver skip", driver.ErrSkip, false},
 		{"eof", io.EOF, false},

@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"gorm.io/gorm"
 
 	"github.com/goravel/framework/support/carbon"
+	basedatabase "github.com/goravel/framework/support/database"
 )
 
 type Json struct {
@@ -778,22 +778,22 @@ func TestScan_ToDeletedAt(t *testing.T) {
 		name      string
 		rowData   map[string]any
 		wantValid bool
-		assertion func(t *testing.T, result gorm.DeletedAt)
+		assertion func(t *testing.T, result basedatabase.DeletedAt)
 	}{
 		{
-			name:      "convert time.Time to gorm.DeletedAt",
+			name:      "convert time.Time to a soft-delete value",
 			rowData:   map[string]any{"deleted_at": now},
 			wantValid: true,
-			assertion: func(t *testing.T, result gorm.DeletedAt) {
+			assertion: func(t *testing.T, result basedatabase.DeletedAt) {
 				assert.True(t, result.Valid)
 				assert.False(t, result.Time.IsZero())
 			},
 		},
 		{
-			name:      "convert string to gorm.DeletedAt",
+			name:      "convert string to a soft-delete value",
 			rowData:   map[string]any{"deleted_at": nowStr},
 			wantValid: true,
-			assertion: func(t *testing.T, result gorm.DeletedAt) {
+			assertion: func(t *testing.T, result basedatabase.DeletedAt) {
 				assert.True(t, result.Valid)
 				assert.False(t, result.Time.IsZero())
 			},
@@ -803,7 +803,7 @@ func TestScan_ToDeletedAt(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			type TestStruct struct {
-				DeletedAt gorm.DeletedAt
+				DeletedAt basedatabase.DeletedAt
 			}
 			row := NewRow(tt.rowData, nil)
 			var result TestStruct
@@ -1243,15 +1243,15 @@ func TestScan_ToScanner(t *testing.T) {
 			},
 		},
 		{
-			name: "scan gorm.DeletedAt with nil value",
+			name: "scan a soft-delete value with nil",
 			target: &struct {
-				DeletedAt gorm.DeletedAt
+				DeletedAt basedatabase.DeletedAt
 			}{},
 			rowData: map[string]any{"deleted_at": nil},
 			wantErr: false,
 			assertion: func(t *testing.T, target any) {
 				result := target.(*struct {
-					DeletedAt gorm.DeletedAt
+					DeletedAt basedatabase.DeletedAt
 				})
 				assert.False(t, result.DeletedAt.Valid)
 			},
@@ -1389,15 +1389,15 @@ func TestScan_ToScanner(t *testing.T) {
 			},
 		},
 		{
-			name: "gorm.DeletedAt should skip ToScannerHookFunc",
+			name: "a soft-delete value should skip ToScannerHookFunc",
 			target: &struct {
-				DeletedAt gorm.DeletedAt
+				DeletedAt basedatabase.DeletedAt
 			}{},
 			rowData: map[string]any{"deleted_at": now.Format(time.RFC3339)},
 			wantErr: false,
 			assertion: func(t *testing.T, target any) {
 				result := target.(*struct {
-					DeletedAt gorm.DeletedAt
+					DeletedAt basedatabase.DeletedAt
 				})
 				// Should be handled by ToDeletedAtHookFunc, not ToScannerHookFunc
 				assert.True(t, result.DeletedAt.Valid)
@@ -1914,6 +1914,197 @@ func TestScan_ToTime(t *testing.T) {
 				if tt.assertion != nil {
 					tt.assertion(t, result)
 				}
+			}
+		})
+	}
+}
+
+func TestScan_DriverValueToFieldType(t *testing.T) {
+	tests := []struct {
+		name      string
+		target    any
+		rowData   map[string]any
+		wantErr   bool
+		assertion func(t *testing.T, result any)
+	}{
+		{
+			name:    "integer to bool",
+			target:  &struct{ Active bool }{},
+			rowData: map[string]any{"active": int64(1)},
+			assertion: func(t *testing.T, result any) {
+				assert.True(t, result.(*struct{ Active bool }).Active)
+			},
+		},
+		{
+			name:    "zero integer to bool",
+			target:  &struct{ Active bool }{},
+			rowData: map[string]any{"active": int64(0)},
+			assertion: func(t *testing.T, result any) {
+				assert.False(t, result.(*struct{ Active bool }).Active)
+			},
+		},
+		{
+			name:    "string one to bool",
+			target:  &struct{ Active bool }{},
+			rowData: map[string]any{"active": "1"},
+			assertion: func(t *testing.T, result any) {
+				assert.True(t, result.(*struct{ Active bool }).Active)
+			},
+		},
+		{
+			name:    "raw bytes zero to bool",
+			target:  &struct{ Active bool }{},
+			rowData: map[string]any{"active": []byte("0")},
+			assertion: func(t *testing.T, result any) {
+				assert.False(t, result.(*struct{ Active bool }).Active)
+			},
+		},
+		{
+			name:    "unparseable string to bool keeps the hard error",
+			target:  &struct{ Active bool }{},
+			rowData: map[string]any{"active": "not-a-bool"},
+			wantErr: true,
+		},
+		{
+			name:    "text to string",
+			target:  &struct{ Name string }{},
+			rowData: map[string]any{"name": "hello"},
+			assertion: func(t *testing.T, result any) {
+				assert.Equal(t, "hello", result.(*struct{ Name string }).Name)
+			},
+		},
+		{
+			name:    "raw driver bytes to string",
+			target:  &struct{ Name string }{},
+			rowData: map[string]any{"name": []byte("hello")},
+			assertion: func(t *testing.T, result any) {
+				assert.Equal(t, "hello", result.(*struct{ Name string }).Name)
+			},
+		},
+		{
+			name:    "integer to string keeps the hard error",
+			target:  &struct{ Name string }{},
+			rowData: map[string]any{"name": int64(42)},
+			wantErr: true,
+		},
+		{
+			name:    "bool to string keeps the hard error",
+			target:  &struct{ Name string }{},
+			rowData: map[string]any{"name": true},
+			wantErr: true,
+		},
+		{
+			name:    "raw bytes to integer",
+			target:  &struct{ ID int64 }{},
+			rowData: map[string]any{"id": []byte("7")},
+			assertion: func(t *testing.T, result any) {
+				assert.Equal(t, int64(7), result.(*struct{ ID int64 }).ID)
+			},
+		},
+		{
+			name:    "raw bytes to integer pointer",
+			target:  &struct{ ID *int64 }{},
+			rowData: map[string]any{"id": []byte("7")},
+			assertion: func(t *testing.T, result any) {
+				target := result.(*struct{ ID *int64 })
+				assert.NotNil(t, target.ID)
+				assert.Equal(t, int64(7), *target.ID)
+			},
+		},
+		{
+			name:    "raw bytes to float pointer",
+			target:  &struct{ Score *float64 }{},
+			rowData: map[string]any{"score": []byte("1.5")},
+			assertion: func(t *testing.T, result any) {
+				target := result.(*struct{ Score *float64 })
+				assert.NotNil(t, target.Score)
+				assert.Equal(t, 1.5, *target.Score)
+			},
+		},
+		{
+			name:    "integral float to integer",
+			target:  &struct{ ID int64 }{},
+			rowData: map[string]any{"id": 7.0},
+			assertion: func(t *testing.T, result any) {
+				assert.Equal(t, int64(7), result.(*struct{ ID int64 }).ID)
+			},
+		},
+		{
+			name:    "fractional float to integer keeps the hard error",
+			target:  &struct{ ID int64 }{},
+			rowData: map[string]any{"id": 1.9},
+			wantErr: true,
+		},
+		{
+			name:    "fractional float to unsigned keeps the hard error",
+			target:  &struct{ ID uint64 }{},
+			rowData: map[string]any{"id": 1.9},
+			wantErr: true,
+		},
+		{
+			name:    "negative fractional float to unsigned keeps the hard error",
+			target:  &struct{ ID uint64 }{},
+			rowData: map[string]any{"id": -1.5},
+			wantErr: true,
+		},
+		{
+			name:    "decimal bytes to byte",
+			target:  &struct{ Status uint8 }{},
+			rowData: map[string]any{"status": []byte("7")},
+			assertion: func(t *testing.T, result any) {
+				assert.Equal(t, uint8(7), result.(*struct{ Status uint8 }).Status)
+			},
+		},
+		{
+			name:    "binary bytes to byte keeps the hard error",
+			target:  &struct{ Status uint8 }{},
+			rowData: map[string]any{"status": []byte{0xFF}},
+			wantErr: true,
+		},
+		{
+			name:    "raw bytes json to string slice",
+			target:  &struct{ Data []string }{},
+			rowData: map[string]any{"data": []byte(`["a","b","c"]`)},
+			assertion: func(t *testing.T, result any) {
+				assert.Equal(t, []string{"a", "b", "c"}, result.(*struct{ Data []string }).Data)
+			},
+		},
+		{
+			name:    "raw bytes json to map",
+			target:  &struct{ Data map[string]any }{},
+			rowData: map[string]any{"data": []byte(`{"int":1}`)},
+			assertion: func(t *testing.T, result any) {
+				assert.Equal(t, map[string]any{"int": float64(1)}, result.(*struct{ Data map[string]any }).Data)
+			},
+		},
+		{
+			name:    "raw bytes stay raw bytes",
+			target:  &struct{ Data []byte }{},
+			rowData: map[string]any{"data": []byte("raw")},
+			assertion: func(t *testing.T, result any) {
+				assert.Equal(t, []byte("raw"), result.(*struct{ Data []byte }).Data)
+			},
+		},
+		{
+			name:    "integer to map keeps the hard error",
+			target:  &struct{ Data map[string]any }{},
+			rowData: map[string]any{"data": int64(1)},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := NewRow(tt.rowData, nil).Scan(tt.target)
+			if tt.wantErr {
+				assert.Error(t, err)
+
+				return
+			}
+
+			assert.NoError(t, err)
+			if tt.assertion != nil {
+				tt.assertion(t, tt.target)
 			}
 		})
 	}

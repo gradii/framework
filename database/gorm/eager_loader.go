@@ -2,15 +2,15 @@ package gorm
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"reflect"
 	"slices"
 	"strings"
 
 	"github.com/samber/lo"
-	gormio "gorm.io/gorm"
-	gormschema "gorm.io/gorm/schema"
 
+	contractsdriver "github.com/goravel/framework/contracts/database/driver"
 	"github.com/goravel/framework/database/orm/morphmap"
 	"github.com/goravel/framework/errors"
 )
@@ -97,7 +97,7 @@ func (r *Query) loadHasOneOrMany(parents []reflect.Value, parentModel any, desc 
 		return errors.OrmRelationUnsupported.Args(entry.relation, "", "no references")
 	}
 	ref := desc.references[0]
-	parentSchema, err := parseGormSchema(r.instance, parentModel)
+	parentSchema, err := parseSchema(r.instance, parentModel)
 	if err != nil {
 		return err
 	}
@@ -111,14 +111,16 @@ func (r *Query) loadHasOneOrMany(parents []reflect.Value, parentModel any, desc 
 		return r.maybeRecurseEmpty(parents, entry.relation, isMany, nested)
 	}
 
-	rows, err := r.runChunkedRelatedQuery(keys, desc, entry, []string{ref.foreignColumn}, func(chunk []any) *gormio.DB {
-		return r.freshSession().Table(desc.relatedTable).Where(fmt.Sprintf("%s.%s IN ?", quoteIdent(desc.relatedTable), quoteIdent(ref.foreignColumn)), chunk)
+	// The column is named without quotes: the compiler quotes each segment itself, and a name that
+	// arrived already quoted would be quoted a second time.
+	rows, err := r.runChunkedRelatedQueryCompiled(keys, desc, entry, []string{ref.foreignColumn}, func(chunk []any) *Query {
+		return r.relatedChild(desc.relatedTable, desc.relatedTable+"."+ref.foreignColumn, chunk)
 	})
 	if err != nil {
 		return err
 	}
 
-	relatedSchema, err := parseGormSchema(r.instance, desc.relatedModel)
+	relatedSchema, err := parseSchema(r.instance, desc.relatedModel)
 	if err != nil {
 		return err
 	}
@@ -144,7 +146,7 @@ func (r *Query) loadBelongsTo(parents []reflect.Value, parentModel any, desc *re
 		return errors.OrmRelationUnsupported.Args(entry.relation, "", "no references")
 	}
 	ref := desc.references[0]
-	parentSchema, err := parseGormSchema(r.instance, parentModel)
+	parentSchema, err := parseSchema(r.instance, parentModel)
 	if err != nil {
 		return err
 	}
@@ -160,14 +162,16 @@ func (r *Query) loadBelongsTo(parents []reflect.Value, parentModel any, desc *re
 		return r.maybeRecurseEmpty(parents, entry.relation, false, nested)
 	}
 
-	rows, err := r.runChunkedRelatedQuery(keys, desc, entry, []string{ref.primaryColumn}, func(chunk []any) *gormio.DB {
-		return r.freshSession().Table(desc.relatedTable).Where(fmt.Sprintf("%s.%s IN ?", quoteIdent(desc.relatedTable), quoteIdent(ref.primaryColumn)), chunk)
+	// The column is named without quotes: the compiler quotes each segment itself, and a name that
+	// arrived already quoted would be quoted a second time.
+	rows, err := r.runChunkedRelatedQueryCompiled(keys, desc, entry, []string{ref.primaryColumn}, func(chunk []any) *Query {
+		return r.relatedChild(desc.relatedTable, desc.relatedTable+"."+ref.primaryColumn, chunk)
 	})
 	if err != nil {
 		return err
 	}
 
-	relatedSchema, err := parseGormSchema(r.instance, desc.relatedModel)
+	relatedSchema, err := parseSchema(r.instance, desc.relatedModel)
 	if err != nil {
 		return err
 	}
@@ -193,7 +197,7 @@ func (r *Query) loadMorph(parents []reflect.Value, parentModel any, desc *relati
 		return errors.OrmRelationUnsupported.Args(entry.relation, "", "no references")
 	}
 	ref := desc.references[0]
-	parentSchema, err := parseGormSchema(r.instance, parentModel)
+	parentSchema, err := parseSchema(r.instance, parentModel)
 	if err != nil {
 		return err
 	}
@@ -207,17 +211,19 @@ func (r *Query) loadMorph(parents []reflect.Value, parentModel any, desc *relati
 		return r.maybeRecurseEmpty(parents, entry.relation, isMany, nested)
 	}
 
-	rows, err := r.runChunkedRelatedQuery(keys, desc, entry, []string{ref.foreignColumn, desc.morphTypeColumn}, func(chunk []any) *gormio.DB {
-		return r.freshSession().
-			Table(desc.relatedTable).
-			Where(fmt.Sprintf("%s.%s IN ?", quoteIdent(desc.relatedTable), quoteIdent(ref.foreignColumn)), chunk).
-			Where(fmt.Sprintf("%s.%s = ?", quoteIdent(desc.relatedTable), quoteIdent(desc.morphTypeColumn)), desc.morphValue)
+	// The child is the related table filtered by the foreign key and by the relation's own morph
+	// value, which is what separates a MorphOne / MorphMany from the plain HasOne / HasMany it is
+	// shaped like. Both columns are named without quotes: the compiler quotes each segment itself,
+	// and a name that arrived already quoted would be quoted a second time.
+	rows, err := r.runChunkedRelatedQueryCompiled(keys, desc, entry, []string{ref.foreignColumn, desc.morphTypeColumn}, func(chunk []any) *Query {
+		return r.relatedChild(desc.relatedTable, desc.relatedTable+"."+ref.foreignColumn, chunk).
+			Where(desc.relatedTable+"."+desc.morphTypeColumn, desc.morphValue).(*Query)
 	})
 	if err != nil {
 		return err
 	}
 
-	relatedSchema, err := parseGormSchema(r.instance, desc.relatedModel)
+	relatedSchema, err := parseSchema(r.instance, desc.relatedModel)
 	if err != nil {
 		return err
 	}
@@ -243,7 +249,7 @@ func (r *Query) loadMorph(parents []reflect.Value, parentModel any, desc *relati
 // row from the value of the *_type column. Parents are bucketed by morph type, and each bucket
 // runs an IN query against its resolved table.
 func (r *Query) loadMorphTo(parents []reflect.Value, parentModel any, desc *relationDescriptor, entry eagerLoadEntry, nested []eagerLoadEntry) error {
-	parentSchema, err := parseGormSchema(r.instance, parentModel)
+	parentSchema, err := parseSchema(r.instance, parentModel)
 	if err != nil {
 		return err
 	}
@@ -315,7 +321,7 @@ func (r *Query) loadMorphTo(parents []reflect.Value, parentModel any, desc *rela
 		if terr != nil {
 			return terr
 		}
-		// Make a per-bucket descriptor so runChunkedRelatedQuery's user-callback gets a
+		// Make a per-bucket descriptor so the compiled runner's user-callback gets a
 		// related-shaped query.
 		bucketDesc := &relationDescriptor{
 			kind:         relKindBelongsTo, // BelongsTo-shaped: WHERE related.<owner_key> IN ?
@@ -329,17 +335,18 @@ func (r *Query) loadMorphTo(parents []reflect.Value, parentModel any, desc *rela
 			ownerKey = "id"
 		}
 
-		rows, qerr := r.runChunkedRelatedQuery(b.keys, bucketDesc, entry, []string{ownerKey}, func(chunk []any) *gormio.DB {
-			return r.freshSession().
-				Table(relatedTable).
-				Where(fmt.Sprintf("%s.%s IN ?", quoteIdent(relatedTable), quoteIdent(ownerKey)), chunk)
+		// The bucket's rows are matched on the owner key and are named the way a caller writes a
+		// column: unquoted, with the related table qualifying it, because the compiler quotes each
+		// segment itself.
+		rows, qerr := r.runChunkedRelatedQueryCompiled(b.keys, bucketDesc, entry, []string{ownerKey}, func(chunk []any) *Query {
+			return r.relatedChild(relatedTable, relatedTable+"."+ownerKey, chunk)
 		})
 		if qerr != nil {
 			return qerr
 		}
 		allRows = append(allRows, rows...)
 
-		relatedSchema, perr := parseGormSchema(r.instance, sample)
+		relatedSchema, perr := parseSchema(r.instance, sample)
 		if perr != nil {
 			return perr
 		}
@@ -387,10 +394,11 @@ func (r *Query) loadMorphTo(parents []reflect.Value, parentModel any, desc *rela
 	return r.recurseNested(allRows, nested)
 }
 
-// loadMany2Many eager-loads a regular many-to-many relation through a pivot table whose schema
-// is described by GORM's parsed metadata.
+// loadMany2Many eager-loads a regular many-to-many relation through a pivot table. The pivot rows
+// and the related rows are both read through statements this package compiles itself, and the
+// pivot schema the loader matches against comes from the relation descriptor.
 func (r *Query) loadMany2Many(parents []reflect.Value, parentModel any, desc *relationDescriptor, entry eagerLoadEntry, nested []eagerLoadEntry) error {
-	parentSchema, err := parseGormSchema(r.instance, parentModel)
+	parentSchema, err := parseSchema(r.instance, parentModel)
 	if err != nil {
 		return err
 	}
@@ -407,10 +415,10 @@ func (r *Query) loadMany2Many(parents []reflect.Value, parentModel any, desc *re
 	pivotParentCol := desc.pivotParentRef.foreignColumn
 	pivotRelatedCol := desc.pivotRelatedRef.foreignColumn
 
-	// Check if the related model has a Pivot field — if yes, we'll SELECT extra pivot columns
-	// using the desc.pivotUsing struct schema. struct-only: when desc.pivotUsing is nil, no pivot
-	// hydration happens regardless of whether the related model has a Pivot field.
-	relatedSchema, err := parseGormSchema(r.instance, desc.relatedModel)
+	// The related model's Pivot field, when it declares one, contributes extra pivot columns to the
+	// SELECT through the hydration plan. Struct-only: when the related model has no field by
+	// desc.pivotField, no pivot hydration happens.
+	relatedSchema, err := parseSchema(r.instance, desc.relatedModel)
 	if err != nil {
 		return err
 	}
@@ -419,25 +427,18 @@ func (r *Query) loadMany2Many(parents []reflect.Value, parentModel any, desc *re
 		return err
 	}
 
-	// Build the pivot SELECT list: always include the two FK columns, plus the columns reported
-	// by the Using-struct hydration plan when present.
+	// Build the pivot SELECT list: always include the two FK columns, plus the columns the
+	// hydration plan reports when the related model declares a Pivot field.
 	pivotSelectCols := []string{pivotParentCol, pivotRelatedCol}
 	if pivotPlan != nil {
 		pivotSelectCols = append(pivotSelectCols, pivotPlan.extraColumns...)
 	}
 
-	// Convert []string to []any for GORM's Select signature.
-	selectArgs := make([]any, len(pivotSelectCols))
-	for i, col := range pivotSelectCols {
-		selectArgs[i] = col
-	}
-
-	pivotRows, err := r.chunkedFindMaps(keys, func(chunk []any) *gormio.DB {
-		q := r.freshSession().
-			Table(desc.pivotTable).
-			Select(selectArgs[0], selectArgs[1:]...).
-			Where(fmt.Sprintf("%s.%s IN ?", quoteIdent(desc.pivotTable), quoteIdent(pivotParentCol)), chunk)
-		return applyOnPivotQuery(q, desc)
+	// The pivot rows are read through the compiled path: the child names the pivot table and the FK
+	// columns the way a caller writes them — unquoted, with the table qualifying the IN column — and
+	// the helper threads the descriptor's OnPivotQuery in before the statement is compiled.
+	pivotRows, err := r.runChunkedPivotQueryCompiled(keys, desc, func(chunk []any) *Query {
+		return r.pivotChild(desc.pivotTable, desc.pivotTable+"."+pivotParentCol, chunk, pivotSelectCols)
 	})
 	if err != nil {
 		return err
@@ -458,10 +459,8 @@ func (r *Query) loadMany2Many(parents []reflect.Value, parentModel any, desc *re
 		relatedKeys = append(relatedKeys, v)
 	}
 
-	rows, err := r.runChunkedRelatedQuery(relatedKeys, desc, entry, []string{desc.pivotRelatedRef.primaryColumn}, func(chunk []any) *gormio.DB {
-		return r.freshSession().
-			Table(desc.relatedTable).
-			Where(fmt.Sprintf("%s.%s IN ?", quoteIdent(desc.relatedTable), quoteIdent(desc.pivotRelatedRef.primaryColumn)), chunk)
+	rows, err := r.runChunkedRelatedQueryCompiled(relatedKeys, desc, entry, []string{desc.pivotRelatedRef.primaryColumn}, func(chunk []any) *Query {
+		return r.relatedChild(desc.relatedTable, desc.relatedTable+"."+desc.pivotRelatedRef.primaryColumn, chunk)
 	})
 	if err != nil {
 		return err
@@ -523,7 +522,7 @@ func (r *Query) loadMany2Many(parents []reflect.Value, parentModel any, desc *re
 // MorphedByMany (inverse) share this code path; the difference between them is captured in
 // desc.morphValue at descriptor-build time.
 func (r *Query) loadMorphToMany(parents []reflect.Value, parentModel any, desc *relationDescriptor, entry eagerLoadEntry, nested []eagerLoadEntry) error {
-	parentSchema, err := parseGormSchema(r.instance, parentModel)
+	parentSchema, err := parseSchema(r.instance, parentModel)
 	if err != nil {
 		return err
 	}
@@ -543,7 +542,7 @@ func (r *Query) loadMorphToMany(parents []reflect.Value, parentModel any, desc *
 	// Check if the related model has a Pivot field — if yes, we'll SELECT extra pivot columns
 	// using the desc.pivotUsing struct schema. struct-only: when desc.pivotUsing is nil, no pivot
 	// hydration happens regardless of whether the related model has a Pivot field.
-	relatedSchema, err := parseGormSchema(r.instance, desc.relatedModel)
+	relatedSchema, err := parseSchema(r.instance, desc.relatedModel)
 	if err != nil {
 		return err
 	}
@@ -559,19 +558,14 @@ func (r *Query) loadMorphToMany(parents []reflect.Value, parentModel any, desc *
 		pivotSelectCols = append(pivotSelectCols, pivotPlan.extraColumns...)
 	}
 
-	// Convert []string to []any for GORM's Select signature.
-	selectArgs := make([]any, len(pivotSelectCols))
-	for i, col := range pivotSelectCols {
-		selectArgs[i] = col
-	}
-
-	pivotRows, err := r.chunkedFindMaps(keys, func(chunk []any) *gormio.DB {
-		q := r.freshSession().
-			Table(desc.pivotTable).
-			Select(selectArgs[0], selectArgs[1:]...).
-			Where(fmt.Sprintf("%s.%s IN ?", quoteIdent(desc.pivotTable), quoteIdent(pivotParentCol)), chunk).
-			Where(fmt.Sprintf("%s.%s = ?", quoteIdent(desc.pivotTable), quoteIdent(desc.morphTypeColumn)), desc.morphValue)
-		return applyOnPivotQuery(q, desc)
+	// The pivot rows are read through the compiled path. The child names the pivot table and the
+	// parent FK column the way a caller writes them — unquoted, with the table qualifying the IN
+	// column — and carries the morph-type predicate that separates a MorphToMany pivot read from a
+	// plain Many2Many one. The helper threads the descriptor's OnPivotQuery in before the statement
+	// is compiled, so the per-relation pivot scope reaches this read too.
+	pivotRows, err := r.runChunkedPivotQueryCompiled(keys, desc, func(chunk []any) *Query {
+		return r.pivotChild(desc.pivotTable, desc.pivotTable+"."+pivotParentCol, chunk, pivotSelectCols).
+			Where(desc.pivotTable+"."+desc.morphTypeColumn, desc.morphValue).(*Query)
 	})
 	if err != nil {
 		return err
@@ -592,10 +586,8 @@ func (r *Query) loadMorphToMany(parents []reflect.Value, parentModel any, desc *
 		relatedKeys = append(relatedKeys, v)
 	}
 
-	rows, err := r.runChunkedRelatedQuery(relatedKeys, desc, entry, []string{desc.pivotRelatedRef.primaryColumn}, func(chunk []any) *gormio.DB {
-		return r.freshSession().
-			Table(desc.relatedTable).
-			Where(fmt.Sprintf("%s.%s IN ?", quoteIdent(desc.relatedTable), quoteIdent(desc.pivotRelatedRef.primaryColumn)), chunk)
+	rows, err := r.runChunkedRelatedQueryCompiled(relatedKeys, desc, entry, []string{desc.pivotRelatedRef.primaryColumn}, func(chunk []any) *Query {
+		return r.relatedChild(desc.relatedTable, desc.relatedTable+"."+desc.pivotRelatedRef.primaryColumn, chunk)
 	})
 	if err != nil {
 		return err
@@ -649,7 +641,7 @@ func (r *Query) loadMorphToMany(parents []reflect.Value, parentModel any, desc *
 }
 
 func (r *Query) loadThrough(parents []reflect.Value, parentModel any, desc *relationDescriptor, entry eagerLoadEntry, nested []eagerLoadEntry, isMany bool) error {
-	parentSchema, err := parseGormSchema(r.instance, parentModel)
+	parentSchema, err := parseSchema(r.instance, parentModel)
 	if err != nil {
 		return err
 	}
@@ -663,11 +655,13 @@ func (r *Query) loadThrough(parents []reflect.Value, parentModel any, desc *rela
 		return r.maybeRecurseEmpty(parents, entry.relation, isMany, nested)
 	}
 
-	throughRows, err := r.chunkedFindMaps(keys, func(chunk []any) *gormio.DB {
-		return r.freshSession().
-			Table(desc.throughTable).
-			Select(desc.firstKey, desc.secondLocalKey).
-			Where(fmt.Sprintf("%s.%s IN ?", quoteIdent(desc.throughTable), quoteIdent(desc.firstKey)), chunk)
+	// The through rows are read through the compiled path, like the pivot reads the other loaders
+	// use: the child names the through table and the parent FK column the way a caller writes them —
+	// unquoted, with the table qualifying the IN column — and keeps the two key columns bare in the
+	// SELECT list, so the returned map stays keyed by the names the hydration loop indexes.
+	throughRows, err := r.runChunkedPivotQueryCompiled(keys, desc, func(chunk []any) *Query {
+		return r.pivotChild(desc.throughTable, desc.throughTable+"."+desc.firstKey, chunk,
+			[]string{desc.firstKey, desc.secondLocalKey})
 	})
 	if err != nil {
 		return err
@@ -688,16 +682,14 @@ func (r *Query) loadThrough(parents []reflect.Value, parentModel any, desc *rela
 		secondKeys = append(secondKeys, v)
 	}
 
-	rows, err := r.runChunkedRelatedQuery(secondKeys, desc, entry, []string{desc.secondKey}, func(chunk []any) *gormio.DB {
-		return r.freshSession().
-			Table(desc.relatedTable).
-			Where(fmt.Sprintf("%s.%s IN ?", quoteIdent(desc.relatedTable), quoteIdent(desc.secondKey)), chunk)
+	rows, err := r.runChunkedRelatedQueryCompiled(secondKeys, desc, entry, []string{desc.secondKey}, func(chunk []any) *Query {
+		return r.relatedChild(desc.relatedTable, desc.relatedTable+"."+desc.secondKey, chunk)
 	})
 	if err != nil {
 		return err
 	}
 
-	relatedSchema, err := parseGormSchema(r.instance, desc.relatedModel)
+	relatedSchema, err := parseSchema(r.instance, desc.relatedModel)
 	if err != nil {
 		return err
 	}
@@ -731,34 +723,38 @@ func (r *Query) loadThrough(parents []reflect.Value, parentModel any, desc *rela
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-// runRelatedQuery applies the user's callback and column pruning to the inner builder, executes
-// it, and returns the result rows as []reflect.Value where each value is a *RelatedModel.
+// runRelatedQueryCompiled runs one related query that this package compiles itself.
 //
-// requiredCols are columns the loader needs back (FK columns, PK columns) to build dictionaries;
-// they are appended to the user's prune list when not already present so the caller does not have
-// to remember to include them.
-func (r *Query) runRelatedQuery(inner *gormio.DB, desc *relationDescriptor, entry eagerLoadEntry, requiredCols []string) ([]reflect.Value, error) {
-	// Apply the per-relation default scope first so callers can layer extra constraints on top
-	// via With("Books", func(q) { ... }).
+// The loader used to hand GORM a statement per chunk; the statement is compiled and run here instead,
+// through the same path the rest of the ORM reads with. The child addresses a table without a model of
+// its own, which is what the statement it replaced did, so a related model's global scopes do not apply
+// to an eager load — that is a question of its own, not part of this migration.
+func (r *Query) runRelatedQueryCompiled(child *Query, desc *relationDescriptor, entry eagerLoadEntry, requiredCols []string) ([]reflect.Value, error) {
+	// The relation's own scope applies first, and the caller's callback layers on top of it.
 	if desc.onQuery != nil {
-		wrapper := r.wrap(inner)
-		wrapped := desc.onQuery(wrapper)
-		if w, ok := wrapped.(*Query); ok {
-			inner = w.buildConditions().instance
+		if scoped, ok := desc.onQuery(child).(*Query); ok {
+			child = scoped
 		}
 	}
-	var oneOfMany *oneOfManyConfig
 	if entry.callback != nil {
-		wrapper := r.wrap(inner)
-		wrapped := entry.callback(wrapper)
-		if w, ok := wrapped.(*Query); ok {
-			oneOfMany = w.conditions.oneOfMany
-			inner = w.buildConditions().instance
+		if scoped, ok := entry.callback(child).(*Query); ok {
+			child = scoped
 		}
 	}
-	if oneOfMany != nil {
-		inner = r.applyOneOfManyJoin(inner, desc, oneOfMany)
+
+	// OfMany asks for one row per parent, which is a join against a grouped subquery.
+	if child.conditions.oneOfMany != nil {
+		join, args, err := r.oneOfManyJoin(desc, child.conditions.oneOfMany)
+		if err != nil {
+			return nil, err
+		}
+		if join != "" {
+			conditions := child.conditions
+			conditions.join = append(conditions.join, contractsdriver.Join{Query: join, Args: args})
+			child = child.setConditions(conditions)
+		}
 	}
+
 	if len(entry.columns) > 0 {
 		cols := append([]string(nil), entry.columns...)
 		for _, req := range requiredCols {
@@ -772,65 +768,183 @@ func (r *Query) runRelatedQuery(inner *gormio.DB, desc *relationDescriptor, entr
 				cols = append(cols, req)
 			}
 		}
-		inner = inner.Select(cols)
+
+		conditions := child.conditions
+		conditions.selectColumns = cols
+		child = child.setConditions(conditions)
 	}
 
-	relatedType := reflect.TypeOf(desc.relatedModel)
-	if relatedType.Kind() == reflect.Pointer {
-		relatedType = relatedType.Elem()
-	}
-	sliceType := reflect.SliceOf(reflect.PointerTo(relatedType))
-	slicePtr := reflect.New(sliceType)
-	if err := inner.Find(slicePtr.Interface()).Error; err != nil {
+	statement, bindings, err := child.compileSelect()
+	if err != nil {
 		return nil, err
 	}
+
+	rows, err := child.queryRows(statement, bindings)
+	if err != nil {
+		return nil, err
+	}
+	defer errors.Ignore(rows.Close)
+
+	relatedType := indirectStructType(reflect.TypeOf(desc.relatedModel))
+	if relatedType == nil {
+		return nil, errors.OrmRelationUnsupported.Args(desc.name, desc.parentTable, "no related model")
+	}
+
+	slicePtr := reflect.New(reflect.SliceOf(reflect.PointerTo(relatedType)))
+	if _, err := child.scanRows(rows, slicePtr.Interface()); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+
 	slice := slicePtr.Elem()
 	out := make([]reflect.Value, 0, slice.Len())
 	for i := 0; i < slice.Len(); i++ {
 		out = append(out, slice.Index(i))
 	}
+
 	return out, nil
 }
 
-// runChunkedRelatedQuery runs runRelatedQuery once per chunk of keys and concatenates rows. Each
-// chunk gets a freshly built inner query from buildInner so the user's callback / column pruning
-// is applied per-chunk.
-//
-// Note: when entry.callback installs a LIMIT, that LIMIT applies *per chunk*, not globally —
-// same semantics as Eloquent's chunkById iteration and unavoidable for any chunked IN approach.
-func (r *Query) runChunkedRelatedQuery(keys []any, desc *relationDescriptor, entry eagerLoadEntry, requiredCols []string, buildInner func(chunk []any) *gormio.DB) ([]reflect.Value, error) {
+// runChunkedRelatedQueryCompiled runs runRelatedQueryCompiled once per chunk of keys and concatenates
+// rows, so a callback's constraints and the column pruning are applied per chunk.
+func (r *Query) runChunkedRelatedQueryCompiled(keys []any, desc *relationDescriptor, entry eagerLoadEntry, requiredCols []string, buildChild func(chunk []any) *Query) ([]reflect.Value, error) {
 	chunks := chunkKeys(keys, r.chunkSize())
 	var all []reflect.Value
 	for _, chunk := range chunks {
-		rows, err := r.runRelatedQuery(buildInner(chunk), desc, entry, requiredCols)
+		rows, err := r.runRelatedQueryCompiled(buildChild(chunk), desc, entry, requiredCols)
 		if err != nil {
 			return nil, err
 		}
 		all = append(all, rows...)
 	}
+
 	return all, nil
 }
 
-// chunkedFindMaps runs the pivot / through intermediate query in chunks of keys and accumulates
-// results into a single []map[string]any. Used by loadMany2Many and loadThrough for the lookup
-// queries that don't go through runRelatedQuery.
-func (r *Query) chunkedFindMaps(keys []any, buildQuery func(chunk []any) *gormio.DB) ([]map[string]any, error) {
+// oneOfManyJoin renders the join an OfMany callback asks for: a grouped subquery holding the
+// per-parent aggregate, so only the row reaching it is kept. It returns the UNKEYED join fragment —
+// "(sub) alias ON ..." with no join keyword — because conditions.join is rendered with a keyword
+// prefix appended (see the loop in compileFrom over conditions.join, which calls JoinRaw(..., "inner")).
+// Carrying an "INNER JOIN " prefix here would render the keyword twice.
+func (r *Query) oneOfManyJoin(desc *relationDescriptor, cfg *oneOfManyConfig) (string, []any, error) {
+	if cfg == nil || len(desc.references) == 0 {
+		return "", nil, nil
+	}
+
+	switch desc.kind {
+	case relKindHasOne, relKindMorphOne:
+	default:
+		// Ignored on unsupported kinds rather than erroring, so a generic with-callback that calls
+		// LatestOfMany does not break unrelated relations downstream.
+		return "", nil, nil
+	}
+
+	ref := desc.references[0]
+	relatedTable := desc.relatedTable
+	const alias = "goravel_one_of_many"
+
+	groupCols := []string{r.ident(relatedTable, ref.foreignColumn)}
+	selectCols := []string{
+		cfg.aggregate + "(" + r.ident(relatedTable, cfg.column) + ") AS aggregate",
+		r.ident(relatedTable, ref.foreignColumn),
+	}
+	if desc.kind == relKindMorphOne {
+		groupCols = append(groupCols, r.ident(relatedTable, desc.morphTypeColumn))
+		selectCols = append(selectCols, r.ident(relatedTable, desc.morphTypeColumn))
+	}
+
+	sub := r.subqueryBuilder(relatedTable)
+	sub.SelectRaw(strings.Join(selectCols, ", "), nil)
+	sub.GroupByRaw(strings.Join(groupCols, ", "), nil)
+	subStatement, subArgs := sub.ToSelectSQL()
+
+	on := []string{
+		r.ident(relatedTable, cfg.column) + " = " + alias + ".aggregate",
+		r.ident(relatedTable, ref.foreignColumn) + " = " + alias + "." + r.ident(ref.foreignColumn),
+	}
+	if desc.kind == relKindMorphOne {
+		on = append(on, r.ident(relatedTable, desc.morphTypeColumn)+" = "+
+			alias+"."+r.ident(desc.morphTypeColumn))
+	}
+
+	return fmt.Sprintf("(%s) %s ON %s", subStatement, alias, strings.Join(on, " AND ")), subArgs, nil
+}
+
+// pivotChild returns the child query a many-to-many loader reads its pivot rows with: one pivot
+// table, a select list, and the pivot's parent key matched against the chunk.
+//
+// It is relatedChild for a table that carries no model of its own: the bare table name is stored the
+// same way a related child stores its model's table, and the grammar applies the connection prefix
+// once when the statement is rendered. The select list keeps the bare column names the pivot table
+// declares, because the rows come back as a column-named map that the hydration loop indexes by
+// those names.
+func (r *Query) pivotChild(table string, column string, values []any, columns []string) *Query {
+	child := r.relatedChild(table, column, values)
+
+	conditions := child.conditions
+	conditions.selectColumns = columns
+
+	return child.setConditions(conditions)
+}
+
+// runChunkedPivotQueryCompiled runs the pivot-table read once per chunk of keys and accumulates the
+// rows into a single []map[string]any, keyed by column name. It is the reader the loaders call:
+// the pivot and through reads are compiled here instead of being handed to GORM.
+func (r *Query) runChunkedPivotQueryCompiled(keys []any, desc *relationDescriptor, buildChild func(chunk []any) *Query) ([]map[string]any, error) {
 	chunks := chunkKeys(keys, r.chunkSize())
 	var all []map[string]any
 	for _, chunk := range chunks {
-		var rows []map[string]any
-		if err := buildQuery(chunk).Find(&rows).Error; err != nil {
+		rows, err := r.findMapsCompiled(buildChild(chunk), desc)
+		if err != nil {
 			return nil, err
 		}
+
 		all = append(all, rows...)
 	}
+
 	return all, nil
+}
+
+// findMapsCompiled compiles one pivot child and reads its rows into column-keyed maps. The
+// descriptor's OnPivotQuery is applied first, so the per-relation pivot scope reaches every pivot
+// read without the loader restating it.
+func (r *Query) findMapsCompiled(child *Query, desc *relationDescriptor) ([]map[string]any, error) {
+	if scoped, ok := applyOnPivotQueryToQuery(r.queryGrammar, child, desc).(*Query); ok {
+		child = scoped
+	}
+
+	statement, bindings, err := child.compileSelect()
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := child.queryRows(statement, bindings)
+	if err != nil {
+		return nil, err
+	}
+	defer errors.Ignore(rows.Close)
+
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+
+	var out []map[string]any
+	for rows.Next() {
+		row, err := scanRowMap(rows, columns)
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, row)
+	}
+
+	return out, rows.Err()
 }
 
 // assignToParents writes the dictionary entries onto each parent's relation field using
 // setRelationField. When isMany is false and a parent has multiple matches, only the first one is
 // assigned (HasOne / BelongsTo / MorphOne / HasOneThrough cases).
-func (r *Query) assignToParents(parents []reflect.Value, parentField *gormschema.Field, relation string, dict map[string][]reflect.Value, isMany bool) error {
+func (r *Query) assignToParents(parents []reflect.Value, parentField *schemaField, relation string, dict map[string][]reflect.Value, isMany bool) error {
 	for _, parent := range parents {
 		val, zero := parentField.ValueOf(r.ctx, parent)
 		if zero {
@@ -925,16 +1039,8 @@ func newSampleModel(parent reflect.Value) any {
 	return reflect.New(t).Interface()
 }
 
-func parseGormSchema(db *gormio.DB, model any) (*gormschema.Schema, error) {
-	stmt := &gormio.Statement{DB: db}
-	if err := stmt.Parse(model); err != nil {
-		return nil, err
-	}
-	return stmt.Schema, nil
-}
-
 // extractKeys pulls the unique non-zero values of field from the parent slice.
-func extractKeys(r *Query, parents []reflect.Value, field *gormschema.Field) []any {
+func extractKeys(r *Query, parents []reflect.Value, field *schemaField) []any {
 	seen := make(map[string]struct{}, len(parents))
 	out := make([]any, 0, len(parents))
 	for _, parent := range parents {
@@ -1077,9 +1183,9 @@ type pivotHydrationPlan struct {
 	// extraColumns is the pivot SELECT list contributed by the pivot struct (every db-tagged
 	// field's column name), not including the two FK columns which loadMany2Many always selects.
 	extraColumns []string
-	// fieldByColumn maps each db column name to the *gormschema.Field that owns it on the pivot
+	// fieldByColumn maps each db column name to the *schemaField that owns it on the pivot
 	// struct. Used by writePivotField to set struct fields from the SELECT row.
-	fieldByColumn map[string]*gormschema.Field
+	fieldByColumn map[string]*schemaField
 }
 
 // preparePivotHydration inspects the related model for a field named desc.pivotField. When found,
@@ -1106,12 +1212,12 @@ func preparePivotHydration(r *Query, desc *relationDescriptor) (*pivotHydrationP
 		)
 	}
 	// Parse the field type's GORM schema by instantiating a zero value of it.
-	usingSchema, err := parseGormSchema(r.instance, reflect.New(pivotStructField.Type).Interface())
+	usingSchema, err := parseSchema(r.instance, reflect.New(pivotStructField.Type).Interface())
 	if err != nil {
 		return nil, err
 	}
 	cols := make([]string, 0, len(usingSchema.Fields))
-	byCol := make(map[string]*gormschema.Field, len(usingSchema.Fields))
+	byCol := make(map[string]*schemaField, len(usingSchema.Fields))
 	for _, f := range usingSchema.Fields {
 		if f.DBName == "" {
 			continue
@@ -1146,7 +1252,7 @@ func cloneRelatedRow(rv reflect.Value) reflect.Value {
 }
 
 // writePivotField copies the column values in data into rv's pivot struct field (named
-// plan.fieldName), using plan.fieldByColumn to resolve column names to *gormschema.Fields on the
+// plan.fieldName), using plan.fieldByColumn to resolve column names to *schemaFields on the
 // pivot struct. Caller guarantees plan is non-nil.
 func writePivotField(ctx context.Context, rv reflect.Value, data map[string]any, plan *pivotHydrationPlan) error {
 	if rv.Kind() == reflect.Pointer {

@@ -32,7 +32,7 @@ func (s *FactoryTestSuite) SetupTest() {
 func (s *FactoryTestSuite) TestTimes() {
 	var user []User
 	s.Nil(s.factory.Count(2).Make(&user))
-	s.True(len(user) == 2)
+	s.Require().True(len(user) == 2)
 	s.True(len(user[0].Name) > 0)
 	s.True(len(user[1].Name) > 0)
 }
@@ -40,7 +40,7 @@ func (s *FactoryTestSuite) TestTimes() {
 func (s *FactoryTestSuite) TestCreate() {
 	var user []User
 	s.Nil(s.factory.Create(&user))
-	s.True(len(user) == 1)
+	s.Require().True(len(user) == 1)
 	s.True(user[0].ID > 0)
 	s.True(len(user[0].Name) > 0)
 	s.True(len(user[0].Avatar) > 0)
@@ -67,7 +67,7 @@ func (s *FactoryTestSuite) TestCreate() {
 
 	var user3 []User
 	s.Nil(s.factory.Count(2).Create(&user3))
-	s.True(len(user3) == 2)
+	s.Require().True(len(user3) == 2)
 	s.True(user3[0].ID > 0)
 	s.True(user3[1].ID > 0)
 	s.True(len(user3[0].Name) > 0)
@@ -77,7 +77,7 @@ func (s *FactoryTestSuite) TestCreate() {
 func (s *FactoryTestSuite) TestCreateQuietly() {
 	var user []User
 	s.Nil(s.factory.CreateQuietly(&user))
-	s.True(len(user) == 1)
+	s.Require().True(len(user) == 1)
 	s.True(user[0].ID > 0)
 	s.True(len(user[0].Name) > 0)
 	s.True(len(user[0].Avatar) > 0)
@@ -104,7 +104,7 @@ func (s *FactoryTestSuite) TestCreateQuietly() {
 
 	var user3 []User
 	s.Nil(s.factory.Count(2).CreateQuietly(&user3))
-	s.True(len(user3) == 2)
+	s.Require().True(len(user3) == 2)
 	s.True(user3[0].ID > 0)
 	s.True(user3[1].ID > 0)
 	s.True(len(user3[0].Name) > 0)
@@ -132,7 +132,7 @@ func (s *FactoryTestSuite) TestMake() {
 
 	var users []User
 	s.Nil(s.factory.Make(&users))
-	s.True(len(users) == 1)
+	s.Require().True(len(users) == 1)
 	s.True(users[0].ID == 0)
 	s.True(len(users[0].Name) > 0)
 	s.True(len(users[0].Avatar) > 0)

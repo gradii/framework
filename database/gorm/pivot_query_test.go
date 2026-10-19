@@ -5,102 +5,98 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	gormio "gorm.io/gorm"
 
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
 )
 
-// dryRunPivotSQL renders the SQL emitted by a SELECT 1 FROM <table> ... query that pq has
-// already mutated, so test cases can assert on exact WHERE-clause shape.
-func dryRunPivotSQL(t *testing.T, db *gormio.DB, table string) string {
+// pivotScopedQuery returns a base query addressed at table and wrapped by the builder-level twin of
+// the retired gorm chain, so its Where* predicates compile through the same path production uses.
+func pivotScopedQuery(t *testing.T, table string) *queryPivotQuery {
 	t.Helper()
-	stmt := db.Session(&gormio.Session{DryRun: true}).Table(table).Find(&[]map[string]any{})
-	return stmt.Statement.SQL.String()
+	base := newRelQueryWith(t, &relUser{}).Table(table).(*Query)
+
+	return newQueryPivotQuery(base.queryGrammar, base, table)
 }
 
-func TestPivotQuery_Where_TwoArgs_DefaultsToEqual(t *testing.T) {
-	db := newStubGormDB(t)
-	pq := newPivotQuery(db.Table("rel_user_roles"), "rel_user_roles")
+func TestQueryPivotQuery_Where_TwoArgs_DefaultsToEqual(t *testing.T) {
+	pq := pivotScopedQuery(t, "rel_user_roles")
 	pq.Where("active", 1)
-	sql := dryRunPivotSQL(t, pq.db, "rel_user_roles")
-	assert.Contains(t, sql, "rel_user_roles.active = ?")
+	sql := newRelationSQL(t, pq.q, &[]map[string]any{})
+	assert.Contains(t, sql, `"rel_user_roles"."active" = ?`)
 }
 
-func TestPivotQuery_Where_ThreeArgs_UsesOperator(t *testing.T) {
-	db := newStubGormDB(t)
-	pq := newPivotQuery(db.Table("rel_user_roles"), "rel_user_roles")
+func TestQueryPivotQuery_Where_ThreeArgs_UsesOperator(t *testing.T) {
+	pq := pivotScopedQuery(t, "rel_user_roles")
 	pq.Where("priority", ">=", 5)
-	sql := dryRunPivotSQL(t, pq.db, "rel_user_roles")
-	assert.Contains(t, sql, "rel_user_roles.priority >= ?")
+	sql := newRelationSQL(t, pq.q, &[]map[string]any{})
+	assert.Contains(t, sql, `"rel_user_roles"."priority" >= ?`)
 }
 
-func TestPivotQuery_WhereIn(t *testing.T) {
-	db := newStubGormDB(t)
-	pq := newPivotQuery(db.Table("rel_user_roles"), "rel_user_roles")
+// TestQueryPivotQuery_WhereIn pins the expanded IN list: the pivot predicate's slice argument is
+// expanded to one placeholder per value, matching the gorm chain this port replaced. Binding the
+// slice whole to the fragment's single "?" left one placeholder against N bindings.
+func TestQueryPivotQuery_WhereIn(t *testing.T) {
+	pq := pivotScopedQuery(t, "rel_user_roles")
 	pq.WhereIn("scope", []any{"team", "global"})
-	sql := dryRunPivotSQL(t, pq.db, "rel_user_roles")
-	assert.Contains(t, sql, "rel_user_roles.scope IN (?,?)")
+	sql := newRelationSQL(t, pq.q, &[]map[string]any{})
+	assert.Contains(t, sql, `"rel_user_roles"."scope" IN (?, ?)`)
 }
 
-func TestPivotQuery_WhereNotIn(t *testing.T) {
-	db := newStubGormDB(t)
-	pq := newPivotQuery(db.Table("rel_user_roles"), "rel_user_roles")
+// TestQueryPivotQuery_WhereNotIn pins the expanded NOT IN list; see TestQueryPivotQuery_WhereIn.
+func TestQueryPivotQuery_WhereNotIn(t *testing.T) {
+	pq := pivotScopedQuery(t, "rel_user_roles")
 	pq.WhereNotIn("scope", []any{"archived"})
-	sql := dryRunPivotSQL(t, pq.db, "rel_user_roles")
-	assert.Contains(t, sql, "rel_user_roles.scope NOT IN (?)")
+	sql := newRelationSQL(t, pq.q, &[]map[string]any{})
+	assert.Contains(t, sql, `"rel_user_roles"."scope" NOT IN (?)`)
 }
 
-func TestPivotQuery_WhereNull(t *testing.T) {
-	db := newStubGormDB(t)
-	pq := newPivotQuery(db.Table("rel_user_roles"), "rel_user_roles")
+func TestQueryPivotQuery_WhereNull(t *testing.T) {
+	pq := pivotScopedQuery(t, "rel_user_roles")
 	pq.WhereNull("deleted_at")
-	sql := dryRunPivotSQL(t, pq.db, "rel_user_roles")
-	assert.Contains(t, sql, "rel_user_roles.deleted_at IS NULL")
+	sql := newRelationSQL(t, pq.q, &[]map[string]any{})
+	assert.Contains(t, sql, `"rel_user_roles"."deleted_at" IS NULL`)
 }
 
-func TestPivotQuery_WhereNotNull(t *testing.T) {
-	db := newStubGormDB(t)
-	pq := newPivotQuery(db.Table("rel_user_roles"), "rel_user_roles")
+func TestQueryPivotQuery_WhereNotNull(t *testing.T) {
+	pq := pivotScopedQuery(t, "rel_user_roles")
 	pq.WhereNotNull("expires_at")
-	sql := dryRunPivotSQL(t, pq.db, "rel_user_roles")
-	assert.Contains(t, sql, "rel_user_roles.expires_at IS NOT NULL")
+	sql := newRelationSQL(t, pq.q, &[]map[string]any{})
+	assert.Contains(t, sql, `"rel_user_roles"."expires_at" IS NOT NULL`)
 }
 
-func TestPivotQuery_Chained_AccumulatesAllClauses(t *testing.T) {
-	db := newStubGormDB(t)
-	pq := newPivotQuery(db.Table("rel_user_roles"), "rel_user_roles")
+func TestQueryPivotQuery_Chained_AccumulatesAllClauses(t *testing.T) {
+	pq := pivotScopedQuery(t, "rel_user_roles")
 	pq.Where("active", 1).
-		WhereIn("scope", []any{"team", "global"}).
-		WhereNull("deleted_at")
-	sql := dryRunPivotSQL(t, pq.db, "rel_user_roles")
+		WhereNull("deleted_at").
+		WhereNotNull("expires_at")
+	sql := newRelationSQL(t, pq.q, &[]map[string]any{})
 	// All three predicates should be ANDed into the final query.
-	assert.Contains(t, sql, "rel_user_roles.active = ?")
-	assert.Contains(t, sql, "rel_user_roles.scope IN (?,?)")
-	assert.Contains(t, sql, "rel_user_roles.deleted_at IS NULL")
-	// Naive count: three "AND" or three predicates joined.
-	assert.Equal(t, 2, strings.Count(sql, " AND "), "three predicates should be joined by two ANDs")
+	assert.Contains(t, sql, `"rel_user_roles"."active" = ?`)
+	assert.Contains(t, sql, `"rel_user_roles"."deleted_at" IS NULL`)
+	assert.Contains(t, sql, `"rel_user_roles"."expires_at" IS NOT NULL`)
+	// Three predicates joined by two ANDs.
+	assert.Equal(t, 2, strings.Count(sql, " and "), "three predicates should be joined by two ANDs")
 }
 
-func TestApplyOnPivotQuery_NilCallback_NoOp(t *testing.T) {
-	db := newStubGormDB(t)
+func TestApplyOnPivotQueryToQuery_NilCallback_NoOp(t *testing.T) {
+	base := newRelQueryWith(t, &relUser{}).Table("rel_user_roles").(*Query)
 	desc := &relationDescriptor{pivotTable: "rel_user_roles", onPivotQuery: nil}
-	q := db.Table("rel_user_roles")
-	out := applyOnPivotQuery(q, desc)
-	assert.Same(t, q, out, "nil callback must return the original query unchanged")
+	out, ok := applyOnPivotQueryToQuery(base.queryGrammar, base, desc).(*Query)
+	assert.True(t, ok)
+	assert.Same(t, base, out, "nil callback must return the original query unchanged")
 }
 
-func TestApplyOnPivotQuery_AppliesCallback(t *testing.T) {
-	db := newStubGormDB(t)
+func TestApplyOnPivotQueryToQuery_AppliesCallback(t *testing.T) {
+	base := newRelQueryWith(t, &relUser{}).Table("rel_user_roles").(*Query)
 	desc := &relationDescriptor{
 		pivotTable: "rel_user_roles",
 		onPivotQuery: func(q contractsorm.PivotQuery) contractsorm.PivotQuery {
 			return q.Where("active", 1)
 		},
 	}
-	q := db.Table("rel_user_roles")
-	out := applyOnPivotQuery(q, desc)
-	sql := dryRunPivotSQL(t, out, "rel_user_roles")
-	assert.Contains(t, sql, "rel_user_roles.active = ?")
+	out := applyOnPivotQueryToQuery(base.queryGrammar, base, desc)
+	sql := newRelationSQL(t, out, &[]map[string]any{})
+	assert.Contains(t, sql, `"rel_user_roles"."active" = ?`)
 }
 
 // Descriptor wiring: OnPivotQuery declared on Many2Many / MorphToMany / MorphedByMany must land
@@ -109,6 +105,8 @@ type pivotWireUser struct {
 	ID    uint
 	Roles []*relRole `gorm:"-"`
 }
+
+func (pivotWireUser) TableName() string { return "pivot_wire_users" }
 
 func (pivotWireUser) Relations() map[string]contractsorm.Relation {
 	return map[string]contractsorm.Relation{
@@ -129,16 +127,19 @@ func TestDescriptor_OnPivotQuery_Many2Many(t *testing.T) {
 	assert.NotNil(t, desc.onPivotQuery, "Many2Many.OnPivotQuery must land on descriptor")
 
 	// Verify the callback actually runs.
-	pq := newPivotQuery(newStubGormDB(t).Table("pivot_wire_user_roles"), "pivot_wire_user_roles")
+	base := q.Table("pivot_wire_user_roles").(*Query)
+	pq := newQueryPivotQuery(base.queryGrammar, base, "pivot_wire_user_roles")
 	desc.onPivotQuery(pq)
-	sql := dryRunPivotSQL(t, pq.db, "pivot_wire_user_roles")
-	assert.Contains(t, sql, "pivot_wire_user_roles.active = ?")
+	sql := newRelationSQL(t, pq.q, &[]map[string]any{})
+	assert.Contains(t, sql, `"pivot_wire_user_roles"."active" = ?`)
 }
 
 type pivotWireMorphPost struct {
 	ID   uint
 	Tags []*morphTag `gorm:"-"`
 }
+
+func (pivotWireMorphPost) TableName() string { return "pivot_wire_morph_posts" }
 
 func (pivotWireMorphPost) Relations() map[string]contractsorm.Relation {
 	return map[string]contractsorm.Relation{
@@ -163,6 +164,8 @@ type pivotWireTag struct {
 	ID    uint
 	Posts []*morphPost `gorm:"-"`
 }
+
+func (pivotWireTag) TableName() string { return "pivot_wire_tags" }
 
 func (pivotWireTag) Relations() map[string]contractsorm.Relation {
 	return map[string]contractsorm.Relation{
@@ -190,6 +193,8 @@ type touchesUser struct {
 	Roles []*relRole `gorm:"-"`
 }
 
+func (touchesUser) TableName() string { return "touches_users" }
+
 func (touchesUser) Relations() map[string]contractsorm.Relation {
 	return map[string]contractsorm.Relation{
 		"Roles": contractsorm.Many2Many{Related: &relRole{}, Table: "touches_user_roles", Touches: true},
@@ -208,6 +213,8 @@ type touchesPost struct {
 	Tags []*morphTag `gorm:"-"`
 }
 
+func (touchesPost) TableName() string { return "touches_posts" }
+
 func (touchesPost) Relations() map[string]contractsorm.Relation {
 	return map[string]contractsorm.Relation{
 		"Tags": contractsorm.MorphToMany{Related: &morphTag{}, Name: "taggable", Touches: true},
@@ -225,6 +232,8 @@ type touchesTag struct {
 	ID    uint
 	Posts []*morphPost `gorm:"-"`
 }
+
+func (touchesTag) TableName() string { return "touches_tags" }
 
 func (touchesTag) Relations() map[string]contractsorm.Relation {
 	return map[string]contractsorm.Relation{
@@ -270,6 +279,8 @@ type pivotFieldUser struct {
 	ID    uint
 	Roles []*relRole `gorm:"-"`
 }
+
+func (pivotFieldUser) TableName() string { return "pivot_field_users" }
 
 func (pivotFieldUser) Relations() map[string]contractsorm.Relation {
 	return map[string]contractsorm.Relation{

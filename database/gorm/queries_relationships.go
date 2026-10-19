@@ -14,7 +14,9 @@ import (
 
 	gormio "gorm.io/gorm"
 
+	contractsdriver "github.com/goravel/framework/contracts/database/driver"
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
+	querybuilder "github.com/goravel/framework/database/query"
 	"github.com/goravel/framework/errors"
 	"github.com/goravel/framework/support/deep"
 	"github.com/goravel/framework/support/str"
@@ -24,7 +26,7 @@ import (
 // Public API: existence (has / whereHas / doesntHave / orWhereDoesntHave / ...)
 //
 // Each method appends a relationExistence to conditions.relations; the actual subquery is built
-// when buildConditions runs (so the parent model from .Model() / dest can be resolved).
+// when the query is compiled to SQL (so the parent model from .Model() / dest can be resolved).
 // ---------------------------------------------------------------------------
 
 // Has adds a relationship count / exists condition to the query.
@@ -129,22 +131,18 @@ func (r *Query) OrWhereDoesntHaveMorph(relation string, types []any, args ...any
 // Public API: aggregate sub-selects (withCount / withMax / withSum / ...)
 //
 // Each method appends a selectSub to conditions.selectSubs; the actual sub-select column is
-// emitted when buildConditions runs (so the parent model can be resolved and the alias derived).
+// emitted when the query is compiled to SQL (so the parent model can be resolved and the alias derived).
 // ---------------------------------------------------------------------------
 
 // WithAggregate adds a sub-select to include an aggregate value for a relationship.
 // fn must be one of: count, max, min, sum, avg, exists.
 func (r *Query) WithAggregate(relation, column, fn string, args ...any) contractsorm.Query {
 	if !validAggregateFn(fn) {
-		query := r.new(r.instance.Session(&gormio.Session{}))
-		_ = query.instance.AddError(errors.OrmRelationInvalidAggregate.Args(fn))
-		return query
+		return r.withError(errors.OrmRelationInvalidAggregate.Args(fn))
 	}
 	cb, _, _, err := parseRelationArgs(args)
 	if err != nil {
-		query := r.new(r.instance.Session(&gormio.Session{}))
-		_ = query.instance.AddError(err)
-		return query
+		return r.withError(err)
 	}
 	conditions := r.conditions
 	conditions.selectSubs = deep.Append(conditions.selectSubs, selectSub{
@@ -186,9 +184,7 @@ func (r *Query) WithCount(relations ...any) contractsorm.Query {
 			}
 			current = next
 		default:
-			impl := r.new(r.instance.Session(&gormio.Session{}))
-			_ = impl.instance.AddError(errors.OrmRelationInvalidArgument.Args(raw))
-			return impl
+			return r.withError(errors.OrmRelationInvalidArgument.Args(raw))
 		}
 	}
 	return current
@@ -242,9 +238,7 @@ func (r *Query) WithExists(relations ...string) contractsorm.Query {
 func (r *Query) With(args ...any) contractsorm.Query {
 	entries, err := parseEagerLoad(args)
 	if err != nil {
-		query := r.new(r.instance.Session(&gormio.Session{}))
-		_ = query.instance.AddError(err)
-		return query
+		return r.withError(err)
 	}
 	conditions := r.conditions
 	for _, e := range entries {
@@ -290,9 +284,7 @@ func (r *Query) WithOnly(args ...any) contractsorm.Query {
 func (r *Query) queueRelationExistence(relation string, args []any, conjunction string, doesntHave bool) contractsorm.Query {
 	cb, op, count, err := parseRelationArgs(args)
 	if err != nil {
-		query := r.new(r.instance.Session(&gormio.Session{}))
-		_ = query.instance.AddError(err)
-		return query
+		return r.withError(err)
 	}
 	if doesntHave {
 		op = "<"
@@ -311,15 +303,11 @@ func (r *Query) queueRelationExistence(relation string, args []any, conjunction 
 
 func (r *Query) queueMorphExistence(relation string, types []any, args []any, conjunction string, doesntHave bool) contractsorm.Query {
 	if len(types) == 0 {
-		query := r.new(r.instance.Session(&gormio.Session{}))
-		_ = query.instance.AddError(errors.OrmRelationMorphTypesEmpty)
-		return query
+		return r.withError(errors.OrmRelationMorphTypesEmpty)
 	}
 	cb, mcb, op, count, err := parseMorphRelationArgs(args)
 	if err != nil {
-		query := r.new(r.instance.Session(&gormio.Session{}))
-		_ = query.instance.AddError(err)
-		return query
+		return r.withError(err)
 	}
 	if doesntHave {
 		op = "<"
@@ -339,449 +327,361 @@ func (r *Query) queueMorphExistence(relation string, types []any, args []any, co
 }
 
 // ---------------------------------------------------------------------------
-// Internal: build phase (called from buildConditions)
-// ---------------------------------------------------------------------------
-
-// buildRelations compiles all queued relation existence conditions into the outer GORM query.
-// Resolves each relation against the parent model now that one of conditions.model / conditions.dest
-// is set.
-func (r *Query) buildRelations(db *gormio.DB) *gormio.DB {
-	if len(r.conditions.relations) == 0 {
-		return db
-	}
-	parent := r.parentModel()
-	if parent == nil {
-		_ = db.AddError(errors.OrmQueryEmptyRelation)
-		return db
-	}
-
-	for _, item := range r.conditions.relations {
-		if len(item.morphTypes) > 0 {
-			db = r.applyMorphExistence(db, parent, item)
-		} else {
-			db = r.applyExistence(db, parent, item)
-		}
-	}
-	r.conditions.relations = nil
-	return db
-}
-
-// buildSelectSubAggregates compiles WithCount / WithSum / WithExists / etc. as sub-select
-// columns. GORM's Select() overwrites prior selections, so we coalesce the parent's existing
-// columns (or a default `<parent>.*`) with all sub-select expressions and emit a single
-// Select() containing the full list of column expressions plus the inner subqueries as bindings.
-func (r *Query) buildSelectSubAggregates(db *gormio.DB) *gormio.DB {
-	if len(r.conditions.selectSubs) == 0 {
-		return db
-	}
-	parent := r.parentModel()
-	if parent == nil {
-		_ = db.AddError(errors.OrmQueryEmptyRelation)
-		return db
-	}
-	parentTable := r.parentTable(parent)
-
-	// Start with the columns the user already requested (via prior .Select() calls). If they
-	// didn't request anything, we project the parent's wildcard so the row can still be scanned
-	// into the dest model.
-	existing := append([]string{}, db.Statement.Selects...)
-	if len(existing) == 0 {
-		existing = []string{fmt.Sprintf("%s.*", quoteIdent(parentTable))}
-	}
-
-	var subExprs []string
-	var subArgs []any
-	for _, sub := range r.conditions.selectSubs {
-		desc, err := resolveRelation(r.instance, parent, sub.relation)
-		if err != nil {
-			_ = db.AddError(err)
-			continue
-		}
-		inner := r.compileAggregateSubquery(desc, sub)
-		if inner == nil {
-			continue
-		}
-		alias := sub.alias
-		if alias == "" {
-			alias = aggregateAlias(sub.relation, sub.function, sub.column)
-		}
-		if sub.function == "exists" {
-			// Use CASE WHEN EXISTS instead of bare `EXISTS (...) AS col`: PostgreSQL returns
-			// EXISTS as a native bool which won't scan into integer struct fields, and SQL Server
-			// rejects EXISTS as a column expression entirely. CASE WHEN yields a portable 0/1 int
-			// across SQLite / MySQL / PostgreSQL / SQL Server.
-			subExprs = append(subExprs, fmt.Sprintf("CASE WHEN EXISTS (?) THEN 1 ELSE 0 END AS %s", quoteIdent(alias)))
-		} else {
-			subExprs = append(subExprs, fmt.Sprintf("(?) AS %s", quoteIdent(alias)))
-		}
-		subArgs = append(subArgs, inner)
-	}
-	if len(subExprs) == 0 {
-		r.conditions.selectSubs = nil
-		return db
-	}
-	full := strings.Join(append(existing, subExprs...), ", ")
-	db = db.Select(full, subArgs...)
-	r.conditions.selectSubs = nil
-	return db
-}
-
-// ---------------------------------------------------------------------------
 // Internal: existence subquery construction
 // ---------------------------------------------------------------------------
 
-func (r *Query) applyExistence(db *gormio.DB, parent any, item relationExistence) *gormio.DB {
-	desc, err := resolveRelation(r.instance, parent, item.relation)
-	if err != nil {
-		_ = db.AddError(err)
-		return db
-	}
-	inner := r.compileExistenceSubquery(desc, item.callback)
-	if inner == nil {
-		return db
-	}
-	return r.attachHasWhere(db, inner, item.operator, item.count, item.conjunction)
-}
-
-func (r *Query) applyMorphExistence(db *gormio.DB, parent any, item relationExistence) *gormio.DB {
-	desc, err := resolveRelation(r.instance, parent, item.relation)
-	if err != nil {
-		_ = db.AddError(err)
-		return db
-	}
-	switch desc.kind {
-	case relKindMorphOne, relKindMorphMany:
-		return r.applyOutboundMorphExistence(db, desc, item)
-	case relKindMorphTo:
-		return r.applyMorphToExistence(db, desc, item)
-	default:
-		_ = db.AddError(errors.OrmRelationUnsupported.Args(item.relation, fmt.Sprintf("%T", parent), "morph (must be polymorphic relation)"))
-		return db
-	}
-}
-
-// applyOutboundMorphExistence builds the morph-existence clauses for outbound MorphOne /
-// MorphMany. The morph_type column lives on the *related* table (e.g. houses.houseable_type), so
-// for each requested type we build a correlated EXISTS subquery whose inner WHERE pins
-// houses.houseable_type to that type's morph value. Multiple types are joined with OR.
-func (r *Query) applyOutboundMorphExistence(db *gormio.DB, desc *relationDescriptor, item relationExistence) *gormio.DB {
-	sub := r.freshSession()
-	first := true
-	for _, typeModel := range item.morphTypes {
-		morphValue, terr := tableNameFor(r.instance, typeModel)
-		if terr != nil {
-			_ = db.AddError(terr)
-			continue
-		}
-		morphValue = resolveMorphValue(typeModel, morphValue)
-
-		var perTypeCallback contractsorm.RelationCallback
-		if item.morphCallback != nil {
-			cb := item.morphCallback
-			captured := morphValue
-			perTypeCallback = func(q contractsorm.Query) contractsorm.Query {
-				return cb(q, captured)
-			}
-		} else {
-			perTypeCallback = item.callback
-		}
-		inner := r.compileMorphExistenceSubquery(desc, morphValue, perTypeCallback)
-		if inner == nil {
-			continue
-		}
-
-		var clauseSQL string
-		var clauseArgs []any
-		if shouldUseExists(item.operator, item.count) {
-			negate := item.operator == "<" && item.count == 1
-			if negate {
-				clauseSQL = "NOT EXISTS (?)"
-			} else {
-				clauseSQL = "EXISTS (?)"
-			}
-			clauseArgs = []any{inner}
-		} else {
-			countInner := inner.Select("COUNT(*)")
-			clauseSQL = fmt.Sprintf("(?) %s ?", item.operator)
-			clauseArgs = []any{countInner, item.count}
-		}
-
-		if first {
-			sub = sub.Where(clauseSQL, clauseArgs...)
-			first = false
-		} else {
-			sub = sub.Or(clauseSQL, clauseArgs...)
-		}
-	}
-	if first {
-		return db
-	}
-
-	if item.conjunction == "or" {
-		return db.Or(sub)
-	}
-	return db.Where(sub)
-}
-
-// applyMorphToExistence builds the inverse-polymorphic existence clauses. Mirrors fedaco's
-// hasMorph at libs/fedaco/src/fedaco/mixins/queries-relationships.ts:320-378: for each requested
-// type, we synthesise a BelongsTo-shaped subquery against that type's table, and AND it with a
-// type filter on the parent's morph_type column. The per-type clauses are OR-ed together.
-//
-// Generated SQL pattern:
-//
-//	WHERE (
-//	     (parents.imageable_type = 'post'  AND ((SELECT count(*) FROM posts  WHERE posts.id  = parents.imageable_id) >= N))
-//	  OR (parents.imageable_type = 'video' AND ((SELECT count(*) FROM videos WHERE videos.id = parents.imageable_id) >= N))
-//	)
-func (r *Query) applyMorphToExistence(db *gormio.DB, desc *relationDescriptor, item relationExistence) *gormio.DB {
-	sub := r.freshSession()
-	first := true
-	ownerKey := desc.morphOwnerKey
-	if ownerKey == "" {
-		ownerKey = "id"
-	}
-
-	for _, typeModel := range item.morphTypes {
-		relatedTable, terr := tableNameFor(r.instance, typeModel)
-		if terr != nil {
-			_ = db.AddError(terr)
-			continue
-		}
-		morphValue := resolveMorphValue(typeModel, relatedTable)
-
-		// Per-type callback resolution (same shape as outbound morph existence).
-		var perTypeCallback contractsorm.RelationCallback
-		if item.morphCallback != nil {
-			cb := item.morphCallback
-			captured := morphValue
-			perTypeCallback = func(q contractsorm.Query) contractsorm.Query {
-				return cb(q, captured)
-			}
-		} else {
-			perTypeCallback = item.callback
-		}
-
-		// Build the BelongsTo-shaped inner: SELECT * FROM <relatedTable> WHERE
-		// <relatedTable>.<ownerKey> = <parentTable>.<morphIDColumn>.
-		inner := r.freshSession().Table(relatedTable).Where(fmt.Sprintf("%s.%s = %s.%s",
-			quoteIdent(relatedTable), quoteIdent(ownerKey),
-			quoteIdent(desc.parentTable), quoteIdent(desc.morphIDColumn)))
-		if desc.onQuery != nil {
-			wrapper := r.wrap(inner)
-			result := desc.onQuery(wrapper)
-			if w, ok := result.(*Query); ok {
-				inner = w.buildConditions().instance
-			}
-		}
-		if perTypeCallback != nil {
-			wrapper := r.wrap(inner)
-			result := perTypeCallback(wrapper)
-			if w, ok := result.(*Query); ok {
-				inner = w.buildConditions().instance
-			}
-		}
-
-		// Type filter applied at the outer level (parent table).
-		typeClause := fmt.Sprintf("%s.%s = ?", quoteIdent(desc.parentTable), quoteIdent(desc.morphTypeColumn))
-		typeArgs := []any{morphValue}
-
-		var perType *gormio.DB
-		if shouldUseExists(item.operator, item.count) {
-			negate := item.operator == "<" && item.count == 1
-			if negate {
-				perType = r.freshSession().Where(typeClause, typeArgs...).Where("NOT EXISTS (?)", inner)
-			} else {
-				perType = r.freshSession().Where(typeClause, typeArgs...).Where("EXISTS (?)", inner)
-			}
-		} else {
-			countInner := inner.Select("COUNT(*)")
-			perType = r.freshSession().Where(typeClause, typeArgs...).Where(fmt.Sprintf("(?) %s ?", item.operator), countInner, item.count)
-		}
-
-		if first {
-			sub = sub.Where(perType)
-			first = false
-		} else {
-			sub = sub.Or(perType)
-		}
-	}
-	if first {
-		return db
-	}
-
-	if item.conjunction == "or" {
-		return db.Or(sub)
-	}
-	return db.Where(sub)
-}
-
-// compileExistenceSubquery returns a *gormio.DB representing the inner SELECT correlated to the
-// parent table. The returned DB is intended to be passed as a value bound to a "?" placeholder
-// in the outer query (GORM will inline it as a subquery and merge bindings).
-func (r *Query) compileExistenceSubquery(desc *relationDescriptor, callback contractsorm.RelationCallback) *gormio.DB {
-	inner := r.freshSession().Table(desc.relatedTable)
+// compileExistenceSubquery builds the correlated inner SELECT for a relation as a framework builder.
+// Callers render it with ToSelectSQL and inline the result, so no GORM statement carries the
+// subquery. The builder is nil when the relation kind is unsupported.
+func (r *Query) compileExistenceSubquery(desc *relationDescriptor, callback contractsorm.RelationCallback) (*querybuilder.Builder, error) {
+	builder := r.subqueryBuilder(desc.relatedTable)
 
 	switch desc.kind {
-	case relKindHasOne, relKindHasMany:
+	case relKindHasOne, relKindHasMany, relKindBelongsTo, relKindMorphOne, relKindMorphMany:
 		for _, ref := range desc.references {
-			inner = inner.Where(fmt.Sprintf("%s.%s = %s.%s",
-				quoteIdent(ref.foreignTable), quoteIdent(ref.foreignColumn),
-				quoteIdent(ref.primaryTable), quoteIdent(ref.primaryColumn)))
+			builder.WhereRaw(r.ident(ref.primaryTable, ref.primaryColumn)+" = "+r.ident(ref.foreignTable, ref.foreignColumn), nil, querybuilder.BooleanAnd)
 		}
-	case relKindBelongsTo:
-		for _, ref := range desc.references {
-			inner = inner.Where(fmt.Sprintf("%s.%s = %s.%s",
-				quoteIdent(ref.primaryTable), quoteIdent(ref.primaryColumn),
-				quoteIdent(ref.foreignTable), quoteIdent(ref.foreignColumn)))
+		if desc.kind == relKindMorphOne || desc.kind == relKindMorphMany {
+			builder.WhereRaw(r.ident(desc.relatedTable, desc.morphTypeColumn)+" = ?", []any{desc.morphValue}, querybuilder.BooleanAnd)
 		}
-	case relKindMany2Many:
-		inner = inner.Joins(fmt.Sprintf("INNER JOIN %s ON %s.%s = %s.%s",
-			quoteIdent(desc.pivotTable),
-			quoteIdent(desc.pivotTable), quoteIdent(desc.pivotRelatedRef.foreignColumn),
-			quoteIdent(desc.relatedTable), quoteIdent(desc.pivotRelatedRef.primaryColumn)))
-		inner = inner.Where(fmt.Sprintf("%s.%s = %s.%s",
-			quoteIdent(desc.pivotTable), quoteIdent(desc.pivotParentRef.foreignColumn),
-			quoteIdent(desc.pivotParentRef.primaryTable), quoteIdent(desc.pivotParentRef.primaryColumn)))
-	case relKindMorphToMany:
-		inner = inner.Joins(fmt.Sprintf("INNER JOIN %s ON %s.%s = %s.%s",
-			quoteIdent(desc.pivotTable),
-			quoteIdent(desc.pivotTable), quoteIdent(desc.pivotRelatedRef.foreignColumn),
-			quoteIdent(desc.relatedTable), quoteIdent(desc.pivotRelatedRef.primaryColumn)))
-		inner = inner.Where(fmt.Sprintf("%s.%s = %s.%s",
-			quoteIdent(desc.pivotTable), quoteIdent(desc.pivotParentRef.foreignColumn),
-			quoteIdent(desc.pivotParentRef.primaryTable), quoteIdent(desc.pivotParentRef.primaryColumn)))
-		inner = inner.Where(fmt.Sprintf("%s.%s = ?",
-			quoteIdent(desc.pivotTable), quoteIdent(desc.morphTypeColumn)), desc.morphValue)
-	case relKindMorphOne, relKindMorphMany:
-		for _, ref := range desc.references {
-			inner = inner.Where(fmt.Sprintf("%s.%s = %s.%s",
-				quoteIdent(ref.foreignTable), quoteIdent(ref.foreignColumn),
-				quoteIdent(ref.primaryTable), quoteIdent(ref.primaryColumn)))
+	case relKindMany2Many, relKindMorphToMany:
+		builder.JoinRaw(r.tableRef(desc.pivotTable)+" on "+
+			r.ident(desc.pivotTable, desc.pivotRelatedRef.foreignColumn)+" = "+
+			r.ident(desc.relatedTable, desc.pivotRelatedRef.primaryColumn), nil, "inner")
+		builder.WhereRaw(r.ident(desc.pivotParentRef.primaryTable, desc.pivotParentRef.primaryColumn)+" = "+
+			r.ident(desc.pivotTable, desc.pivotParentRef.foreignColumn), nil, querybuilder.BooleanAnd)
+		if desc.kind == relKindMorphToMany {
+			builder.WhereRaw(r.ident(desc.pivotTable, desc.morphTypeColumn)+" = ?", []any{desc.morphValue}, querybuilder.BooleanAnd)
 		}
-		inner = inner.Where(fmt.Sprintf("%s.%s = ?",
-			quoteIdent(desc.relatedTable), quoteIdent(desc.morphTypeColumn)), desc.morphValue)
 	case relKindHasOneThrough, relKindHasManyThrough:
-		inner = inner.Joins(fmt.Sprintf("INNER JOIN %s ON %s.%s = %s.%s",
-			quoteIdent(desc.throughTable),
-			quoteIdent(desc.relatedTable), quoteIdent(desc.secondKey),
-			quoteIdent(desc.throughTable), quoteIdent(desc.secondLocalKey)))
-		inner = inner.Where(fmt.Sprintf("%s.%s = %s.%s",
-			quoteIdent(desc.throughTable), quoteIdent(desc.firstKey),
-			quoteIdent(desc.parentTable), quoteIdent(desc.localKey)))
+		builder.JoinRaw(r.tableRef(desc.throughTable)+" on "+
+			r.ident(desc.relatedTable, desc.secondKey)+" = "+
+			r.ident(desc.throughTable, desc.secondLocalKey), nil, "inner")
+		builder.WhereRaw(r.ident(desc.parentTable, desc.localKey)+" = "+
+			r.ident(desc.throughTable, desc.firstKey), nil, querybuilder.BooleanAnd)
 	default:
-		_ = inner.AddError(errors.OrmRelationUnsupported.Args(desc.name, desc.parentTable, fmt.Sprintf("kind=%d", desc.kind)))
-		return inner
+		return nil, errors.OrmRelationUnsupported.Args(desc.name, desc.parentTable, fmt.Sprintf("kind=%d", desc.kind))
 	}
 
 	// Apply the relation's default scope before the caller's callback so the user's WhereHas
 	// callback can layer on top of the always-on filter.
-	if desc.onQuery != nil {
-		wrapper := r.wrap(inner)
-		wrapped := desc.onQuery(wrapper)
-		if w, ok := wrapped.(*Query); ok {
-			inner = w.buildConditions().instance
-		}
-	}
+	r.applyRelationScope(builder, desc.onQuery)
+	r.applyRelationScope(builder, callback)
 
-	if callback != nil {
-		wrapper := r.wrap(inner)
-		wrapped := callback(wrapper)
-		if w, ok := wrapped.(*Query); ok {
-			inner = w.buildConditions().instance
-		}
-	}
+	r.applySubquerySoftDelete(builder, desc.relatedTable, desc.relatedModel)
 
 	if desc.nested != nil {
-		nested := r.compileExistenceSubquery(desc.nested, nil)
+		nested, err := r.compileExistenceSubquery(desc.nested, nil)
+		if err != nil {
+			return nil, err
+		}
 		if nested != nil {
-			inner = inner.Where("EXISTS (?)", nested)
+			nestedSQL, nestedBindings := nested.ToSelectSQL()
+			builder.WhereRaw("exists ("+nestedSQL+")", nestedBindings, querybuilder.BooleanAnd)
 		}
 	}
 
-	return inner.Select("1")
+	setSubquerySelect(builder, "1")
+
+	return builder, nil
 }
 
-// compileMorphExistenceSubquery is the morph-specific variant. The morph_type column is included
-// in the *outer* group, not the inner subquery, because it lives on the parent's side.
-func (r *Query) compileMorphExistenceSubquery(desc *relationDescriptor, morphValue string, callback contractsorm.RelationCallback) *gormio.DB {
-	inner := r.freshSession().Table(desc.relatedTable)
+// compileMorphExistenceSubquery is the morph-specific variant. The morph_type column is pinned on the
+// related table, inside the subquery, and the type comparison the caller needs lives in the subquery.
+func (r *Query) compileMorphExistenceSubquery(desc *relationDescriptor, morphValue string, callback contractsorm.RelationCallback) *querybuilder.Builder {
+	builder := r.subqueryBuilder(desc.relatedTable)
 	for _, ref := range desc.references {
-		inner = inner.Where(fmt.Sprintf("%s.%s = %s.%s",
-			quoteIdent(ref.foreignTable), quoteIdent(ref.foreignColumn),
-			quoteIdent(ref.primaryTable), quoteIdent(ref.primaryColumn)))
+		builder.WhereRaw(r.ident(ref.primaryTable, ref.primaryColumn)+" = "+r.ident(ref.foreignTable, ref.foreignColumn), nil, querybuilder.BooleanAnd)
 	}
-	inner = inner.Where(fmt.Sprintf("%s.%s = ?",
-		quoteIdent(desc.relatedTable), quoteIdent(desc.morphTypeColumn)), morphValue)
-	if desc.onQuery != nil {
-		wrapper := r.wrap(inner)
-		wrapped := desc.onQuery(wrapper)
-		if w, ok := wrapped.(*Query); ok {
-			inner = w.buildConditions().instance
-		}
-	}
-	if callback != nil {
-		wrapper := r.wrap(inner)
-		wrapped := callback(wrapper)
-		if w, ok := wrapped.(*Query); ok {
-			inner = w.buildConditions().instance
-		}
-	}
-	return inner.Select("1")
+	builder.WhereRaw(r.ident(desc.relatedTable, desc.morphTypeColumn)+" = ?", []any{morphValue}, querybuilder.BooleanAnd)
+	r.applyRelationScope(builder, desc.onQuery)
+	r.applyRelationScope(builder, callback)
+	r.applySubquerySoftDelete(builder, desc.relatedTable, desc.relatedModel)
+	setSubquerySelect(builder, "1")
+
+	return builder
 }
 
-// compileAggregateSubquery returns a *gormio.DB whose compiled SQL is the inner SELECT for an
-// aggregate. The select expression is dictated by sub.function.
-func (r *Query) compileAggregateSubquery(desc *relationDescriptor, sub selectSub) *gormio.DB {
-	inner := r.compileExistenceSubquery(desc, sub.callback)
-	if inner == nil {
-		return nil
+// compileAggregateSubquery returns the framework builder for the inner SELECT of an aggregate. The
+// select expression is dictated by sub.function.
+func (r *Query) compileAggregateSubquery(desc *relationDescriptor, sub selectSub) (*querybuilder.Builder, error) {
+	inner, err := r.compileExistenceSubquery(desc, sub.callback)
+	if err != nil {
+		return nil, err
 	}
+	if inner == nil {
+		return nil, nil
+	}
+
 	var selectExpr string
 	switch sub.function {
 	case "count":
-		selectExpr = "COUNT(*)"
+		selectExpr = "count(*)"
 	case "exists":
 		selectExpr = "1"
 	default:
 		col := "*"
 		if sub.column != "*" && sub.column != "" {
-			col = fmt.Sprintf("%s.%s", quoteIdent(desc.relatedTable), quoteIdent(sub.column))
+			col = r.ident(desc.relatedTable, sub.column)
 		}
-		selectExpr = fmt.Sprintf("%s(%s)", strings.ToUpper(sub.function), col)
+		selectExpr = fmt.Sprintf("%s(%s)", sub.function, col)
 	}
-	return inner.Select(selectExpr)
+	setSubquerySelect(inner, selectExpr)
+
+	return inner, nil
 }
 
-// attachHasWhere appends the inner subquery to the outer query as either WHERE [NOT] EXISTS
-// (preferred, when operator/count match the EXISTS optimisation) or as a (SELECT count(*)) op ?
-// comparison.
-func (r *Query) attachHasWhere(db *gormio.DB, inner *gormio.DB, operator string, count int, conjunction string) *gormio.DB {
-	if shouldUseExists(operator, count) {
-		negate := operator == "<" && count == 1
-		var clause string
-		if negate {
-			clause = "NOT EXISTS (?)"
-		} else {
-			clause = "EXISTS (?)"
-		}
-		if conjunction == "or" {
-			return db.Or(clause, inner)
-		}
-		return db.Where(clause, inner)
+// ---------------------------------------------------------------------------
+// Internal: relation conditions on the compiled statement
+// ---------------------------------------------------------------------------
+
+// applyRelations puts the query's relation existence conditions on the compiled statement.
+//
+// The correlated subquery is assembled by the framework builder and rendered to the SQL and bindings
+// the statement carries, so what is decided here is only the clause: the same EXISTS optimisation,
+// negation and conjunction the GORM path hands over, and for the polymorphic variants the same set of
+// per-type clauses joined into one group.
+func (r *Query) applyRelations(builder *querybuilder.Builder) error {
+	if len(r.conditions.relations) == 0 {
+		return nil
 	}
 
-	countInner := inner.Select("COUNT(*)")
-	clause := fmt.Sprintf("(?) %s ?", operator)
-	if conjunction == "or" {
-		return db.Or(clause, countInner, count)
+	parent := r.parentModel()
+	if parent == nil {
+		return errors.OrmQueryEmptyRelation
 	}
-	return db.Where(clause, countInner, count)
+
+	for _, item := range r.conditions.relations {
+		boolean := querybuilder.BooleanAnd
+		if item.conjunction == "or" {
+			boolean = querybuilder.BooleanOr
+		}
+
+		if len(item.morphTypes) > 0 {
+			if err := r.applyMorphRelation(builder, parent, item, boolean); err != nil {
+				return err
+			}
+
+			continue
+		}
+
+		desc, err := resolveRelation(r.instance, parent, item.relation)
+		if err != nil {
+			return err
+		}
+
+		inner, err := r.compileExistenceSubquery(desc, item.callback)
+		if err != nil {
+			return err
+		}
+		if inner == nil {
+			continue
+		}
+
+		applyExistenceClause(builder, inner, item.operator, item.count, boolean)
+	}
+
+	return nil
+}
+
+// applyMorphRelation adds a polymorphic existence condition. Each requested type is a table of its own,
+// so the types contribute one clause each to a single group, which the condition's conjunction then
+// attaches to the query.
+func (r *Query) applyMorphRelation(builder *querybuilder.Builder, parent any, item relationExistence, boolean string) error {
+	desc, err := resolveRelation(r.instance, parent, item.relation)
+	if err != nil {
+		return err
+	}
+
+	switch desc.kind {
+	case relKindMorphOne, relKindMorphMany, relKindMorphTo:
+	default:
+		return errors.OrmRelationUnsupported.Args(item.relation, fmt.Sprintf("%T", parent), "morph (must be polymorphic relation)")
+	}
+
+	builder.WhereNested(func(group *querybuilder.Builder) *querybuilder.Builder {
+		for _, typeModel := range item.morphTypes {
+			// A type that cannot be resolved contributes nothing rather than failing the query, which
+			// is what the GORM path does: it skips the type and keeps the others.
+			if err := r.applyMorphTypeClause(group, desc, typeModel, item); err != nil {
+				continue
+			}
+		}
+
+		return group
+	}, boolean)
+
+	return nil
+}
+
+// applyMorphTypeClause adds the clauses one requested type contributes to the group.
+//
+// The type is pinned inside the subquery for the outbound kinds, whose morph column lives on the
+// related table, and against the parent table for the inverse kind, whose column lives there. Either
+// way the type and its subquery are ANDed inside the group, so the group reads as one alternative per
+// type.
+func (r *Query) applyMorphTypeClause(builder *querybuilder.Builder, desc *relationDescriptor, typeModel any, item relationExistence) error {
+	relatedTable, err := tableNameFor(r.instance, typeModel)
+	if err != nil {
+		return err
+	}
+
+	morphValue := resolveMorphValue(typeModel, relatedTable)
+
+	callback := item.callback
+	if item.morphCallback != nil {
+		morphCallback := item.morphCallback
+		callback = func(query contractsorm.Query) contractsorm.Query {
+			return morphCallback(query, morphValue)
+		}
+	}
+
+	if desc.kind == relKindMorphTo {
+		inner := r.compileMorphToExistenceSubquery(desc, relatedTable, typeModel, callback)
+
+		builder.WhereRaw(r.ident(desc.parentTable, desc.morphTypeColumn)+" = ?", []any{morphValue}, querybuilder.BooleanAnd)
+
+		applyExistenceClause(builder, inner, item.operator, item.count, querybuilder.BooleanAnd)
+
+		return nil
+	}
+
+	inner := r.compileMorphExistenceSubquery(desc, morphValue, callback)
+
+	applyExistenceClause(builder, inner, item.operator, item.count, querybuilder.BooleanAnd)
+
+	return nil
+}
+
+// compileMorphToExistenceSubquery builds the belongs-to-shaped inner query an inverse polymorphic
+// condition correlates against one of its types: that type's own key against the parent's morph id.
+//
+// The type is one of the morph map's models, so each type decides its own soft-delete predicate: a
+// type still declaring gorm.DeletedAt is left to GORM, exactly as on every other compiled path, while
+// a type carrying the framework's own soft-delete type gets its "not deleted" predicate inside the
+// subquery - the same per-type treatment Laravel's SoftDeletingScope gives the BelongsTo it builds.
+func (r *Query) compileMorphToExistenceSubquery(desc *relationDescriptor, relatedTable string, relatedModel any, callback contractsorm.RelationCallback) *querybuilder.Builder {
+	ownerKey := desc.morphOwnerKey
+	if ownerKey == "" {
+		ownerKey = "id"
+	}
+
+	builder := r.subqueryBuilder(relatedTable)
+	builder.WhereRaw(r.ident(relatedTable, ownerKey)+" = "+r.ident(desc.parentTable, desc.morphIDColumn), nil, querybuilder.BooleanAnd)
+
+	r.applyRelationScope(builder, desc.onQuery)
+	r.applyRelationScope(builder, callback)
+
+	r.applySubquerySoftDelete(builder, relatedTable, relatedModel)
+
+	return builder
+}
+
+// applyExistenceClause adds one existence clause, or the count comparison that stands in for it when
+// EXISTS is not the matching shape. The subquery is rendered from the framework builder, so no GORM
+// statement carries it.
+func applyExistenceClause(builder *querybuilder.Builder, inner *querybuilder.Builder, operator string, count int, boolean string) {
+	if shouldUseExists(operator, count) {
+		subquery, bindings := inner.ToSelectSQL()
+		builder.WhereRaw(existenceKeyword(operator, count)+" ("+subquery+")", bindings, boolean)
+
+		return
+	}
+
+	setSubquerySelect(inner, "count(*)")
+	subquery, bindings := inner.ToSelectSQL()
+	builder.WhereRaw("("+subquery+") "+operator+" ?", append(bindings, count), boolean)
+}
+
+// existenceKeyword names the clause an existence condition becomes, negated when the condition asked
+// for the rows without the relation.
+func existenceKeyword(operator string, count int) string {
+	if operator == "<" && count == 1 {
+		return "not exists"
+	}
+
+	return "exists"
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+// relatedChild returns a child query addressing one table and matching a column against a list of
+// values. It is the shape every eager loader builds per chunk, expressed in the conditions the compiler
+// reads rather than as a statement handed to GORM.
+//
+// The column is named the way a caller writes one — unquoted, with a dot separating a table from its
+// column — because the compiler quotes each segment. A name that arrived already quoted would be
+// quoted again and the statement would not run.
+func (r *Query) relatedChild(table string, column string, values []any) *Query {
+	// The child starts from no conditions of its own, as the fresh session it replaced did. Inheriting
+	// the receiver's would carry the parent query's where clause into the child and narrow it to the
+	// rows the parent matched.
+	child := r.wrap(r.freshSession())
+
+	conditions := child.conditions
+	conditions.table = &Table{name: table}
+	conditions.where = append(conditions.where, contractsdriver.Where{Query: column, Args: []any{values}})
+
+	return child.setConditions(conditions)
+}
+
+// applySubquerySoftDelete adds the related model's "not soft deleted" predicate inside an existence
+// subquery. Laravel applies the related model's SoftDeletingScope to the subquery, and the compiled
+// relation read (applySoftDelete) already filters deleted rows, so without this an existence check
+// would match a parent whose only related rows are soft-deleted. Only the framework's own soft-delete
+// type is handled: a related model still declaring gorm.DeletedAt is left to GORM, exactly as on every
+// other compiled path.
+func (r *Query) applySubquerySoftDelete(builder *querybuilder.Builder, table string, model any) {
+	if !usesFrameworkSoftDeleteModel(model) {
+		return
+	}
+
+	column, ok := softDeleteColumn(model)
+	if !ok {
+		return
+	}
+
+	builder.WhereRaw(r.ident(table, column)+" IS NULL", nil, querybuilder.BooleanAnd)
+}
+
+// subqueryBuilder starts a framework builder for a correlated subquery over table.
+//
+// The name is bare, like every table name the ORM holds, and goes in through tableRef so the
+// grammar renders it with the dialect quoting and the connection prefix exactly once.
+func (r *Query) subqueryBuilder(table string) *querybuilder.Builder {
+	builder := querybuilder.NewBuilder(r.queryGrammar)
+	builder.SetDriver(r.dbConfig.Driver)
+	builder.FromRaw(r.tableRef(table), nil)
+
+	return builder
+}
+
+// setSubquerySelect replaces a subquery's select list with a raw expression. The builder's Select
+// would quote the expression, so a raw one is used instead.
+func setSubquerySelect(builder *querybuilder.Builder, expression string) {
+	builder.Select(querybuilder.Expression{Value: expression})
+}
+
+// applyRelationScope runs a relation callback against a child query and translates its conditions onto
+// the subquery builder. The callback is handed a wrapper query, exactly as it was when the subquery
+// was assembled with GORM, but its clauses now land on the framework builder.
+func (r *Query) applyRelationScope(builder *querybuilder.Builder, callback contractsorm.RelationCallback) {
+	if callback == nil {
+		return
+	}
+
+	child := r.wrap(r.freshSession())
+
+	if scoped, ok := callback(child).(*Query); ok {
+		scoped.applyWhere(builder)
+
+		return
+	}
+
+	child.applyWhere(builder)
+}
 
 func (r *Query) freshSession() *gormio.DB {
 	return r.instance.Session(&gormio.Session{NewDB: true, Initialized: true})
@@ -802,11 +702,8 @@ func (r *Query) parentModel() any {
 			return m
 		}
 	}
-	if r.instance != nil && r.instance.Statement != nil {
-		if r.instance.Statement.Model != nil {
-			return r.instance.Statement.Model
-		}
-	}
+	// The statement's model is not consulted: it is only ever set from conditions.model, which the
+	// branches above already read.
 	return nil
 }
 
@@ -905,16 +802,6 @@ func aggregateAlias(relation, fn, column string) string {
 		return fmt.Sprintf("%s_%s", rel, fn)
 	}
 	return fmt.Sprintf("%s_%s_%s", rel, fn, column)
-}
-
-// quoteIdent applies a portable identifier quote. We use backticks - GORM rewrites identifiers
-// per dialect during compilation when the value passes through `clause.Column`, but raw SQL
-// fragments (which is what we emit for correlation) are left alone. Backticks work on MySQL and
-// SQLite by default; PostgreSQL and SQL Server only accept double quotes. To stay portable we
-// emit the bare identifier and let the dialects accept it - all tested dialects parse unquoted
-// identifiers when the names are simple snake_case.
-func quoteIdent(name string) string {
-	return strings.NewReplacer("`", "", "'", "", `"`, "").Replace(name)
 }
 
 // Sanity: ensure *Query satisfies contractsorm.QueryWithRelations at compile time.

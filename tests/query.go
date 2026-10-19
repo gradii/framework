@@ -19,6 +19,8 @@ import (
 	"github.com/goravel/framework/support/env"
 	"github.com/goravel/framework/support/str"
 	"github.com/goravel/framework/testing/utils"
+	gormio "gorm.io/gorm"
+
 	"github.com/goravel/mysql"
 	mysqlcontracts "github.com/goravel/mysql/contracts"
 	"github.com/goravel/postgres"
@@ -39,21 +41,26 @@ type TestQuery struct {
 func NewTestQuery(ctx context.Context, driver contractsdriver.Driver, config config.Config, connection string) (*TestQuery, error) {
 	pool := driver.Pool()
 	logger := databasedb.NewLogger(config, utils.NewTestLog())
-	gorm, instrument, err := databasedriver.BuildGorm(config, logger.ToGorm(), pool, connection, nil)
+	conn, err := databasedriver.Open(config, logger, pool, connection, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	db, err := databasedb.NewDB(ctx, config, driver, logger, gorm, instrument, nil)
+	db, err := databasedb.NewDB(ctx, config, driver, logger, conn, nil)
 	if err != nil {
 		return nil, err
+	}
+
+	var instance *gormio.DB
+	if conn != nil {
+		instance = conn.Gorm()
 	}
 
 	testQuery := &TestQuery{
 		config: config,
 		db:     db,
 		driver: driver,
-		query:  databasegorm.NewQuery(ctx, config, pool.Writers[0], gorm, driver.Grammar(), utils.NewTestLog(), nil, nil, nil),
+		query:  databasegorm.NewQuery(ctx, config, pool.Writers[0], instance, driver.Grammar(), utils.NewTestLog(), nil, nil, nil),
 	}
 
 	return testQuery, nil

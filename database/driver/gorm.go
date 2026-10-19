@@ -5,12 +5,12 @@ import (
 	"time"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 	"gorm.io/gorm/schema"
 	"gorm.io/plugin/dbresolver"
 
 	"github.com/goravel/framework/contracts/config"
 	"github.com/goravel/framework/contracts/database"
+	contractslogger "github.com/goravel/framework/contracts/database/logger"
 	contractstelemetry "github.com/goravel/framework/contracts/telemetry"
 	"github.com/goravel/framework/errors"
 	"github.com/goravel/framework/support/carbon"
@@ -29,7 +29,7 @@ var (
 	pingWarning        sync.Once
 )
 
-func BuildGorm(config config.Config, logger logger.Interface, pool database.Pool, connection string, telemetryResolver contractstelemetry.Resolver) (*gorm.DB, *instrumentationdatabase.Instrument, error) {
+func BuildGorm(config config.Config, logger contractslogger.Logger, pool database.Pool, connection string, telemetryResolver contractstelemetry.Resolver) (*gorm.DB, *instrumentationdatabase.Instrument, error) {
 	if cached, ok := connectionToDB.Load(connection); ok {
 		c := cached.(cachedConnection)
 		return c.db, c.instrument, nil
@@ -56,7 +56,7 @@ func BuildGorm(config config.Config, logger logger.Interface, pool database.Pool
 		DisableAutomaticPing:                     true,
 		DisableForeignKeyConstraintWhenMigrating: true,
 		SkipDefaultTransaction:                   true,
-		Logger:                                   logger,
+		Logger:                                   NewGormLogger(logger),
 		NowFunc: func() time.Time {
 			return carbon.Now().StdTime()
 		},
@@ -92,6 +92,13 @@ func BuildGorm(config config.Config, logger logger.Interface, pool database.Pool
 	maxOpenConns := config.GetInt("database.pool.max_open_conns", 100)
 	connMaxIdleTime := config.GetDuration("database.pool.conn_max_idletime", 3600)
 	connMaxLifetime := config.GetDuration("database.pool.conn_max_lifetime", 3600)
+
+	// The pool the framework's compiled reads execute on is opened next to the writer's, so the
+	// facades (through Connection) and the ORM (through Reader) resolve the same one whichever
+	// entry point built this connection.
+	if _, err := openReader(config, pool, connection); err != nil {
+		return nil, nil, err
+	}
 
 	if len(pool.Writers) == 1 && len(pool.Readers) == 0 {
 		db, err := instance.DB()
@@ -166,15 +173,18 @@ func drainConnections() []cachedConnection {
 }
 
 // ResetConnections drops the cached connections and unregisters their telemetry,
-// leaving the pools open for callers that may still hold the *gorm.DB.
+// leaving the pools open for callers that may still hold the *gorm.DB. Reader pools
+// are dropped from the cache as well, but likewise left open.
 func ResetConnections() {
 	for _, cached := range drainConnections() {
 		cached.instrument.Shutdown()
 	}
+
+	resetReaders()
 }
 
 // CloseConnections drops the cached connections, unregisters their telemetry and
-// closes the pools. Call it only when the connections are idle.
+// closes the pools, the reader pools included. Call it only when the connections are idle.
 func CloseConnections() {
 	for _, cached := range drainConnections() {
 		cached.instrument.Shutdown()
@@ -187,4 +197,6 @@ func CloseConnections() {
 			}
 		}
 	}
+
+	closeReaders()
 }

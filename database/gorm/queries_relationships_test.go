@@ -101,7 +101,7 @@ func TestHasInvalidArgErrorPropagated(t *testing.T) {
 	q := newRelQuery(t)
 	got := toQuery(q.Has("Books", 1.23))
 	// invalid arg path returns a fresh query carrying an error on its instance.
-	assert.Error(t, got.instance.Error)
+	assert.Error(t, got.conditions.err)
 }
 
 // --- Morph queueing --------------------------------------------------------
@@ -145,13 +145,13 @@ func TestMorphFamilyQueueing(t *testing.T) {
 func TestHasMorphEmptyTypesError(t *testing.T) {
 	q := newRelQuery(t)
 	got := toQuery(q.HasMorph("X", nil))
-	assert.True(t, errors.Is(got.instance.Error, errors.OrmRelationMorphTypesEmpty))
+	assert.True(t, errors.Is(got.conditions.err, errors.OrmRelationMorphTypesEmpty))
 }
 
 func TestHasMorphInvalidArgError(t *testing.T) {
 	q := newRelQuery(t)
 	got := toQuery(q.HasMorph("X", []any{&relUser{}}, 3.14))
-	assert.Error(t, got.instance.Error)
+	assert.Error(t, got.conditions.err)
 }
 
 // --- Aggregate / WithCount / WithExists queueing --------------------------
@@ -170,13 +170,13 @@ func TestWithAggregate(t *testing.T) {
 func TestWithAggregateInvalidFn(t *testing.T) {
 	q := newRelQuery(t)
 	got := toQuery(q.WithAggregate("Books", "*", "median"))
-	assert.True(t, errors.Is(got.instance.Error, errors.OrmRelationInvalidAggregate))
+	assert.True(t, errors.Is(got.conditions.err, errors.OrmRelationInvalidAggregate))
 }
 
 func TestWithAggregateInvalidArg(t *testing.T) {
 	q := newRelQuery(t)
 	got := toQuery(q.WithAggregate("Books", "*", "count", 3.14))
-	assert.True(t, errors.Is(got.instance.Error, errors.OrmRelationInvalidArgument))
+	assert.True(t, errors.Is(got.conditions.err, errors.OrmRelationInvalidArgument))
 }
 
 func TestWithCountStringAndStruct(t *testing.T) {
@@ -192,7 +192,7 @@ func TestWithCountStringAndStruct(t *testing.T) {
 func TestWithCountInvalidArg(t *testing.T) {
 	q := newRelQuery(t)
 	got := toQuery(q.WithCount(123))
-	assert.True(t, errors.Is(got.instance.Error, errors.OrmRelationInvalidArgument))
+	assert.True(t, errors.Is(got.conditions.err, errors.OrmRelationInvalidArgument))
 }
 
 func TestWithMaxMinSumAvg(t *testing.T) {
@@ -230,7 +230,7 @@ func TestWithQueueing(t *testing.T) {
 func TestWithInvalidArg(t *testing.T) {
 	q := newRelQuery(t)
 	got := toQuery(q.With(3.14))
-	assert.True(t, errors.Is(got.instance.Error, errors.OrmEagerLoadInvalidArgument))
+	assert.True(t, errors.Is(got.conditions.err, errors.OrmEagerLoadInvalidArgument))
 }
 
 func TestWithout(t *testing.T) {
@@ -374,14 +374,6 @@ func TestAggregateAlias(t *testing.T) {
 	for _, tc := range cases {
 		assert.Equal(t, tc.want, aggregateAlias(tc.relation, tc.fn, tc.col))
 	}
-}
-
-func TestQuoteIdent(t *testing.T) {
-	assert.Equal(t, "", quoteIdent(""))
-	assert.Equal(t, "users", quoteIdent("users"))
-	// expressions left alone (contain space, parens, dot)
-	assert.Equal(t, "users.id", quoteIdent("users.id"))
-	assert.Equal(t, "COUNT(*)", quoteIdent("COUNT(*)"))
 }
 
 func TestParentTable(t *testing.T) {

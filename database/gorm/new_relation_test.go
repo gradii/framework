@@ -5,24 +5,26 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	gormio "gorm.io/gorm"
+	"github.com/stretchr/testify/require"
 
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
 	"github.com/goravel/framework/database/orm/morphmap"
 	"github.com/goravel/framework/errors"
 )
 
-// dryRunFind wraps the inner *gormio.DB pulled out of a Goravel Query, runs Find in DryRun mode,
-// and returns the resulting SQL string. Used to verify the WHERE / JOIN shape produced by
-// Related per kind.
+// newRelationSQL compiles the statement the Related query would run, through the same path the ORM
+// executes, and returns it. It used to hand the query to GORM in DryRun mode; compiling here pins the
+// SQL a caller really gets.
 func newRelationSQL(t *testing.T, q contractsorm.Query, dest any) string {
 	t.Helper()
 	gq, ok := q.(*Query)
 	if !ok {
 		t.Fatalf("expected *gorm.Query, got %T", q)
 	}
-	stmt := gq.buildConditions().instance.Session(&gormio.Session{DryRun: true}).Find(dest)
-	return stmt.Statement.SQL.String()
+	stmt, _, err := gq.dest(dest).addGlobalScopes().compileSelect()
+	require.NoError(t, err)
+
+	return stmt
 }
 
 func TestRelated_HasMany_Where(t *testing.T) {
@@ -63,7 +65,7 @@ func TestRelated_HasManyThrough(t *testing.T) {
 	rel := q.Related(&relCountry{ID: 1}, "Posts")
 	sql := newRelationSQL(t, rel, &[]relPost{})
 	assert.Contains(t, sql, "rel_posts")
-	assert.Contains(t, sql, "INNER JOIN")
+	assert.Contains(t, strings.ToLower(sql), "inner join")
 	assert.Contains(t, sql, "rel_users")
 }
 
@@ -72,7 +74,7 @@ func TestRelated_NotPointer(t *testing.T) {
 	rel := q.Related(relUser{ID: 1}, "Books") // value, not pointer
 	gq, ok := rel.(*Query)
 	assert.True(t, ok)
-	assert.True(t, errors.Is(gq.instance.Error, errors.OrmRelationParentNotPointer))
+	assert.True(t, errors.Is(gq.conditions.err, errors.OrmRelationParentNotPointer))
 }
 
 func TestRelated_NilParent(t *testing.T) {
@@ -80,15 +82,17 @@ func TestRelated_NilParent(t *testing.T) {
 	rel := q.Related(nil, "Books")
 	gq, ok := rel.(*Query)
 	assert.True(t, ok)
-	assert.True(t, errors.Is(gq.instance.Error, errors.OrmRelationParentNotPointer))
+	assert.True(t, errors.Is(gq.conditions.err, errors.OrmRelationParentNotPointer))
 }
 
+// A query guarded because its relation could not be resolved carries the error on itself, so whichever
+// terminal runs on it reports the reason rather than an empty result.
 func TestRelated_RelationNotFound(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
 	rel := q.Related(&relUser{ID: 1}, "DoesNotExist")
 	gq, ok := rel.(*Query)
 	assert.True(t, ok)
-	assert.True(t, errors.Is(gq.instance.Error, errors.OrmRelationNotFound))
+	assert.True(t, errors.Is(gq.conditions.err, errors.OrmRelationNotFound))
 }
 
 // --- MorphTo --------------------------------------------------------------
@@ -121,7 +125,7 @@ func TestRelated_MorphTo_UnregisteredType(t *testing.T) {
 	rel := q.Related(&morphImage{ID: 1, ImageableID: 42, ImageableType: "unknown"}, "Imageable")
 	gq, ok := rel.(*Query)
 	assert.True(t, ok)
-	assert.True(t, errors.Is(gq.instance.Error, errors.OrmMorphTypeUnknown))
+	assert.True(t, errors.Is(gq.conditions.err, errors.OrmMorphTypeUnknown))
 }
 
 func TestRelated_MorphTo_EmptyType_YieldsZeroRowQuery(t *testing.T) {
@@ -132,10 +136,10 @@ func TestRelated_MorphTo_EmptyType_YieldsZeroRowQuery(t *testing.T) {
 	rel := q.Related(&morphImage{ID: 1, ImageableID: 0, ImageableType: ""}, "Imageable")
 	gq, ok := rel.(*Query)
 	assert.True(t, ok)
-	// Apply conditions and run Find against an arbitrary table to verify the WHERE renders.
-	stmt := gq.buildConditions().instance.Table("any_table").Session(&gormio.Session{DryRun: true}).Find(&[]map[string]any{})
-	sql := stmt.Statement.SQL.String()
-	assert.Contains(t, sql, "1 = 0")
+	// The zero-row guard compiles to a WHERE that cannot match.
+	stmt, _, err := gq.Table("any_table").(*Query).compileSelect()
+	require.NoError(t, err)
+	assert.Contains(t, stmt, "1 = 0")
 }
 
 // --- MorphToMany ---------------------------------------------------------
@@ -144,7 +148,7 @@ func TestRelated_MorphToMany_AddsPivotTypeFilter(t *testing.T) {
 	q := newRelQueryWith(t, &morphPost{})
 	rel := q.Related(&morphPost{ID: 3}, "Tags")
 	sql := newRelationSQL(t, rel, &[]morphTag{})
-	assert.Contains(t, sql, "INNER JOIN")
+	assert.Contains(t, strings.ToLower(sql), "inner join")
 	assert.Contains(t, sql, "taggables")
 	assert.Contains(t, sql, "taggable_type")
 }
@@ -158,6 +162,8 @@ type scopedUser struct {
 	ID    uint
 	Books []*scopedBook `gorm:"-"`
 }
+
+func (scopedUser) TableName() string { return "scoped_users" }
 
 func (scopedUser) Relations() map[string]contractsorm.Relation {
 	return map[string]contractsorm.Relation{
@@ -178,6 +184,8 @@ type scopedBook struct {
 	Published bool
 }
 
+func (scopedBook) TableName() string { return "scoped_books" }
+
 func TestRelated_OnQuery_AppliedToReturnedQuery(t *testing.T) {
 	q := newRelQueryWith(t, &scopedUser{})
 	rel := q.Related(&scopedUser{ID: 5}, "Books")
@@ -191,8 +199,8 @@ func TestCompileExistenceSubquery_OnQuery_AppliedInExistenceCheck(t *testing.T) 
 	q := newRelQueryWith(t, &scopedUser{})
 	desc, err := resolveRelation(q.instance, &scopedUser{}, "Books")
 	assert.NoError(t, err)
-	inner := q.compileExistenceSubquery(desc, nil)
-	stmt := inner.Session(&gormio.Session{DryRun: true}).Find(&[]scopedBook{})
-	sql := stmt.Statement.SQL.String()
+	inner, err := q.compileExistenceSubquery(desc, nil)
+	assert.NoError(t, err)
+	sql, _ := inner.ToSelectSQL()
 	assert.Contains(t, sql, "published")
 }

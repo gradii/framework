@@ -19,11 +19,17 @@ type User struct {
 	orm.SoftDeletes
 }
 
+// TableName states the table the fixture maps to, as make:model writes into every model.
+func (User) TableName() string { return "users" }
+
 type Product struct {
 	ID    uint   `gorm:"primaryKey"`
 	Code  string `gorm:"uniqueIndex"`
 	Price float64
 }
+
+// TableName states the table the fixture maps to, as make:model writes into every model.
+func (Product) TableName() string { return "products" }
 
 type CompositeKey struct {
 	OrderID   uint `gorm:"primaryKey"`
@@ -31,10 +37,16 @@ type CompositeKey struct {
 	Note      string
 }
 
+// TableName states the table the fixture maps to, as make:model writes into every model.
+func (CompositeKey) TableName() string { return "composite_keys" }
+
 type IgnoredField struct {
 	ID     uint
 	Secret string `gorm:"-:migration"`
 }
+
+// TableName states the table the fixture maps to, as make:model writes into every model.
+func (IgnoredField) TableName() string { return "ignored_fields" }
 
 type CustomTypes struct {
 	ID       uint
@@ -42,11 +54,17 @@ type CustomTypes struct {
 	Settings map[string]any `gorm:"type:json"`
 }
 
+// TableName states the table the fixture maps to, as make:model writes into every model.
+func (CustomTypes) TableName() string { return "custom_types" }
+
 type PtrFields struct {
 	ID   uint
 	Name *string
 	Age  *int
 }
+
+// TableName states the table the fixture maps to, as make:model writes into every model.
+func (PtrFields) TableName() string { return "ptr_fields" }
 
 type NullableFields struct {
 	ID      uint
@@ -54,12 +72,18 @@ type NullableFields struct {
 	NullInt sql.NullInt64
 }
 
+// TableName states the table the fixture maps to, as make:model writes into every model.
+func (NullableFields) TableName() string { return "nullable_fields" }
+
 type MigrationTagFields struct {
 	ID       uint
 	Data     string `gorm:"migration:Json"`      // StudlyCase
 	Content  string `gorm:"migration:long_text"` // snake_case
 	UniqueID string `gorm:"migration:uuid"`      // lowercase
 }
+
+// TableName states the table the fixture maps to, as make:model writes into every model.
+func (MigrationTagFields) TableName() string { return "migration_tag_fields" }
 
 func TestGenerate(t *testing.T) {
 	tests := []struct {

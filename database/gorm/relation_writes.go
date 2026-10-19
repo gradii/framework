@@ -7,6 +7,7 @@ import (
 	"time"
 
 	dbcontract "github.com/goravel/framework/contracts/database/db"
+	contractsdriver "github.com/goravel/framework/contracts/database/driver"
 	"github.com/goravel/framework/errors"
 )
 
@@ -220,7 +221,7 @@ func (r *Query) applyAssociate(parent, owner any, desc *relationDescriptor, isMo
 // mutateAssociate is the pure-mutation half of applyAssociate. Writes owner's PK into parent's
 // FK column (and the morph_type column for MorphTo). No persistence.
 func (r *Query) mutateAssociate(parent, owner any, desc *relationDescriptor, isMorph bool) error {
-	parentSchema, err := parseGormSchema(r.instance, parent)
+	parentSchema, err := parseSchema(r.instance, parent)
 	if err != nil {
 		return err
 	}
@@ -285,7 +286,7 @@ func (r *Query) applyDissociate(parent any, desc *relationDescriptor, isMorph bo
 
 // mutateDissociate is the pure-mutation half of applyDissociate.
 func (r *Query) mutateDissociate(parent any, desc *relationDescriptor, isMorph bool) error {
-	parentSchema, err := parseGormSchema(r.instance, parent)
+	parentSchema, err := parseSchema(r.instance, parent)
 	if err != nil {
 		return err
 	}
@@ -402,7 +403,7 @@ func (r *Query) FindOrNewRelation(parent any, relation string, id any, dest any)
 			return err
 		}
 		// Check if Find actually populated dest by inspecting the PK field.
-		schema, err := parseGormSchema(r.instance, dest)
+		schema, err := parseSchema(r.instance, dest)
 		if err != nil {
 			return err
 		}
@@ -492,11 +493,11 @@ func (r *Query) FirstOrCreateRelation(parent any, relation string, attrs map[str
 		return nil
 	case relKindMany2Many, relKindMorphToMany:
 		// For m2m: search the related table directly (no FK constraint), create+attach if missing.
-		q := r.freshSession().Model(desc.relatedModel)
+		q := r.relatedQuery(desc.relatedModel)
 		for col, val := range attrs {
 			q = q.Where(col, val)
 		}
-		if err := r.wrap(q).First(dest); err != nil {
+		if err := q.First(dest); err != nil {
 			// Not found — overlay attrs+values, create, attach.
 			if err := r.applyAttrMap(dest, attrs); err != nil {
 				return err
@@ -559,12 +560,12 @@ func (r *Query) UpdateOrCreateRelation(parent any, relation string, attrs map[st
 		return r.wrap(r.freshSession()).Save(dest)
 	case relKindMany2Many, relKindMorphToMany:
 		// For m2m: search the related table directly, create+attach if missing, otherwise update.
-		q := r.freshSession().Model(desc.relatedModel)
+		q := r.relatedQuery(desc.relatedModel)
 		for col, val := range attrs {
 			q = q.Where(col, val)
 		}
 		var freshlyCreated bool
-		if err := r.wrap(q).First(dest); err != nil {
+		if err := q.First(dest); err != nil {
 			// Not found — overlay attrs+values, create.
 			if err := r.applyAttrMap(dest, attrs); err != nil {
 				return err
@@ -634,6 +635,58 @@ func (r *Query) AttachWithPivotRelation(parent any, relation string, idsWithAttr
 	return nil
 }
 
+// pivotTableQuery returns a fresh query addressing the given table directly, so pivot reads,
+// inserts, updates and deletes compile through the framework builder instead of being handed to
+// GORM. The name is bare, like every table name the ORM holds, so the grammar applies the connection
+// prefix once when the statement is rendered.
+func (r *Query) pivotTableQuery(table string) *Query {
+	child := r.wrap(r.freshSession())
+	conditions := child.conditions
+	conditions.table = &Table{name: table}
+
+	return child.setConditions(conditions)
+}
+
+// pivotWhere appends one predicate to the query and returns it. An equality passes the dialect-quoted
+// column and a "?" placeholder; an IN list passes the unquoted qualified column with the id slice as
+// its single binding, which the compiler renders as a typed IN clause.
+func (r *Query) pivotWhere(query string, args ...any) *Query {
+	return r.addWhere(contractsdriver.Where{Query: query, Args: args}).(*Query)
+}
+
+// insertPivotRows inserts the given rows into the pivot table through the framework builder and runs
+// the statement on the connection pool. It replaces the GORM Create the pivot writers used.
+func (r *Query) insertPivotRows(table string, rows []map[string]any) error {
+	child := r.pivotTableQuery(table)
+
+	statement, bindings, err := child.pivotInsertStatement(rows)
+	if err != nil {
+		return err
+	}
+
+	_, err = child.execStatement(statement, bindings)
+
+	return err
+}
+
+// pivotInsertStatement compiles the pivot insert. The rows are given the union of their columns first:
+// per-id pivot attributes (AttachWithPivotRelation, and sync's attach map) let one row carry a column
+// another does not, and the grammar would otherwise key the whole statement off the first row and drop
+// the later column, losing its value on the rows that do not carry it in the same position.
+func (r *Query) pivotInsertStatement(rows []map[string]any) (string, []any, error) {
+	builder, err := r.newBuilder()
+	if err != nil {
+		return "", nil, err
+	}
+
+	statement, bindings := builder.ToInsertSQL(uniformInsertRecords(rows))
+	if err := builder.Error(); err != nil {
+		return "", nil, err
+	}
+
+	return statement, bindings, nil
+}
+
 // doAttach is the shared work-horse for AttachRelation / AttachWithPivotRelation. It does not
 // trigger touchIfTouching — callers (the public methods, and syncCore) own when to touch. Returns
 // the number of newly-inserted pivot rows; zero when every id was already attached.
@@ -662,7 +715,7 @@ func (r *Query) doAttach(desc *relationDescriptor, parentVal any, ids []any, ids
 	if len(rows) == 0 {
 		return 0, nil
 	}
-	if err := r.freshSession().Table(desc.pivotTable).Create(rows).Error; err != nil {
+	if err := r.insertPivotRows(desc.pivotTable, rows); err != nil {
 		return 0, err
 	}
 	return int64(len(rows)), nil
@@ -693,7 +746,7 @@ func (r *Query) doAttachWithPivot(desc *relationDescriptor, parentVal any, idsWi
 	if len(rows) == 0 {
 		return 0, nil
 	}
-	if err := r.freshSession().Table(desc.pivotTable).Create(rows).Error; err != nil {
+	if err := r.insertPivotRows(desc.pivotTable, rows); err != nil {
 		return 0, err
 	}
 	return int64(len(rows)), nil
@@ -721,17 +774,22 @@ func (r *Query) DetachRelation(parent any, relation string, ids []any) (int64, e
 
 // doDetach is the no-touch worker behind DetachRelation. Returns rows affected by the DELETE.
 func (r *Query) doDetach(desc *relationDescriptor, parentVal any, ids []any) (int64, error) {
-	q := r.freshSession().Table(desc.pivotTable).
-		Where(fmt.Sprintf("%s.%s = ?", quoteIdent(desc.pivotTable), quoteIdent(desc.pivotParentRef.foreignColumn)), parentVal)
+	q := r.pivotTableQuery(desc.pivotTable).
+		pivotWhere(fmt.Sprintf("%s = ?", r.ident(desc.pivotTable, desc.pivotParentRef.foreignColumn)), parentVal)
 	if desc.kind == relKindMorphToMany {
-		q = q.Where(fmt.Sprintf("%s.%s = ?", quoteIdent(desc.pivotTable), quoteIdent(desc.morphTypeColumn)), desc.morphValue)
+		q = q.pivotWhere(fmt.Sprintf("%s = ?", r.ident(desc.pivotTable, desc.morphTypeColumn)), desc.morphValue)
 	}
 	if len(ids) > 0 {
-		q = q.Where(fmt.Sprintf("%s.%s IN ?", quoteIdent(desc.pivotTable), quoteIdent(desc.pivotRelatedRef.foreignColumn)), ids)
+		q = q.pivotWhere(desc.pivotTable+"."+desc.pivotRelatedRef.foreignColumn, ids)
 	}
-	q = applyOnPivotQuery(q, desc)
-	res := q.Delete(nil)
-	return res.RowsAffected, res.Error
+	if scoped, ok := applyOnPivotQueryToQuery(r.queryGrammar, q, desc).(*Query); ok {
+		q = scoped
+	}
+	res, err := q.execDelete()
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected, nil
 }
 
 // resolvePivot is the shared front-half for all pivot operations: validates parent, resolves the
@@ -783,17 +841,17 @@ func (r *Query) basePivotRow(desc *relationDescriptor, parentVal, relatedID any,
 // existingPivotIDs returns the set of already-attached related ids among ids. Used by Attach to
 // skip duplicates.
 func (r *Query) existingPivotIDs(desc *relationDescriptor, parentVal any, ids []any) (map[string]struct{}, error) {
-	q := r.freshSession().
-		Table(desc.pivotTable).
-		Select(desc.pivotRelatedRef.foreignColumn).
-		Where(fmt.Sprintf("%s.%s = ?", quoteIdent(desc.pivotTable), quoteIdent(desc.pivotParentRef.foreignColumn)), parentVal).
-		Where(fmt.Sprintf("%s.%s IN ?", quoteIdent(desc.pivotTable), quoteIdent(desc.pivotRelatedRef.foreignColumn)), ids)
+	q := r.pivotTableQuery(desc.pivotTable)
+	conditions := q.conditions
+	conditions.selectColumns = []string{desc.pivotRelatedRef.foreignColumn}
+	q = q.setConditions(conditions)
+	q = q.pivotWhere(fmt.Sprintf("%s = ?", r.ident(desc.pivotTable, desc.pivotParentRef.foreignColumn)), parentVal)
+	q = q.pivotWhere(desc.pivotTable+"."+desc.pivotRelatedRef.foreignColumn, ids)
 	if desc.kind == relKindMorphToMany {
-		q = q.Where(fmt.Sprintf("%s.%s = ?", quoteIdent(desc.pivotTable), quoteIdent(desc.morphTypeColumn)), desc.morphValue)
+		q = q.pivotWhere(fmt.Sprintf("%s = ?", r.ident(desc.pivotTable, desc.morphTypeColumn)), desc.morphValue)
 	}
-	q = applyOnPivotQuery(q, desc)
-	var rows []map[string]any
-	if err := q.Find(&rows).Error; err != nil {
+	rows, err := r.findMapsCompiled(q, desc)
+	if err != nil {
 		return nil, err
 	}
 	out := make(map[string]struct{}, len(rows))
@@ -806,16 +864,16 @@ func (r *Query) existingPivotIDs(desc *relationDescriptor, parentVal any, ids []
 // allPivotIDs returns the set of all currently-attached related ids for parent. Used by Sync /
 // Toggle to compute the diff.
 func (r *Query) allPivotIDs(desc *relationDescriptor, parentVal any) ([]any, error) {
-	q := r.freshSession().
-		Table(desc.pivotTable).
-		Select(desc.pivotRelatedRef.foreignColumn).
-		Where(fmt.Sprintf("%s.%s = ?", quoteIdent(desc.pivotTable), quoteIdent(desc.pivotParentRef.foreignColumn)), parentVal)
+	q := r.pivotTableQuery(desc.pivotTable)
+	conditions := q.conditions
+	conditions.selectColumns = []string{desc.pivotRelatedRef.foreignColumn}
+	q = q.setConditions(conditions)
+	q = q.pivotWhere(fmt.Sprintf("%s = ?", r.ident(desc.pivotTable, desc.pivotParentRef.foreignColumn)), parentVal)
 	if desc.kind == relKindMorphToMany {
-		q = q.Where(fmt.Sprintf("%s.%s = ?", quoteIdent(desc.pivotTable), quoteIdent(desc.morphTypeColumn)), desc.morphValue)
+		q = q.pivotWhere(fmt.Sprintf("%s = ?", r.ident(desc.pivotTable, desc.morphTypeColumn)), desc.morphValue)
 	}
-	q = applyOnPivotQuery(q, desc)
-	var rows []map[string]any
-	if err := q.Find(&rows).Error; err != nil {
+	rows, err := r.findMapsCompiled(q, desc)
+	if err != nil {
 		return nil, err
 	}
 	out := make([]any, 0, len(rows))
@@ -1099,15 +1157,24 @@ func (r *Query) doUpdateExistingPivot(desc *relationDescriptor, parentVal any, i
 			updateMap[desc.pivotUpdatedAtColumn] = time.Now()
 		}
 	}
-	q := r.freshSession().Table(desc.pivotTable).
-		Where(fmt.Sprintf("%s.%s = ?", quoteIdent(desc.pivotTable), quoteIdent(desc.pivotParentRef.foreignColumn)), parentVal).
-		Where(fmt.Sprintf("%s.%s = ?", quoteIdent(desc.pivotTable), quoteIdent(desc.pivotRelatedRef.foreignColumn)), id)
+	q := r.pivotTableQuery(desc.pivotTable).
+		pivotWhere(fmt.Sprintf("%s = ?", r.ident(desc.pivotTable, desc.pivotParentRef.foreignColumn)), parentVal).
+		pivotWhere(fmt.Sprintf("%s = ?", r.ident(desc.pivotTable, desc.pivotRelatedRef.foreignColumn)), id)
 	if desc.kind == relKindMorphToMany {
-		q = q.Where(fmt.Sprintf("%s.%s = ?", quoteIdent(desc.pivotTable), quoteIdent(desc.morphTypeColumn)), desc.morphValue)
+		q = q.pivotWhere(fmt.Sprintf("%s = ?", r.ident(desc.pivotTable, desc.morphTypeColumn)), desc.morphValue)
 	}
-	q = applyOnPivotQuery(q, desc)
-	res := q.Updates(updateMap)
-	return res.RowsAffected, res.Error
+	if scoped, ok := applyOnPivotQueryToQuery(r.queryGrammar, q, desc).(*Query); ok {
+		q = scoped
+	}
+	statement, bindings, err := q.compileUpdate(updateMap)
+	if err != nil {
+		return 0, err
+	}
+	res, err := q.execStatement(statement, bindings)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected, nil
 }
 
 // setRelationFKOnChild reads parent's local key, then writes that value into child's FK column
@@ -1122,7 +1189,7 @@ func (r *Query) setRelationFKOnChild(parent, child any, desc *relationDescriptor
 	if err != nil {
 		return err
 	}
-	childSchema, err := parseGormSchema(r.instance, child)
+	childSchema, err := parseSchema(r.instance, child)
 	if err != nil {
 		return err
 	}
@@ -1152,7 +1219,7 @@ func (r *Query) applyAttrMap(dest any, attrs map[string]any) error {
 	if len(attrs) == 0 {
 		return nil
 	}
-	schema, err := parseGormSchema(r.instance, dest)
+	schema, err := parseSchema(r.instance, dest)
 	if err != nil {
 		return err
 	}
@@ -1182,7 +1249,7 @@ func (r *Query) touchIfTouching(desc *relationDescriptor, parent any, parentVal 
 	if !desc.touches {
 		return nil
 	}
-	parentSchema, err := parseGormSchema(r.instance, parent)
+	parentSchema, err := parseSchema(r.instance, parent)
 	if err != nil {
 		return err
 	}
@@ -1196,11 +1263,14 @@ func (r *Query) touchIfTouching(desc *relationDescriptor, parent any, parentVal 
 	}
 	pkColumn := parentSchema.PrimaryFields[0].DBName
 	now := time.Now()
-	res := r.freshSession().Table(parentSchema.Table).
-		Where(fmt.Sprintf("%s = ?", quoteIdent(pkColumn)), parentVal).
-		Update(field.DBName, now)
-	if res.Error != nil {
-		return res.Error
+	q := r.pivotTableQuery(parentSchema.Table).
+		pivotWhere(fmt.Sprintf("%s = ?", r.ident(pkColumn)), parentVal)
+	statement, bindings, err := q.compileUpdate(map[string]any{field.DBName: now})
+	if err != nil {
+		return err
+	}
+	if _, err := q.execStatement(statement, bindings); err != nil {
+		return err
 	}
 	// Mirror the change into the in-memory parent struct so subsequent reads see the bump.
 	parentRV := reflect.ValueOf(parent).Elem()

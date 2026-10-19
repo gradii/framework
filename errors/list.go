@@ -116,6 +116,11 @@ var (
 	DatabaseTransactionNotStarted       = New("transaction not started")
 	DatabaseFailedToGetSql              = New("failed to get sql: %v")
 	DatabaseDataIsEmpty                 = New("data can't be empty")
+	DatabaseConnectionIsNil             = New("database connection is not initialized")
+	DatabaseChunkStopped                = New("chunk iteration stopped by the callback")
+	DatabaseChunkByIdColumnNotPresent   = New("the chunk by id operation was aborted because the %s column is not present in the query result")
+	OrmFieldTypeMismatch                = New("cannot assign %s to %s.%s")
+	OrmRowScanValueNotRepresentable     = New("cannot scan value %v of type %s into %s")
 
 	DockerUnknownContainerType           = New("unknown container type")
 	DockerInsufficientDatabaseContainers = New("the number of database container is not enough, expect: %d, got: %d")
@@ -240,6 +245,7 @@ var (
 	OrmQueryInvalidParameter        = New("parameter error, please check the document")
 	OrmQueryModelNotPointer         = New("model must be pointer")
 	OrmQuerySelectAndOmitsConflict  = New("cannot set Select and Omits at the same time")
+	OrmQueryTableNotSet             = New("%v: Table not set, please add a TableName() method returning the table name")
 	OrmRecordNotFound               = New("record not found")
 	OrmDeletedAtColumnNotFound      = New("deleted at column not found")
 	OrmJsonContainsInvalidBinding   = New("invalid value for JSON contains: %v")
@@ -392,4 +398,70 @@ var (
 	ViewFSRootNotDirectory = New("view filesystem root %q is not a directory")
 	ViewInvalidFSRoot      = New("invalid view filesystem root %q: %v")
 	ViewTemplateNotExist   = New("view template %s does not exist")
+)
+
+// Query builder errors. Mirrors the exceptions thrown by Illuminate\Database\Query\Builder.
+var (
+	QueryInvalidBindingType          = New("invalid binding type: %s")
+	QueryIllegalOperatorAndValue     = New("Illegal operator and value combination.")
+	QueryIncrementAmountNonNumeric   = New("Non-numeric value passed as increment amount for column: '%s'.")
+	QueryIncrementEachNonAssociative = New("Non-associative array passed to incrementEach method.")
+	QueryNestedArraysNotAllowed      = New("nested arrays may not be passed to whereIn method")
+	QueryOrderDirectionInvalid       = New("order direction must be asc or desc")
+	QueryOrderRequired               = New("You must specify an orderBy clause when using this function.")
+	QueryRowValuesCountMismatch      = New("The number of columns must match the number of values")
+	QuerySubqueryTypeInvalid         = New("a subquery must be a query builder instance, a func, or a string")
+	QueryGrammarNotSet               = New("query grammar is not set")
+)
+
+// Cursor pagination errors. The codec mirrors Illuminate\Pagination\Cursor, but fails loudly where
+// Laravel either returns null or reads a missing key.
+var (
+	// QueryCursorParameterMissing is returned when the cursor carries no value for an ORDER BY
+	// column the query asks about. Laravel throws an UnexpectedValueException here.
+	QueryCursorParameterMissing = New("unable to find parameter [%s] in pagination item")
+	// QueryCursorInvalid is the catch-all for an encoded cursor that cannot be decoded.
+	QueryCursorInvalid = New("invalid cursor: %v")
+	// QueryCursorPayloadTooLarge rejects encoded cursors and decoded JSON above the size cap.
+	QueryCursorPayloadTooLarge = New("cursor payload exceeds the %d byte limit")
+	// QueryCursorNotObject rejects JSON whose top level is not an object.
+	QueryCursorNotObject = New("cursor payload must be a JSON object, got %s")
+	// QueryCursorPointsToNextItemsMissing rejects a payload without the direction bit.
+	QueryCursorPointsToNextItemsMissing = New("cursor payload is missing the _pointsToNextItems key")
+	// QueryCursorPointsToNextItemsInvalid rejects a direction bit that is not a boolean.
+	QueryCursorPointsToNextItemsInvalid = New("cursor payload _pointsToNextItems must be a boolean, got %s")
+	// QueryCursorNonScalarValue rejects array and object parameter values.
+	QueryCursorNonScalarValue = New("cursor parameter [%s] must be a scalar value, got %s")
+	// QueryCursorDuplicateParameter rejects a column that appears twice in one payload.
+	QueryCursorDuplicateParameter = New("cursor parameter [%s] is declared more than once")
+	// QueryCursorInvalidValue rejects a value that cannot be serialised to JSON.
+	QueryCursorInvalidValue = New("cursor parameter [%s] cannot be encoded as a JSON scalar: %v")
+	// QueryCursorReservedParameter rejects the direction bit's own key as a parameter name.
+	QueryCursorReservedParameter = New("cursor parameter name [%s] is reserved for the cursor direction bit")
+	// QueryCursorColumnNotFound is returned when a row carries no value for a column a cursor
+	// must be minted from. Laravel reads a dynamic property and would bind null; this fails loudly.
+	QueryCursorColumnNotFound = New("unable to find cursor column [%s] in the pagination item")
+)
+
+// Query grammar errors. Mirrors the RuntimeException thrown by dialect grammars that do not
+// implement a clause.
+var (
+	QueryJsonContainsNotSupported    = New("this database engine does not support JSON contains operations")
+	QueryJsonContainsKeyNotSupported = New("this database engine does not support JSON contains key operations")
+	QueryJsonLengthNotSupported      = New("this database engine does not support JSON length operations")
+	QueryJsonSelectorNotSupported    = New("this database engine does not support JSON operations")
+	QueryFullTextNotSupported        = New("this database engine does not support fulltext search operations")
+	QueryUpsertNotSupported          = New("this database engine does not support upserts")
+	QueryInsertIgnoreNotSupported    = New("this database engine does not support inserting while ignoring errors")
+	QueryLateralJoinNotSupported     = New("this database engine does not support lateral joins")
+)
+
+// Query grammar capability errors.
+var (
+	QueryCaseSensitiveLikeNotSupported = New("this database engine does not support case sensitive like operations")
+)
+
+// Query grammar selection errors.
+var (
+	QueryGrammarDriverNotRecognised = New("driver %s is not recognised, only mysql, postgres, sqlite and sqlserver have a dedicated grammar; the base grammar will be used")
 )

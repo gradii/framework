@@ -2,7 +2,6 @@ package database
 
 import (
 	"reflect"
-	"strings"
 )
 
 func GetID(dest any) any {
@@ -22,11 +21,19 @@ func GetIDByReflect(t reflect.Type, v reflect.Value) any {
 		v = v.Elem()
 	}
 
+	// Only a struct can carry a primary-key field. Anything else — most importantly the slice or
+	// array a batch destination is passed as — has no key to read, so it reports none instead of
+	// panicking on NumField. That is what lets a batch destination reach the insert branch it is
+	// meant for.
+	if t.Kind() != reflect.Struct {
+		return nil
+	}
+
 	for i := 0; i < t.NumField(); i++ {
 		if !t.Field(i).IsExported() {
 			continue
 		}
-		if strings.Contains(t.Field(i).Tag.Get("gorm"), "primaryKey") {
+		if ParseAnnotation(t.Field(i).Tag.Get("gorm")).PrimaryKey {
 			if v.Field(i).IsZero() {
 				return nil
 			}

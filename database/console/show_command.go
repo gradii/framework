@@ -2,6 +2,7 @@ package console
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cast"
 
@@ -23,6 +24,7 @@ type databaseInfo struct {
 	Host     string
 	Name     string
 	Username string
+	Prefix   string
 	Tables   []driver.Table
 	// TODO: We want to reconstruct the way to get the version of the database, comment it out temporarily.
 	// Version string
@@ -82,6 +84,7 @@ func (r *ShowCommand) Handle(ctx console.Context) error {
 		Name:     dbConfig.Driver,
 		Port:     dbConfig.Port,
 		Username: dbConfig.Username,
+		Prefix:   dbConfig.Prefix,
 	}
 
 	db, err := r.schema.Orm().DB()
@@ -136,7 +139,13 @@ func (r *ShowCommand) display(ctx console.Context, info databaseInfo) {
 		ctx.TwoColumnDetail("<fg=green;op=bold>Views</>", "<fg=yellow;op=bold>Rows</>")
 		for i := range info.Views {
 			if !str.Of(info.Views[i].Name).StartsWith("pg_catalog", "information_schema", "spt_") {
-				count, err := r.schema.Orm().Query().Table(info.Views[i].Name).Count()
+				// GetViews reports the name as it stands in the database catalog, so it already
+				// carries the connection prefix. Table() applies the prefix once when the statement
+				// is rendered, so passing that catalog name verbatim would address
+				// "<prefix><prefix><view>". Laravel counts a view's rows with the table prefix
+				// disabled (Connection::withoutTablePrefix), so strip the connection prefix here to
+				// let the renderer put it back exactly once.
+				count, err := r.schema.Orm().Query().Table(strings.TrimPrefix(info.Views[i].Name, info.Prefix)).Count()
 				if err != nil {
 					ctx.Error(err.Error())
 					return

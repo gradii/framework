@@ -37,3 +37,23 @@ func TestEvent_IsClean_InverseOfIsDirty(t *testing.T) {
 	assert.True(t, e.IsClean())
 	assert.False(t, e.IsDirty())
 }
+
+// TestEvent_ValidColumnFollowsTheQueryFilter pins that an observer sees the column filter the query
+// itself carries — the same one the compiled statement writes by — rather than GORM's statement.
+func TestEvent_ValidColumnFollowsTheQueryFilter(t *testing.T) {
+	selecting := &Query{instance: &gormio.DB{Statement: &gormio.Statement{}}}
+	selecting.conditions.selectColumns = []string{"Name"}
+
+	event := NewEvent(selecting, &testEventModel, &TestEventModel{})
+
+	assert.True(t, event.validColumn("Name"), "a named column is one the observer may see")
+	assert.False(t, event.validColumn("Avatar"), "a column the filter leaves out is not")
+
+	omitting := &Query{instance: &gormio.DB{Statement: &gormio.Statement{}}}
+	omitting.conditions.omit = []string{"Avatar"}
+
+	omitted := NewEvent(omitting, &testEventModel, &TestEventModel{})
+
+	assert.True(t, omitted.validColumn("Name"), "omitting one column leaves the others writable")
+	assert.False(t, omitted.validColumn("Avatar"), "an omitted column is not")
+}

@@ -8,7 +8,7 @@ import (
 	"github.com/goravel/framework/contracts/database/factory"
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
 	"github.com/goravel/framework/support/carbon"
-	"gorm.io/gorm"
+	basedatabase "github.com/goravel/framework/support/database"
 )
 
 type contextKey int
@@ -21,7 +21,7 @@ type Model struct {
 }
 
 type SoftDeletes struct {
-	DeletedAt gorm.DeletedAt `gorm:"column:deleted_at" json:"deleted_at" db:"deleted_at"`
+	DeletedAt basedatabase.DeletedAt `gorm:"column:deleted_at" json:"deleted_at" db:"deleted_at"`
 }
 
 type Timestamps struct {
@@ -43,6 +43,8 @@ type User struct {
 	Ratio   float64
 	age     int
 }
+
+func (User) TableName() string { return "users" }
 
 func (r *User) Factory() factory.Factory {
 	return &UserFactory{}
@@ -444,6 +446,8 @@ type Role struct {
 	Users  []*User `gorm:"-"`
 }
 
+func (Role) TableName() string { return "roles" }
+
 func (r *Role) Relations() map[string]contractsorm.Relation {
 	return map[string]contractsorm.Relation{
 		"Users": contractsorm.Many2Many{
@@ -461,6 +465,8 @@ type Address struct {
 	User     *User `gorm:"-"`
 }
 
+func (Address) TableName() string { return "addresses" }
+
 func (r *Address) Relations() map[string]contractsorm.Relation {
 	return map[string]contractsorm.Relation{
 		"User": contractsorm.BelongsTo{
@@ -476,6 +482,8 @@ type Book struct {
 	User   *User   `gorm:"-"`
 	Author *Author `gorm:"-"`
 }
+
+func (Book) TableName() string { return "books" }
 
 func (r *Book) Relations() map[string]contractsorm.Relation {
 	return map[string]contractsorm.Relation{
@@ -493,6 +501,8 @@ type Author struct {
 	BookID uint   `db:"book_id"`
 	Name   string `db:"name"`
 }
+
+func (Author) TableName() string { return "authors" }
 
 func (r *Author) Factory() factory.Factory {
 	return &AuthorFactory{}
@@ -519,6 +529,8 @@ type House struct {
 	HouseableType string
 }
 
+func (House) TableName() string { return "houses" }
+
 func (r *House) Factory() string {
 	return "house"
 }
@@ -530,6 +542,8 @@ type Phone struct {
 	PhoneableType string
 }
 
+func (Phone) TableName() string { return "phones" }
+
 type Product struct {
 	Model
 	SoftDeletes
@@ -537,6 +551,8 @@ type Product struct {
 	Weight *int   `db:"weight"`
 	Height *int   `db:"height"`
 }
+
+func (Product) TableName() string { return "products" }
 
 func (r *Product) Connection() string {
 	return "sqlite"
@@ -548,6 +564,8 @@ type Review struct {
 	Body string
 }
 
+func (Review) TableName() string { return "reviews" }
+
 func (r *Review) Connection() string {
 	return ""
 }
@@ -557,6 +575,8 @@ type People struct {
 	SoftDeletes
 	Body string
 }
+
+func (People) TableName() string { return "peoples" }
 
 func (r *People) Connection() string {
 	return "dummy"
@@ -572,11 +592,15 @@ func (r *Person) Connection() string {
 	return "dummy"
 }
 
+func (Person) TableName() string { return "people" }
+
 type Box struct {
 	Model
 	SoftDeletes
 	Name string
 }
+
+func (Box) TableName() string { return "boxes" }
 
 func (r *Box) Connection() string {
 	return "postgres"
@@ -596,12 +620,16 @@ type JsonData struct {
 	Data string
 }
 
+func (JsonData) TableName() string { return "json_data" }
+
 type GlobalScope struct {
 	Model
 	Name      string
 	Avatar    string
-	DeletedAt gorm.DeletedAt `gorm:"column:deleted_at" json:"deleted_at" db:"deleted_at"`
+	DeletedAt basedatabase.DeletedAt `gorm:"column:deleted_at" json:"deleted_at" db:"deleted_at"`
 }
+
+func (GlobalScope) TableName() string { return "global_scopes" }
 
 func (r *GlobalScope) GlobalScopes() map[string]func(contractsorm.Query) contractsorm.Query {
 	return map[string]func(contractsorm.Query) contractsorm.Query{
@@ -621,12 +649,16 @@ type UuidEntity struct {
 	Name string `json:"name"`
 }
 
+func (UuidEntity) TableName() string { return "uuid_entities" }
+
 // UlidEntity model for testing ULID columns
 type UlidEntity struct {
 	ID   string `gorm:"primaryKey;type:char(26)" json:"id"`
 	Name string `json:"name"`
 	Timestamps
 }
+
+func (UlidEntity) TableName() string { return "ulid_entities" }
 
 // MorphableEntity for testing polymorphic relationships
 type MorphableEntity struct {
@@ -636,6 +668,8 @@ type MorphableEntity struct {
 	MorphableType string `json:"morphable_type"`
 }
 
+func (MorphableEntity) TableName() string { return "morphable_entities" }
+
 // UuidMorphableEntity for testing UUID morphs
 type UuidMorphableEntity struct {
 	Model
@@ -644,6 +678,8 @@ type UuidMorphableEntity struct {
 	MorphableType string `json:"morphable_type"`
 }
 
+func (UuidMorphableEntity) TableName() string { return "uuid_morphable_entities" }
+
 // UlidMorphableEntity for testing ULID morphs
 type UlidMorphableEntity struct {
 	Model
@@ -651,3 +687,22 @@ type UlidMorphableEntity struct {
 	MorphableID   string `gorm:"type:char(26)" json:"morphable_id"`
 	MorphableType string `json:"morphable_type"`
 }
+
+func (UlidMorphableEntity) TableName() string { return "ulid_morphable_entities" }
+
+// ColumnExtraAttribute is the model the schema suite's column-extra-attribute test maps its table
+// to. The table is stated here rather than derived from the struct name: the ORM no longer
+// pluralises a model's table, and this model is used only against the schema suite's singular
+// connection, which creates goravel_column_extra_attribute.
+type ColumnExtraAttribute struct {
+	ID                 uint            `gorm:"primaryKey" json:"id"`
+	Name               string          `json:"name"`
+	Nullable           *string         `json:"nullable"`
+	StringDefault      string          `json:"string_default"`
+	IntegerDefault     int             `json:"integer_default"`
+	BoolDefault        bool            `json:"bool_default"`
+	UseCurrent         carbon.DateTime `json:"use_current"`
+	UseCurrentOnUpdate carbon.DateTime `json:"use_current_on_update"`
+}
+
+func (ColumnExtraAttribute) TableName() string { return "column_extra_attribute" }
