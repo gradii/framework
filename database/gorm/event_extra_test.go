@@ -42,7 +42,7 @@ func TestEvent_IsClean_InverseOfIsDirty(t *testing.T) {
 // itself carries — the same one the compiled statement writes by — rather than GORM's statement.
 func TestEvent_ValidColumnFollowsTheQueryFilter(t *testing.T) {
 	selecting := &Query{instance: &gormio.DB{Statement: &gormio.Statement{}}}
-	selecting.conditions.selectColumns = []string{"Name"}
+	selecting.conditions.selectItems = []any{"Name"}
 
 	event := NewEvent(selecting, &testEventModel, &TestEventModel{})
 

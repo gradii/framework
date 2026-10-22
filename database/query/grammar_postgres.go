@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 )
 
 var (
@@ -141,23 +142,25 @@ func (g *PostgresGrammar) CompileUpsert(b *Builder, values []map[string]any, uni
 	return sql + strings.Join(parts, ", ")
 }
 
-// postgresCascadeTruncate mirrors PostgresGrammar::$cascadeTruncate. Laravel's flag is a static
-// property, so it is a package-level toggle here rather than a grammar field: one value governs every
-// PostgresGrammar in the process, exactly as the static does.
-var postgresCascadeTruncate = true
+// postgresTruncateWithoutCascade mirrors PostgresGrammar::$cascadeTruncate, inverted. Laravel's flag
+// is a static property, so it is a package-level toggle here rather than a grammar field: one value
+// governs every PostgresGrammar in the process, exactly as the static does. Unlike PHP, Go compiles
+// statements on many goroutines at once, so the flag is atomic to keep a concurrent toggle from being
+// a data race. It stores "cascade disabled" so that its zero value is Laravel's default (cascade on).
+var postgresTruncateWithoutCascade atomic.Bool
 
 // CascadeOnTruncate mirrors PostgresGrammar::cascadeOnTruncate(): it turns the "cascade" keyword a
 // truncate statement appends on or off. The default is on, matching Laravel. The flag is process-wide,
 // so a caller that flips it should restore the previous value.
 func CascadeOnTruncate(value bool) {
-	postgresCascadeTruncate = value
+	postgresTruncateWithoutCascade.Store(!value)
 }
 
 // CompileTruncate mirrors PostgresGrammar::compileTruncate(): restart identity, then the cascade
 // keyword unless CascadeOnTruncate(false) disabled it.
 func (g *PostgresGrammar) CompileTruncate(b *Builder) []Statement {
 	sql := "truncate " + g.WrapTable(b.from) + " restart identity"
-	if postgresCascadeTruncate {
+	if !postgresTruncateWithoutCascade.Load() {
 		sql += " cascade"
 	}
 

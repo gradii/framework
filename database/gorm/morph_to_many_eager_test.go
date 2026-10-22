@@ -86,7 +86,7 @@ func TestLoadMorphToMany_ReadsAreCompiled(t *testing.T) {
 		assert.Empty(t, child.conditions.withoutGlobalScopes)
 		assert.Empty(t, child.conditions.scopes)
 		assert.Len(t, child.conditions.where, 2)
-		assert.Len(t, child.conditions.selectColumns, 2)
+		assert.Len(t, child.conditions.selectItems, 2)
 	})
 
 	t.Run("pivot read receives the relation scope", func(t *testing.T) {

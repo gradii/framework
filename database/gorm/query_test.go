@@ -1158,25 +1158,25 @@ func TestBasicSelectWithGetColumns(t *testing.T) {
 	var first []getColumnsUser
 	assert.NoError(t, query.Get(&first))
 	assert.Equal(t, `select * from "users"`, recorder.last(t).sql)
-	assert.Nil(t, query.conditions.selectColumns)
+	assert.Nil(t, query.conditions.selectItems)
 
 	// get(['foo', 'bar']) renders the two columns transiently.
 	var second []getColumnsUser
 	assert.NoError(t, query.Get(&second, []string{"foo", "bar"}))
 	assert.Equal(t, `select "foo", "bar" from "users"`, recorder.last(t).sql)
-	assert.Nil(t, query.conditions.selectColumns)
+	assert.Nil(t, query.conditions.selectItems)
 
 	// get('baz') wraps the single column name.
 	var third []getColumnsUser
 	assert.NoError(t, query.Get(&third, "baz"))
 	assert.Equal(t, `select "baz" from "users"`, recorder.last(t).sql)
-	assert.Nil(t, query.conditions.selectColumns)
+	assert.Nil(t, query.conditions.selectItems)
 
 	// toSql() is unchanged: the transient columns never touched the query.
 	statement, _, err := query.compileSelect()
 	assert.NoError(t, err)
 	assert.Equal(t, `select * from "users"`, statement)
-	assert.Nil(t, query.conditions.selectColumns)
+	assert.Nil(t, query.conditions.selectItems)
 }
 
 // TestBasicSelectUseWritePdo ports Laravel's testBasicSelectUseWritePdo. Laravel's builder carries a

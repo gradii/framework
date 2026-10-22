@@ -148,13 +148,15 @@ func (r *Query) selectAndOmitColumns(schema *modelSchema) (map[string]bool, bool
 	columns := make(map[string]bool)
 	restricted := false
 
-	for _, column := range r.conditions.selectColumns {
-		if column == "*" {
-			continue
-		}
+	for _, item := range r.conditions.selectItems {
+		if column, ok := item.(string); ok {
+			if column == "*" {
+				continue
+			}
 
-		columns[resolveColumn(schema, column)] = true
-		restricted = true
+			columns[resolveColumn(schema, column)] = true
+			restricted = true
+		}
 	}
 	for _, column := range r.conditions.omit {
 		columns[resolveColumn(schema, column)] = false

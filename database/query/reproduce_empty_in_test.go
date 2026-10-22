@@ -6,50 +6,76 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestEmptyInSliceConsistency reproduces the defect: an empty IN slice compiles to "column IN ()"
-// on the WhereAny path but "0 = 1" on the WhereIn path.
+// TestEmptyInSliceConsistency tests that empty IN slices produce consistent SQL across all paths.
 func TestEmptyInSliceConsistency(t *testing.T) {
-	t.Run("empty IN via WhereIn produces 0 = 1", func(t *testing.T) {
-		b := NewBuilder(NewBaseGrammar(""))
+	t.Run("WhereIn with empty slice produces 0 = 1", func(t *testing.T) {
+		b := newTestBuilder()
 		b.From("users", "").WhereIn("name", []any{}, BooleanAnd, false)
 
-		sql := b.ToSQL()
-		bindings := b.GetBindings()
+		sql, bindings := b.ToSQL(), b.GetBindings()
+		t.Logf("SQL: %s", sql)
+		t.Logf("Bindings: %v", bindings)
+		t.Logf("Wheres: %+v", b.wheres)
+
 		assert.Contains(t, sql, "0 = 1", "WhereIn with empty slice should produce '0 = 1'")
 		assert.Nil(t, bindings, "Empty IN should bind nothing")
 	})
 
-	t.Run("empty NOT IN via WhereNotIn produces 1 = 1", func(t *testing.T) {
-		b := NewBuilder(NewBaseGrammar(""))
+	t.Run("WhereNotIn with empty slice produces 1 = 1", func(t *testing.T) {
+		b := newTestBuilder()
 		b.From("users", "").WhereNotIn("name", []any{}, BooleanAnd)
 
-		sql := b.ToSQL()
-		bindings := b.GetBindings()
+		sql, bindings := b.ToSQL(), b.GetBindings()
+		t.Logf("SQL: %s", sql)
+		t.Logf("Bindings: %v", bindings)
+		t.Logf("Wheres: %+v", b.wheres)
+
 		assert.Contains(t, sql, "1 = 1", "WhereNotIn with empty slice should produce '1 = 1'")
 		assert.Nil(t, bindings, "Empty NOT IN should bind nothing")
 	})
 
-	t.Run("empty IN via WhereAny produces malformed column IN ()", func(t *testing.T) {
-		b := NewBuilder(NewBaseGrammar(""))
-		b.From("users", "").WhereAny([]any{"name"}, "IN", []any{}, BooleanAnd)
+	t.Run("WhereAny with empty IN slice via string operator", func(t *testing.T) {
+		b := newTestBuilder()
+		b.From("users", "").WhereAny([]any{"name", "email"}, "IN", []any{}, BooleanAnd)
 
-		sql := b.ToSQL()
-		bindings := b.GetBindings()
+		sql, bindings := b.ToSQL(), b.GetBindings()
 		t.Logf("SQL: %s", sql)
 		t.Logf("Bindings: %v", bindings)
+		t.Logf("Wheres: %+v", b.wheres)
+		if len(b.wheres) > 0 && b.wheres[0].Query != nil {
+			t.Logf("Nested wheres: %+v", b.wheres[0].Query.wheres)
+		}
 
-		// This should produce "0 = 1" like WhereIn, but instead produces malformed "name IN ()"
+		// The bug: this might produce malformed "name IN ()" instead of "0 = 1"
+		assert.NotContains(t, sql, "in ()", "WhereAny with empty IN should not produce malformed 'in ()'")
+		assert.NotContains(t, sql, "IN ()", "WhereAny with empty IN should not produce malformed 'IN ()'")
 	})
 
-	t.Run("empty NOT IN via WhereAny produces malformed column NOT IN ()", func(t *testing.T) {
-		b := NewBuilder(NewBaseGrammar(""))
-		b.From("users", "").WhereAny([]any{"name"}, "NOT IN", []any{}, BooleanAnd)
+	t.Run("WhereAny with empty IN slice via uppercase IN", func(t *testing.T) {
+		b := newTestBuilder()
+		b.From("users", "").WhereAny([]any{"name", "email"}, "IN", []any{}, BooleanAnd)
 
-		sql := b.ToSQL()
-		bindings := b.GetBindings()
+		sql, bindings := b.ToSQL(), b.GetBindings()
 		t.Logf("SQL: %s", sql)
 		t.Logf("Bindings: %v", bindings)
+		t.Logf("Wheres: %+v", b.wheres)
 
-		// This should produce "1 = 1" like WhereNotIn, but instead produces malformed "name NOT IN ()"
+		// The bug: this might produce malformed "name IN ()" instead of "0 = 1"
+		assert.NotContains(t, sql, "in ()", "WhereAny with empty IN should not produce malformed 'in ()'")
+		assert.NotContains(t, sql, "IN ()", "WhereAny with empty IN should not produce malformed 'IN ()'")
+	})
+
+	t.Run("WhereAny with empty NOT IN slice", func(t *testing.T) {
+		b := newTestBuilder()
+		b.From("users", "").WhereAny([]any{"name", "email"}, "NOT IN", []any{}, BooleanAnd)
+
+		sql, bindings := b.ToSQL(), b.GetBindings()
+		t.Logf("SQL: %s", sql)
+		t.Logf("Bindings: %v", bindings)
+		t.Logf("Wheres: %+v", b.wheres)
+
+		// The bug: this might produce malformed "name NOT IN ()" instead of "1 = 1"
+		assert.NotContains(t, sql, "not in ()", "WhereAny with empty NOT IN should not produce malformed 'not in ()'")
+		assert.NotContains(t, sql, "NOT IN ()", "WhereAny with empty NOT IN should not produce malformed 'NOT IN ()'")
 	})
 }

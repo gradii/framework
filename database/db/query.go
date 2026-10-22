@@ -107,7 +107,7 @@ func (r *Query) applyWhere(query any, args []any, boolean string) *Query {
 			r.builder.WhereRaw(value, args, boolean)
 		case strings.Contains(trimmed, " "):
 			r.builder.WhereRaw(value, args, boolean)
-		case len(args) == 1 && isSlice(args[0]):
+		case len(args) == 1 && isSlice(args[0]) && !isByteSlice(args[0]):
 			r.builder.WhereIn(value, args[0], boolean, false)
 		default:
 			r.addSimpleWhere(value, args, boolean)
@@ -178,6 +178,26 @@ func isSlice(value any) bool {
 	kind := reflect.ValueOf(value).Kind()
 
 	return kind == reflect.Slice || kind == reflect.Array
+}
+
+// isByteSlice reports whether the value is a byte slice or byte array (after unwrapping
+// pointers/interfaces). A byte slice is ONE binary value, not a list to expand into IN (?,...).
+func isByteSlice(value any) bool {
+	reflected := reflect.ValueOf(value)
+	if !reflected.IsValid() {
+		return false
+	}
+	for reflected.Kind() == reflect.Pointer || reflected.Kind() == reflect.Interface {
+		if reflected.IsNil() {
+			return false
+		}
+		reflected = reflected.Elem()
+	}
+	if reflected.Kind() != reflect.Slice && reflected.Kind() != reflect.Array {
+		return false
+	}
+
+	return reflected.Type().Elem().Kind() == reflect.Uint8
 }
 
 // WhereRaw adds a raw where clause.

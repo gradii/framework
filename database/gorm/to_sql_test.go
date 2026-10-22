@@ -80,7 +80,7 @@ func TestToSql_CountFollowsTheSelection(t *testing.T) {
 	log := mockslog.NewLog(t)
 
 	selected := NewToSql(compiledQuery(t, &relUser{}, Conditions{
-		selectColumns: []string{"name"},
+		selectItems: []any{"name"},
 	}), log, false)
 
 	assert.Contains(t, selected.Count(), `count("name")`)
@@ -89,7 +89,7 @@ func TestToSql_CountFollowsTheSelection(t *testing.T) {
 	// count(*) would count every row.
 	distinct := NewToSql(compiledQuery(t, &relUser{}, Conditions{
 		distinct:      true,
-		selectColumns: []string{"name"},
+		selectItems: []any{"name"},
 	}), log, false)
 
 	assert.Contains(t, distinct.Count(), `count(distinct "name")`)

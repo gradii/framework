@@ -219,7 +219,7 @@ func TestUpdateAssignments_FromStruct(t *testing.T) {
 // TestUpdateAssignments_SelectAndOmitFilter checks the query's own column filter, which is how
 // Select("name").Update(model) writes one column.
 func TestUpdateAssignments_SelectAndOmitFilter(t *testing.T) {
-	selected := compiledQuery(t, &relUser{}, Conditions{selectColumns: []string{"name"}})
+	selected := compiledQuery(t, &relUser{}, Conditions{selectItems: []any{"name"}})
 
 	assignments, err := selected.updateAssignments(map[string]any{"id": 7, "name": "Jane"})
 	assert.NoError(t, err)
@@ -233,7 +233,7 @@ func TestUpdateAssignments_SelectAndOmitFilter(t *testing.T) {
 
 	// A column named outright is written even when it holds the zero value, which is what lets
 	// Select("name").Update(model) clear a column; every other column is left out when it is zero.
-	clearing := compiledQuery(t, &relUser{}, Conditions{selectColumns: []string{"name"}})
+	clearing := compiledQuery(t, &relUser{}, Conditions{selectItems: []any{"name"}})
 
 	assignments, err = clearing.updateAssignments(relUser{ID: 7})
 	require.NoError(t, err)
@@ -350,6 +350,81 @@ func TestCompileSelect_CombinesSelectAndSelectRaw(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.Contains(t, sql, `select "name", count(avatar) as count from "rel_users"`)
+}
+
+// TestCompileSelect_SelectAndSelectRawKeepCallOrder pins Laravel's single call-ordered select list.
+// Repeated SelectRaw calls append rather than overwrite, and named columns no longer jump ahead of a
+// raw expression written before them. Laravel renders the same chains as follows (oracle, pgsql).
+// selectRaw(a)->selectRaw(b) gives `select a, b`. selectRaw(raw)->addSelect("name") gives
+// `select raw, "name"`. selectRaw('? as flag',[1])->selectRaw('? as flag',[2])->whereRaw('id = ?',[9])
+// gives `select ? as flag, ? as flag ... where id = ?` with bindings [1, 2, 9]. Before the fix the
+// second SelectRaw replaced the first and the named columns were always emitted first. Two identical
+// expressions also collapsed into one placeholder while both bindings stayed, so the where clause
+// was bound to 2 instead of 9.
+func TestCompileSelect_SelectAndSelectRawKeepCallOrder(t *testing.T) {
+	tests := []struct {
+		name         string
+		build        func(contractsorm.Query) contractsorm.Query
+		wantSQL      string
+		wantBindings []any
+	}{
+		{
+			name: "repeated SelectRaw appends",
+			build: func(q contractsorm.Query) contractsorm.Query {
+				return q.SelectRaw("count(name) as name_count").SelectRaw("sum(id) as total_id")
+			},
+			wantSQL:      `select count(name) as name_count, sum(id) as total_id from "rel_users"`,
+			wantBindings: nil,
+		},
+		{
+			name: "SelectRaw then Select keeps the raw expression first",
+			build: func(q contractsorm.Query) contractsorm.Query {
+				return q.SelectRaw("count(avatar) as count").Select("name")
+			},
+			wantSQL:      `select count(avatar) as count, "name" from "rel_users"`,
+			wantBindings: nil,
+		},
+		{
+			name: "Select then SelectRaw keeps the column first",
+			build: func(q contractsorm.Query) contractsorm.Query {
+				return q.Select("name").SelectRaw("count(avatar) as count")
+			},
+			wantSQL:      `select "name", count(avatar) as count from "rel_users"`,
+			wantBindings: nil,
+		},
+		{
+			name: "interleaved calls keep their order and bindings",
+			build: func(q contractsorm.Query) contractsorm.Query {
+				return q.SelectRaw("? as a", 1).Select("name").SelectRaw("? as b", 2).Where("id = ?", 9)
+			},
+			wantSQL:      `select ? as a, "name", ? as b from "rel_users" where id = ?`,
+			wantBindings: []any{1, 2, 9},
+		},
+		{
+			name: "identical SelectRaw calls each keep their placeholder",
+			build: func(q contractsorm.Query) contractsorm.Query {
+				return q.SelectRaw("? as flag", 1).SelectRaw("? as flag", 2).Where("id = ?", 9)
+			},
+			wantSQL:      `select ? as flag, ? as flag from "rel_users" where id = ?`,
+			wantBindings: []any{1, 2, 9},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			query := tt.build(newRelQueryWith(t, &relUser{})).(*Query)
+
+			sql, bindings, err := query.compileSelect()
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.wantSQL, sql)
+			if tt.wantBindings == nil {
+				assert.Empty(t, bindings)
+			} else {
+				assert.Equal(t, tt.wantBindings, bindings)
+			}
+		})
+	}
 }
 
 // TestCompileSelect_SelectRawOnlyStillApplies pins that the raw select is still used when it is the

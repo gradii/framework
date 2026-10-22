@@ -242,7 +242,7 @@ the method is on `Builder` itself.
 - [x] `whereExists` `orWhereExists` `whereNotExists` `addWhereExistsQuery`
 - [ ] `orWhereNotExists`
 - [x] `whereRowValues`
-- [ ] `orWhereRowValues`
+- [x] `orWhereRowValues`
 - [x] `whereJsonContains` `whereJsonDoesntContain` `whereJsonOverlaps` `whereJsonContainsKey`
       `whereJsonDoesntContainKey` `whereJsonLength` and the `or` variants of the contains,
       contains-key and length forms

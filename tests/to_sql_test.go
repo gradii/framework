@@ -496,3 +496,25 @@ func (s *ToSqlTestSuite) TestUpdate() {
 	s.Contains(sql, "update \"global_scopes\" set \"name\" = 'goravel', \"updated_at\" = ")
 	s.Contains(sql, "' where \"id\" = 1 and \"avatar\" = 'avatar_scope' and \"global_scopes\".\"deleted_at\" IS NULL")
 }
+
+func (s *ToSqlTestSuite) TestEmptyInSliceBug() {
+	// Test 1: Where with IN operator and empty slice
+	// Expected: should produce "0 = 1" (matches nothing)
+	toSql1 := gorm.NewToSql(s.query.Model(&User{}).Where("name", "IN", []any{}).(*gorm.Query), s.mockLog, true)
+	sql1 := toSql1.Get([]User{})
+	s.T().Logf("Test 1 - Where(name, IN, []any{}):\nSQL: %s\n", sql1)
+	s.NotContains(sql1, "IN ()", "Should not produce malformed 'IN ()'")
+
+	// Test 2: WhereAny with IN operator and empty slice
+	// Expected: should also produce "0 = 1" or similar, NOT "name IN ()"
+	toSql2 := gorm.NewToSql(s.query.Model(&User{}).WhereAny([]string{"name"}, "IN", []any{}).(*gorm.Query), s.mockLog, true)
+	sql2 := toSql2.Get([]User{})
+	s.T().Logf("Test 2 - WhereAny([name], IN, []any{}):\nSQL: %s\n", sql2)
+	s.NotContains(sql2, "IN ()", "Should not produce malformed 'IN ()'")
+
+	// Test 3: WhereAny with NOT IN and empty slice
+	toSql3 := gorm.NewToSql(s.query.Model(&User{}).WhereAny([]string{"name"}, "NOT IN", []any{}).(*gorm.Query), s.mockLog, true)
+	sql3 := toSql3.Get([]User{})
+	s.T().Logf("Test 3 - WhereAny([name], NOT IN, []any{}):\nSQL: %s\n", sql3)
+	s.NotContains(sql3, "NOT IN ()", "Should not produce malformed 'NOT IN ()'")
+}

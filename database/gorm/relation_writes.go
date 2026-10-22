@@ -843,7 +843,7 @@ func (r *Query) basePivotRow(desc *relationDescriptor, parentVal, relatedID any,
 func (r *Query) existingPivotIDs(desc *relationDescriptor, parentVal any, ids []any) (map[string]struct{}, error) {
 	q := r.pivotTableQuery(desc.pivotTable)
 	conditions := q.conditions
-	conditions.selectColumns = []string{desc.pivotRelatedRef.foreignColumn}
+	conditions.selectItems = []any{desc.pivotRelatedRef.foreignColumn}
 	q = q.setConditions(conditions)
 	q = q.pivotWhere(fmt.Sprintf("%s = ?", r.ident(desc.pivotTable, desc.pivotParentRef.foreignColumn)), parentVal)
 	q = q.pivotWhere(desc.pivotTable+"."+desc.pivotRelatedRef.foreignColumn, ids)
@@ -866,7 +866,7 @@ func (r *Query) existingPivotIDs(desc *relationDescriptor, parentVal any, ids []
 func (r *Query) allPivotIDs(desc *relationDescriptor, parentVal any) ([]any, error) {
 	q := r.pivotTableQuery(desc.pivotTable)
 	conditions := q.conditions
-	conditions.selectColumns = []string{desc.pivotRelatedRef.foreignColumn}
+	conditions.selectItems = []any{desc.pivotRelatedRef.foreignColumn}
 	q = q.setConditions(conditions)
 	q = q.pivotWhere(fmt.Sprintf("%s = ?", r.ident(desc.pivotTable, desc.pivotParentRef.foreignColumn)), parentVal)
 	if desc.kind == relKindMorphToMany {

@@ -272,28 +272,31 @@ func (r *Query) newBuilder() (*querybuilder.Builder, error) {
 		builder.Distinct()
 	}
 
-	if len(r.conditions.selectColumns) > 0 {
-		columns := make([]any, 0, len(r.conditions.selectColumns))
-		for _, column := range r.conditions.selectColumns {
-			columns = append(columns, column)
+	if len(r.conditions.selectItems) > 0 {
+		// Iterate selectItems in order, handling both strings and *Select
+		for _, item := range r.conditions.selectItems {
+			switch v := item.(type) {
+			case string:
+				builder.AddSelect(v)
+			case *Select:
+				// Each SelectRaw call is its own entry, as in Laravel, where selectRaw() adds a new
+				// Expression object that addSelect's strict in_array never matches. builder.SelectRaw
+				// goes through AddSelect, which compares expressions by value. It would drop a repeated
+				// identical expression but keep that call's bindings, which shifts every later
+				// placeholder onto the wrong value. So the expression is appended directly.
+				builder.SetSelects(append(builder.Selects(), querybuilder.Raw(fmt.Sprint(v.query))))
+				if len(v.args) > 0 {
+					_ = builder.AddBinding(v.args, "select")
+				}
+			}
 		}
-		builder.Select(columns...)
-	} else if r.conditions.selectRaw == nil && len(r.conditions.selectSubs) > 0 {
+	} else if len(r.conditions.selectSubs) > 0 {
 		// A sub-select only adds a column, so the row still needs the parent's own columns to be
 		// scanned into the model. The wildcard is pre-quoted and therefore goes in as a raw
 		// expression: Select() would quote it a second time and clear the list besides.
 		if parent := r.parentModel(); parent != nil {
 			builder.SelectRaw(r.ident(r.parentTable(parent), "*"), nil)
 		}
-	}
-
-	// SelectRaw appends to the select list rather than replacing it, so a query that calls both
-	// Select and SelectRaw keeps the raw expression alongside the named columns. Laravel's
-	// selectRaw() calls addSelect(new Expression(...)) and shares one ordered list with select(),
-	// and builder.SelectRaw reaches the same AddSelect, so the raw expression lands after the named
-	// columns and no longer shadows them.
-	if r.conditions.selectRaw != nil {
-		builder.SelectRaw(fmt.Sprint(r.conditions.selectRaw.query), r.conditions.selectRaw.args)
 	}
 
 	if err := r.applySelectSubAggregates(builder); err != nil {
@@ -472,7 +475,7 @@ func (r *Query) applySingleWhere(builder *querybuilder.Builder, item contractsdr
 			builder.WhereRaw(expanded, bindings, boolean)
 		case containsPlaceholder(query):
 			builder.WhereRaw(query, item.Args, boolean)
-		case len(item.Args) == 1 && isSlice(item.Args[0]):
+		case len(item.Args) == 1 && isSlice(item.Args[0]) && !isByteSlice(item.Args[0]):
 			builder.WhereIn(query, item.Args[0], boolean, item.IsNot)
 		default:
 			applySimpleWhere(builder, query, item.Args, boolean)

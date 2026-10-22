@@ -233,8 +233,10 @@ func TestMergeWheresCanMergeWheresAndBindings(t *testing.T) {
 // cascades by default, CascadeOnTruncate(false) drops the cascade keyword, and turning it back on
 // restores it.
 func TestCompileTruncate(t *testing.T) {
-	// The toggle is process-wide, so leave it on for any test that runs after this one.
-	defer CascadeOnTruncate(true)
+	// The toggle is process-wide, so hand back whatever value it held on entry rather than assuming the
+	// default, and start from Laravel's default so the first assertion does not depend on test order.
+	defer CascadeOnTruncate(!postgresTruncateWithoutCascade.Load())
+	CascadeOnTruncate(true)
 
 	g := NewPostgresGrammar("")
 	b := NewBuilder(g).From("users", "")

@@ -27,7 +27,6 @@ import (
 	"github.com/goravel/framework/database/utils"
 	"github.com/goravel/framework/errors"
 	"github.com/goravel/framework/support/carbon"
-	"github.com/goravel/framework/support/collect"
 	"github.com/goravel/framework/support/database"
 	"github.com/goravel/framework/support/deep"
 	"github.com/goravel/framework/support/str"
@@ -185,7 +184,7 @@ func (r *Query) Count() (int64, error) {
 func (r *Query) Create(value any) error {
 	query := r.dest(value).buildConditions()
 
-	if len(query.conditions.selectColumns) > 0 && len(query.conditions.omit) > 0 {
+	if hasSelectColumns(query.conditions) && len(query.conditions.omit) > 0 {
 		return errors.OrmQuerySelectAndOmitsConflict
 	}
 
@@ -592,9 +591,11 @@ func (r *Query) Get(dest any, columns ...any) error {
 
 	// onceWithColumns only installs the columns when the builder has none of its own; the copy keeps
 	// the original query's selection untouched.
-	if len(r.conditions.selectColumns) == 0 {
+	if !hasSelectColumns(r.conditions) {
 		conditions := r.conditions
-		conditions.selectColumns = columnsToStrings(columns)
+		for _, col := range columnsToStrings(columns) {
+			conditions.selectItems = append(conditions.selectItems, col)
+		}
 		r = r.setConditions(conditions)
 	}
 
@@ -1175,8 +1176,7 @@ func (r *Query) Pluck(column string, dest any) error {
 	}
 
 	conditions := query.conditions
-	conditions.selectColumns = []string{column}
-	conditions.selectRaw = nil
+	conditions.selectItems = []any{column}
 	conditions.raw = nil
 
 	statement, bindings, err := query.setConditions(conditions).compileSelect()
@@ -1277,7 +1277,7 @@ func (r *Query) Rollback() error {
 }
 
 func (r *Query) Save(dest any) error {
-	if len(r.conditions.selectColumns) > 0 && len(r.conditions.omit) > 0 {
+	if hasSelectColumns(r.conditions) && len(r.conditions.omit) > 0 {
 		return errors.OrmQuerySelectAndOmitsConflict
 	}
 
@@ -1362,14 +1362,32 @@ func (r *Query) Scopes(funcs ...func(contractsorm.Query) contractsorm.Query) con
 
 func (r *Query) Select(columns ...string) contractsorm.Query {
 	conditions := r.conditions
-	conditions.selectColumns = append(conditions.selectColumns, columns...)
-	conditions.selectColumns = collect.Unique(conditions.selectColumns)
+
+	// Append new columns to selectItems, de-duplicating
+	seen := make(map[string]bool)
+	for _, item := range conditions.selectItems {
+		if col, ok := item.(string); ok {
+			seen[col] = true
+		}
+	}
+
+	for _, column := range columns {
+		if !seen[column] {
+			conditions.selectItems = append(conditions.selectItems, column)
+			seen[column] = true
+		}
+	}
 
 	// * may be added along with other columns automatically, Distinct().Select("name") -> (*, name), * should be removed in this case.
-	if len(conditions.selectColumns) > 1 {
-		conditions.selectColumns = collect.Filter(conditions.selectColumns, func(column string, _ int) bool {
-			return column != "*"
-		})
+	if len(conditions.selectItems) > 1 {
+		filtered := make([]any, 0, len(conditions.selectItems))
+		for _, item := range conditions.selectItems {
+			if col, ok := item.(string); ok && col == "*" {
+				continue
+			}
+			filtered = append(filtered, item)
+		}
+		conditions.selectItems = filtered
 	}
 
 	return r.setConditions(conditions)
@@ -1377,10 +1395,10 @@ func (r *Query) Select(columns ...string) contractsorm.Query {
 
 func (r *Query) SelectRaw(query any, args ...any) contractsorm.Query {
 	conditions := r.conditions
-	conditions.selectRaw = &Select{
+	conditions.selectItems = append(conditions.selectItems, &Select{
 		query: query,
 		args:  args,
-	}
+	})
 
 	return r.setConditions(conditions)
 }
@@ -2454,7 +2472,7 @@ func (r *Query) update(values any) (*contractsdb.Result, error) {
 // updateScoped compiles and runs an update, reporting how many rows it changed. A soft delete scopes
 // the statement the way a delete does rather than the way an update does.
 func (r *Query) updateScoped(values any, byDest bool) (*contractsdb.Result, error) {
-	if len(r.conditions.selectColumns) > 0 && len(r.conditions.omit) > 0 {
+	if hasStringColumns(r.conditions.selectItems) && len(r.conditions.omit) > 0 {
 		return nil, errors.OrmQuerySelectAndOmitsConflict
 	}
 
@@ -2526,8 +2544,15 @@ func (r *Query) assignUpdatedValues(assignments map[string]any) {
 // becomes count(distinct column) rather than a leading DISTINCT over count(*), which would count every
 // row instead.
 func countColumns(query *Query) []any {
-	if len(query.conditions.selectColumns) == 1 {
-		return []any{query.conditions.selectColumns[0]}
+	// Count the string columns in selectItems
+	var stringColumns []string
+	for _, item := range query.conditions.selectItems {
+		if col, ok := item.(string); ok {
+			stringColumns = append(stringColumns, col)
+		}
+	}
+	if len(stringColumns) == 1 {
+		return []any{stringColumns[0]}
 	}
 
 	return []any{"*"}
@@ -2542,8 +2567,9 @@ func buildSelectForCount(query *Query) *Query {
 	// With several select columns there is nothing to trim: the count ignores them and reduces the
 	// whole row with *.
 	// For example: Select("name as n").Count() counts the name column, while Select("name", "age as a").Count() counts *.
-	if len(conditions.selectColumns) == 1 && str.Of(conditions.selectColumns[0]).Trim().Contains(" ") {
-		conditions.selectColumns = []string{str.Of(conditions.selectColumns[0]).Split(" ")[0]}
+	columns := selectStringColumns(conditions.selectItems)
+	if len(columns) == 1 && str.Of(columns[0]).Trim().Contains(" ") {
+		conditions.selectItems = []any{str.Of(columns[0]).Split(" ")[0]}
 	}
 
 	// The count a paginator runs never orders or bounds the rows it counts: Laravel builds it on a
@@ -2696,4 +2722,9 @@ func isSlice(dest any) bool {
 
 func hasID(dest any) bool {
 	return database.GetID(dest) != nil
+}
+
+// hasSelectColumns reports whether conditions has any selections (either column names or raw expressions).
+func hasSelectColumns(conditions Conditions) bool {
+	return len(conditions.selectItems) > 0
 }

@@ -129,8 +129,7 @@ func (r *ToSql) Pluck(column string, dest any) string {
 
 	// The column replaces whatever select list the query carried, which is what the executed form does.
 	conditions := query.conditions
-	conditions.selectColumns = []string{column}
-	conditions.selectRaw = nil
+	conditions.selectItems = []any{column}
 	conditions.raw = nil
 
 	statement, bindings, err := query.setConditions(conditions).compileSelect()

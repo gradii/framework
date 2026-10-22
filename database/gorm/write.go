@@ -146,9 +146,10 @@ func (r *Query) applyInsertTimestamps(value reflect.Value, schema *modelSchema) 
 func (r *Query) filterInsertColumns(record map[string]any) map[string]any {
 	schema := r.insertSchema()
 
-	if len(r.conditions.selectColumns) > 0 && !hasWildcard(r.conditions.selectColumns) {
-		selected := make(map[string]any, len(r.conditions.selectColumns))
-		for _, column := range r.conditions.selectColumns {
+	columns := selectStringColumns(r.conditions.selectItems)
+	if len(columns) > 0 && !hasWildcard(columns) {
+		selected := make(map[string]any, len(columns))
+		for _, column := range columns {
 			column = resolveInsertColumn(schema, column)
 			if value, ok := record[column]; ok {
 				selected[column] = value

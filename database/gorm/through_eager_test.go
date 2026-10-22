@@ -126,7 +126,7 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 		assert.Empty(t, child.conditions.withoutGlobalScopes)
 		assert.Empty(t, child.conditions.scopes)
 		assert.Len(t, child.conditions.where, 1)
-		assert.Equal(t, []string{desc.firstKey, desc.secondLocalKey}, child.conditions.selectColumns)
+		assert.Equal(t, []any{desc.firstKey, desc.secondLocalKey}, child.conditions.selectItems)
 	})
 
 	t.Run("related read is compiled and keeps the related key when pruned", func(t *testing.T) {
@@ -156,7 +156,7 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 		// The loader passes the related key as a required column, so it survives column pruning and
 		// the dictionary can be keyed off the related rows.
 		conditions := child.conditions
-		conditions.selectColumns = []string{"title", desc.secondKey}
+		conditions.selectItems = []any{"title", desc.secondKey}
 		pruned, prunedBindings, err := child.setConditions(conditions).compileSelect()
 		assert.NoError(t, err)
 		assert.Equal(t, `select "title", "rel_user_id" from "rel_posts" where "rel_posts"."rel_user_id" in (?)`, pruned)

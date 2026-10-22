@@ -257,7 +257,7 @@ func (s *EventTestSuite) TestValidColumn() {
 		// The filter an observer sees is the query's own, which is the one the statement being built
 		// writes by.
 		event.query = &Query{}
-		event.query.conditions.selectColumns = []string{"name"}
+		event.query.conditions.selectItems = []any{"name"}
 		s.True(event.validColumn("Name"))
 		s.True(event.validColumn("name"))
 		s.False(event.validColumn("avatar"))

@@ -21,8 +21,7 @@ type Conditions struct {
 	omit                []string
 	order               []any
 	scopes              []func(contractsorm.Query) contractsorm.Query
-	selectColumns       []string
-	selectRaw           *Select
+	selectItems         []any // Unified list: strings for columns, *Select for raw expressions
 	raw                 *Select
 	selectSubs          []selectSub
 	where               []contractsdriver.Where
@@ -84,3 +83,25 @@ type relationExistence struct {
 	morphTypes    []any
 	morphCallback contractsorm.MorphRelationCallback
 }
+
+// hasStringColumns returns true if selectItems contains any string (regular column) entries
+func hasStringColumns(selectItems []any) bool {
+	for _, item := range selectItems {
+		if _, ok := item.(string); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// selectStringColumns extracts only the string (regular column) entries from selectItems
+func selectStringColumns(selectItems []any) []string {
+	var columns []string
+	for _, item := range selectItems {
+		if col, ok := item.(string); ok {
+			columns = append(columns, col)
+		}
+	}
+	return columns
+}
+

@@ -14,7 +14,7 @@ import (
 // omitted value reached the row.
 func TestFilterInsertColumnsResolvesGoFieldNames(t *testing.T) {
 	selectQuery := compiledQuery(t, &SchemaOuter{}, Conditions{
-		selectColumns: []string{"Name"},
+		selectItems: []any{"Name"},
 	})
 
 	records, err := selectQuery.insertRecords(&SchemaOuter{Name: "kept"})
@@ -40,7 +40,7 @@ func TestFilterInsertColumnsResolvesGoFieldNames(t *testing.T) {
 // must restrict nothing rather than filter the record down to nothing.
 func TestFilterInsertColumnsAcceptsDBColumnNamesAndWildcard(t *testing.T) {
 	columnQuery := compiledQuery(t, &SchemaOuter{}, Conditions{
-		selectColumns: []string{"name"},
+		selectItems: []any{"name"},
 	})
 
 	records, err := columnQuery.insertRecords(&SchemaOuter{Name: "kept"})
@@ -50,7 +50,7 @@ func TestFilterInsertColumnsAcceptsDBColumnNamesAndWildcard(t *testing.T) {
 	}
 
 	wildcardQuery := compiledQuery(t, &SchemaOuter{}, Conditions{
-		selectColumns: []string{"*"},
+		selectItems: []any{"*"},
 	})
 
 	records, err = wildcardQuery.insertRecords(&SchemaOuter{Name: "kept"})

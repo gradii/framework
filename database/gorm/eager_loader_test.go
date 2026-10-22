@@ -841,7 +841,7 @@ func TestLoadBelongsTo_ChildQueryIsCompiled(t *testing.T) {
 
 		child := q.relatedChild(desc.relatedTable, desc.relatedTable+"."+ref.primaryColumn, []any{uint(5)})
 		conditions := child.conditions
-		conditions.selectColumns = []string{"name", ref.primaryColumn}
+		conditions.selectItems = []any{"name", ref.primaryColumn}
 
 		compiled, bindings, err := child.setConditions(conditions).compileSelect()
 		assert.NoError(t, err)
@@ -980,7 +980,7 @@ func TestLoadHasOneOrMany_ChildQueryIsCompiled(t *testing.T) {
 
 		child := q.relatedChild(desc.relatedTable, desc.relatedTable+"."+ref.foreignColumn, []any{uint(3)})
 		conditions := child.conditions
-		conditions.selectColumns = []string{"title", ref.foreignColumn}
+		conditions.selectItems = []any{"title", ref.foreignColumn}
 
 		compiled, bindings, err := child.setConditions(conditions).compileSelect()
 		assert.NoError(t, err)
@@ -1122,7 +1122,7 @@ func TestLoadMorph_ChildQueryIsCompiled(t *testing.T) {
 		child := q.relatedChild(desc.relatedTable, desc.relatedTable+"."+ref.foreignColumn, []any{uint(9)}).
 			Where(desc.relatedTable+"."+desc.morphTypeColumn, desc.morphValue).(*Query)
 		conditions := child.conditions
-		conditions.selectColumns = []string{"address", ref.foreignColumn, desc.morphTypeColumn}
+		conditions.selectItems = []any{"address", ref.foreignColumn, desc.morphTypeColumn}
 
 		compiled, bindings, err := child.setConditions(conditions).compileSelect()
 		assert.NoError(t, err)
@@ -1365,7 +1365,7 @@ func TestLoadMorphTo_BucketChildQueryIsCompiled(t *testing.T) {
 		q := newRelQueryWith(t, &morphImage{})
 		child := q.relatedChild("morph_parent_like_posts", "morph_parent_like_posts.id", []any{uint(5)})
 		conditions := child.conditions
-		conditions.selectColumns = []string{"title", "id"}
+		conditions.selectItems = []any{"title", "id"}
 
 		compiled, bindings, err := child.setConditions(conditions).compileSelect()
 		assert.NoError(t, err)
@@ -1467,7 +1467,7 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 		assert.Empty(t, child.conditions.withoutGlobalScopes)
 		assert.Empty(t, child.conditions.scopes)
 		assert.Len(t, child.conditions.where, 1)
-		assert.Len(t, child.conditions.selectColumns, 2)
+		assert.Len(t, child.conditions.selectItems, 2)
 	})
 
 	t.Run("pivot read receives the relation scope and the hydration plan's columns", func(t *testing.T) {
@@ -1570,7 +1570,7 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 		// The loader passes the related key as a required column, so it survives column pruning and
 		// the dictionary can be keyed off the related rows.
 		conditions := child.conditions
-		conditions.selectColumns = []string{"name", desc.pivotRelatedRef.primaryColumn}
+		conditions.selectItems = []any{"name", desc.pivotRelatedRef.primaryColumn}
 		pruned, prunedBindings, err := child.setConditions(conditions).compileSelect()
 		assert.NoError(t, err)
 		assert.Equal(t, `select "name", "id" from "rel_roles" where "rel_roles"."id" in (?)`, pruned)

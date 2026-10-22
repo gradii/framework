@@ -770,7 +770,10 @@ func (r *Query) runRelatedQueryCompiled(child *Query, desc *relationDescriptor, 
 		}
 
 		conditions := child.conditions
-		conditions.selectColumns = cols
+		conditions.selectItems = nil
+		for _, col := range cols {
+			conditions.selectItems = append(conditions.selectItems, col)
+		}
 		child = child.setConditions(conditions)
 	}
 
@@ -881,7 +884,10 @@ func (r *Query) pivotChild(table string, column string, values []any, columns []
 	child := r.relatedChild(table, column, values)
 
 	conditions := child.conditions
-	conditions.selectColumns = columns
+	conditions.selectItems = nil
+	for _, col := range columns {
+		conditions.selectItems = append(conditions.selectItems, col)
+	}
 
 	return child.setConditions(conditions)
 }
