@@ -66,6 +66,9 @@ func NewQuery(
 	// builds or runs them.
 	// An unrecognised driver is deliberately allowed (a module may bring its own database/sql
 	// name); it warns once, naming the driver and the recognised set, rather than failing.
+	// When log is nil, the warning is silently lost: a nil logger cannot report anything, and
+	// the framework allows NewQuery to be called with nil log for testing or when logging is
+	// disabled. The base grammar still works, so silence is correct behaviour rather than an error.
 	queryGrammar, known := querybuilder.NewGrammar(dbConfig.Driver, dbConfig.Prefix)
 	if !known && log != nil {
 		if err := querybuilder.UnrecognisedDriverWarning(dbConfig.Driver); err != nil {

@@ -109,6 +109,18 @@ func TestWhereMonthMySql(t *testing.T) {
 		WhereMonth("created_at", "=", 5).GetBindings())
 }
 
+// TestWhereMonthSqlite ports Laravel's testWhereMonthSqlite.
+func TestWhereMonthSqlite(t *testing.T) {
+	runDialectCases(t, []dialectCase{
+		{"bound value", NewSqliteGrammar(""), func(b *Builder) *Builder {
+			return b.Select("*").From("users", "").WhereMonth("created_at", "=", 5)
+		}, `select * from "users" where strftime('%m', "created_at") = cast(? as text)`},
+	})
+
+	assert.Equal(t, []any{"05"}, NewBuilder(NewSqliteGrammar("")).Select("*").From("users", "").
+		WhereMonth("created_at", "=", 5).GetBindings())
+}
+
 // TestWhereTimeMySql ports Laravel's testWhereTimeMySql.
 func TestWhereTimeMySql(t *testing.T) {
 	runDialectCases(t, []dialectCase{
@@ -168,6 +180,30 @@ func TestWhereDatePostgres(t *testing.T) {
 
 	assert.Equal(t, []any{"2015-12-21"}, NewBuilder(NewPostgresGrammar("")).Select("*").From("users", "").
 		WhereDate("created_at", "=", "2015-12-21").GetBindings())
+}
+
+// TestWhereDayPostgres ports Laravel's testWhereDayPostgres.
+func TestWhereDayPostgres(t *testing.T) {
+	runDialectCases(t, []dialectCase{
+		{"bound value", NewPostgresGrammar(""), func(b *Builder) *Builder {
+			return b.Select("*").From("users", "").WhereDay("created_at", "=", 1)
+		}, `select * from "users" where extract(day from "created_at") = ?`},
+	})
+
+	assert.Equal(t, []any{"01"}, NewBuilder(NewPostgresGrammar("")).Select("*").From("users", "").
+		WhereDay("created_at", "=", 1).GetBindings())
+}
+
+// TestWhereMonthPostgres ports Laravel's testWhereMonthPostgres.
+func TestWhereMonthPostgres(t *testing.T) {
+	runDialectCases(t, []dialectCase{
+		{"bound value", NewPostgresGrammar(""), func(b *Builder) *Builder {
+			return b.Select("*").From("users", "").WhereMonth("created_at", "=", 5)
+		}, `select * from "users" where extract(month from "created_at") = ?`},
+	})
+
+	assert.Equal(t, []any{"05"}, NewBuilder(NewPostgresGrammar("")).Select("*").From("users", "").
+		WhereMonth("created_at", "=", 5).GetBindings())
 }
 
 // TestWhereDateSqlite ports Laravel's testWhereDateSqlite: the date is compared against strftime's

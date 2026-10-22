@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/goravel/framework/errors"
 	"github.com/goravel/framework/support/carbon"
 )
 
@@ -219,6 +220,17 @@ func (b *Builder) WhereIn(column any, values any, boolean string, not bool) *Bui
 	list := toAnySlice(values)
 
 	b.wheres = append(b.wheres, Where{Type: typ, Column: column, Values: list, Boolean: boolean})
+
+	// An untyped nil is PHP's null, not an empty list. Laravel counts $values right after queueing the
+	// clause and count(null) is a TypeError, so whereIn('col', null) never compiles on any dialect.
+	// Reading it as an empty list compiled the constant "0 = 1", or "1 = 1" for not in, so a value list
+	// left unset silently matched nothing, or every row. A nil slice of any element type has length
+	// zero, so it is Laravel's empty array and keeps compiling to that constant.
+	if values == nil {
+		b.setError(errors.QueryNilValueListNotAllowed)
+
+		return b
+	}
 
 	// Laravel rejects a nested list whose one-level flatten would change the value count, because such
 	// a list cannot be bound positionally; a nested list of single-value arrays is still allowed.
@@ -577,16 +589,26 @@ func (b *Builder) WhereNotLike(column any, value string, caseSensitive bool, boo
 }
 
 // WhereRowValues compares tuples. Mirrors Builder::whereRowValues().
-func (b *Builder) WhereRowValues(columns []any, operator string, values []any, boolean string) *Builder {
+func (b *Builder) WhereRowValues(columns []any, operator string, values []any, boolean ...string) *Builder {
 	if len(columns) != len(values) {
 		b.setError(errRowValuesCountMismatch)
 		return b
 	}
 
-	b.wheres = append(b.wheres, Where{Type: WhereRowValuesType, Columns: columns, Operator: operator, Values: values, Boolean: boolean})
+	boolVal := BooleanAnd
+	if len(boolean) > 0 {
+		boolVal = boolean[0]
+	}
+
+	b.wheres = append(b.wheres, Where{Type: WhereRowValuesType, Columns: columns, Operator: operator, Values: values, Boolean: boolVal})
 	_ = b.AddBinding(CleanBindings(values), "where")
 
 	return b
+}
+
+// OrWhereRowValues adds an "or" tuple comparison. Mirrors Builder::orWhereRowValues().
+func (b *Builder) OrWhereRowValues(columns []any, operator string, values []any) *Builder {
+	return b.WhereRowValues(columns, operator, values, BooleanOr)
 }
 
 // WhereJsonContains adds a JSON contains clause. Mirrors Builder::whereJsonContains().

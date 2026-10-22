@@ -649,7 +649,7 @@ func TestWhereLikeClauseSqlServer(t *testing.T) {
 // laravel_port_fix_align_row_values_message_test.go.
 func TestWhereRowValuesArityMismatch(t *testing.T) {
 	builder := newTestBuilder().Select("*").From("orders", "").
-		WhereRowValues([]any{"last_update"}, "<", []any{1, 2}, BooleanAnd)
+		WhereRowValues([]any{"last_update"}, "<", []any{1, 2})
 
 	assert.Error(t, builder.Error())
 	assert.Equal(t, errors.QueryRowValuesCountMismatch, builder.Error())

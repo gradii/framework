@@ -192,6 +192,10 @@ func NewTx(
 	poolWriter := driver.Pool().Writers[0]
 	// An unrecognised driver is deliberately allowed (a module may bring its own database/sql
 	// name); it warns once, naming the driver and the recognised set, rather than failing.
+	// When logger is nil, the warning is silently lost: a nil logger cannot report anything,
+	// and the framework allows NewTx to be called with nil logger for testing or when logging
+	// is disabled. The base grammar still works, so silence is correct behaviour rather than
+	// an error.
 	queryGrammar, known := querybuilder.NewGrammar(poolWriter.Driver, poolWriter.Prefix)
 	if !known && logger != nil {
 		if err := querybuilder.UnrecognisedDriverWarning(poolWriter.Driver); err != nil {

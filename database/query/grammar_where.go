@@ -343,7 +343,7 @@ func (g *BaseGrammar) WhereJsonContains(b *Builder, where Where) string {
 func (g *BaseGrammar) WhereJsonOverlaps(b *Builder, where Where) string {
 	compiled := g.dialect().CompileJsonOverlaps(asString(where.Column), g.dialect().Parameter(where.Value))
 	if compiled == "" {
-		b.setError(errJsonContainsNotSupported)
+		b.setError(errJsonOverlapsNotSupported)
 		return ""
 	}
 

@@ -76,16 +76,16 @@ func TestWhereRowValues(t *testing.T) {
 	runLaravelCases(t, []laravelCase{
 		{"row values", func(b *Builder) *Builder {
 			return b.Select("*").From("orders", "").
-				WhereRowValues([]any{"last_update", "order_number"}, "<", []any{1, 2}, BooleanAnd)
+				WhereRowValues([]any{"last_update", "order_number"}, "<", []any{1, 2})
 		}, `select * from "orders" where ("last_update", "order_number") < (?, ?)`},
 		{"or row values after a where", func(b *Builder) *Builder {
 			return b.Select("*").From("orders", "").Where("company_id", 1).
-				WhereRowValues([]any{"last_update", "order_number"}, "<", []any{1, 2}, BooleanOr)
+				OrWhereRowValues([]any{"last_update", "order_number"}, "<", []any{1, 2})
 		}, `select * from "orders" where "company_id" = ? or ("last_update", "order_number") < (?, ?)`},
 	})
 
 	builder := newTestBuilder().Select("*").From("orders", "").
-		WhereRowValues([]any{"last_update", "order_number"}, "<", []any{1, Raw("2")}, BooleanAnd)
+		WhereRowValues([]any{"last_update", "order_number"}, "<", []any{1, Raw("2")})
 
 	assert.Equal(t, `select * from "orders" where ("last_update", "order_number") < (?, 2)`, builder.ToSQL())
 	assert.Equal(t, []any{1}, builder.GetBindings())

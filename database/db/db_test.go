@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	contractsdatabase "github.com/goravel/framework/contracts/database"
@@ -150,4 +151,65 @@ func TestDB_TransactionUnconfiguredConnection(t *testing.T) {
 
 	assert.ErrorIs(t, err, errors.DatabaseConnectionIsNil)
 	assert.False(t, called, "callback must not run when the transaction cannot start")
+}
+
+func TestNewTx_UnrecognisedDriverWarning(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("unrecognised driver logs warning when logger is not nil", func(t *testing.T) {
+		mockLogger := mockslogger.NewLogger(t)
+		mockDriver := mocksdriver.NewDriver(t)
+		mockGrammar := mocksdriver.NewGrammar(t)
+		mockPool := contractsdatabase.Pool{
+			Writers: []contractsdatabase.Config{
+				{Driver: "unknown_test_driver", Prefix: ""},
+			},
+		}
+
+		mockDriver.EXPECT().Pool().Return(mockPool).Once()
+		mockDriver.EXPECT().Grammar().Return(mockGrammar).Once()
+		mockLogger.EXPECT().Warningf(ctx, "%s", mock.AnythingOfType("*errors.errorString")).Once()
+
+		tx := NewTx(ctx, mockDriver, mockLogger, nil, nil, &[]TxLog{}, nil)
+
+		assert.NotNil(t, tx)
+		assert.NotNil(t, tx.queryGrammar)
+	})
+
+	t.Run("unrecognised driver is silent when logger is nil", func(t *testing.T) {
+		mockDriver := mocksdriver.NewDriver(t)
+		mockGrammar := mocksdriver.NewGrammar(t)
+		mockPool := contractsdatabase.Pool{
+			Writers: []contractsdatabase.Config{
+				{Driver: "unknown_test_driver_2", Prefix: ""},
+			},
+		}
+
+		mockDriver.EXPECT().Pool().Return(mockPool).Once()
+		mockDriver.EXPECT().Grammar().Return(mockGrammar).Once()
+
+		tx := NewTx(ctx, mockDriver, nil, nil, nil, &[]TxLog{}, nil)
+
+		assert.NotNil(t, tx)
+		assert.NotNil(t, tx.queryGrammar)
+	})
+
+	t.Run("recognised driver does not log warning", func(t *testing.T) {
+		mockLogger := mockslogger.NewLogger(t)
+		mockDriver := mocksdriver.NewDriver(t)
+		mockGrammar := mocksdriver.NewGrammar(t)
+		mockPool := contractsdatabase.Pool{
+			Writers: []contractsdatabase.Config{
+				{Driver: "mysql", Prefix: ""},
+			},
+		}
+
+		mockDriver.EXPECT().Pool().Return(mockPool).Once()
+		mockDriver.EXPECT().Grammar().Return(mockGrammar).Once()
+
+		tx := NewTx(ctx, mockDriver, mockLogger, nil, nil, &[]TxLog{}, nil)
+
+		assert.NotNil(t, tx)
+		assert.NotNil(t, tx.queryGrammar)
+	})
 }

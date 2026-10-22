@@ -1,6 +1,7 @@
 package query
 
 import (
+	"reflect"
 	"strings"
 
 	"github.com/goravel/framework/errors"
@@ -270,16 +271,16 @@ func (b *Builder) GetBindings() []any {
 	return out
 }
 
-// SetBindings replaces the bindings for one component. Mirrors Builder::setBindings().
+// SetBindings replaces the bindings for one component. Mirrors Builder::setBindings(), which stores
+// the values as given: Laravel casts a binding only in addBinding and cleanBindings, so an enum set
+// here is not unwrapped. The values are copied so the builder does not alias the caller's slice.
 func (b *Builder) SetBindings(values []any, typ string) error {
 	if _, ok := b.bindings[typ]; !ok {
 		return errors.QueryInvalidBindingType.Args(typ)
 	}
-	cast := make([]any, len(values))
-	for i := range values {
-		cast[i] = CastBinding(values[i])
-	}
-	b.bindings[typ] = cast
+	stored := make([]any, len(values))
+	copy(stored, values)
+	b.bindings[typ] = stored
 	return nil
 }
 
@@ -310,21 +311,57 @@ func (b *Builder) MergeBindings(other *Builder) {
 // MergeWheres merges an array of where clauses and bindings. Mirrors Builder::mergeWheres(): the
 // incoming clauses are appended to this builder's, and the incoming bindings are appended to the
 // "where" component in order - array_values(array_merge(...)) in Laravel, which a slice append
-// reproduces without the PHP array keys. Each merged binding is cast, as Laravel casts it.
+// reproduces without the PHP array keys. Laravel stores the merged bindings as given, without
+// castBinding (which runs only in addBinding and cleanBindings), and so does this.
 func (b *Builder) MergeWheres(wheres []Where, bindings []any) *Builder {
 	b.wheres = append(b.wheres, wheres...)
-
-	merged := append(append([]any{}, b.bindings["where"]...), bindings...)
-	for i := range merged {
-		merged[i] = CastBinding(merged[i])
-	}
-	b.bindings["where"] = merged
+	b.bindings["where"] = append(append([]any{}, b.bindings["where"]...), bindings...)
 
 	return b
 }
 
-// CastBinding unwraps enum-like values. Mirrors Builder::castBinding().
-func CastBinding(value any) any { return value }
+// UnitEnum is implemented by an enum type whose cases are identified by name: the Go counterpart of a
+// PHP pure enum (UnitEnum). Go has no enum construct, so a type opts in by implementing EnumName, and
+// CastBinding then binds a case as its name.
+type UnitEnum interface {
+	EnumName() string
+}
+
+// BackedEnum is implemented by an enum type whose cases carry a scalar backing value: the Go
+// counterpart of PHP's BackedEnum. CastBinding binds a case as that value. A type implementing both
+// interfaces binds its value, because PHP's BackedEnum extends UnitEnum and enum_value() tests it first.
+type BackedEnum interface {
+	EnumValue() any
+}
+
+// CastBinding mirrors Builder::castBinding(), which passes an enum case through enum_value(): a
+// BackedEnum binds as its backing value and a UnitEnum as its name. Any other value is returned
+// unchanged, so it keeps its dynamic type and database/sql converts it at execution.
+//
+// A nil pointer is also returned unchanged, even when its type is an enum. Calling a value-receiver
+// method through a nil pointer panics, and database/sql binds a nil pointer as NULL, which matches
+// castBinding(null) returning null.
+func CastBinding(value any) any {
+	switch enum := value.(type) {
+	case BackedEnum:
+		if !isNilPointer(enum) {
+			return enum.EnumValue()
+		}
+	case UnitEnum:
+		if !isNilPointer(enum) {
+			return enum.EnumName()
+		}
+	}
+
+	return value
+}
+
+// isNilPointer reports whether value holds a nil pointer.
+func isNilPointer(value any) bool {
+	rv := reflect.ValueOf(value)
+
+	return rv.Kind() == reflect.Pointer && rv.IsNil()
+}
 
 // CleanBindings drops expressions and casts the rest. Mirrors Builder::cleanBindings().
 func CleanBindings(values []any) []any {

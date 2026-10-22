@@ -21,6 +21,7 @@ var (
 	errJsonContainsNotSupported      = errors.QueryJsonContainsNotSupported
 	errJsonContainsKeyNotSupported   = errors.QueryJsonContainsKeyNotSupported
 	errJsonLengthNotSupported        = errors.QueryJsonLengthNotSupported
+	errJsonOverlapsNotSupported      = errors.QueryJsonOverlapsNotSupported
 	errFullTextNotSupported          = errors.QueryFullTextNotSupported
 	errUpsertNotSupported            = errors.QueryUpsertNotSupported
 	errInsertIgnoreNotSupported      = errors.QueryInsertIgnoreNotSupported

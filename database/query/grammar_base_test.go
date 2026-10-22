@@ -63,7 +63,7 @@ func TestCompileSelect(t *testing.T) {
 			return b.From("users", "").WhereDate("created_at", "2024-01-01")
 		}, `select * from "users" where date("created_at") = ?`},
 		{"where row values", func(b *Builder) *Builder {
-			return b.From("users", "").WhereRowValues([]any{"a", "b"}, "=", []any{1, 2}, BooleanAnd)
+			return b.From("users", "").WhereRowValues([]any{"a", "b"}, "=", []any{1, 2})
 		}, `select * from "users" where ("a", "b") = (?, ?)`},
 		{"where nested", func(b *Builder) *Builder {
 			return b.From("users", "").WhereNested(func(q *Builder) *Builder {

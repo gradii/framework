@@ -339,13 +339,6 @@ func (g *PostgresGrammar) CompileJsonContainsKey(column string) string {
 	return "coalesce((" + wrapped + ")::jsonb ?? '" + strings.ReplaceAll(last, "'", "''") + "', false)"
 }
 
-// CompileJsonOverlaps mirrors PostgresGrammar::compileJsonOverlaps().
-func (g *PostgresGrammar) CompileJsonOverlaps(column string, value string) string {
-	wrapped := strings.ReplaceAll(g.Wrap(column), "->>", "->")
-
-	return "(" + wrapped + ")::jsonb ?| array[" + value + "]"
-}
-
 // CompileJsonUpdateColumn mirrors PostgresGrammar::compileJsonUpdateColumn().
 func (g *PostgresGrammar) CompileJsonUpdateColumn(key string, value any) string {
 	segments := strings.Split(key, "->")

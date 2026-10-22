@@ -34,7 +34,7 @@ import (
 // declared message lowercased the first letter, which the corpus's exact-message assertion rejects.
 func TestWhereRowValuesArityMismatchMessage(t *testing.T) {
 	builder := newTestBuilder().Select("*").From("orders", "").
-		WhereRowValues([]any{"last_update"}, "<", []any{1, 2}, BooleanAnd)
+		WhereRowValues([]any{"last_update"}, "<", []any{1, 2})
 
 	assert.Error(t, builder.Error())
 	assert.ErrorIs(t, builder.Error(), errors.QueryRowValuesCountMismatch)
@@ -63,7 +63,7 @@ func TestWhereRowValuesArityMismatchMessagePerDialect(t *testing.T) {
 	for _, dialect := range dialects {
 		t.Run(dialect.name, func(t *testing.T) {
 			builder := NewBuilder(dialect.grammar).Select("*").From("orders", "").
-				WhereRowValues([]any{"last_update"}, "<", []any{1, 2}, BooleanAnd)
+				WhereRowValues([]any{"last_update"}, "<", []any{1, 2})
 
 			assert.EqualError(t, builder.Error(), "The number of columns must match the number of values")
 			assert.Equal(t, dialect.want, builder.ToSQL())
@@ -78,7 +78,7 @@ func TestWhereRowValuesArityMismatchMessagePerDialect(t *testing.T) {
 func TestWhereRowValuesArityMismatchMatchingArityStillCompiles(t *testing.T) {
 	runLaravelCases(t, []laravelCase{
 		{"where row values", func(b *Builder) *Builder {
-			return b.Select("*").From("orders", "").WhereRowValues([]any{"last_update", "order_number"}, "<", []any{1, 2}, BooleanAnd)
+			return b.Select("*").From("orders", "").WhereRowValues([]any{"last_update", "order_number"}, "<", []any{1, 2})
 		}, `select * from "orders" where ("last_update", "order_number") < (?, ?)`},
 	})
 }

@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/errors"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -353,7 +354,7 @@ func TestWhereFamilyVariants(t *testing.T) {
 			return b.From("users", "").WhereIntegerInRaw("id", []any{1}, BooleanAnd, true)
 		}, `select * from "users" where "id" not in (1)`},
 		{"where row values", func(b *Builder) *Builder {
-			return b.From("users", "").WhereRowValues([]any{"a", "b"}, "=", []any{1, 2}, BooleanAnd)
+			return b.From("users", "").WhereRowValues([]any{"a", "b"}, "=", []any{1, 2})
 		}, `select * from "users" where ("a", "b") = (?, ?)`},
 		{"where between columns", func(b *Builder) *Builder {
 			return b.From("users", "").WhereBetweenColumns("a", []any{"b", "c"}, BooleanAnd, false)
@@ -555,9 +556,6 @@ func TestJsonWheres(t *testing.T) {
 		{"postgres contains", NewPostgresGrammar(""), func(b *Builder) *Builder {
 			return b.From("users", "").WhereJsonContains("data", "x", BooleanAnd, false)
 		}, `select * from "users" where ("data")::jsonb @> ?`},
-		{"postgres overlaps", NewPostgresGrammar(""), func(b *Builder) *Builder {
-			return b.From("users", "").WhereJsonOverlaps("data", "x", BooleanAnd, false)
-		}, `select * from "users" where ("data")::jsonb ?| array[?]`},
 		{"sqlite contains", NewSqliteGrammar(""), func(b *Builder) *Builder {
 			return b.From("users", "").WhereJsonContains("data", "x", BooleanAnd, false)
 			// The dotted name is quoted segment by segment, which reads the same to the database.
@@ -1368,7 +1366,7 @@ func TestJsonOverlapsSqliteIsRefused(t *testing.T) {
 
 	_ = builder.ToSQL()
 
-	assert.Error(t, builder.Error())
+	assert.ErrorIs(t, builder.Error(), errors.QueryJsonOverlapsNotSupported)
 }
 
 // TestHavingExpression ports the raw-expression having.

@@ -1251,9 +1251,9 @@ type discardQueryLogger struct{}
 func (discardQueryLogger) Level(contractslogger.Level) contractslogger.Logger {
 	return discardQueryLogger{}
 }
-func (discardQueryLogger) Log() log.Log                                                { return nil }
-func (discardQueryLogger) Infof(context.Context, string, ...any)                       {}
-func (discardQueryLogger) Warningf(context.Context, string, ...any)                    {}
-func (discardQueryLogger) Errorf(context.Context, string, ...any)                      {}
-func (discardQueryLogger) Panicf(context.Context, string, ...any)                      {}
+func (discardQueryLogger) Log() log.Log                                                 { return nil }
+func (discardQueryLogger) Infof(context.Context, string, ...any)                        {}
+func (discardQueryLogger) Warningf(context.Context, string, ...any)                     {}
+func (discardQueryLogger) Errorf(context.Context, string, ...any)                       {}
+func (discardQueryLogger) Panicf(context.Context, string, ...any)                       {}
 func (discardQueryLogger) Trace(context.Context, *carbon.Carbon, string, int64, error) {}
