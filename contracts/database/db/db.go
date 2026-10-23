@@ -65,7 +65,8 @@ type Query interface {
 	DoesntExist() (bool, error)
 	// DoesntExistOr reports true if no rows exist; otherwise it returns the callback's value.
 	DoesntExistOr(callback func() any) (any, error)
-	// Distinct forces the query to only return distinct results.
+	// Distinct preserves the selected fields and returns distinct results. Optional columns
+	// specify DISTINCT ON in PostgreSQL and the distinct columns for aggregate queries.
 	Distinct(columns ...string) Query
 	// Each executes the query and passes each row to the callback.
 	Each(callback func(row Row) error) error

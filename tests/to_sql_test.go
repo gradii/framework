@@ -46,7 +46,7 @@ func (s *ToSqlTestSuite) TestCount() {
 	s.Equal("select count(distinct \"name\") as aggregate from \"users\" where \"id\" = 1 and \"users\".\"deleted_at\" IS NULL", toSql.Count())
 
 	toSql = gorm.NewToSql(s.query.Model(&User{}).Distinct("name", "avatar").Where("id", 1).(*gorm.Query), s.mockLog, true)
-	s.Equal("select count(*) as aggregate from \"users\" where \"id\" = 1 and \"users\".\"deleted_at\" IS NULL", toSql.Count())
+	s.Equal("select count(distinct \"name\", \"avatar\") as aggregate from \"users\" where \"id\" = 1 and \"users\".\"deleted_at\" IS NULL", toSql.Count())
 
 	toSql = gorm.NewToSql(s.query.Model(&User{}).Select("name", "avatar").Where("id", 1).(*gorm.Query), s.mockLog, true)
 	s.Equal("select count(*) as aggregate from \"users\" where \"id\" = 1 and \"users\".\"deleted_at\" IS NULL", toSql.Count())

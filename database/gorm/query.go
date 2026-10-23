@@ -184,7 +184,7 @@ func (r *Query) Count() (int64, error) {
 func (r *Query) Create(value any) error {
 	query := r.dest(value).buildConditions()
 
-	if hasSelectColumns(query.conditions) && len(query.conditions.omit) > 0 {
+	if hasStringColumns(query.conditions.selectItems) && len(query.conditions.omit) > 0 {
 		return errors.OrmQuerySelectAndOmitsConflict
 	}
 
@@ -281,14 +281,14 @@ func (r *Query) Delete(dests ...any) (*contractsdb.Result, error) {
 }
 
 func (r *Query) Distinct(columns ...string) contractsorm.Query {
-	if len(columns) == 0 {
-		columns = []string{"*"}
+	conditions := r.conditions
+	conditions.distinct = true
+	conditions.distinctColumns = make([]any, len(columns))
+	for i, column := range columns {
+		conditions.distinctColumns[i] = column
 	}
 
-	query := r.Select(columns...).(*Query)
-	query.conditions.distinct = true
-
-	return r.setConditions(query.conditions)
+	return r.setConditions(conditions)
 }
 
 func (r *Query) Driver() string {
@@ -594,7 +594,7 @@ func (r *Query) Get(dest any, columns ...any) error {
 	if !hasSelectColumns(r.conditions) {
 		conditions := r.conditions
 		for _, col := range columnsToStrings(columns) {
-			conditions.selectItems = append(conditions.selectItems, col)
+			conditions.selectItems = deep.Append[any](conditions.selectItems, col)
 		}
 		r = r.setConditions(conditions)
 	}
@@ -1277,7 +1277,7 @@ func (r *Query) Rollback() error {
 }
 
 func (r *Query) Save(dest any) error {
-	if hasSelectColumns(r.conditions) && len(r.conditions.omit) > 0 {
+	if hasStringColumns(r.conditions.selectItems) && len(r.conditions.omit) > 0 {
 		return errors.OrmQuerySelectAndOmitsConflict
 	}
 
@@ -1360,34 +1360,16 @@ func (r *Query) Scopes(funcs ...func(contractsorm.Query) contractsorm.Query) con
 	return r.setConditions(conditions)
 }
 
+// Select replaces the selected columns and their bindings, mirroring Laravel's select().
 func (r *Query) Select(columns ...string) contractsorm.Query {
 	conditions := r.conditions
-
-	// Append new columns to selectItems, de-duplicating
-	seen := make(map[string]bool)
-	for _, item := range conditions.selectItems {
-		if col, ok := item.(string); ok {
-			seen[col] = true
-		}
+	conditions.selectItems = nil
+	conditions.selectSubs = nil
+	if len(columns) == 0 {
+		columns = []string{"*"}
 	}
-
 	for _, column := range columns {
-		if !seen[column] {
-			conditions.selectItems = append(conditions.selectItems, column)
-			seen[column] = true
-		}
-	}
-
-	// * may be added along with other columns automatically, Distinct().Select("name") -> (*, name), * should be removed in this case.
-	if len(conditions.selectItems) > 1 {
-		filtered := make([]any, 0, len(conditions.selectItems))
-		for _, item := range conditions.selectItems {
-			if col, ok := item.(string); ok && col == "*" {
-				continue
-			}
-			filtered = append(filtered, item)
-		}
-		conditions.selectItems = filtered
+		conditions.selectItems = deep.Append[any](conditions.selectItems, column)
 	}
 
 	return r.setConditions(conditions)
@@ -1395,7 +1377,7 @@ func (r *Query) Select(columns ...string) contractsorm.Query {
 
 func (r *Query) SelectRaw(query any, args ...any) contractsorm.Query {
 	conditions := r.conditions
-	conditions.selectItems = append(conditions.selectItems, &Select{
+	conditions.selectItems = deep.Append[any](conditions.selectItems, &Select{
 		query: query,
 		args:  args,
 	})

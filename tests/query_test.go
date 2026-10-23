@@ -1014,7 +1014,13 @@ func (s *QueryTestSuite) TestDistinct() {
 			s.Equal(3, len(users))
 
 			s.Nil(query.Query().Distinct("name").Find(&users, []uint{user.ID, user1.ID}))
-			s.Equal(1, len(users))
+			if driver == postgres.Name {
+				s.Require().Len(users, 1)
+			} else {
+				s.Require().Len(users, 2)
+			}
+			s.NotZero(users[0].ID)
+			s.NotEmpty(users[0].Avatar)
 
 			s.Nil(query.Query().Distinct("name", "avatar").Find(&users, []uint{user.ID, user1.ID}))
 			s.Equal(2, len(users))
@@ -1029,7 +1035,7 @@ func (s *QueryTestSuite) TestDistinct() {
 			s.NoError(err)
 			s.Equal(int64(3), count)
 
-			count, err = query.Query().Model(&User{}).Distinct("avatar as avatar").Count()
+			count, err = query.Query().Model(&User{}).Distinct("avatar").Select("name").Count()
 			s.NoError(err)
 			s.Equal(int64(2), count)
 
@@ -1041,10 +1047,14 @@ func (s *QueryTestSuite) TestDistinct() {
 			s.Nil(err)
 			s.Equal(int64(1), count)
 
-			// Gorm cannot support multiple distinct fields count directly, the sql will be COUNT(*).
+			// Laravel emits count(distinct name, avatar); only MySQL accepts multiple arguments here.
 			count, err = query.Query().Model(&User{}).Distinct("name", "avatar").Count()
-			s.Nil(err)
-			s.Equal(int64(3), count)
+			if driver == mysql.Name {
+				s.NoError(err)
+				s.Equal(int64(2), count)
+			} else {
+				s.Error(err)
+			}
 		})
 	}
 }

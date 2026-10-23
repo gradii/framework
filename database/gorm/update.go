@@ -147,15 +147,26 @@ func (r *Query) updateSchema() *modelSchema {
 func (r *Query) selectAndOmitColumns(schema *modelSchema) (map[string]bool, bool) {
 	columns := make(map[string]bool)
 	restricted := false
+	selectAll := false
 
 	for _, item := range r.conditions.selectItems {
 		if column, ok := item.(string); ok {
 			if column == "*" {
+				selectAll = true
 				continue
 			}
 
 			columns[resolveColumn(schema, column)] = true
 			restricted = true
+		}
+	}
+	if selectAll {
+		restricted = false
+		// A wildcard explicitly selects every field, including fields holding zero values.
+		if schema != nil {
+			for _, field := range schema.Fields {
+				columns[field.DBName] = true
+			}
 		}
 	}
 	for _, column := range r.conditions.omit {

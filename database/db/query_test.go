@@ -29,6 +29,17 @@ type TestUser struct {
 	Age   int    `db:"-"`
 }
 
+func TestSelectResetsColumnsAndBindings(t *testing.T) {
+	query := NewQuery(context.Background(), nil, nil, querybuilder.NewPostgresGrammar(""), "", nil, "users", nil)
+	query.builder.SelectRaw("? as old", []any{1}).Where("id", 9)
+
+	selected := query.Select("name").(*Query)
+	assert.Equal(t, `select "name" from "users" where "id" = ?`, selected.builder.ToSQL())
+	assert.Equal(t, []any{9}, selected.builder.GetBindings())
+	assert.Equal(t, `select ? as old from "users" where "id" = ?`, query.builder.ToSQL())
+	assert.Equal(t, []any{1, 9}, query.builder.GetBindings())
+}
+
 // MockResult is a database/sql.Result whose behaviour the tests script.
 type MockResult struct {
 	mock.Mock
@@ -186,10 +197,13 @@ func (s *QueryTestSuite) TestCompiledSQL() {
 		{"where json contains key", func(q db.Query) db.Query { return q.WhereJsonContainsKey("data") }, "select * from `users` where ifnull(json_contains_path(`data`, 'one'), 0)"},
 		{"where json length", func(q db.Query) db.Query { return q.WhereJsonLength("data", 2) }, "select * from `users` where json_length(`data`) = ?"},
 		{"select", func(q db.Query) db.Query { return q.Select("id", "name") }, "select `id`, `name` from `users`"},
-		{"select deduplicates", func(q db.Query) db.Query { return q.Select("name", "name") }, "select `name` from `users`"},
+		{"select preserves duplicates", func(q db.Query) db.Query { return q.Select("name", "name") }, "select `name`, `name` from `users`"},
+		{"select replaces columns", func(q db.Query) db.Query { return q.Select("id").Select("name") }, "select `name` from `users`"},
+		{"select preserves explicit wildcard", func(q db.Query) db.Query { return q.Select("*", "name") }, "select *, `name` from `users`"},
+		{"select defaults to wildcard", func(q db.Query) db.Query { return q.Select("id").Select() }, "select * from `users`"},
 		{"distinct", func(q db.Query) db.Query { return q.Distinct() }, "select distinct * from `users`"},
-		{"distinct columns", func(q db.Query) db.Query { return q.Distinct("name") }, "select distinct `name` from `users`"},
-		{"distinct two columns", func(q db.Query) db.Query { return q.Distinct("name", "age") }, "select distinct `name`, `age` from `users`"},
+		{"distinct columns", func(q db.Query) db.Query { return q.Distinct("name") }, "select distinct * from `users`"},
+		{"distinct two columns", func(q db.Query) db.Query { return q.Distinct("name", "age") }, "select distinct * from `users`"},
 		{"group by", func(q db.Query) db.Query { return q.GroupBy("name") }, "select * from `users` group by `name`"},
 		{"having", func(q db.Query) db.Query { return q.GroupBy("name").Having("name", "John") }, "select * from `users` group by `name` having `name` = ?"},
 		{"order by", func(q db.Query) db.Query { return q.OrderBy("name") }, "select * from `users` order by `name` asc"},
@@ -379,10 +393,12 @@ func (s *QueryTestSuite) TestCountAndExists() {
 	s.False(exists)
 }
 
-func (s *QueryTestSuite) TestCountDistinctWithoutColumnsIsRejected() {
-	_, err := s.query.Distinct().Count()
+func (s *QueryTestSuite) TestCountDistinctWithoutColumnsCountsAllRows() {
+	s.expectCount(3)
+	count, err := s.query.Distinct().Count()
 
-	s.Equal(errors.DatabaseCountDistinctWithoutColumns, err)
+	s.NoError(err)
+	s.Equal(int64(3), count)
 }
 
 func (s *QueryTestSuite) TestInsert() {

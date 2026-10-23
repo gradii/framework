@@ -1179,6 +1179,23 @@ func TestBasicSelectWithGetColumns(t *testing.T) {
 	assert.Nil(t, query.conditions.selectItems)
 }
 
+// Laravel's onceWithColumns ignores the Get columns whenever a raw selection is already present.
+func TestGetColumnsKeepsExistingRawSelect(t *testing.T) {
+	base, recorder := newGetColumnsQuery(t)
+	query := base.SelectRaw("count(*) as total").(*Query)
+	var rows []struct{ Total int64 }
+
+	require.NoError(t, query.Get(&rows, "name"))
+	assert.Equal(t, `select count(*) as total from "users"`, recorder.last(t).sql)
+	assert.Empty(t, recorder.last(t).args)
+	assert.Nil(t, base.conditions.selectItems)
+
+	statement, bindings, err := query.compileSelect()
+	require.NoError(t, err)
+	assert.Equal(t, `select count(*) as total from "users"`, statement)
+	assert.Empty(t, bindings)
+}
+
 // TestBasicSelectUseWritePdo ports Laravel's testBasicSelectUseWritePdo. Laravel's builder carries a
 // useWritePdo flag that reaches the connection as the inverse of its $useReadPdo argument: a plain
 // get() reads through the replica ($useReadPdo = true), while useWritePdo()->get() forces the write
@@ -1251,9 +1268,9 @@ type discardQueryLogger struct{}
 func (discardQueryLogger) Level(contractslogger.Level) contractslogger.Logger {
 	return discardQueryLogger{}
 }
-func (discardQueryLogger) Log() log.Log                                                 { return nil }
-func (discardQueryLogger) Infof(context.Context, string, ...any)                        {}
-func (discardQueryLogger) Warningf(context.Context, string, ...any)                     {}
-func (discardQueryLogger) Errorf(context.Context, string, ...any)                       {}
-func (discardQueryLogger) Panicf(context.Context, string, ...any)                       {}
+func (discardQueryLogger) Log() log.Log                                                { return nil }
+func (discardQueryLogger) Infof(context.Context, string, ...any)                       {}
+func (discardQueryLogger) Warningf(context.Context, string, ...any)                    {}
+func (discardQueryLogger) Errorf(context.Context, string, ...any)                      {}
+func (discardQueryLogger) Panicf(context.Context, string, ...any)                      {}
 func (discardQueryLogger) Trace(context.Context, *carbon.Carbon, string, int64, error) {}

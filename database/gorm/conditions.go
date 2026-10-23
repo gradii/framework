@@ -28,6 +28,7 @@ type Conditions struct {
 	eagerLoad           []eagerLoadEntry
 	relations           []relationExistence
 	oneOfMany           *oneOfManyConfig
+	distinctColumns     []any
 	distinct            bool
 	lockForUpdate       bool
 	sharedLock          bool
@@ -104,4 +105,3 @@ func selectStringColumns(selectItems []any) []string {
 	}
 	return columns
 }
-

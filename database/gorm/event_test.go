@@ -272,6 +272,32 @@ func (s *EventTestSuite) TestValidColumn() {
 	}
 }
 
+func (s *EventTestSuite) TestRawSelectDoesNotMakeZeroValuesValid() {
+	for _, dest := range []any{
+		TestEventModel{},
+		&TestEventModel{},
+		map[string]any{"name": "", "is_admin": false, "manage": 0},
+	} {
+		query := (&Query{}).SelectRaw("count(*) as total").(*Query)
+		event := NewEvent(query, &testEventModel, dest)
+
+		s.False(event.validValue("name", ""))
+		s.False(event.validValue("is_admin", false))
+		s.False(event.validValue("manage", 0))
+		s.True(event.validValue("name", "changed"))
+		s.False(event.IsDirty())
+		s.False(event.IsDirty("name", "is_admin", "manage"))
+		s.Equal("name", event.GetAttribute("name"))
+		s.Equal(true, event.GetAttribute("is_admin"))
+
+		// Selecting a named column still makes an explicitly selected zero value writable.
+		event.query = query.Select("name").(*Query)
+		s.True(event.validValue("name", ""))
+		s.True(event.IsDirty("name"))
+		s.Equal("", event.GetAttribute("name"))
+	}
+}
+
 func (s *EventTestSuite) TestDirty() {
 	for _, event := range s.events {
 		s.False(event.dirty("Name", "name"))

@@ -520,58 +520,31 @@ func (r *Query) WhereNone(columns []string, args ...any) db.Query {
 
 // --- select and clauses ------------------------------------------------------
 
-// Select sets the selected columns. The facade has always appended, de-duplicated, and dropped a
-// leading "*" once real columns are named, which Laravel's select() does not do, so that behaviour
-// is preserved here.
+// Select replaces the selected columns and their bindings, mirroring Laravel's select().
 func (r *Query) Select(columns ...string) db.Query {
 	q := r.clone()
 
-	seen := make(map[string]bool, len(columns))
-	selects := make([]any, 0, len(columns))
-
-	for _, existing := range q.builder.Selects() {
-		key := asString(existing)
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		selects = append(selects, existing)
+	if len(columns) == 0 {
+		columns = []string{"*"}
 	}
-
+	selects := make([]any, 0, len(columns))
 	for _, column := range columns {
-		if seen[column] {
-			continue
-		}
-		seen[column] = true
 		selects = append(selects, column)
 	}
-
-	if len(selects) > 1 {
-		filtered := make([]any, 0, len(selects))
-		for _, column := range selects {
-			if asString(column) != "*" {
-				filtered = append(filtered, column)
-			}
-		}
-		selects = filtered
-	}
-
-	q.builder.SetSelects(selects)
+	q.builder.Select(selects...)
 
 	return q
 }
 
-// Distinct sets the distinct flag. When columns are given they also become the select list, which
-// is the DB facade's long standing behaviour; Laravel's distinct($columns) instead records a
-// distinct-on list, and the ORM layer follows that.
+// Distinct preserves the select list and sets the distinct columns, mirroring Laravel's distinct().
 func (r *Query) Distinct(columns ...string) db.Query {
 	q := r.clone()
 
-	if len(columns) > 0 {
-		q = q.Select(columns...).(*Query)
+	distinctColumns := make([]any, len(columns))
+	for i, column := range columns {
+		distinctColumns[i] = column
 	}
-
-	q.builder.Distinct(true)
+	q.builder.Distinct(distinctColumns...)
 
 	return q
 }
@@ -890,16 +863,14 @@ func (r *Query) buildDelete() (string, []any, error) {
 	return querybuilder.ReplacePlaceholders(sql, r.driver), args, nil
 }
 
-// buildSelectForCount rewrites the select list into a count aggregate. It mirrors the previous
-// behaviour: several columns or none count all rows, one column counts that column, and distinct
-// without any column is rejected.
+// buildSelectForCount rewrites the select list into a count aggregate. Several columns or none
+// count all rows, while one column counts that column. The grammar applies explicit DISTINCT columns.
 //
 // The count a paginator runs never orders or bounds the rows it counts: Laravel builds it on a clone
 // without the orders, limit and offset (Builder::runPaginationCountQuery), so an ordered or limited
 // query still counts every matching row. The orders and the bound are dropped here, together with the
 // order bindings that would otherwise outnumber the placeholders left in the compiled SQL.
 func buildSelectForCount(q *Query) error {
-	distinct := q.builder.DistinctFlag()
 	selects := q.builder.Selects()
 
 	columns := []any{"*"}
@@ -909,8 +880,6 @@ func buildSelectForCount(q *Query) error {
 			column = str.Of(column).Split(" ")[0]
 		}
 		columns = []any{column}
-	} else if len(selects) == 0 && distinct {
-		return errors.DatabaseCountDistinctWithoutColumns
 	}
 
 	q.builder = q.builder.CloneWithout("orders", "limit", "offset").CloneWithoutBindings("order")

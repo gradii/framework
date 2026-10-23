@@ -19,6 +19,7 @@ import (
 	"github.com/goravel/framework/support/convert"
 	"github.com/goravel/framework/support/str"
 	"github.com/goravel/framework/testing/utils"
+	"github.com/goravel/mysql"
 	"github.com/goravel/postgres"
 	"github.com/goravel/sqlite"
 	"github.com/goravel/sqlserver"
@@ -616,18 +617,27 @@ func (s *DBTestSuite) TestDistinct() {
 
 			err = query.DB().Table("products").Distinct("name").Get(&products)
 			s.NoError(err)
-			s.Require().Equal(1, len(products))
+			if driver == postgres.Name {
+				s.Require().Len(products, 1)
+			} else {
+				s.Require().Len(products, 3)
+			}
 			s.Equal("distinct_product", products[0].Name)
+			s.NotZero(products[0].ID)
 
 			err = query.DB().Table("products").Distinct("name", "weight").Get(&products)
 			s.NoError(err)
-			s.Equal(2, len(products))
+			if driver == postgres.Name {
+				s.Len(products, 2)
+			} else {
+				s.Len(products, 3)
+			}
 
 			count, err := query.DB().Table("products").Distinct().Count()
-			s.Error(err)
-			s.Equal(int64(0), count)
+			s.NoError(err)
+			s.Equal(int64(3), count)
 
-			count, err = query.DB().Table("products").Distinct("name as name").Count()
+			count, err = query.DB().Table("products").Distinct("name").Select("id").Count()
 			s.NoError(err)
 			s.Equal(int64(1), count)
 
@@ -639,10 +649,14 @@ func (s *DBTestSuite) TestDistinct() {
 			s.NoError(err)
 			s.Equal(int64(1), count)
 
-			// Gorm cannot support multiple distinct fields count directly, the sql will be COUNT(*), keep consistent here.
+			// MySQL accepts Laravel's multi-column COUNT(DISTINCT) and excludes tuples containing NULL.
 			count, err = query.DB().Table("products").Distinct("name", "weight").Count()
-			s.NoError(err)
-			s.Equal(int64(3), count)
+			if driver == mysql.Name {
+				s.NoError(err)
+				s.Equal(int64(1), count)
+			} else {
+				s.Error(err)
+			}
 		})
 	}
 }

@@ -92,7 +92,8 @@ type Query interface {
 	DB() (*sql.DB, error)
 	// Delete deletes records matching given conditions, if the conditions are empty will delete all records.
 	Delete(value ...any) (*db.Result, error)
-	// Distinct specifies distinct fields to query.
+	// Distinct preserves the selected fields and returns distinct results. Optional columns
+	// specify DISTINCT ON in PostgreSQL and the distinct columns for aggregate queries.
 	Distinct(columns ...string) Query
 	// Driver gets the driver for the query.
 	Driver() string

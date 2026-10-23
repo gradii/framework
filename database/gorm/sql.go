@@ -269,7 +269,7 @@ func (r *Query) newBuilder() (*querybuilder.Builder, error) {
 	}
 
 	if r.conditions.distinct {
-		builder.Distinct()
+		builder.Distinct(r.conditions.distinctColumns...)
 	}
 
 	if len(r.conditions.selectItems) > 0 {
@@ -277,17 +277,10 @@ func (r *Query) newBuilder() (*querybuilder.Builder, error) {
 		for _, item := range r.conditions.selectItems {
 			switch v := item.(type) {
 			case string:
-				builder.AddSelect(v)
+				// Select preserves explicitly repeated columns, unlike AddSelect.
+				builder.SetSelects(append(builder.Selects(), v))
 			case *Select:
-				// Each SelectRaw call is its own entry, as in Laravel, where selectRaw() adds a new
-				// Expression object that addSelect's strict in_array never matches. builder.SelectRaw
-				// goes through AddSelect, which compares expressions by value. It would drop a repeated
-				// identical expression but keep that call's bindings, which shifts every later
-				// placeholder onto the wrong value. So the expression is appended directly.
-				builder.SetSelects(append(builder.Selects(), querybuilder.Raw(fmt.Sprint(v.query))))
-				if len(v.args) > 0 {
-					_ = builder.AddBinding(v.args, "select")
-				}
+				builder.SelectRaw(fmt.Sprint(v.query), v.args)
 			}
 		}
 	} else if len(r.conditions.selectSubs) > 0 {

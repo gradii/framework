@@ -1,6 +1,9 @@
 package query
 
-import "strings"
+import (
+	"reflect"
+	"strings"
+)
 
 // Select sets the selected columns. Mirrors Builder::select().
 //
@@ -39,10 +42,15 @@ func (b *Builder) SelectRaw(expression string, bindings []any) *Builder {
 func (b *Builder) AddSelect(columns ...any) *Builder {
 	for _, column := range columns {
 		duplicate := false
-		for _, existing := range b.columns {
-			if existing == column {
-				duplicate = true
-				break
+		// A value Expression represents a fresh Laravel object. Comparable columns use strict
+		// equality: strings match by value and *Expression matches only the same pointer.
+		_, valueExpression := column.(Expression)
+		if !valueExpression && (column == nil || reflect.ValueOf(column).Comparable()) {
+			for _, existing := range b.columns {
+				if (existing == nil || reflect.ValueOf(existing).Comparable()) && existing == column {
+					duplicate = true
+					break
+				}
 			}
 		}
 		if duplicate {
@@ -57,6 +65,7 @@ func (b *Builder) AddSelect(columns ...any) *Builder {
 
 // Distinct sets distinct, or distinct-on columns. Mirrors Builder::distinct().
 func (b *Builder) Distinct(columns ...any) *Builder {
+	b.distinctColumns = nil
 	if len(columns) == 0 {
 		b.distinct = true
 		return b

@@ -353,14 +353,8 @@ func TestCompileSelect_CombinesSelectAndSelectRaw(t *testing.T) {
 }
 
 // TestCompileSelect_SelectAndSelectRawKeepCallOrder pins Laravel's single call-ordered select list.
-// Repeated SelectRaw calls append rather than overwrite, and named columns no longer jump ahead of a
-// raw expression written before them. Laravel renders the same chains as follows (oracle, pgsql).
-// selectRaw(a)->selectRaw(b) gives `select a, b`. selectRaw(raw)->addSelect("name") gives
-// `select raw, "name"`. selectRaw('? as flag',[1])->selectRaw('? as flag',[2])->whereRaw('id = ?',[9])
-// gives `select ? as flag, ? as flag ... where id = ?` with bindings [1, 2, 9]. Before the fix the
-// second SelectRaw replaced the first and the named columns were always emitted first. Two identical
-// expressions also collapsed into one placeholder while both bindings stayed, so the where clause
-// was bound to 2 instead of 9.
+// Repeated SelectRaw calls append; Select replaces the list and clears its bindings. Expectations
+// are checked against the Laravel checkout and the v12.55.1 oracle.
 func TestCompileSelect_SelectAndSelectRawKeepCallOrder(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -377,11 +371,11 @@ func TestCompileSelect_SelectAndSelectRawKeepCallOrder(t *testing.T) {
 			wantBindings: nil,
 		},
 		{
-			name: "SelectRaw then Select keeps the raw expression first",
+			name: "SelectRaw then Select replaces the raw expression",
 			build: func(q contractsorm.Query) contractsorm.Query {
 				return q.SelectRaw("count(avatar) as count").Select("name")
 			},
-			wantSQL:      `select count(avatar) as count, "name" from "rel_users"`,
+			wantSQL:      `select "name" from "rel_users"`,
 			wantBindings: nil,
 		},
 		{
@@ -393,12 +387,12 @@ func TestCompileSelect_SelectAndSelectRawKeepCallOrder(t *testing.T) {
 			wantBindings: nil,
 		},
 		{
-			name: "interleaved calls keep their order and bindings",
+			name: "Select clears earlier raw columns and bindings",
 			build: func(q contractsorm.Query) contractsorm.Query {
 				return q.SelectRaw("? as a", 1).Select("name").SelectRaw("? as b", 2).Where("id = ?", 9)
 			},
-			wantSQL:      `select ? as a, "name", ? as b from "rel_users" where id = ?`,
-			wantBindings: []any{1, 2, 9},
+			wantSQL:      `select "name", ? as b from "rel_users" where id = ?`,
+			wantBindings: []any{2, 9},
 		},
 		{
 			name: "identical SelectRaw calls each keep their placeholder",
@@ -427,6 +421,50 @@ func TestCompileSelect_SelectAndSelectRawKeepCallOrder(t *testing.T) {
 	}
 }
 
+// A branch that appends a selection must not overwrite the backing array of another branch.
+func TestCompileSelect_SelectBranchesAreIsolated(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		second func(contractsorm.Query) contractsorm.Query
+		want   string
+	}{
+		{
+			name: "two raw branches",
+			second: func(q contractsorm.Query) contractsorm.Query {
+				return q.SelectRaw("q2_only")
+			},
+			want: `select a, b, c, q2_only from "users"`,
+		},
+		{
+			name: "raw and named column branches",
+			second: func(q contractsorm.Query) contractsorm.Query {
+				return q.Select("name")
+			},
+			want: `select "name" from "users"`,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			base := compiledQuery(t, &getColumnsUser{}, Conditions{}).SelectRaw("a").SelectRaw("b").SelectRaw("c")
+			first := base.SelectRaw("q1_only")
+			second := test.second(base)
+
+			for _, branch := range []struct {
+				query contractsorm.Query
+				want  string
+			}{
+				{first, `select a, b, c, q1_only from "users"`},
+				{second, test.want},
+				{base, `select a, b, c from "users"`},
+			} {
+				statement, bindings, err := branch.query.(*Query).compileSelect()
+				require.NoError(t, err)
+				assert.Equal(t, branch.want, statement)
+				assert.Empty(t, bindings)
+			}
+		})
+	}
+}
+
 // TestCompileSelect_SelectRawOnlyStillApplies pins that the raw select is still used when it is the
 // only selection, so the combine change did not disturb the SelectRaw-on-its-own path.
 func TestCompileSelect_SelectRawOnlyStillApplies(t *testing.T) {
@@ -436,6 +474,76 @@ func TestCompileSelect_SelectRawOnlyStillApplies(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.Contains(t, sql, `select count(avatar) as count from "rel_users"`)
+}
+
+func TestCompileSelect_SelectResetsColumns(t *testing.T) {
+	base := compiledQuery(t, &getColumnsUser{}, Conditions{}).SelectRaw("? as old", 1).Where("id", 9)
+	for _, test := range []struct {
+		name    string
+		columns []string
+		want    string
+	}{
+		{"named column", []string{"name"}, `select "name" from "users" where "id" = ?`},
+		{"duplicate columns", []string{"name", "name"}, `select "name", "name" from "users" where "id" = ?`},
+		{"explicit wildcard", []string{"*", "name"}, `select *, "name" from "users" where "id" = ?`},
+		{"default wildcard", nil, `select * from "users" where "id" = ?`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			statement, bindings, err := base.Select(test.columns...).(*Query).compileSelect()
+			require.NoError(t, err)
+			assert.Equal(t, test.want, statement)
+			assert.Equal(t, []any{9}, bindings)
+		})
+	}
+
+	statement, bindings, err := base.(*Query).compileSelect()
+	require.NoError(t, err)
+	assert.Equal(t, `select ? as old from "users" where "id" = ?`, statement)
+	assert.Equal(t, []any{1, 9}, bindings)
+
+	// Relation aggregates are select expressions too, so Select replaces them as well.
+	related := newRelQueryWith(t, &relUser{}).WithCount("Books").Select("name").(*Query)
+	statement, bindings, err = related.compileSelect()
+	require.NoError(t, err)
+	assert.Equal(t, `select "name" from "rel_users"`, statement)
+	assert.Empty(t, bindings)
+}
+
+func TestCompileSelect_DistinctKeepsSelection(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		selects  func(contractsorm.Query) contractsorm.Query
+		wantSQL  string
+		bindings []any
+	}{
+		{
+			name: "named selection",
+			selects: func(q contractsorm.Query) contractsorm.Query {
+				return q.Select("name")
+			},
+			wantSQL: `select distinct "name" from "users"`,
+		},
+		{
+			name: "raw selection and binding",
+			selects: func(q contractsorm.Query) contractsorm.Query {
+				return q.SelectRaw("? as flag", 1).Where("id", 9)
+			},
+			wantSQL:  `select distinct ? as flag from "users" where "id" = ?`,
+			bindings: []any{1, 9},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			query := test.selects(compiledQuery(t, &getColumnsUser{}, Conditions{})).Distinct().(*Query)
+			statement, bindings, err := query.compileSelect()
+			require.NoError(t, err)
+			assert.Equal(t, test.wantSQL, statement)
+			if test.bindings == nil {
+				assert.Empty(t, bindings)
+			} else {
+				assert.Equal(t, test.bindings, bindings)
+			}
+		})
+	}
 }
 
 // TestCompileSelect_ByteSliceStaysOneBinding guards the value side of the raw-placeholder expansion:

@@ -241,14 +241,9 @@ func (e *Event) validColumn(name string) bool {
 
 	// The filter is read from the query's own conditions rather than from GORM's statement, so an
 	// observer sees exactly the columns the statement being built will write.
-	var selectColumns []string
-	for _, item := range e.query.conditions.selectItems {
-		if col, ok := item.(string); ok {
-			selectColumns = append(selectColumns, col)
-		}
-	}
+	selectColumns := selectStringColumns(e.query.conditions.selectItems)
 	omitColumns := e.query.conditions.omit
-	if len(selectColumns) > 0 {
+	if len(selectColumns) > 0 && !hasWildcard(selectColumns) {
 		for _, selectColumn := range selectColumns {
 			dbSelectColumn := e.toDBColumnName(selectColumn)
 			if dbSelectColumn == "" {
@@ -286,7 +281,7 @@ func (e *Event) validValue(name string, value any) bool {
 		return false
 	}
 
-	if hasSelectColumns(e.query.conditions) {
+	if hasStringColumns(e.query.conditions.selectItems) {
 		return e.validColumn(name)
 	}
 

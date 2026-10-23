@@ -81,6 +81,23 @@ func TestBasicSelectDistinctOnColumns(t *testing.T) {
 	})
 }
 
+func TestDistinctReplacesPreviousColumns(t *testing.T) {
+	runDialectCases(t, []dialectCase{
+		{"bare distinct clears the distinct-on columns", NewPostgresGrammar(""), func(b *Builder) *Builder {
+			return b.From("users", "").Select("name", "id").Distinct("name").Distinct()
+		}, `select distinct "name", "id" from "users"`},
+		{"true clears the distinct-on columns", NewPostgresGrammar(""), func(b *Builder) *Builder {
+			return b.From("users", "").Select("name", "id").Distinct("name").Distinct(true)
+		}, `select distinct "name", "id" from "users"`},
+		{"false clears the distinct-on columns", NewPostgresGrammar(""), func(b *Builder) *Builder {
+			return b.From("users", "").Select("name", "id").Distinct("name").Distinct(false)
+		}, `select "name", "id" from "users"`},
+		{"new columns replace the distinct-on columns", NewPostgresGrammar(""), func(b *Builder) *Builder {
+			return b.From("users", "").Select("name", "id").Distinct("name").Distinct("id")
+		}, `select distinct on ("id") "name", "id" from "users"`},
+	})
+}
+
 // TestBasicAlias ports Laravel's testBasicAlias.
 // corpus L152: select('foo as bar')->from('users') => select "foo" as "bar" from "users".
 func TestBasicAlias(t *testing.T) {
