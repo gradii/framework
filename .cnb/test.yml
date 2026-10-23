@@ -67,20 +67,13 @@
       # Idempotent and retried, same reason as the `Test` pipeline above.
       script: (go mod tidy && cd tests && go mod tidy) || (sleep 5 && go mod tidy && cd tests && go mod tidy)
     - name: run tests
-      # go test prints nothing until its only package finishes, which can take
-      # longer than the 10m no-output timeout of CNB once compiling is counted.
-      #
-      # No pull or check stage in front of it, on purpose:
-      # - the images the drivers start (postgres, mysql
-      #   and mcr.microsoft.com/mssql/server) are pulled on demand and fit into
-      #   the 30m budget below even on a cold cache;
-      # - the check that was tried here before reports the published port of a
-      #   container it started itself with `docker port`, which CNB cannot
-      #   answer (the daemon drops `-p` of a container on the host network), so
-      #   that check fails on the CI system no matter what the tests do.
+      # Container startup and fixture creation across four databases count
+      # toward the test package's timeout. Allow 25m for the tests within the
+      # 30m stage budget, leaving time for compilation and cleanup. Verbose
+      # output reports progress while the integration package is running.
       timeout: 30m
       script:
-        - cd tests && go test -timeout 10m ./...
+        - cd tests && go test -v -timeout 25m ./...
 
 master:
   push:
