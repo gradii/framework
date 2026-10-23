@@ -382,7 +382,7 @@ func (b *Builder) addCursorPredicate(cursor Cursor, orders []Order) error {
 		return errors.QueryOrderRequired
 	}
 
-	return b.addCursorConditionsFrom(cursor, orders, "", nil, 0, b.columns, b.columns)
+	return b.addCursorConditionsFrom(cursor, orders, "", nil, 0, b.State().Columns, b.State().Columns)
 }
 
 // addCursorPredicateFrom is addCursorPredicate with the original-column resolution split between the
@@ -515,24 +515,24 @@ func (b *Builder) CursorPaginate(perPage int, cursor *Cursor) (CursorPaginator, 
 		// Union branches flattened their own bindings into this builder's "union" bucket when they were
 		// attached. Clear it and replay each branch's where bindings in branch order, so the placeholders
 		// the compiled union SQL emits line up with the values the executor binds.
-		if len(b.unions) > 0 {
+		if len(b.State().Unions) > 0 {
 			if err := b.SetBindings([]any{}, "union"); err != nil {
 				return CursorPaginator{}, err
 			}
 		}
 
-		if err := b.addCursorPredicateFrom(*cursor, orders, b.columns, b.columns); err != nil {
+		if err := b.addCursorPredicateFrom(*cursor, orders, b.State().Columns, b.State().Columns); err != nil {
 			return CursorPaginator{}, err
 		}
 
-		for _, union := range b.unions {
+		for _, union := range b.State().Unions {
 			if union.Query == nil {
 				continue
 			}
 
 			// The branch's predicate compares its own original column for the first order column and the
 			// root's for the deeper ones — see addCursorConditionsFrom.
-			if err := union.Query.addCursorPredicateFrom(*cursor, orders, union.Query.columns, b.columns); err != nil {
+			if err := union.Query.(*Builder).addCursorPredicateFrom(*cursor, orders, union.Query.State().Columns, b.State().Columns); err != nil {
 				return CursorPaginator{}, err
 			}
 
@@ -558,23 +558,23 @@ func (b *Builder) CursorPaginate(perPage int, cursor *Cursor) (CursorPaginator, 
 // cursorOrders is the order list cursor pagination reads and reverses: the union orders when the
 // builder has unions (Laravel orders unions through unionOrders), otherwise the plain orders.
 func (b *Builder) cursorOrders() []Order {
-	if len(b.unions) > 0 {
-		return b.unionOrders
+	if len(b.State().Unions) > 0 {
+		return b.State().UnionOrders
 	}
 
-	return b.orders
+	return b.State().Orders
 }
 
 // setCursorOrders writes a reversed order list back into the slot cursorOrders reads, so the ORDER BY
 // the builder compiles is the reversed one.
 func (b *Builder) setCursorOrders(orders []Order) {
-	if len(b.unions) > 0 {
-		b.unionOrders = orders
+	if len(b.State().Unions) > 0 {
+		b.State().UnionOrders = orders
 
 		return
 	}
 
-	b.orders = orders
+	b.State().Orders = orders
 }
 
 // flipCursorOrders reverses each order's direction in a fresh slice. A raw order carries no direction

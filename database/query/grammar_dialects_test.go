@@ -162,9 +162,9 @@ func TestSqlServerGrammar(t *testing.T) {
 			NewBuilder(g).From("users", "").Where("data->a", "x").ToSQL())
 	})
 
-	t.Run("insert has no returning clause", func(t *testing.T) {
+	t.Run("insert ID uses output", func(t *testing.T) {
 		b := NewBuilder(g).From("users", "")
-		assert.Equal(t, "insert into [users] ([name]) values (?)",
+		assert.Equal(t, "insert into [users] ([name]) output inserted.[id] values (?)",
 			g.CompileInsertGetId(b, []map[string]any{{"name": "x"}}, ""))
 	})
 }

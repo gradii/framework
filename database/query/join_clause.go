@@ -27,8 +27,8 @@ func NewJoinLateralClause(parent *Builder, typ string, table any) *JoinClause {
 
 // NewJoinClause creates a join clause bound to the parent's grammar.
 func NewJoinClause(parent *Builder, typ string, table any) *JoinClause {
-	inner := NewBuilder(parent.grammar)
-	inner.isJoinClause = true
+	inner := NewBuilder(parent.grammar, parent.processor)
+	inner.State().IsJoinClause = true
 
 	return &JoinClause{Builder: inner, Type: typ, Table: table}
 }
@@ -50,3 +50,7 @@ func (j *JoinClause) On(first any, operator any, second any, boolean string) *Jo
 func (j *JoinClause) OrOn(first any, operator any, second any) *JoinClause {
 	return j.On(first, operator, second, BooleanOr)
 }
+
+func (j *JoinClause) JoinType() string { return j.Type }
+func (j *JoinClause) JoinTable() any   { return j.Table }
+func (j *JoinClause) IsLateral() bool  { return j.isLateral }

@@ -1,10 +1,11 @@
-package query
+package grammars
 
 import (
 	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 )
 
@@ -22,7 +23,7 @@ type PostgresGrammar struct {
 // NewPostgresGrammar creates the Postgres grammar.
 func NewPostgresGrammar(prefix string) *PostgresGrammar {
 	g := &PostgresGrammar{BaseGrammar: NewBaseGrammar(prefix)}
-	g.BaseGrammar.Attach(g)
+	g.Attach(g)
 
 	return g
 }
@@ -37,11 +38,36 @@ var postgresOperators = []string{
 	"is distinct from", "is not distinct from",
 }
 
-// GetOperators mirrors PostgresGrammar::getOperators(), which merges the dialect's own $operators
-// with any custom operators. We keep no custom-operator registry, so it returns the dialect list;
-// without it a ? or # operator is treated as the "=" shorthand and shifted into the value slot.
+var postgresCustomOperators struct {
+	sync.RWMutex
+	values []string
+}
+
+// CustomOperators ports PostgresGrammar::customOperators: valid strings are appended process-wide.
+func CustomOperators(operators []any) {
+	postgresCustomOperators.Lock()
+	defer postgresCustomOperators.Unlock()
+	for _, value := range operators {
+		if operator, ok := value.(string); ok && operator != "" && operator != "0" {
+			postgresCustomOperators.values = append(postgresCustomOperators.values, operator)
+		}
+	}
+}
+
+// GetOperators merges the built-in and custom operators into a unique, ordered list.
 func (g *PostgresGrammar) GetOperators() []string {
-	return append([]string{}, postgresOperators...)
+	postgresCustomOperators.RLock()
+	defer postgresCustomOperators.RUnlock()
+	operators := append(append([]string{}, postgresOperators...), postgresCustomOperators.values...)
+	seen := make(map[string]bool, len(operators))
+	result := make([]string, 0, len(operators))
+	for _, operator := range operators {
+		if !seen[operator] {
+			result = append(result, operator)
+			seen[operator] = true
+		}
+	}
+	return result
 }
 
 // GetBitwiseOperators mirrors PostgresGrammar::$bitwiseOperators, which adds "#" and the shift
@@ -51,7 +77,7 @@ func (g *PostgresGrammar) GetBitwiseOperators() []string {
 }
 
 // WhereBasic mirrors PostgresGrammar::whereBasic(): a like comparison casts the column to text.
-func (g *PostgresGrammar) WhereBasic(b *Builder, where Where) string {
+func (g *PostgresGrammar) WhereBasic(b Query, where Where) string {
 	if strings.Contains(strings.ToLower(where.Operator), "like") {
 		return g.Wrap(where.Column) + "::text " + where.Operator + " " + g.Parameter(where.Value)
 	}
@@ -60,9 +86,9 @@ func (g *PostgresGrammar) WhereBasic(b *Builder, where Where) string {
 }
 
 // WhereDate mirrors PostgresGrammar::whereDate().
-func (g *PostgresGrammar) WhereDate(b *Builder, where Where) string {
+func (g *PostgresGrammar) WhereDate(b Query, where Where) string {
 	column := g.Wrap(where.Column)
-	if g.IsJsonSelector(asString(where.Column)) {
+	if g.IsJsonSelector(AsString(where.Column)) {
 		column = "(" + column + ")"
 	}
 
@@ -76,9 +102,9 @@ func (g *PostgresGrammar) dateBasedWhere(typ string, where Where) string {
 
 // WhereTime mirrors PostgresGrammar::whereTime(): the column is cast to time rather than read out
 // with extract(), and a JSON selector is parenthesised before the cast the way the date clause is.
-func (g *PostgresGrammar) WhereTime(b *Builder, where Where) string {
+func (g *PostgresGrammar) WhereTime(b Query, where Where) string {
 	column := g.Wrap(where.Column)
-	if g.IsJsonSelector(asString(where.Column)) {
+	if g.IsJsonSelector(AsString(where.Column)) {
 		column = "(" + column + ")"
 	}
 
@@ -86,30 +112,30 @@ func (g *PostgresGrammar) WhereTime(b *Builder, where Where) string {
 }
 
 // WhereDay mirrors PostgresGrammar::whereDay().
-func (g *PostgresGrammar) WhereDay(b *Builder, where Where) string {
+func (g *PostgresGrammar) WhereDay(b Query, where Where) string {
 	return g.dateBasedWhere("day", where)
 }
 
 // WhereMonth mirrors PostgresGrammar::whereMonth().
-func (g *PostgresGrammar) WhereMonth(b *Builder, where Where) string {
+func (g *PostgresGrammar) WhereMonth(b Query, where Where) string {
 	return g.dateBasedWhere("month", where)
 }
 
 // WhereYear mirrors PostgresGrammar::whereYear().
-func (g *PostgresGrammar) WhereYear(b *Builder, where Where) string {
+func (g *PostgresGrammar) WhereYear(b Query, where Where) string {
 	return g.dateBasedWhere("year", where)
 }
 
 // CompileColumns mirrors PostgresGrammar::compileColumns(), which supports distinct on.
-func (g *PostgresGrammar) CompileColumns(b *Builder, columns []any) string {
-	if b.aggregate != nil {
+func (g *PostgresGrammar) CompileColumns(b Query, columns []any) string {
+	if b.State().Aggregate != nil {
 		return ""
 	}
 
 	switch {
-	case len(b.distinctColumns) > 0:
-		return "select distinct on (" + g.Columnize(b.distinctColumns) + ") " + g.Columnize(columns)
-	case b.distinct:
+	case len(b.State().DistinctColumns) > 0:
+		return "select distinct on (" + g.Columnize(b.State().DistinctColumns) + ") " + g.Columnize(columns)
+	case b.State().Distinct:
 		return "select distinct " + g.Columnize(columns)
 	default:
 		return "select " + g.Columnize(columns)
@@ -117,7 +143,7 @@ func (g *PostgresGrammar) CompileColumns(b *Builder, columns []any) string {
 }
 
 // CompileInsertGetId mirrors PostgresGrammar::compileInsertGetId(): insert then returning.
-func (g *PostgresGrammar) CompileInsertGetId(b *Builder, values []map[string]any, sequence string) string {
+func (g *PostgresGrammar) CompileInsertGetId(b Query, values []map[string]any, sequence string) string {
 	if sequence == "" {
 		sequence = "id"
 	}
@@ -126,7 +152,7 @@ func (g *PostgresGrammar) CompileInsertGetId(b *Builder, values []map[string]any
 }
 
 // CompileUpsert mirrors PostgresGrammar::compileUpsert(): on conflict do update.
-func (g *PostgresGrammar) CompileUpsert(b *Builder, values []map[string]any, uniqueBy []string, update []UpsertUpdate) string {
+func (g *PostgresGrammar) CompileUpsert(b Query, values []map[string]any, uniqueBy []string, update []UpsertUpdate) string {
 	sql := g.CompileInsert(b, values)
 	sql += " on conflict (" + g.Columnize(anySlice(uniqueBy)) + ") do update set "
 
@@ -158,8 +184,8 @@ func CascadeOnTruncate(value bool) {
 
 // CompileTruncate mirrors PostgresGrammar::compileTruncate(): restart identity, then the cascade
 // keyword unless CascadeOnTruncate(false) disabled it.
-func (g *PostgresGrammar) CompileTruncate(b *Builder) []Statement {
-	sql := "truncate " + g.WrapTable(b.from) + " restart identity"
+func (g *PostgresGrammar) CompileTruncate(b Query) []Statement {
+	sql := "truncate " + g.WrapTable(b.State().From) + " restart identity"
 	if !postgresTruncateWithoutCascade.Load() {
 		sql += " cascade"
 	}
@@ -168,7 +194,7 @@ func (g *PostgresGrammar) CompileTruncate(b *Builder) []Statement {
 }
 
 // CompileLock mirrors PostgresGrammar::compileLock().
-func (g *PostgresGrammar) CompileLock(b *Builder, value any) string {
+func (g *PostgresGrammar) CompileLock(b Query, value any) string {
 	if s, ok := value.(string); ok {
 		return s
 	}
@@ -183,12 +209,12 @@ func (g *PostgresGrammar) CompileLock(b *Builder, value any) string {
 
 // CompileInsertOrIgnore mirrors PostgresGrammar::compileInsertOrIgnore(): the conflict clause is what
 // ignores the row, so the statement is an ordinary insert with one appended.
-func (g *PostgresGrammar) CompileInsertOrIgnore(b *Builder, values []map[string]any) string {
+func (g *PostgresGrammar) CompileInsertOrIgnore(b Query, values []map[string]any) string {
 	return g.CompileInsert(b, values) + " on conflict do nothing"
 }
 
 // CompileInsertOrIgnoreUsing mirrors PostgresGrammar::compileInsertOrIgnoreUsing().
-func (g *PostgresGrammar) CompileInsertOrIgnoreUsing(b *Builder, columns []any, sql string) string {
+func (g *PostgresGrammar) CompileInsertOrIgnoreUsing(b Query, columns []any, sql string) string {
 	return g.CompileInsertUsing(b, columns, sql) + " on conflict do nothing"
 }
 
@@ -388,17 +414,17 @@ func encodeJSON(value any) any {
 	}
 
 	if isArrayValue(value) {
-		return encodeJSONArray(toAnySlice(value))
+		return encodeJSONArray(ToAnySlice(value))
 	}
 
-	return asString(value)
+	return AsString(value)
 }
 
 // encodeJSONArray renders a slice as a JSON array.
 func encodeJSONArray(values []any) string {
 	parts := make([]string, len(values))
 	for i, item := range values {
-		parts[i] = asString(encodeJSON(item))
+		parts[i] = AsString(encodeJSON(item))
 	}
 
 	return "[" + strings.Join(parts, ",") + "]"
@@ -407,10 +433,10 @@ func encodeJSONArray(values []any) string {
 // encodeJSONObject renders a map as a JSON object with its keys sorted, the order a Go map can give
 // deterministically.
 func encodeJSONObject(values map[string]any) string {
-	keys := sortedKeys(values)
+	keys := SortedKeys(values)
 	parts := make([]string, 0, len(keys))
 	for _, key := range keys {
-		parts = append(parts, jsonString(key)+":"+asString(encodeJSON(values[key])))
+		parts = append(parts, jsonString(key)+":"+AsString(encodeJSON(values[key])))
 	}
 
 	return "{" + strings.Join(parts, ",") + "}"
@@ -429,7 +455,7 @@ var validFullTextLanguages = []string{
 }
 
 // WhereLike mirrors PostgresGrammar::whereLike(): the default match is case insensitive.
-func (g *PostgresGrammar) WhereLike(b *Builder, where Where) string {
+func (g *PostgresGrammar) WhereLike(b Query, where Where) string {
 	operator := ""
 	if where.Not {
 		operator = "not "
@@ -447,14 +473,14 @@ func (g *PostgresGrammar) WhereLike(b *Builder, where Where) string {
 }
 
 // WhereBitwise mirrors PostgresGrammar::whereBitwise().
-func (g *PostgresGrammar) WhereBitwise(b *Builder, where Where) string {
+func (g *PostgresGrammar) WhereBitwise(b Query, where Where) string {
 	operator := strings.ReplaceAll(where.Operator, "?", "??")
 
 	return "(" + g.Wrap(where.Column) + " " + operator + " " + g.Parameter(where.Value) + ")::bool"
 }
 
 // WhereFullText mirrors PostgresGrammar::whereFullText().
-func (g *PostgresGrammar) WhereFullText(b *Builder, where Where) string {
+func (g *PostgresGrammar) WhereFullText(b Query, where Where) string {
 	language := optionValue(where.Options, "language", "english")
 	if !containsString(validFullTextLanguages, language) {
 		language = "english"
@@ -479,7 +505,7 @@ func (g *PostgresGrammar) WhereFullText(b *Builder, where Where) string {
 }
 
 // CompileHaving mirrors PostgresGrammar::compileHaving().
-func (g *PostgresGrammar) CompileHaving(b *Builder, having Having) string {
+func (g *PostgresGrammar) CompileHaving(b Query, having Having) string {
 	if having.Type == HavingBitType {
 		return "(" + g.Wrap(having.Column) + " " + having.Operator + " " + g.Parameter(having.Value) + ")::bool"
 	}
@@ -497,7 +523,7 @@ func (g *PostgresGrammar) CompileHaving(b *Builder, having Having) string {
 // selector's position: jsonb_set(jsonb_set(col::jsonb, path1, ?), path2, ?). Laravel leaves them as
 // separate assignments, which only survives on a driver that permits the duplicate. Every other
 // assignment keeps its position and its value.
-func (g *PostgresGrammar) CompileUpdateColumns(b *Builder, values UpdateValues) string {
+func (g *PostgresGrammar) CompileUpdateColumns(b Query, values UpdateValues) string {
 	merged := g.groupJsonColumnsForUpdate(values)
 	parts := make([]string, 0, len(merged))
 
@@ -572,8 +598,8 @@ type postgresJsonUpdate struct {
 }
 
 // CompileUpdate mirrors PostgresGrammar::compileUpdate(): joins or a limit take the ctid rewrite.
-func (g *PostgresGrammar) CompileUpdate(b *Builder, values UpdateValues) string {
-	if len(b.joins) > 0 || b.limit != nil {
+func (g *PostgresGrammar) CompileUpdate(b Query, values UpdateValues) string {
+	if len(b.State().Joins) > 0 || b.State().Limit != nil {
 		return g.compileUpdateWithJoinsOrLimit(b, values)
 	}
 
@@ -581,13 +607,13 @@ func (g *PostgresGrammar) CompileUpdate(b *Builder, values UpdateValues) string 
 }
 
 // compileUpdateWithJoinsOrLimit mirrors PostgresGrammar::compileUpdateWithJoinsOrLimit().
-func (g *PostgresGrammar) compileUpdateWithJoinsOrLimit(b *Builder, values UpdateValues) string {
-	table := g.WrapTable(b.from)
+func (g *PostgresGrammar) compileUpdateWithJoinsOrLimit(b Query, values UpdateValues) string {
+	table := g.WrapTable(b.State().From)
 	columns := g.CompileUpdateColumns(b, values)
-	alias := aliasOf(b.from)
+	alias := aliasOf(b.State().From)
 
-	inner := b.Clone()
-	inner.columns = []any{alias + ".ctid"}
+	inner := b.CloneForGrammar()
+	inner.State().Columns = []any{alias + ".ctid"}
 	selectSQL := g.CompileSelect(inner)
 
 	return "update " + table + " set " + columns + " where " + g.Wrap("ctid") + " in (" + selectSQL + ")"
@@ -595,20 +621,20 @@ func (g *PostgresGrammar) compileUpdateWithJoinsOrLimit(b *Builder, values Updat
 
 // CompileJoinLateral mirrors PostgresGrammar::compileJoinLateral(): Postgres supports lateral joins
 // and spells them the same way MySQL does.
-func (g *PostgresGrammar) CompileJoinLateral(join *JoinClause, expression string) string {
-	return strings.TrimSpace(join.Type + " join lateral " + expression + " on true")
+func (g *PostgresGrammar) CompileJoinLateral(join Join, expression string) string {
+	return strings.TrimSpace(join.JoinType() + " join lateral " + expression + " on true")
 }
 
 // CompileUpdateFrom mirrors PostgresGrammar::compileUpdateFrom().
-func (g *PostgresGrammar) CompileUpdateFrom(b *Builder, values UpdateValues) string {
-	table := g.WrapTable(b.from)
+func (g *PostgresGrammar) CompileUpdateFrom(b Query, values UpdateValues) string {
+	table := g.WrapTable(b.State().From)
 	columns := g.CompileUpdateColumns(b, values)
 
 	from := ""
-	if len(b.joins) > 0 {
-		tables := make([]string, 0, len(b.joins))
-		for _, join := range b.joins {
-			tables = append(tables, g.WrapTable(join.Table))
+	if len(b.State().Joins) > 0 {
+		tables := make([]string, 0, len(b.State().Joins))
+		for _, join := range b.State().Joins {
+			tables = append(tables, g.WrapTable(join.JoinTable()))
 		}
 		if len(tables) > 0 {
 			from = " from " + strings.Join(tables, ", ")
@@ -621,9 +647,9 @@ func (g *PostgresGrammar) CompileUpdateFrom(b *Builder, values UpdateValues) str
 }
 
 // CompileUpdateWheres mirrors PostgresGrammar::compileUpdateWheres().
-func (g *PostgresGrammar) CompileUpdateWheres(b *Builder) string {
+func (g *PostgresGrammar) CompileUpdateWheres(b Query) string {
 	baseWheres := g.CompileWheres(b)
-	if len(b.joins) == 0 {
+	if len(b.State().Joins) == 0 {
 		return baseWheres
 	}
 
@@ -636,11 +662,11 @@ func (g *PostgresGrammar) CompileUpdateWheres(b *Builder) string {
 }
 
 // CompileUpdateJoinWheres mirrors PostgresGrammar::compileUpdateJoinWheres().
-func (g *PostgresGrammar) CompileUpdateJoinWheres(b *Builder) string {
+func (g *PostgresGrammar) CompileUpdateJoinWheres(b Query) string {
 	var parts []string
 
-	for _, join := range b.joins {
-		for _, where := range join.wheres {
+	for _, join := range b.State().Joins {
+		for _, where := range join.State().Wheres {
 			parts = append(parts, where.Boolean+" "+g.CompileWhere(b, where))
 		}
 	}
@@ -668,13 +694,13 @@ func (g *PostgresGrammar) PrepareBindingsForUpdateFrom(bindings map[string][]any
 }
 
 // CompileDelete mirrors PostgresGrammar::compileDelete(): joins or a limit take the ctid rewrite.
-func (g *PostgresGrammar) CompileDelete(b *Builder) string {
-	if len(b.joins) > 0 || b.limit != nil {
-		table := g.WrapTable(b.from)
-		alias := aliasOf(b.from)
+func (g *PostgresGrammar) CompileDelete(b Query) string {
+	if len(b.State().Joins) > 0 || b.State().Limit != nil {
+		table := g.WrapTable(b.State().From)
+		alias := aliasOf(b.State().From)
 
-		inner := b.Clone()
-		inner.columns = []any{alias + ".ctid"}
+		inner := b.CloneForGrammar()
+		inner.State().Columns = []any{alias + ".ctid"}
 		selectSQL := g.CompileSelect(inner)
 
 		return "delete from " + table + " where " + g.Wrap("ctid") + " in (" + selectSQL + ")"

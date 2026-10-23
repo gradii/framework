@@ -1,4 +1,4 @@
-package query
+package grammars
 
 import (
 	"encoding/json"
@@ -25,6 +25,7 @@ type BaseGrammar struct {
 	self   Grammar
 	wrap   *schema.Wrap
 	prefix string
+	escape func(any, bool) string
 }
 
 // NewBaseGrammar creates the shared grammar. Call Attach with the concrete dialect afterwards.
@@ -174,8 +175,8 @@ func (g *BaseGrammar) PrepareBindingsForUpdate(bindings map[string][]any, values
 // Grammar::prepareBindingsForUpdate()'s Arr::flatten does to the bindings closure Builder::update()
 // stores for a query value.
 func (g *BaseGrammar) AppendUpdateValueBinding(out []any, value any) []any {
-	if sub, ok := value.(subQueryBindings); ok {
-		return append(out, sub.values...)
+	if sub, ok := value.(SubQueryBindings); ok {
+		return append(out, sub.Values...)
 	}
 
 	return append(out, value)
@@ -201,43 +202,43 @@ func (g *BaseGrammar) PrepareBindingsForDelete(bindings map[string][]any) []any 
 func (g *BaseGrammar) SelectComponents() []string { return SelectComponents }
 
 // CompileSelect compiles a select statement. Mirrors Grammar::compileSelect().
-func (g *BaseGrammar) CompileSelect(b *Builder) string {
+func (g *BaseGrammar) CompileSelect(b Query) string {
 	d := g.dialect()
 
-	if (len(b.unions) > 0 || len(b.havings) > 0) && b.aggregate != nil {
+	if (len(b.State().Unions) > 0 || len(b.State().Havings) > 0) && b.State().Aggregate != nil {
 		return d.CompileUnionAggregate(b)
 	}
 
 	// A "group limit" compiles to a different shape entirely: Laravel short-circuits to
 	// compileGroupLimit before touching the normal component list. The Go builder mirrors
 	// Laravel's isset($query->groupLimit) with the groupLimitSet presence flag.
-	if b.groupLimitSet {
-		if b.columns == nil {
-			b.columns = []any{"*"}
+	if b.State().GroupLimitSet {
+		if b.State().Columns == nil {
+			b.State().Columns = []any{"*"}
 		}
 
 		return d.CompileGroupLimit(b)
 	}
 
-	original := b.columns
-	if b.columns == nil {
-		b.columns = []any{"*"}
+	original := b.State().Columns
+	if b.State().Columns == nil {
+		b.State().Columns = []any{"*"}
 	}
 
 	sql := strings.TrimSpace(strings.Join(d.CompileComponents(b), " "))
 
-	if len(b.unions) > 0 {
+	if len(b.State().Unions) > 0 {
 		sql = d.WrapUnion(sql) + " " + d.CompileUnions(b)
 	}
 
-	b.columns = original
+	b.State().Columns = original
 
 	return sql
 }
 
 // CompileComponents compiles each set component in Laravel's fixed order.
 // Mirrors Grammar::compileComponents().
-func (g *BaseGrammar) CompileComponents(b *Builder) []string {
+func (g *BaseGrammar) CompileComponents(b Query) []string {
 	d := g.dialect()
 	order := d.SelectComponents()
 	out := make([]string, 0, len(order))
@@ -247,65 +248,65 @@ func (g *BaseGrammar) CompileComponents(b *Builder) []string {
 
 		switch component {
 		case "aggregate":
-			if b.aggregate == nil {
+			if b.State().Aggregate == nil {
 				continue
 			}
-			compiled = d.CompileAggregate(b, *b.aggregate)
+			compiled = d.CompileAggregate(b, *b.State().Aggregate)
 		case "columns":
-			if b.columns == nil {
+			if b.State().Columns == nil {
 				continue
 			}
-			compiled = d.CompileColumns(b, b.columns)
+			compiled = d.CompileColumns(b, b.State().Columns)
 		case "from":
-			if b.from == nil {
+			if b.State().From == nil {
 				continue
 			}
-			compiled = d.CompileFrom(b, b.from)
+			compiled = d.CompileFrom(b, b.State().From)
 		case "indexHint":
-			if b.indexHint == nil {
+			if b.State().IndexHint == nil {
 				continue
 			}
-			compiled = d.CompileIndexHint(b, b.indexHint)
+			compiled = d.CompileIndexHint(b, b.State().IndexHint)
 		case "joins":
-			if len(b.joins) == 0 {
+			if len(b.State().Joins) == 0 {
 				continue
 			}
-			compiled = d.CompileJoins(b, b.joins)
+			compiled = d.CompileJoins(b, b.State().Joins)
 		case "wheres":
-			if len(b.wheres) == 0 {
+			if len(b.State().Wheres) == 0 {
 				continue
 			}
 			compiled = d.CompileWheres(b)
 		case "groups":
-			if len(b.groups) == 0 {
+			if len(b.State().Groups) == 0 {
 				continue
 			}
-			compiled = d.CompileGroups(b, b.groups)
+			compiled = d.CompileGroups(b, b.State().Groups)
 		case "havings":
-			if len(b.havings) == 0 {
+			if len(b.State().Havings) == 0 {
 				continue
 			}
 			compiled = d.CompileHavings(b)
 		case "orders":
-			if len(b.orders) == 0 {
+			if len(b.State().Orders) == 0 {
 				continue
 			}
-			compiled = d.CompileOrders(b, b.orders)
+			compiled = d.CompileOrders(b, b.State().Orders)
 		case "limit":
-			if b.limit == nil {
+			if b.State().Limit == nil {
 				continue
 			}
-			compiled = d.CompileLimit(b, b.limit)
+			compiled = d.CompileLimit(b, b.State().Limit)
 		case "offset":
-			if b.offset == nil {
+			if b.State().Offset == nil {
 				continue
 			}
-			compiled = d.CompileOffset(b, b.offset)
+			compiled = d.CompileOffset(b, b.State().Offset)
 		case "lock":
-			if b.lock == nil {
+			if b.State().Lock == nil {
 				continue
 			}
-			compiled = d.CompileLock(b, b.lock)
+			compiled = d.CompileLock(b, b.State().Lock)
 		}
 
 		if compiled != "" {
@@ -317,12 +318,12 @@ func (g *BaseGrammar) CompileComponents(b *Builder) []string {
 }
 
 // CompileAggregate mirrors Grammar::compileAggregate().
-func (g *BaseGrammar) CompileAggregate(b *Builder, aggregate Aggregate) string {
+func (g *BaseGrammar) CompileAggregate(b Query, aggregate Aggregate) string {
 	column := g.dialect().Columnize(aggregate.Columns)
 
-	if len(b.distinctColumns) > 0 {
-		column = "distinct " + g.dialect().Columnize(b.distinctColumns)
-	} else if b.distinct && column != "*" {
+	if len(b.State().DistinctColumns) > 0 {
+		column = "distinct " + g.dialect().Columnize(b.State().DistinctColumns)
+	} else if b.State().Distinct && column != "*" {
 		column = "distinct " + column
 	}
 
@@ -330,13 +331,13 @@ func (g *BaseGrammar) CompileAggregate(b *Builder, aggregate Aggregate) string {
 }
 
 // CompileColumns mirrors Grammar::compileColumns().
-func (g *BaseGrammar) CompileColumns(b *Builder, columns []any) string {
-	if b.aggregate != nil {
+func (g *BaseGrammar) CompileColumns(b Query, columns []any) string {
+	if b.State().Aggregate != nil {
 		return ""
 	}
 
 	selectClause := "select "
-	if b.distinct {
+	if b.State().Distinct {
 		selectClause = "select distinct "
 	}
 
@@ -344,31 +345,31 @@ func (g *BaseGrammar) CompileColumns(b *Builder, columns []any) string {
 }
 
 // CompileFrom mirrors Grammar::compileFrom().
-func (g *BaseGrammar) CompileFrom(b *Builder, table any) string {
+func (g *BaseGrammar) CompileFrom(b Query, table any) string {
 	return "from " + g.dialect().WrapTable(table)
 }
 
 // CompileIndexHint is dialect specific. The base compiles nothing.
-func (g *BaseGrammar) CompileIndexHint(b *Builder, hint *IndexHint) string { return "" }
+func (g *BaseGrammar) CompileIndexHint(b Query, hint *IndexHint) string { return "" }
 
 // CompileJoins mirrors Grammar::compileJoins().
-func (g *BaseGrammar) CompileJoins(b *Builder, joins []*JoinClause) string {
+func (g *BaseGrammar) CompileJoins(b Query, joins []Join) string {
 	d := g.dialect()
 	parts := make([]string, 0, len(joins))
 
 	for _, join := range joins {
-		table := d.WrapTable(join.Table)
+		table := d.WrapTable(join.JoinTable())
 
-		if len(join.joins) > 0 {
-			table = "(" + table + " " + d.CompileJoins(join.Builder, join.joins) + ")"
+		if len(join.State().Joins) > 0 {
+			table = "(" + table + " " + d.CompileJoins(join, join.State().Joins) + ")"
 		}
 
-		if join.isLateral {
+		if join.IsLateral() {
 			compiled := d.CompileJoinLateral(join, table)
 			if compiled == "" {
 				// The dialect refused, as Grammar::compileJoinLateral throws a RuntimeException there.
 				// The port records the refusal on the query instead of panicking.
-				b.setError(errLateralJoinNotSupported)
+				b.SetError(errLateralJoinNotSupported)
 				continue
 			}
 
@@ -376,23 +377,23 @@ func (g *BaseGrammar) CompileJoins(b *Builder, joins []*JoinClause) string {
 			continue
 		}
 
-		parts = append(parts, strings.TrimSpace(join.Type+" join "+table+" "+d.CompileWheres(join.Builder)))
+		parts = append(parts, strings.TrimSpace(join.JoinType()+" join "+table+" "+d.CompileWheres(join)))
 	}
 
 	return strings.Join(parts, " ")
 }
 
 // CompileGroups mirrors Grammar::compileGroups().
-func (g *BaseGrammar) CompileGroups(b *Builder, groups []any) string {
+func (g *BaseGrammar) CompileGroups(b Query, groups []any) string {
 	return "group by " + g.dialect().Columnize(groups)
 }
 
 // CompileHavings mirrors Grammar::compileHavings().
-func (g *BaseGrammar) CompileHavings(b *Builder) string {
+func (g *BaseGrammar) CompileHavings(b Query) string {
 	d := g.dialect()
-	parts := make([]string, 0, len(b.havings))
+	parts := make([]string, 0, len(b.State().Havings))
 
-	for _, having := range b.havings {
+	for _, having := range b.State().Havings {
 		parts = append(parts, having.Boolean+" "+d.CompileHaving(b, having))
 	}
 
@@ -400,7 +401,7 @@ func (g *BaseGrammar) CompileHavings(b *Builder) string {
 }
 
 // CompileHaving mirrors Grammar::compileHaving().
-func (g *BaseGrammar) CompileHaving(b *Builder, having Having) string {
+func (g *BaseGrammar) CompileHaving(b Query, having Having) string {
 	switch having.Type {
 	case HavingRawType:
 		return fmt.Sprint(having.SQL)
@@ -437,15 +438,15 @@ func (g *BaseGrammar) compileHavingBetween(having Having) string {
 }
 
 // CompileOrders mirrors Grammar::compileOrders().
-func (g *BaseGrammar) CompileOrders(b *Builder, orders []Order) string {
+func (g *BaseGrammar) CompileOrders(b Query, orders []Order) string {
 	if len(orders) == 0 {
 		return ""
 	}
 
 	parts := make([]string, 0, len(orders))
 	for _, order := range orders {
-		if order.Type == OrderRawType {
-			parts = append(parts, fmt.Sprint(order.SQL))
+		if order.SQL != nil || order.Type == OrderRawType {
+			parts = append(parts, GetValueString(order.SQL))
 			continue
 		}
 		parts = append(parts, g.dialect().Wrap(order.Column)+" "+order.Direction)
@@ -455,7 +456,7 @@ func (g *BaseGrammar) CompileOrders(b *Builder, orders []Order) string {
 }
 
 // CompileLimit mirrors Grammar::compileLimit().
-func (g *BaseGrammar) CompileLimit(b *Builder, limit *int) string {
+func (g *BaseGrammar) CompileLimit(b Query, limit *int) string {
 	if limit == nil {
 		return ""
 	}
@@ -464,7 +465,7 @@ func (g *BaseGrammar) CompileLimit(b *Builder, limit *int) string {
 }
 
 // CompileOffset mirrors Grammar::compileOffset().
-func (g *BaseGrammar) CompileOffset(b *Builder, offset *int) string {
+func (g *BaseGrammar) CompileOffset(b Query, offset *int) string {
 	if offset == nil {
 		return ""
 	}
@@ -473,7 +474,7 @@ func (g *BaseGrammar) CompileOffset(b *Builder, offset *int) string {
 }
 
 // CompileLock mirrors Grammar::compileLock().
-func (g *BaseGrammar) CompileLock(b *Builder, value any) string {
+func (g *BaseGrammar) CompileLock(b Query, value any) string {
 	if s, ok := value.(string); ok {
 		return s
 	}
@@ -502,23 +503,23 @@ func (g *BaseGrammar) CompileRowNumber(partition string, orders string) string {
 }
 
 // CompileGroupLimit mirrors Grammar::compileGroupLimit().
-func (g *BaseGrammar) CompileGroupLimit(b *Builder) string {
+func (g *BaseGrammar) CompileGroupLimit(b Query) string {
 	d := g.dialect()
 
-	selectBindings := append(append([]any{}, b.bindings["select"]...), b.bindings["order"]...)
+	selectBindings := append(append([]any{}, b.State().Bindings["select"]...), b.State().Bindings["order"]...)
 	_ = b.SetBindings(selectBindings, "select")
 	_ = b.SetBindings(nil, "order")
 
-	limit := b.groupLimit
-	offset := b.offset
+	limit := b.State().GroupLimit
+	offset := b.State().Offset
 	if offset != nil {
 		limit += *offset
-		b.offset = nil
+		b.State().Offset = nil
 	}
 
 	components := d.CompileComponents(b)
 
-	orders := d.CompileOrders(b, b.orders)
+	orders := d.CompileOrders(b, b.State().Orders)
 	columns := ""
 	for i, component := range components {
 		if strings.HasPrefix(component, "select ") {
@@ -528,7 +529,7 @@ func (g *BaseGrammar) CompileGroupLimit(b *Builder) string {
 		}
 	}
 
-	sql := strings.Join(append([]string{columns + d.CompileRowNumber(b.groupLimitColumn, orders)}, components...), " ")
+	sql := strings.Join(append([]string{columns + d.CompileRowNumber(b.State().GroupLimitColumn, orders)}, components...), " ")
 
 	table := d.Wrap("laravel_table")
 	row := d.Wrap("laravel_row")
@@ -542,23 +543,23 @@ func (g *BaseGrammar) CompileGroupLimit(b *Builder) string {
 }
 
 // CompileLegacyGroupLimit is only implemented by MySQL.
-func (g *BaseGrammar) CompileLegacyGroupLimit(b *Builder) string {
+func (g *BaseGrammar) CompileLegacyGroupLimit(b Query) string {
 	return g.dialect().CompileGroupLimit(b)
 }
 
 // UseLegacyGroupLimit reports whether the dialect needs the legacy group limit rewrite.
-func (g *BaseGrammar) UseLegacyGroupLimit(b *Builder) bool { return false }
+func (g *BaseGrammar) UseLegacyGroupLimit(b Query) bool { return false }
 
 // CompileInsertOrIgnoreUsing mirrors Grammar::compileInsertOrIgnoreUsing(). The base refuses.
-func (g *BaseGrammar) CompileInsertOrIgnoreUsing(b *Builder, columns []any, sql string) string {
-	b.setError(errInsertIgnoreNotSupported)
+func (g *BaseGrammar) CompileInsertOrIgnoreUsing(b Query, columns []any, sql string) string {
+	b.SetError(errInsertIgnoreNotSupported)
 	return ""
 }
 
 // CompileJoinLateral mirrors Grammar::compileJoinLateral(). The base does not support lateral joins
 // and compiles nothing; CompileJoins records errLateralJoinNotSupported, mirroring the
 // RuntimeException the base throws.
-func (g *BaseGrammar) CompileJoinLateral(join *JoinClause, expression string) string {
+func (g *BaseGrammar) CompileJoinLateral(join Join, expression string) string {
 	return ""
 }
 
@@ -569,11 +570,11 @@ func (g *BaseGrammar) CompileJsonValueCast(value string) string { return value }
 func (g *BaseGrammar) WrapUnion(sql string) string { return "(" + sql + ")" }
 
 // CompileUnions mirrors Grammar::compileUnions().
-func (g *BaseGrammar) CompileUnions(b *Builder) string {
+func (g *BaseGrammar) CompileUnions(b Query) string {
 	d := g.dialect()
 	var out strings.Builder
 
-	for _, union := range b.unions {
+	for _, union := range b.State().Unions {
 		if union.All {
 			out.WriteString(" union all ")
 		} else {
@@ -585,29 +586,29 @@ func (g *BaseGrammar) CompileUnions(b *Builder) string {
 		}
 	}
 
-	if len(b.unionOrders) > 0 {
-		out.WriteString(" " + d.CompileOrders(b, b.unionOrders))
+	if len(b.State().UnionOrders) > 0 {
+		out.WriteString(" " + d.CompileOrders(b, b.State().UnionOrders))
 	}
-	if b.unionLimit != nil {
-		out.WriteString(" " + d.CompileLimit(b, b.unionLimit))
+	if b.State().UnionLimit != nil {
+		out.WriteString(" " + d.CompileLimit(b, b.State().UnionLimit))
 	}
-	if b.unionOffset != nil {
-		out.WriteString(" " + d.CompileOffset(b, b.unionOffset))
+	if b.State().UnionOffset != nil {
+		out.WriteString(" " + d.CompileOffset(b, b.State().UnionOffset))
 	}
 
 	return strings.TrimLeft(out.String(), " ")
 }
 
 // CompileUnionAggregate mirrors Grammar::compileUnionAggregate().
-func (g *BaseGrammar) CompileUnionAggregate(b *Builder) string {
-	sql := g.dialect().CompileAggregate(b, *b.aggregate)
-	b.aggregate = nil
+func (g *BaseGrammar) CompileUnionAggregate(b Query) string {
+	sql := g.dialect().CompileAggregate(b, *b.State().Aggregate)
+	b.State().Aggregate = nil
 
 	return sql + " from (" + g.dialect().CompileSelect(b) + ") as " + g.dialect().WrapTable("temp_table")
 }
 
 // CompileExists mirrors Grammar::compileExists().
-func (g *BaseGrammar) CompileExists(b *Builder) string {
+func (g *BaseGrammar) CompileExists(b Query) string {
 	return "select exists(" + g.dialect().CompileSelect(b) + ") as " + g.dialect().Wrap("exists")
 }
 

@@ -76,8 +76,8 @@ func TestInsertGetIdMethod(t *testing.T) {
 }
 
 // TestInsertGetIdWithEmptyValues ports Laravel's testInsertGetIdWithEmptyValues (corpus L4063-4081).
-// Each dialect spells an insert of no values its own way, and only Postgres needs the returning
-// clause; SQL Server's identity retrieval happens outside the statement.
+// Each dialect spells an insert of no values its own way. SQL Server uses OUTPUT for go-mssqldb,
+// whose generated-key API differs from the PDO API Laravel's SQL Server processor uses.
 func TestInsertGetIdWithEmptyValues(t *testing.T) {
 	t.Run("mysql", func(t *testing.T) {
 		sql, bindings := NewBuilder(NewMySqlGrammar("")).From("users", "").ToInsertGetIdSQL(nil, "")
@@ -103,7 +103,7 @@ func TestInsertGetIdWithEmptyValues(t *testing.T) {
 	t.Run("sqlserver", func(t *testing.T) {
 		sql, bindings := NewBuilder(NewSqlServerGrammar("")).From("users", "").ToInsertGetIdSQL(nil, "")
 
-		assert.Equal(t, "insert into [users] default values", sql)
+		assert.Equal(t, "insert into [users] output inserted.[id] default values", sql)
 		assert.Empty(t, bindings)
 	})
 }

@@ -7,53 +7,20 @@ import (
 	"github.com/goravel/framework/errors"
 )
 
-// BindingTypes is Laravel's $bindings key order. GetBindings flattens in exactly this order, which
-// is what keeps positional placeholders aligned.
-var BindingTypes = []string{
-	"select", "from", "join", "where", "groupBy", "having", "order", "union", "unionOrder",
-}
-
 // Builder is the dialect-neutral query builder. Its state mirrors
 // Illuminate\Database\Query\Builder: flat clause descriptors plus positional bindings.
 //
 // Presence follows Laravel's isset($query->$component): a nil slice or nil pointer means the
 // component is unset, so the grammar skips it.
 type Builder struct {
-	grammar Grammar
-	driver  string
-
-	// useUpsertAlias mirrors the connection's "use_upsert_alias" config, which Laravel's
-	// MySqlGrammar reads through $query->connection->getConfig(...) in compileUpsert. It is off by
-	// default; SetUseUpsertAlias turns it on for a builder whose connection enables it.
-	useUpsertAlias bool
+	grammar   Grammar
+	processor Processor
+	driver    string
+	state     *State
 
 	// err carries the first failure. Fluent methods return the builder, so errors cannot be
 	// returned directly; this mirrors the existing database/db.Query builder.
 	err error
-
-	bindings map[string][]any
-
-	aggregate        *Aggregate
-	columns          []any
-	distinct         bool
-	distinctColumns  []any
-	from             any
-	joins            []*JoinClause
-	wheres           []Where
-	groups           []any
-	havings          []Having
-	orders           []Order
-	limit            *int
-	offset           *int
-	indexHint        *IndexHint
-	groupLimit       int
-	groupLimitSet    bool
-	groupLimitColumn string
-	unions           []Union
-	unionLimit       *int
-	unionOffset      *int
-	unionOrders      []Order
-	lock             any
 
 	// beforeQueryCallbacks queues the closures registered with BeforeQuery. They run once, at
 	// the head of the next compile entry point, and the queue is then emptied. Mirrors
@@ -72,32 +39,27 @@ type Builder struct {
 	// hands the merged array to update(), which executes against its connection; the builder here holds
 	// none, so the descriptor is left for the caller to compile with ToUpdateSQL.
 	updateValues UpdateValues
-
-	// insertColumns, when set, is the ordered column list an insertGetId record carries; base
-	// CompileInsert uses it instead of sorting the record's keys, and insertBindings reads the values
-	// in the same order. It is set only for the duration of an ordered insertGetId compile, so a
-	// map-shaped insert keeps the historic sorted order.
-	insertColumns []string
-
-	// isJoinClause mirrors `$query instanceof JoinClause`. It changes the conjunction compileWheres
-	// emits ("on" instead of "where") and the offset whereNested strips.
-	isJoinClause bool
 }
 
-// NewBuilder creates a builder bound to a grammar.
-func NewBuilder(grammar Grammar) *Builder {
-	b := &Builder{grammar: grammar, bindings: make(map[string][]any, len(BindingTypes))}
+// NewBuilder binds SQL compilation and result processing. A SQL-only builder may omit the
+// processor; connections supply their dialect processor when the builder will execute inserts.
+func NewBuilder(grammar Grammar, postProcessor ...Processor) *Builder {
+	processor := NewProcessor("")
+	if len(postProcessor) > 0 && postProcessor[0] != nil {
+		processor = postProcessor[0]
+	}
+	b := &Builder{grammar: grammar, processor: processor, state: &State{Bindings: make(map[string][]any, len(BindingTypes))}}
 	for _, t := range BindingTypes {
-		b.bindings[t] = []any{}
+		b.State().Bindings[t] = []any{}
 	}
 	return b
 }
 
-// NewQuery mirrors Builder::newQuery(): a fresh builder sharing the grammar and dialect.
+// NewQuery mirrors Builder::newQuery(): a fresh builder sharing the grammar, processor, and dialect.
 func (b *Builder) NewQuery() *Builder {
-	n := NewBuilder(b.grammar)
+	n := NewBuilder(b.grammar, b.processor)
 	n.driver = b.driver
-	n.useUpsertAlias = b.useUpsertAlias
+	n.State().UseUpsertAlias = b.State().UseUpsertAlias
 	return n
 }
 
@@ -106,9 +68,9 @@ func (b *Builder) NewQuery() *Builder {
 // untouched, and the presence flag is what compileSelect tests (Laravel's isset($query->groupLimit)).
 func (b *Builder) GroupLimit(value int, column string) *Builder {
 	if value >= 0 {
-		b.groupLimit = value
-		b.groupLimitColumn = column
-		b.groupLimitSet = true
+		b.State().GroupLimit = value
+		b.State().GroupLimitColumn = column
+		b.State().GroupLimitSet = true
 	}
 
 	return b
@@ -120,7 +82,7 @@ func (b *Builder) SetDriver(driver string) { b.driver = driver }
 // SetUseUpsertAlias records the connection's use_upsert_alias setting on the builder. Laravel's
 // MySQL grammar reads it from the connection in compileUpsert; Go carries it on the builder, which
 // represents $query, and the MySQL grammar reads it there.
-func (b *Builder) SetUseUpsertAlias(alias bool) { b.useUpsertAlias = alias }
+func (b *Builder) SetUseUpsertAlias(alias bool) { b.State().UseUpsertAlias = alias }
 
 // ForSubQuery mirrors Builder::forSubQuery().
 func (b *Builder) ForSubQuery() *Builder { return b.NewQuery() }
@@ -252,13 +214,13 @@ func (b *Builder) Pipe(callback func(*Builder) any) any {
 }
 
 // IsJoinClause reports whether this builder is a JoinClause.
-func (b *Builder) IsJoinClause() bool { return b.isJoinClause }
+func (b *Builder) IsJoinClause() bool { return b.State().IsJoinClause }
 
 // Bindings returns the raw binding map.
-func (b *Builder) Bindings() map[string][]any { return b.bindings }
+func (b *Builder) Bindings() map[string][]any { return b.State().Bindings }
 
 // RawBindings returns the bindings for one component.
-func (b *Builder) RawBindings(typ string) []any { return b.bindings[typ] }
+func (b *Builder) RawBindings(typ string) []any { return b.State().Bindings[typ] }
 
 // GetBindings flattens the bindings in Laravel's component order. Mirrors Builder::getBindings(),
 // which is Arr::flatten($this->bindings): a binding that is itself a list (for example a whereIn
@@ -266,7 +228,7 @@ func (b *Builder) RawBindings(typ string) []any { return b.bindings[typ] }
 func (b *Builder) GetBindings() []any {
 	var out []any
 	for _, t := range BindingTypes {
-		out = append(out, flatten(b.bindings[t], 0)...)
+		out = append(out, flatten(b.State().Bindings[t], 0)...)
 	}
 	return out
 }
@@ -275,36 +237,36 @@ func (b *Builder) GetBindings() []any {
 // the values as given: Laravel casts a binding only in addBinding and cleanBindings, so an enum set
 // here is not unwrapped. The values are copied so the builder does not alias the caller's slice.
 func (b *Builder) SetBindings(values []any, typ string) error {
-	if _, ok := b.bindings[typ]; !ok {
+	if _, ok := b.State().Bindings[typ]; !ok {
 		return errors.QueryInvalidBindingType.Args(typ)
 	}
 	stored := make([]any, len(values))
 	copy(stored, values)
-	b.bindings[typ] = stored
+	b.State().Bindings[typ] = stored
 	return nil
 }
 
 // AddBinding appends a binding for one component. Mirrors Builder::addBinding().
 func (b *Builder) AddBinding(value any, typ string) error {
-	if _, ok := b.bindings[typ]; !ok {
+	if _, ok := b.State().Bindings[typ]; !ok {
 		return errors.QueryInvalidBindingType.Args(typ)
 	}
 	if slice, ok := value.([]any); ok {
-		merged := append(append([]any{}, b.bindings[typ]...), slice...)
+		merged := append(append([]any{}, b.State().Bindings[typ]...), slice...)
 		for i := range merged {
 			merged[i] = CastBinding(merged[i])
 		}
-		b.bindings[typ] = merged
+		b.State().Bindings[typ] = merged
 		return nil
 	}
-	b.bindings[typ] = append(b.bindings[typ], CastBinding(value))
+	b.State().Bindings[typ] = append(b.State().Bindings[typ], CastBinding(value))
 	return nil
 }
 
 // MergeBindings merges another builder's bindings. Mirrors Builder::mergeBindings().
 func (b *Builder) MergeBindings(other *Builder) {
 	for _, t := range BindingTypes {
-		_ = b.AddBinding(other.bindings[t], t)
+		_ = b.AddBinding(other.State().Bindings[t], t)
 	}
 }
 
@@ -314,8 +276,8 @@ func (b *Builder) MergeBindings(other *Builder) {
 // reproduces without the PHP array keys. Laravel stores the merged bindings as given, without
 // castBinding (which runs only in addBinding and cleanBindings), and so does this.
 func (b *Builder) MergeWheres(wheres []Where, bindings []any) *Builder {
-	b.wheres = append(b.wheres, wheres...)
-	b.bindings["where"] = append(append([]any{}, b.bindings["where"]...), bindings...)
+	b.State().Wheres = append(b.State().Wheres, wheres...)
+	b.State().Bindings["where"] = append(append([]any{}, b.State().Bindings["where"]...), bindings...)
 
 	return b
 }
@@ -392,43 +354,45 @@ func FlattenValue(value any) any {
 // shares slice backing arrays, so every slice is copied explicitly.
 func (b *Builder) Clone() *Builder {
 	c := *b
-	c.bindings = make(map[string][]any, len(b.bindings))
-	for k, v := range b.bindings {
-		c.bindings[k] = cloneSlice(v)
+	state := *b.State()
+	c.state = &state
+	c.State().Bindings = make(map[string][]any, len(b.State().Bindings))
+	for k, v := range b.State().Bindings {
+		c.State().Bindings[k] = cloneSlice(v)
 	}
-	c.columns = cloneSlice(b.columns)
-	c.distinctColumns = cloneSlice(b.distinctColumns)
-	c.joins = cloneSlice(b.joins)
-	c.wheres = cloneSlice(b.wheres)
-	c.groups = cloneSlice(b.groups)
-	c.havings = cloneSlice(b.havings)
-	c.orders = cloneSlice(b.orders)
-	c.unions = cloneSlice(b.unions)
-	c.unionOrders = cloneSlice(b.unionOrders)
+	c.State().Columns = cloneSlice(b.State().Columns)
+	c.State().DistinctColumns = cloneSlice(b.State().DistinctColumns)
+	c.State().Joins = cloneSlice(b.State().Joins)
+	c.State().Wheres = cloneSlice(b.State().Wheres)
+	c.State().Groups = cloneSlice(b.State().Groups)
+	c.State().Havings = cloneSlice(b.State().Havings)
+	c.State().Orders = cloneSlice(b.State().Orders)
+	c.State().Unions = cloneSlice(b.State().Unions)
+	c.State().UnionOrders = cloneSlice(b.State().UnionOrders)
 	c.beforeQueryCallbacks = cloneSlice(b.beforeQueryCallbacks)
 	c.insertUsingColumns = cloneSlice(b.insertUsingColumns)
 	c.insertUsingBindings = cloneSlice(b.insertUsingBindings)
 	c.updateValues = cloneSlice(b.updateValues)
-	if b.aggregate != nil {
-		a := *b.aggregate
-		a.Columns = cloneSlice(b.aggregate.Columns)
-		c.aggregate = &a
+	if b.State().Aggregate != nil {
+		a := *b.State().Aggregate
+		a.Columns = cloneSlice(b.State().Aggregate.Columns)
+		c.State().Aggregate = &a
 	}
-	if b.limit != nil {
-		v := *b.limit
-		c.limit = &v
+	if b.State().Limit != nil {
+		v := *b.State().Limit
+		c.State().Limit = &v
 	}
-	if b.offset != nil {
-		v := *b.offset
-		c.offset = &v
+	if b.State().Offset != nil {
+		v := *b.State().Offset
+		c.State().Offset = &v
 	}
-	if b.unionLimit != nil {
-		v := *b.unionLimit
-		c.unionLimit = &v
+	if b.State().UnionLimit != nil {
+		v := *b.State().UnionLimit
+		c.State().UnionLimit = &v
 	}
-	if b.unionOffset != nil {
-		v := *b.unionOffset
-		c.unionOffset = &v
+	if b.State().UnionOffset != nil {
+		v := *b.State().UnionOffset
+		c.State().UnionOffset = &v
 	}
 	return &c
 }
@@ -440,35 +404,35 @@ func (b *Builder) CloneWithout(components ...string) *Builder {
 	for _, name := range components {
 		switch name {
 		case "aggregate":
-			c.aggregate = nil
+			c.State().Aggregate = nil
 		case "columns":
-			c.columns = nil
+			c.State().Columns = nil
 		case "from":
-			c.from = nil
+			c.State().From = nil
 		case "joins":
-			c.joins = nil
+			c.State().Joins = nil
 		case "wheres":
-			c.wheres = nil
+			c.State().Wheres = nil
 		case "groups":
-			c.groups = nil
+			c.State().Groups = nil
 		case "havings":
-			c.havings = nil
+			c.State().Havings = nil
 		case "orders":
-			c.orders = nil
+			c.State().Orders = nil
 		case "limit":
-			c.limit = nil
+			c.State().Limit = nil
 		case "offset":
-			c.offset = nil
+			c.State().Offset = nil
 		case "unions":
-			c.unions = nil
+			c.State().Unions = nil
 		case "unionLimit":
-			c.unionLimit = nil
+			c.State().UnionLimit = nil
 		case "unionOffset":
-			c.unionOffset = nil
+			c.State().UnionOffset = nil
 		case "unionOrders":
-			c.unionOrders = nil
+			c.State().UnionOrders = nil
 		case "lock":
-			c.lock = nil
+			c.State().Lock = nil
 		}
 	}
 	return c
@@ -479,8 +443,8 @@ func (b *Builder) CloneWithout(components ...string) *Builder {
 func (b *Builder) CloneWithoutBindings(except ...string) *Builder {
 	c := b.Clone()
 	for _, t := range except {
-		if _, ok := c.bindings[t]; ok {
-			c.bindings[t] = []any{}
+		if _, ok := c.State().Bindings[t]; ok {
+			c.State().Bindings[t] = []any{}
 		}
 	}
 	return c
@@ -590,3 +554,17 @@ func cloneSlice[T any](in []T) []T {
 
 	return append([]T(nil), in...)
 }
+
+// State exposes the compilation clauses to the grammar.
+func (b *Builder) State() *State {
+	if b.state == nil {
+		b.state = &State{}
+	}
+	return b.state
+}
+
+// CloneForGrammar lets compilers rewrite a copy without depending on the concrete builder.
+func (b *Builder) CloneForGrammar() GrammarQuery { return b.Clone() }
+
+// SetError records a compilation error while preserving the first failure.
+func (b *Builder) SetError(err error) { b.setError(err) }

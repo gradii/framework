@@ -78,7 +78,7 @@ func TestUnionsAndAggregate(t *testing.T) {
 		b.UnionAll(func(q *Builder) *Builder {
 			return q.From("archived_users", "").Select("name")
 		})
-		b.aggregate = &Aggregate{Function: "count", Columns: []any{"*"}}
+		b.State().Aggregate = &Aggregate{Function: "count", Columns: []any{"*"}}
 
 		sql, _ := b.ToSelectSQL()
 		assert.Contains(t, sql, "select count(*) as aggregate from (")

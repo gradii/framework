@@ -15,7 +15,7 @@ func TestEmptyInSliceConsistency(t *testing.T) {
 		sql, bindings := b.ToSQL(), b.GetBindings()
 		t.Logf("SQL: %s", sql)
 		t.Logf("Bindings: %v", bindings)
-		t.Logf("Wheres: %+v", b.wheres)
+		t.Logf("Wheres: %+v", b.State().Wheres)
 
 		assert.Contains(t, sql, "0 = 1", "WhereIn with empty slice should produce '0 = 1'")
 		assert.Nil(t, bindings, "Empty IN should bind nothing")
@@ -28,7 +28,7 @@ func TestEmptyInSliceConsistency(t *testing.T) {
 		sql, bindings := b.ToSQL(), b.GetBindings()
 		t.Logf("SQL: %s", sql)
 		t.Logf("Bindings: %v", bindings)
-		t.Logf("Wheres: %+v", b.wheres)
+		t.Logf("Wheres: %+v", b.State().Wheres)
 
 		assert.Contains(t, sql, "1 = 1", "WhereNotIn with empty slice should produce '1 = 1'")
 		assert.Nil(t, bindings, "Empty NOT IN should bind nothing")
@@ -41,9 +41,9 @@ func TestEmptyInSliceConsistency(t *testing.T) {
 		sql, bindings := b.ToSQL(), b.GetBindings()
 		t.Logf("SQL: %s", sql)
 		t.Logf("Bindings: %v", bindings)
-		t.Logf("Wheres: %+v", b.wheres)
-		if len(b.wheres) > 0 && b.wheres[0].Query != nil {
-			t.Logf("Nested wheres: %+v", b.wheres[0].Query.wheres)
+		t.Logf("Wheres: %+v", b.State().Wheres)
+		if len(b.State().Wheres) > 0 && b.State().Wheres[0].Query != nil {
+			t.Logf("Nested wheres: %+v", b.State().Wheres[0].Query.State().Wheres)
 		}
 
 		// The bug: this might produce malformed "name IN ()" instead of "0 = 1"
@@ -58,7 +58,7 @@ func TestEmptyInSliceConsistency(t *testing.T) {
 		sql, bindings := b.ToSQL(), b.GetBindings()
 		t.Logf("SQL: %s", sql)
 		t.Logf("Bindings: %v", bindings)
-		t.Logf("Wheres: %+v", b.wheres)
+		t.Logf("Wheres: %+v", b.State().Wheres)
 
 		// The bug: this might produce malformed "name IN ()" instead of "0 = 1"
 		assert.NotContains(t, sql, "in ()", "WhereAny with empty IN should not produce malformed 'in ()'")
@@ -72,7 +72,7 @@ func TestEmptyInSliceConsistency(t *testing.T) {
 		sql, bindings := b.ToSQL(), b.GetBindings()
 		t.Logf("SQL: %s", sql)
 		t.Logf("Bindings: %v", bindings)
-		t.Logf("Wheres: %+v", b.wheres)
+		t.Logf("Wheres: %+v", b.State().Wheres)
 
 		// The bug: this might produce malformed "name NOT IN ()" instead of "1 = 1"
 		assert.NotContains(t, sql, "not in ()", "WhereAny with empty NOT IN should not produce malformed 'not in ()'")

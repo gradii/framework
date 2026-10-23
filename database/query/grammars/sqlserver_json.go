@@ -1,11 +1,11 @@
-package query
+package grammars
 
 import "strings"
 
 // SQL Server JSON updates extend Laravel's grammar to preserve the framework's JSON write API.
 // JSON_VALUE can read a selector, but an assignment must target the column and use JSON_MODIFY.
 // Multiple paths in one column are nested because SQL Server rejects duplicate SET assignments.
-func (g *SqlServerGrammar) CompileUpdateColumns(b *Builder, values UpdateValues) string {
+func (g *SqlServerGrammar) CompileUpdateColumns(b Query, values UpdateValues) string {
 	merged := g.groupJsonColumnsForUpdate(values)
 	parts := make([]string, 0, len(merged))
 	for _, value := range merged {

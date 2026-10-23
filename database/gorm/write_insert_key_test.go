@@ -12,6 +12,7 @@ import (
 	gormio "gorm.io/gorm"
 
 	contractsdatabase "github.com/goravel/framework/contracts/database"
+	querybuilder "github.com/goravel/framework/database/query"
 )
 
 // insertKeyEntity carries a string primary key, the shape a UUID or ULID model has.
@@ -76,6 +77,20 @@ func TestInsertRowReadsAnIntegerKeyByItsColumnType(t *testing.T) {
 	key, err := query.insertRow(map[string]any{"name": "user"})
 	require.NoError(t, err)
 	assert.Equal(t, uint(42), key)
+}
+
+func TestInsertRowIgnoresSQLKeywordsInValues(t *testing.T) {
+	query, recorder := newPostgresKeyQuery(t, &insertKeyEntity{})
+	query.dbConfig.Driver = "MySQL"
+	query.queryGrammar = querybuilder.NewMySqlGrammar("")
+
+	key, err := query.insertRow(map[string]any{
+		"id":   "01AN4Z07BY79KA1307SR9X4MV3",
+		"name": querybuilder.Raw("' returning output inserted. '"),
+	})
+	require.NoError(t, err)
+	assert.Nil(t, key)
+	assert.Zero(t, recorder.count(), "a MySQL insert must not attempt to read a returned row")
 }
 
 // isIntegerKeyType is what the non-returning path consults before trusting the driver's LastInsertId,

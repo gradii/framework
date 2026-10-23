@@ -36,8 +36,8 @@ func (b *Builder) ToInsertGetIdSQL(values any, sequence string) (string, []any) 
 
 	records, columns := insertGetIdRecords(values)
 	if len(columns) > 0 {
-		b.insertColumns = columns
-		defer func() { b.insertColumns = nil }()
+		b.State().InsertColumns = columns
+		defer func() { b.State().InsertColumns = nil }()
 	}
 
 	return b.grammar.CompileInsertGetId(b, records, sequence), CleanBindings(insertBindings(records, columns))
@@ -113,7 +113,7 @@ func (b *Builder) ToUpdateSQL(values any) (string, []any) {
 	ordered := updateValuesFrom(values)
 	compiled, contributions := b.resolveUpdateValues(ordered)
 
-	return b.grammar.CompileUpdate(b, compiled), CleanBindings(b.grammar.PrepareBindingsForUpdate(b.bindings, contributions))
+	return b.grammar.CompileUpdate(b, compiled), CleanBindings(b.grammar.PrepareBindingsForUpdate(b.State().Bindings, contributions))
 }
 
 // resolveUpdateValues splits the update assignments so a query-valued assignment compiles as a
@@ -132,7 +132,7 @@ func (b *Builder) resolveUpdateValues(ordered UpdateValues) (UpdateValues, Updat
 		if query, ok := value.Value.(*Builder); ok {
 			sql, bindings := b.parseSub(query)
 			compiled[i] = UpdateValue{Column: value.Column, Value: Expression{Value: "(" + sql + ")"}}
-			contributions[i] = UpdateValue{Column: value.Column, Value: subQueryBindings{values: bindings}}
+			contributions[i] = UpdateValue{Column: value.Column, Value: subQueryBindings{Values: bindings}}
 		}
 	}
 
@@ -147,7 +147,7 @@ func (b *Builder) ToDeleteSQL() (string, []any) {
 
 	b.ApplyBeforeQueryCallbacks()
 
-	return b.grammar.CompileDelete(b), b.grammar.PrepareBindingsForDelete(b.bindings)
+	return b.grammar.CompileDelete(b), b.grammar.PrepareBindingsForDelete(b.State().Bindings)
 }
 
 // ToExistsSQL compiles an exists statement and its bindings.
@@ -185,15 +185,15 @@ func (b *Builder) ToAggregateSQL(aggregate Aggregate) (string, []any) {
 	}
 
 	clone := b.Clone()
-	if len(clone.unions) == 0 && len(clone.havings) == 0 {
+	if len(clone.State().Unions) == 0 && len(clone.State().Havings) == 0 {
 		clone = clone.CloneWithout("columns").CloneWithoutBindings("select")
 	}
 
-	clone.aggregate = &aggregate
+	clone.State().Aggregate = &aggregate
 
-	if len(clone.groups) == 0 {
-		clone.orders = nil
-		clone.bindings["order"] = []any{}
+	if len(clone.State().Groups) == 0 {
+		clone.State().Orders = nil
+		clone.State().Bindings["order"] = []any{}
 	}
 
 	clone.ApplyBeforeQueryCallbacks()
@@ -223,11 +223,11 @@ func (b *Builder) GetCountForPagination(columns ...any) (string, []any) {
 		columns = []any{"*"}
 	}
 
-	if len(b.groups) > 0 || len(b.havings) > 0 {
+	if len(b.State().Groups) > 0 || len(b.State().Havings) > 0 {
 		clone := b.CloneWithout("orders", "limit", "offset").CloneWithoutBindings("order")
 
-		if clone.columns == nil && len(b.joins) > 0 {
-			clone.Select(asString(clone.from) + ".*")
+		if clone.State().Columns == nil && len(b.State().Joins) > 0 {
+			clone.Select(asString(clone.State().From) + ".*")
 		}
 
 		query := b.NewQuery()
@@ -239,7 +239,7 @@ func (b *Builder) GetCountForPagination(columns ...any) (string, []any) {
 	}
 
 	var without, withoutBindings []string
-	if len(b.unions) > 0 {
+	if len(b.State().Unions) > 0 {
 		without = []string{"unionOrders", "unionLimit", "unionOffset"}
 		withoutBindings = []string{"unionOrder"}
 	} else {

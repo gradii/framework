@@ -261,7 +261,7 @@ func (r *Query) newBuilder() (*querybuilder.Builder, error) {
 		return nil, r.instance.Error
 	}
 
-	builder := querybuilder.NewBuilder(r.queryGrammar)
+	builder := querybuilder.NewBuilder(r.queryGrammar, querybuilder.NewProcessor(r.dbConfig.Driver))
 	builder.SetDriver(r.dbConfig.Driver)
 
 	if err := r.applyTable(builder); err != nil {

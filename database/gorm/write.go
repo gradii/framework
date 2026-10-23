@@ -392,26 +392,7 @@ func (r *Query) compileInsertAll(records []map[string]any) (string, []any, error
 		return "", nil, err
 	}
 
-	// SQL Server cannot report the generated key through LastInsertId - go-mssqldb refuses it by
-	// design ("... use the OUTPUT clause ...") - so its statement carries an OUTPUT clause and reports
-	// the key itself, the way PostgreSQL's grammar appends a returning clause. Laravel reads the key
-	// back out of band in its SQL Server processor, but a following SCOPE_IDENTITY() query would run
-	// on a pooled connection that may differ from the insert's, so the key has to travel with the
-	// insert.
-	if sqlServer, ok := r.queryGrammar.(*querybuilder.SqlServerGrammar); ok {
-		statement = sqlServer.CompileInsertGetIdOutput(builder, records, sequence)
-	}
-
 	return statement, bindings, nil
-}
-
-// returnsKeyInStatement reports whether a compiled insert reports the generated key in the statement
-// itself rather than through the driver's LastInsertId: PostgreSQL appends a `returning` clause and
-// SQL Server an `output inserted.<key>` clause.
-func returnsKeyInStatement(statement string) bool {
-	lowered := strings.ToLower(statement)
-
-	return strings.Contains(lowered, " returning ") || strings.Contains(lowered, " output inserted.")
 }
 
 // compileInsert renders one record as an insert statement and its bindings.
@@ -422,51 +403,17 @@ func (r *Query) compileInsert(record map[string]any) (string, []any, error) {
 // insertRow inserts one record and returns its generated key, or nil when the dialect cannot
 // report one.
 func (r *Query) insertRow(record map[string]any) (any, error) {
-	statement, bindings, err := r.compileInsert(record)
+	builder, err := r.newBuilder()
 	if err != nil {
 		return nil, err
 	}
-
 	pool, err := r.queryPool()
 	if err != nil {
 		return nil, err
 	}
 
-	// A dialect that returns the key puts it in the statement itself: PostgreSQL appends a
-	// `returning` clause and SQL Server an `output inserted.<key>` clause. The others report it
-	// through the driver. Either way the value is read back as the primary key column's own type,
-	// because a key is not always an integer: a ULID or UUID primary key is a string.
-	if returnsKeyInStatement(statement) {
-		return r.readReturnedKey(statement, bindings)
-	}
-
-	begin := carbon.Now()
-	result, err := pool.ExecContext(r.ctx, querybuilder.ReplacePlaceholders(statement, r.dbConfig.Driver), bindings...)
-	if err != nil {
-		r.trace(begin, statement, bindings, -1, err)
-
-		return nil, err
-	}
-
-	r.trace(begin, statement, bindings, 1, nil)
-
-	// A driver reports a generated key only for an auto-increment integer primary key. A string key
-	// (a ULID or UUID) is supplied by the caller, and LastInsertId would hand back an unrelated rowid
-	// that schemaField.Set then coerced into a one-byte string. Leave such a key alone.
-	if field := r.primaryKeyField(); field != nil && !isIntegerKeyType(field.FieldType) {
-		return nil, nil
-	}
-
-	lastID, err := result.LastInsertId()
-	if err != nil {
-		// The row is inserted either way; only the key is unavailable. A dialect that cannot serve
-		// LastInsertId is supposed to have reported the key in the statement above, as SQL Server now
-		// does, so reaching here means the driver genuinely could not supply a key. Report it rather
-		// than hide it behind a nil result - a silent nil is what left the key unassigned.
-		return nil, err
-	}
-
-	return lastID, nil
+	connection := &insertConnection{query: r, pool: pool}
+	return builder.InsertGetID(connection, []map[string]any{record}, r.solePrimaryKeyColumn())
 }
 
 // readReturnedKey reads the key a `returning` insert reports back into the type of the primary key

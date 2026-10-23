@@ -39,7 +39,7 @@ type Query struct {
 // NewQuery creates a query bound to a table. grammar selects the dialect and driver is its name,
 // used to convert placeholders at execution time.
 func NewQuery(ctx context.Context, readBuilder db.CommonBuilder, writeBuilder db.CommonBuilder, grammar querybuilder.Grammar, driver string, logger logger.Logger, table string, txLogs *[]TxLog) *Query {
-	builder := querybuilder.NewBuilder(grammar)
+	builder := querybuilder.NewBuilder(grammar, querybuilder.NewProcessor(driver))
 	builder.SetDriver(driver)
 	if table != "" {
 		builder.From(table, "")
@@ -810,26 +810,6 @@ func (r *Query) buildInsert(values []map[string]any) (string, []any, error) {
 	sql, args := r.builder.ToInsertSQL(uniformInsertRecords(values))
 	if err := r.builder.Error(); err != nil {
 		return "", nil, err
-	}
-
-	return querybuilder.ReplacePlaceholders(sql, r.driver), args, nil
-}
-
-func (r *Query) buildInsertGetID(values []map[string]any) (string, []any, error) {
-	if r.err != nil {
-		return "", nil, r.err
-	}
-	if r.builder.TableSource() == nil {
-		return "", nil, errors.DatabaseTableIsRequired
-	}
-
-	sql, args := r.builder.ToInsertGetIdSQL(values, "")
-	if err := r.builder.Error(); err != nil {
-		return "", nil, err
-	}
-	if sqlServer, ok := r.grammar.(*querybuilder.SqlServerGrammar); ok {
-		// go-mssqldb cannot read LastInsertId; return the key from this insert's own connection.
-		sql = sqlServer.CompileInsertGetIdOutput(r.builder, values, "")
 	}
 
 	return querybuilder.ReplacePlaceholders(sql, r.driver), args, nil
@@ -1675,47 +1655,18 @@ func (r *Query) InsertGetID(data any) (int64, error) {
 	if len(mapData) == 0 {
 		return 0, errors.DatabaseUnsupportedType.Args("nil", "struct, map[string]any").SetModule("DB")
 	}
+	if r.err != nil {
+		return 0, r.err
+	}
+	if r.builder.TableSource() == nil {
+		return 0, errors.DatabaseTableIsRequired
+	}
 
-	sql, args, err := r.buildInsertGetID([]map[string]any{mapData})
+	id, err := r.builder.InsertGetID(&insertConnection{query: r}, []map[string]any{mapData}, "")
 	if err != nil {
 		return 0, err
 	}
-
-	now := carbon.Now()
-
-	// Postgres and SQL Server return the generated id from the insert statement itself, and their
-	// drivers do not support LastInsertId, so the row is read back instead.
-	lowered := strings.ToLower(sql)
-	if strings.Contains(lowered, " returning ") || strings.Contains(lowered, " output inserted.") {
-		var id int64
-		if err := r.writeBuilder.GetContext(r.ctx, &id, sql, args...); err != nil {
-			r.trace(r.writeBuilder, sql, args, now, -1, err)
-
-			return 0, err
-		}
-
-		r.trace(r.writeBuilder, sql, args, now, 1, nil)
-
-		return id, nil
-	}
-
-	result, err := r.writeBuilder.ExecContext(r.ctx, sql, args...)
-	if err != nil {
-		r.trace(r.writeBuilder, sql, args, now, -1, err)
-
-		return 0, err
-	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		r.trace(r.writeBuilder, sql, args, now, -1, err)
-
-		return 0, err
-	}
-
-	r.trace(r.writeBuilder, sql, args, now, 1, nil)
-
-	return id, nil
+	return id.(int64), nil
 }
 
 // Update updates rows with the given column and value, or with a map of columns.

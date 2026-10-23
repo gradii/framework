@@ -50,7 +50,7 @@ func TestCompileSeams(t *testing.T) {
 		sql, bindings := b.ToAggregateSQL(Aggregate{Function: "count", Columns: []any{"*"}})
 		assert.Equal(t, `select count(*) as aggregate from "users" where "id" = ?`, sql)
 		assert.Equal(t, []any{1}, bindings)
-		assert.Nil(t, b.aggregate)
+		assert.Nil(t, b.State().Aggregate)
 	})
 
 	t.Run("truncate", func(t *testing.T) {

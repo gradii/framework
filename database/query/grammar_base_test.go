@@ -89,7 +89,7 @@ func TestCompileSelect(t *testing.T) {
 		}, `select distinct "name" from "users"`},
 		{"aggregate", func(b *Builder) *Builder {
 			b.From("users", "")
-			b.aggregate = &Aggregate{Function: "count", Columns: []any{"*"}}
+			b.State().Aggregate = &Aggregate{Function: "count", Columns: []any{"*"}}
 			return b
 		}, `select count(*) as aggregate from "users"`},
 		{"exists query", func(b *Builder) *Builder { return b.From("users", "") }, `select exists(select * from "users") as "exists"`},

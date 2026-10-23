@@ -450,6 +450,19 @@ func (s *QueryTestSuite) TestInsertGetIDSqlServer() {
 	s.Equal(int64(17), id)
 }
 
+func (s *QueryTestSuite) TestInsertGetIDIgnoresSQLKeywordsInValues() {
+	const statement = "insert into `users` (`name`) values (' returning output inserted. ')"
+	result := &MockResult{}
+	result.On("LastInsertId").Return(int64(17), nil)
+	s.mockWriteBuilder.EXPECT().ExecContext(s.ctx, statement).Return(result, nil).Once()
+	s.mockWriteBuilder.EXPECT().Explain(statement).Return(statement).Once()
+	s.mockLogger.EXPECT().Trace(s.ctx, s.now, statement, int64(1), nil).Return().Once()
+
+	id, err := s.query.InsertGetID(map[string]any{"name": querybuilder.Raw("' returning output inserted. '")})
+	s.Require().NoError(err)
+	s.Equal(int64(17), id)
+}
+
 func (s *QueryTestSuite) TestUpdate() {
 	result := &MockResult{}
 	result.On("RowsAffected").Return(int64(1), nil)

@@ -1,4 +1,4 @@
-package query
+package grammars
 
 // MariaDbGrammar mirrors Illuminate\Database\Query\Grammars\MariaDbGrammar, which extends the MySQL
 // grammar and overrides a handful of methods. Only the override this port exercises is declared here:
@@ -18,7 +18,7 @@ func NewMariaDbGrammar(prefix string) *MariaDbGrammar {
 	// Re-attach the concrete dialect. NewMySqlGrammar set the embedded MySQL grammar as the shared
 	// base's self reference, and Go embedding does not dispatch virtually, so without this the shared
 	// methods would keep routing through MySQL and never reach this type's CompileJoinLateral override.
-	g.BaseGrammar.Attach(g)
+	g.Attach(g)
 
 	return g
 }
@@ -26,6 +26,6 @@ func NewMariaDbGrammar(prefix string) *MariaDbGrammar {
 // CompileJoinLateral mirrors MariaDbGrammar::compileJoinLateral(): MariaDB has no lateral joins, so the
 // dialect refuses. Returning the empty string makes BaseGrammar.CompileJoins record
 // errLateralJoinNotSupported, mirroring the RuntimeException Laravel throws.
-func (g *MariaDbGrammar) CompileJoinLateral(join *JoinClause, expression string) string {
+func (g *MariaDbGrammar) CompileJoinLateral(join Join, expression string) string {
 	return ""
 }

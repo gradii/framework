@@ -109,7 +109,7 @@ func (b *Builder) addWhere(column any, args []any, boolean string) *Builder {
 		typ = WhereBitwise
 	}
 
-	b.wheres = append(b.wheres, Where{Type: typ, Column: column, Operator: op, Value: value, Boolean: boolean})
+	b.State().Wheres = append(b.State().Wheres, Where{Type: typ, Column: column, Operator: op, Value: value, Boolean: boolean})
 
 	if !IsExpression(value) {
 		_ = b.AddBinding(FlattenValue(value), "where")
@@ -180,7 +180,7 @@ func (b *Builder) WhereColumn(first any, operator any, second any, boolean strin
 	}
 
 	op, _ := operator.(string)
-	b.wheres = append(b.wheres, Where{Type: WhereColumnType, First: first, Operator: op, Second: second, Boolean: boolean})
+	b.State().Wheres = append(b.State().Wheres, Where{Type: WhereColumnType, First: first, Operator: op, Second: second, Boolean: boolean})
 
 	return b
 }
@@ -192,7 +192,7 @@ func (b *Builder) OrWhereColumn(first any, operator any, second any) *Builder {
 
 // WhereRaw adds a raw where clause. Mirrors Builder::whereRaw().
 func (b *Builder) WhereRaw(sql any, bindings []any, boolean string) *Builder {
-	b.wheres = append(b.wheres, Where{Type: WhereRawType, SQL: sql, Boolean: boolean})
+	b.State().Wheres = append(b.State().Wheres, Where{Type: WhereRawType, SQL: sql, Boolean: boolean})
 	_ = b.AddBinding(bindings, "where")
 
 	return b
@@ -219,7 +219,7 @@ func (b *Builder) WhereIn(column any, values any, boolean string, not bool) *Bui
 
 	list := toAnySlice(values)
 
-	b.wheres = append(b.wheres, Where{Type: typ, Column: column, Values: list, Boolean: boolean})
+	b.State().Wheres = append(b.State().Wheres, Where{Type: typ, Column: column, Values: list, Boolean: boolean})
 
 	// An untyped nil is PHP's null, not an empty list. Laravel counts $values right after queueing the
 	// clause and count(null) is a TypeError, so whereIn('col', null) never compiles on any dialect.
@@ -275,7 +275,7 @@ func (b *Builder) WhereIntegerInRaw(column any, values []any, boolean string, no
 		flattened = append(flattened, toInt(v))
 	}
 
-	b.wheres = append(b.wheres, Where{Type: typ, Column: column, Values: flattened, Boolean: boolean})
+	b.State().Wheres = append(b.State().Wheres, Where{Type: typ, Column: column, Values: flattened, Boolean: boolean})
 
 	return b
 }
@@ -288,7 +288,7 @@ func (b *Builder) WhereNull(columns any, boolean string, not bool) *Builder {
 	}
 
 	for _, column := range wrapValues(columns) {
-		b.wheres = append(b.wheres, Where{Type: typ, Column: column, Boolean: boolean})
+		b.State().Wheres = append(b.State().Wheres, Where{Type: typ, Column: column, Boolean: boolean})
 	}
 
 	return b
@@ -311,7 +311,7 @@ func (b *Builder) OrWhereNotNull(column any) *Builder {
 
 // WhereBetween adds a "between" clause. Mirrors Builder::whereBetween().
 func (b *Builder) WhereBetween(column any, values []any, boolean string, not bool) *Builder {
-	b.wheres = append(b.wheres, Where{Type: WhereBetweenType, Column: column, Values: values, Boolean: boolean, Not: not})
+	b.State().Wheres = append(b.State().Wheres, Where{Type: WhereBetweenType, Column: column, Values: values, Boolean: boolean, Not: not})
 
 	// Laravel resolves the bounds with Arr::flatten(), so [[1, 2, 3]] binds 1 and 2, not one array.
 	bounds := CleanBindings(flatten(values, 0))
@@ -336,14 +336,14 @@ func (b *Builder) WhereNotBetween(column any, values []any, boolean string) *Bui
 // WhereBetweenColumns compares a column against two other columns.
 // Mirrors Builder::whereBetweenColumns().
 func (b *Builder) WhereBetweenColumns(column any, values []any, boolean string, not bool) *Builder {
-	b.wheres = append(b.wheres, Where{Type: WhereBetweenColsType, Column: column, Values: values, Boolean: boolean, Not: not})
+	b.State().Wheres = append(b.State().Wheres, Where{Type: WhereBetweenColsType, Column: column, Values: values, Boolean: boolean, Not: not})
 
 	return b
 }
 
 // WhereValueBetween compares a value against two columns. Mirrors Builder::whereValueBetween().
 func (b *Builder) WhereValueBetween(value any, columns []any, boolean string, not bool) *Builder {
-	b.wheres = append(b.wheres, Where{Type: WhereValueBetweenType, Value: value, Columns: columns, Boolean: boolean, Not: not})
+	b.State().Wheres = append(b.State().Wheres, Where{Type: WhereValueBetweenType, Value: value, Columns: columns, Boolean: boolean, Not: not})
 	_ = b.AddBinding(value, "where")
 
 	return b
@@ -352,7 +352,7 @@ func (b *Builder) WhereValueBetween(value any, columns []any, boolean string, no
 // addDateBasedWhere stores a date-part comparison. Mirrors Builder::addDateBasedWhere().
 func (b *Builder) addDateBasedWhere(typ WhereType, column any, operator any, value any, boolean string) *Builder {
 	op, _ := operator.(string)
-	b.wheres = append(b.wheres, Where{Type: typ, Column: column, Operator: op, Value: value, Boolean: boolean})
+	b.State().Wheres = append(b.State().Wheres, Where{Type: typ, Column: column, Operator: op, Value: value, Boolean: boolean})
 
 	if !IsExpression(value) {
 		_ = b.AddBinding(value, "where")
@@ -524,7 +524,7 @@ func (b *Builder) wherePastOrFuture(columns any, operator string, boolean string
 	value := carbon.Now()
 
 	for _, column := range toAnySlice(columns) {
-		b.wheres = append(b.wheres, Where{Type: WhereBasic, Column: column, Operator: operator, Value: value, Boolean: boolean})
+		b.State().Wheres = append(b.State().Wheres, Where{Type: WhereBasic, Column: column, Operator: operator, Value: value, Boolean: boolean})
 		_ = b.AddBinding(value, "where")
 	}
 
@@ -573,7 +573,7 @@ func (b *Builder) OrWhereYear(column any, args ...any) *Builder {
 
 // WhereLike adds a "like" clause. Mirrors Builder::whereLike().
 func (b *Builder) WhereLike(column any, value string, caseSensitive bool, boolean string, not bool) *Builder {
-	b.wheres = append(b.wheres, Where{Type: WhereLikeType, Column: column, Value: value, CaseSensitive: caseSensitive, Boolean: boolean, Not: not})
+	b.State().Wheres = append(b.State().Wheres, Where{Type: WhereLikeType, Column: column, Value: value, CaseSensitive: caseSensitive, Boolean: boolean, Not: not})
 
 	if b.grammar != nil {
 		value = b.grammar.PrepareWhereLikeBinding(value, caseSensitive)
@@ -600,7 +600,7 @@ func (b *Builder) WhereRowValues(columns []any, operator string, values []any, b
 		boolVal = boolean[0]
 	}
 
-	b.wheres = append(b.wheres, Where{Type: WhereRowValuesType, Columns: columns, Operator: operator, Values: values, Boolean: boolVal})
+	b.State().Wheres = append(b.State().Wheres, Where{Type: WhereRowValuesType, Columns: columns, Operator: operator, Values: values, Boolean: boolVal})
 	_ = b.AddBinding(CleanBindings(values), "where")
 
 	return b
@@ -613,7 +613,7 @@ func (b *Builder) OrWhereRowValues(columns []any, operator string, values []any)
 
 // WhereJsonContains adds a JSON contains clause. Mirrors Builder::whereJsonContains().
 func (b *Builder) WhereJsonContains(column string, value any, boolean string, not bool) *Builder {
-	b.wheres = append(b.wheres, Where{Type: WhereJsonContainsType, Column: column, Value: value, Boolean: boolean, Not: not})
+	b.State().Wheres = append(b.State().Wheres, Where{Type: WhereJsonContainsType, Column: column, Value: value, Boolean: boolean, Not: not})
 
 	if !IsExpression(value) && b.grammar != nil {
 		_ = b.AddBinding(b.grammar.PrepareBindingForJsonContains(value), "where")
@@ -641,7 +641,7 @@ func (b *Builder) OrWhereJsonDoesntContain(column string, value any) *Builder {
 
 // WhereJsonOverlaps adds a JSON overlaps clause. Mirrors Builder::whereJsonOverlaps().
 func (b *Builder) WhereJsonOverlaps(column string, value any, boolean string, not bool) *Builder {
-	b.wheres = append(b.wheres, Where{Type: WhereJsonOverlapsType, Column: column, Value: value, Boolean: boolean, Not: not})
+	b.State().Wheres = append(b.State().Wheres, Where{Type: WhereJsonOverlapsType, Column: column, Value: value, Boolean: boolean, Not: not})
 
 	if !IsExpression(value) && b.grammar != nil {
 		_ = b.AddBinding(b.grammar.PrepareBindingForJsonContains(value), "where")
@@ -652,7 +652,7 @@ func (b *Builder) WhereJsonOverlaps(column string, value any, boolean string, no
 
 // WhereJsonContainsKey adds a JSON key existence clause. Mirrors Builder::whereJsonContainsKey().
 func (b *Builder) WhereJsonContainsKey(column string, boolean string, not bool) *Builder {
-	b.wheres = append(b.wheres, Where{Type: WhereJsonContainsKeyType, Column: column, Boolean: boolean, Not: not})
+	b.State().Wheres = append(b.State().Wheres, Where{Type: WhereJsonContainsKeyType, Column: column, Boolean: boolean, Not: not})
 
 	return b
 }
@@ -705,7 +705,7 @@ func (b *Builder) whereJsonLength(column string, args []any, boolean string) *Bu
 	}
 
 	op, _ := operator.(string)
-	b.wheres = append(b.wheres, Where{Type: WhereJsonLengthType, Column: column, Operator: op, Value: value, Boolean: boolean})
+	b.State().Wheres = append(b.State().Wheres, Where{Type: WhereJsonLengthType, Column: column, Operator: op, Value: value, Boolean: boolean})
 
 	if !IsExpression(value) {
 		_ = b.AddBinding(toInt(FlattenValue(value)), "where")
@@ -716,7 +716,7 @@ func (b *Builder) whereJsonLength(column string, args []any, boolean string) *Bu
 
 // WhereFullText adds a fulltext clause. Mirrors Builder::whereFullText().
 func (b *Builder) WhereFullText(columns any, value string, options []string, boolean string) *Builder {
-	b.wheres = append(b.wheres, Where{Type: WhereFullTextType, Columns: wrapValues(columns), Value: value, Options: options, Boolean: boolean})
+	b.State().Wheres = append(b.State().Wheres, Where{Type: WhereFullTextType, Columns: wrapValues(columns), Value: value, Options: options, Boolean: boolean})
 	_ = b.AddBinding(value, "where")
 
 	return b
@@ -889,16 +889,16 @@ func (b *Builder) WhereNested(callback func(*Builder) *Builder, boolean string) 
 // Mirrors Builder::forNestedWhere().
 func (b *Builder) ForNestedWhere() *Builder {
 	nested := b.NewQuery()
-	nested.from = b.from
+	nested.State().From = b.State().From
 
 	return nested
 }
 
 // AddNestedWhereQuery adds a builder as a nested where. Mirrors Builder::addNestedWhereQuery().
 func (b *Builder) AddNestedWhereQuery(query *Builder, boolean string) *Builder {
-	if len(query.wheres) > 0 {
-		b.wheres = append(b.wheres, Where{Type: WhereNestedType, Query: query, Boolean: boolean})
-		_ = b.AddBinding(query.bindings["where"], "where")
+	if len(query.State().Wheres) > 0 {
+		b.State().Wheres = append(b.State().Wheres, Where{Type: WhereNestedType, Query: query, Boolean: boolean})
+		_ = b.AddBinding(query.State().Bindings["where"], "where")
 	}
 
 	return b
@@ -934,7 +934,7 @@ func (b *Builder) AddWhereExistsQuery(query *Builder, boolean string, not bool) 
 		typ = WhereNotExistsType
 	}
 
-	b.wheres = append(b.wheres, Where{Type: typ, Query: query, Boolean: boolean})
+	b.State().Wheres = append(b.State().Wheres, Where{Type: typ, Query: query, Boolean: boolean})
 
 	if query != nil {
 		_ = b.AddBinding(query.GetBindings(), "where")
@@ -954,7 +954,7 @@ func (b *Builder) WhereSub(column any, operator any, callback any, boolean strin
 	}
 
 	op, _ := operator.(string)
-	b.wheres = append(b.wheres, Where{Type: WhereSubType, Column: column, Operator: op, Query: query, Boolean: boolean})
+	b.State().Wheres = append(b.State().Wheres, Where{Type: WhereSubType, Column: column, Operator: op, Query: query, Boolean: boolean})
 
 	if query != nil {
 		_ = b.AddBinding(query.GetBindings(), "where")

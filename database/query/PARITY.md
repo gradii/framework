@@ -18,6 +18,13 @@ this file first when judging the fidelity of the port.
 | `src/Illuminate/Database/Query/Grammars/SqlServerGrammar.php` | 35 functions |
 | `src/Illuminate/Database/Query/Processors/Processor.php` | 9 functions |
 
+The fluent builder lives in `database/query`, SQL compilers in `database/query/grammars`, and
+result processors in `database/query/processors`. `NewBuilder(grammar, processor)` mirrors
+Laravel's builder wiring: `InsertGetID` compiles and cleans bindings before delegating execution
+to the connection's processor. DB and ORM adapters supply writer access, tracing, and model key
+conversion. The grammar reads a compilation-state interface, so it does not import the builder
+package. Existing query grammar constructors remain available through compatibility aliases.
+
 ## 1. Component order
 
 `Query/Grammars/Grammar.php::$selectComponents`, compiled in exactly this order:
@@ -302,7 +309,7 @@ These are intentional and must be documented in code, not treated as gaps.
 | `Collection` type | out of scope | scope decision |
 | Laravel-style `Relation` objects | existing descriptor system stays | scope decision |
 | SQL Server JSON path updates have no dedicated compiler | `JSON_MODIFY` assignments, with `JSON_QUERY` for arrays and objects and nested calls for multiple paths | preserve the framework's JSON update API and avoid duplicate assignments to one column |
-| SQL Server insert IDs are read by the PDO processor | DB and ORM inserts use `OUTPUT inserted.<key>` | go-mssqldb does not support `LastInsertId`; returning the key in the insert keeps it on the same connection |
+| SQL Server insert IDs are read by the PDO processor | `SqlServerGrammar` emits `OUTPUT inserted.<key>` and `SqlServerProcessor` reads the returned row | go-mssqldb does not support `LastInsertId`; returning the key in the insert keeps it on the same connection |
 | `$component` presence via `isset` | explicit nil or presence flag | Go fields always exist |
 | `forPage($page, $perPage = 15)` | `ForPage(page int, perPage ...int)` | Go has no default arguments, so the default is a variadic. A surplus argument is ignored: `ForPage(2, 15, 20)` is `ForPage(2, 15)`. The builder has no error return, and a fluent call is the wrong place to panic on an arity slip |
 | `forPageBeforeId($perPage = 15, ...)` / `forPageAfterId($perPage = 15, ...)` | `ForPageBeforeId(perPage int, lastID any, column string)` | A leading default cannot be variadic in Go, so the caller passes the framework default explicitly; a passed zero is never replaced |
@@ -324,3 +331,9 @@ These are intentional and must be documented in code, not treated as gaps.
   `TestLaravelPortFixForPageZeroPerPage` (`laravel_port_fix_fix_forpage_zero_perpage_test.go`). The
   second file adds the regression context for the removed zero substitution; the duplication is
   deliberate, not a weakened assertion.
+
+## 10. Processor and query grammar test suites
+
+All 16 methods from the upstream processor and query grammar test classes are
+ported in their respective directories. See [LARAVEL_TESTS.md](LARAVEL_TESTS.md)
+for the source mapping, fixtures, and PHP-to-Go comparison rules.

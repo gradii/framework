@@ -1,4 +1,4 @@
-package query
+package grammars
 
 import (
 	"strings"
@@ -13,13 +13,13 @@ type SqliteGrammar struct {
 // NewSqliteGrammar creates the SQLite grammar.
 func NewSqliteGrammar(prefix string) *SqliteGrammar {
 	g := &SqliteGrammar{BaseGrammar: NewBaseGrammar(prefix)}
-	g.BaseGrammar.Attach(g)
+	g.Attach(g)
 
 	return g
 }
 
 // WhereBasic mirrors SQLiteGrammar::whereBasic(): the null-safe equality operator becomes IS.
-func (g *SqliteGrammar) WhereBasic(b *Builder, where Where) string {
+func (g *SqliteGrammar) WhereBasic(b Query, where Where) string {
 	if where.Operator == "<=>" {
 		return g.Wrap(where.Column) + " IS " + g.Parameter(where.Value)
 	}
@@ -28,7 +28,7 @@ func (g *SqliteGrammar) WhereBasic(b *Builder, where Where) string {
 }
 
 // WhereLike mirrors SQLiteGrammar::whereLike(): a case sensitive match uses glob.
-func (g *SqliteGrammar) WhereLike(b *Builder, where Where) string {
+func (g *SqliteGrammar) WhereLike(b Query, where Where) string {
 	if !where.CaseSensitive {
 		return g.BaseGrammar.WhereLike(b, where)
 	}
@@ -62,32 +62,32 @@ func (g *SqliteGrammar) dateBasedWhere(format string, where Where) string {
 }
 
 // WhereDate mirrors SQLiteGrammar::whereDate().
-func (g *SqliteGrammar) WhereDate(b *Builder, where Where) string {
+func (g *SqliteGrammar) WhereDate(b Query, where Where) string {
 	return g.dateBasedWhere("%Y-%m-%d", where)
 }
 
 // WhereDay mirrors SQLiteGrammar::whereDay().
-func (g *SqliteGrammar) WhereDay(b *Builder, where Where) string {
+func (g *SqliteGrammar) WhereDay(b Query, where Where) string {
 	return g.dateBasedWhere("%d", where)
 }
 
 // WhereMonth mirrors SQLiteGrammar::whereMonth().
-func (g *SqliteGrammar) WhereMonth(b *Builder, where Where) string {
+func (g *SqliteGrammar) WhereMonth(b Query, where Where) string {
 	return g.dateBasedWhere("%m", where)
 }
 
 // WhereYear mirrors SQLiteGrammar::whereYear().
-func (g *SqliteGrammar) WhereYear(b *Builder, where Where) string {
+func (g *SqliteGrammar) WhereYear(b Query, where Where) string {
 	return g.dateBasedWhere("%Y", where)
 }
 
 // WhereTime mirrors SQLiteGrammar::whereTime().
-func (g *SqliteGrammar) WhereTime(b *Builder, where Where) string {
+func (g *SqliteGrammar) WhereTime(b Query, where Where) string {
 	return g.dateBasedWhere("%H:%M:%S", where)
 }
 
 // CompileIndexHint mirrors SQLiteGrammar::compileIndexHint().
-func (g *SqliteGrammar) CompileIndexHint(b *Builder, hint *IndexHint) string {
+func (g *SqliteGrammar) CompileIndexHint(b Query, hint *IndexHint) string {
 	if hint.Type == "force" {
 		return "indexed by " + hint.Index
 	}
@@ -96,18 +96,18 @@ func (g *SqliteGrammar) CompileIndexHint(b *Builder, hint *IndexHint) string {
 }
 
 // CompileInsertOrIgnore mirrors SQLiteGrammar::compileInsertOrIgnore().
-func (g *SqliteGrammar) CompileInsertOrIgnore(b *Builder, values []map[string]any) string {
+func (g *SqliteGrammar) CompileInsertOrIgnore(b Query, values []map[string]any) string {
 	return strings.Replace(g.CompileInsert(b, values), "insert", "insert or ignore", 1)
 }
 
 // CompileInsertOrIgnoreUsing mirrors SQLiteGrammar::compileInsertOrIgnoreUsing().
-func (g *SqliteGrammar) CompileInsertOrIgnoreUsing(b *Builder, columns []any, sql string) string {
+func (g *SqliteGrammar) CompileInsertOrIgnoreUsing(b Query, columns []any, sql string) string {
 	return strings.Replace(g.CompileInsertUsing(b, columns, sql), "insert", "insert or ignore", 1)
 }
 
 // CompileUpdate mirrors SQLiteGrammar::compileUpdate(): joins or a limit take the rowid rewrite.
-func (g *SqliteGrammar) CompileUpdate(b *Builder, values UpdateValues) string {
-	if len(b.joins) > 0 || b.limit != nil {
+func (g *SqliteGrammar) CompileUpdate(b Query, values UpdateValues) string {
+	if len(b.State().Joins) > 0 || b.State().Limit != nil {
 		return g.compileUpdateWithJoinsOrLimit(b, values)
 	}
 
@@ -115,13 +115,13 @@ func (g *SqliteGrammar) CompileUpdate(b *Builder, values UpdateValues) string {
 }
 
 // compileUpdateWithJoinsOrLimit mirrors SQLiteGrammar::compileUpdateWithJoinsOrLimit().
-func (g *SqliteGrammar) compileUpdateWithJoinsOrLimit(b *Builder, values UpdateValues) string {
-	table := g.WrapTable(b.from)
+func (g *SqliteGrammar) compileUpdateWithJoinsOrLimit(b Query, values UpdateValues) string {
+	table := g.WrapTable(b.State().From)
 	columns := g.CompileUpdateColumns(b, values)
-	alias := aliasOf(b.from)
+	alias := aliasOf(b.State().From)
 
-	inner := b.Clone()
-	inner.columns = []any{alias + ".rowid"}
+	inner := b.CloneForGrammar()
+	inner.State().Columns = []any{alias + ".rowid"}
 	selectSQL := g.CompileSelect(inner)
 
 	return "update " + table + " set " + columns + " where " + g.Wrap("rowid") + " in (" + selectSQL + ")"
@@ -130,7 +130,7 @@ func (g *SqliteGrammar) compileUpdateWithJoinsOrLimit(b *Builder, values UpdateV
 // CompileUpdateColumns mirrors SQLiteGrammar::compileUpdateColumns(): the JSON selectors of one column
 // are folded into a single json_patch() assignment appended last, and the patch names the wrapped column
 // rather than the extraction inside it. Every other assignment keeps its order and its value.
-func (g *SqliteGrammar) CompileUpdateColumns(b *Builder, values UpdateValues) string {
+func (g *SqliteGrammar) CompileUpdateColumns(b Query, values UpdateValues) string {
 	groups := g.groupJsonColumnsForUpdate(values)
 	merged := g.mergeJsonGroups(values, groups)
 
@@ -160,13 +160,13 @@ func (g *SqliteGrammar) CompileJsonPatch(column string, value any) string {
 }
 
 // CompileDelete mirrors SQLiteGrammar::compileDelete(): joins or a limit take the rowid rewrite.
-func (g *SqliteGrammar) CompileDelete(b *Builder) string {
-	if len(b.joins) > 0 || b.limit != nil {
-		table := g.WrapTable(b.from)
-		alias := aliasOf(b.from)
+func (g *SqliteGrammar) CompileDelete(b Query) string {
+	if len(b.State().Joins) > 0 || b.State().Limit != nil {
+		table := g.WrapTable(b.State().From)
+		alias := aliasOf(b.State().From)
 
-		inner := b.Clone()
-		inner.columns = []any{alias + ".rowid"}
+		inner := b.CloneForGrammar()
+		inner.State().Columns = []any{alias + ".rowid"}
 		selectSQL := g.CompileSelect(inner)
 
 		return "delete from " + table + " where " + g.Wrap("rowid") + " in (" + selectSQL + ")"
@@ -176,7 +176,7 @@ func (g *SqliteGrammar) CompileDelete(b *Builder) string {
 }
 
 // CompileUpsert mirrors SQLiteGrammar::compileUpsert(): on conflict do update with excluded.
-func (g *SqliteGrammar) CompileUpsert(b *Builder, values []map[string]any, uniqueBy []string, update []UpsertUpdate) string {
+func (g *SqliteGrammar) CompileUpsert(b Query, values []map[string]any, uniqueBy []string, update []UpsertUpdate) string {
 	sql := g.CompileInsert(b, values)
 	sql += " on conflict (" + g.Columnize(anySlice(uniqueBy)) + ") do update set "
 
@@ -197,8 +197,8 @@ func (g *SqliteGrammar) CompileUpsert(b *Builder, values []map[string]any, uniqu
 // Laravel asks the connection's schema builder for parseSchemaAndTable. That method only splits the
 // reference on ".", so the same split is done here: a schema-qualified table keeps its schema on the
 // sqlite_sequence delete, and only the bare table name is prefixed in the binding.
-func (g *SqliteGrammar) CompileTruncate(b *Builder) []Statement {
-	reference := asString(b.from)
+func (g *SqliteGrammar) CompileTruncate(b Query) []Statement {
+	reference := AsString(b.State().From)
 	schema := ""
 	table := reference
 	if index := strings.LastIndex(reference, "."); index >= 0 {
@@ -215,12 +215,12 @@ func (g *SqliteGrammar) CompileTruncate(b *Builder) []Statement {
 
 	return []Statement{
 		{SQL: sequence + "sqlite_sequence where name = ?", Bindings: []any{g.Prefix() + table}},
-		{SQL: "delete from " + g.WrapTable(b.from)},
+		{SQL: "delete from " + g.WrapTable(b.State().From)},
 	}
 }
 
 // CompileLock mirrors SQLiteGrammar::compileLock().
-func (g *SqliteGrammar) CompileLock(b *Builder, value any) string { return "" }
+func (g *SqliteGrammar) CompileLock(b Query, value any) string { return "" }
 
 // WrapUnion mirrors SQLiteGrammar::wrapUnion().
 func (g *SqliteGrammar) WrapUnion(sql string) string { return "select * from (" + sql + ")" }
@@ -256,12 +256,12 @@ func (g *SqliteGrammar) CompileJsonContains(column string, value string) string 
 // the meaning MySQL's "not json_contains(column, list)" and Postgres' "not column @> list" carry, and
 // it makes the clause the exact negation of its positive form. Negating each predicate instead would
 // read "contains none" and quietly diverge from the other two dialects for the same call.
-func (g *SqliteGrammar) WhereJsonContains(b *Builder, where Where) string {
+func (g *SqliteGrammar) WhereJsonContains(b Query, where Where) string {
 	if IsExpression(where.Value) || !isArrayValue(where.Value) {
 		return g.BaseGrammar.WhereJsonContains(b, where)
 	}
 
-	values := toAnySlice(where.Value)
+	values := ToAnySlice(where.Value)
 	if len(values) == 0 {
 		// An empty list cannot be ANDed into a predicate, and the base grammar's single
 		// "json_each.value is ?" placeholder would be left without a binding: the empty slice
@@ -278,9 +278,9 @@ func (g *SqliteGrammar) WhereJsonContains(b *Builder, where Where) string {
 
 	parts := make([]string, 0, len(values))
 	for _, value := range values {
-		compiled := g.CompileJsonContains(asString(where.Column), g.Parameter(value))
+		compiled := g.CompileJsonContains(AsString(where.Column), g.Parameter(value))
 		if compiled == "" {
-			b.setError(errJsonContainsNotSupported)
+			b.SetError(errJsonContainsNotSupported)
 
 			return ""
 		}
@@ -424,13 +424,13 @@ func setNestedGroup(target map[string]any, segments []string, value any) map[str
 }
 
 // CompileGroupLimit mirrors SQLiteGrammar::compileGroupLimit(): modern SQLite uses the base rewrite.
-func (g *SqliteGrammar) CompileGroupLimit(b *Builder) string {
+func (g *SqliteGrammar) CompileGroupLimit(b Query) string {
 	return g.BaseGrammar.CompileGroupLimit(b)
 }
 
 // aliasOf returns the alias of a "table as alias" source, or the table itself.
 func aliasOf(from any) string {
-	value := asString(from)
+	value := AsString(from)
 	if index := strings.LastIndex(strings.ToLower(value), " as "); index >= 0 {
 		return strings.TrimSpace(value[index+4:])
 	}

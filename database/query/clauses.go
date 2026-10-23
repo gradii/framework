@@ -10,11 +10,11 @@ import (
 // Laravel also accepts a string-keyed array to alias a subselect; Go callers use SelectSub for
 // that, which is a deliberate deviation because a variadic Go call cannot carry keys.
 func (b *Builder) Select(columns ...any) *Builder {
-	b.columns = nil
-	b.bindings["select"] = []any{}
+	b.State().Columns = nil
+	b.State().Bindings["select"] = []any{}
 
 	for _, column := range columns {
-		b.columns = append(b.columns, column)
+		b.State().Columns = append(b.State().Columns, column)
 	}
 
 	return b
@@ -46,7 +46,7 @@ func (b *Builder) AddSelect(columns ...any) *Builder {
 		// equality: strings match by value and *Expression matches only the same pointer.
 		_, valueExpression := column.(Expression)
 		if !valueExpression && (column == nil || reflect.ValueOf(column).Comparable()) {
-			for _, existing := range b.columns {
+			for _, existing := range b.State().Columns {
 				if (existing == nil || reflect.ValueOf(existing).Comparable()) && existing == column {
 					duplicate = true
 					break
@@ -57,7 +57,7 @@ func (b *Builder) AddSelect(columns ...any) *Builder {
 			continue
 		}
 
-		b.columns = append(b.columns, column)
+		b.State().Columns = append(b.State().Columns, column)
 	}
 
 	return b
@@ -65,26 +65,26 @@ func (b *Builder) AddSelect(columns ...any) *Builder {
 
 // Distinct sets distinct, or distinct-on columns. Mirrors Builder::distinct().
 func (b *Builder) Distinct(columns ...any) *Builder {
-	b.distinctColumns = nil
+	b.State().DistinctColumns = nil
 	if len(columns) == 0 {
-		b.distinct = true
+		b.State().Distinct = true
 		return b
 	}
 
 	if len(columns) == 1 {
 		switch value := columns[0].(type) {
 		case bool:
-			b.distinct = value
+			b.State().Distinct = value
 			return b
 		case []any:
-			b.distinct = true
-			b.distinctColumns = value
+			b.State().Distinct = true
+			b.State().DistinctColumns = value
 			return b
 		}
 	}
 
-	b.distinct = true
-	b.distinctColumns = columns
+	b.State().Distinct = true
+	b.State().DistinctColumns = columns
 
 	return b
 }
@@ -96,9 +96,9 @@ func (b *Builder) From(table any, as string) *Builder {
 	}
 
 	if as != "" {
-		b.from = aliased(table, as)
+		b.State().From = aliased(table, as)
 	} else {
-		b.from = table
+		b.State().From = table
 	}
 
 	return b
@@ -113,7 +113,7 @@ func (b *Builder) FromSub(query any, as string) *Builder {
 
 // FromRaw sets a raw table expression. Mirrors Builder::fromRaw().
 func (b *Builder) FromRaw(expression string, bindings []any) *Builder {
-	b.from = Expression{Value: expression}
+	b.State().From = Expression{Value: expression}
 	_ = b.AddBinding(bindings, "from")
 
 	return b
@@ -133,7 +133,7 @@ func (b *Builder) Join(table any, first any, operator any, second any, typ strin
 		}
 	}
 
-	b.joins = append(b.joins, join)
+	b.State().Joins = append(b.State().Joins, join)
 	_ = b.AddBinding(join.GetBindings(), "join")
 
 	return b
@@ -163,7 +163,7 @@ func (b *Builder) JoinLateral(query any, as string, typ string) *Builder {
 
 	_ = b.AddBinding(bindings, "join")
 
-	b.joins = append(b.joins, NewJoinLateralClause(b, typ, expression))
+	b.State().Joins = append(b.State().Joins, NewJoinLateralClause(b, typ, expression))
 
 	return b
 }
@@ -200,7 +200,7 @@ func (b *Builder) CrossJoin(table any, first any, operator any, second any) *Bui
 		return b.Join(table, first, operator, second, "cross", false)
 	}
 
-	b.joins = append(b.joins, NewJoinClause(b, "cross", table))
+	b.State().Joins = append(b.State().Joins, NewJoinClause(b, "cross", table))
 
 	return b
 }
@@ -214,7 +214,7 @@ func (b *Builder) CrossJoinSub(query any, as string) *Builder {
 
 	_ = b.AddBinding(bindings, "join")
 
-	b.joins = append(b.joins, NewJoinClause(b, "cross", expression))
+	b.State().Joins = append(b.State().Joins, NewJoinClause(b, "cross", expression))
 
 	return b
 }
@@ -222,7 +222,7 @@ func (b *Builder) CrossJoinSub(query any, as string) *Builder {
 // GroupBy appends grouping columns. Mirrors Builder::groupBy().
 func (b *Builder) GroupBy(groups ...any) *Builder {
 	for _, group := range groups {
-		b.groups = append(b.groups, wrapValues(group)...)
+		b.State().Groups = append(b.State().Groups, wrapValues(group)...)
 	}
 
 	return b
@@ -230,7 +230,7 @@ func (b *Builder) GroupBy(groups ...any) *Builder {
 
 // GroupByRaw appends a raw grouping expression. Mirrors Builder::groupByRaw().
 func (b *Builder) GroupByRaw(sql string, bindings []any) *Builder {
-	b.groups = append(b.groups, Expression{Value: sql})
+	b.State().Groups = append(b.State().Groups, Expression{Value: sql})
 	_ = b.AddBinding(bindings, "groupBy")
 
 	return b
@@ -248,7 +248,7 @@ func (b *Builder) OrHaving(column any, args ...any) *Builder {
 
 func (b *Builder) addHaving(column any, args []any, boolean string) *Builder {
 	if expr, ok := column.(Expression); ok {
-		b.havings = append(b.havings, Having{Type: HavingExpressionType, Column: expr, Boolean: boolean})
+		b.State().Havings = append(b.State().Havings, Having{Type: HavingExpressionType, Column: expr, Boolean: boolean})
 		return b
 	}
 
@@ -285,7 +285,7 @@ func (b *Builder) addHaving(column any, args []any, boolean string) *Builder {
 		havingType = HavingBitType
 	}
 
-	b.havings = append(b.havings, Having{Type: havingType, Column: column, Operator: op, Value: value, Boolean: boolean})
+	b.State().Havings = append(b.State().Havings, Having{Type: havingType, Column: column, Operator: op, Value: value, Boolean: boolean})
 
 	if !IsExpression(value) {
 		_ = b.AddBinding(FlattenValue(value), "having")
@@ -296,7 +296,7 @@ func (b *Builder) addHaving(column any, args []any, boolean string) *Builder {
 
 // HavingRaw adds a raw having clause. Mirrors Builder::havingRaw().
 func (b *Builder) HavingRaw(sql string, bindings []any, boolean string) *Builder {
-	b.havings = append(b.havings, Having{Type: HavingRawType, SQL: sql, Boolean: boolean})
+	b.State().Havings = append(b.State().Havings, Having{Type: HavingRawType, SQL: sql, Boolean: boolean})
 	_ = b.AddBinding(bindings, "having")
 
 	return b
@@ -318,9 +318,9 @@ func (b *Builder) HavingNested(callback func(*Builder) *Builder, boolean string)
 
 // AddNestedHavingQuery adds a builder as a nested having. Mirrors Builder::addNestedHavingQuery().
 func (b *Builder) AddNestedHavingQuery(query *Builder, boolean string) *Builder {
-	if len(query.havings) > 0 {
-		b.havings = append(b.havings, Having{Type: HavingNestedType, Query: query, Boolean: boolean})
-		_ = b.AddBinding(query.bindings["having"], "having")
+	if len(query.State().Havings) > 0 {
+		b.State().Havings = append(b.State().Havings, Having{Type: HavingNestedType, Query: query, Boolean: boolean})
+		_ = b.AddBinding(query.State().Bindings["having"], "having")
 	}
 
 	return b
@@ -328,7 +328,7 @@ func (b *Builder) AddNestedHavingQuery(query *Builder, boolean string) *Builder 
 
 // HavingBetween adds a having between clause. Mirrors Builder::havingBetween().
 func (b *Builder) HavingBetween(column any, values []any, boolean string, not bool) *Builder {
-	b.havings = append(b.havings, Having{Type: HavingBetweenType, Column: column, Values: values, Boolean: boolean, Not: not})
+	b.State().Havings = append(b.State().Havings, Having{Type: HavingBetweenType, Column: column, Values: values, Boolean: boolean, Not: not})
 
 	// Laravel resolves the bounds with Arr::flatten() before binding, exactly like whereBetween.
 	bounds := CleanBindings(flatten(values, 0))
@@ -348,7 +348,7 @@ func (b *Builder) HavingNull(columns any, boolean string, not bool) *Builder {
 	}
 
 	for _, column := range wrapValues(columns) {
-		b.havings = append(b.havings, Having{Type: typ, Column: column, Boolean: boolean})
+		b.State().Havings = append(b.State().Havings, Having{Type: typ, Column: column, Boolean: boolean})
 	}
 
 	return b
@@ -365,7 +365,7 @@ func (b *Builder) OrderBy(column any, direction string) *Builder {
 		sql, bindings := b.createSub(column)
 		column = Expression{Value: "(" + sql + ")"}
 
-		if len(b.unions) > 0 {
+		if len(b.State().Unions) > 0 {
 			_ = b.AddBinding(bindings, "unionOrder")
 		} else {
 			_ = b.AddBinding(bindings, "order")
@@ -379,10 +379,10 @@ func (b *Builder) OrderBy(column any, direction string) *Builder {
 	}
 
 	order := Order{Column: column, Direction: direction}
-	if len(b.unions) > 0 {
-		b.unionOrders = append(b.unionOrders, order)
+	if len(b.State().Unions) > 0 {
+		b.State().UnionOrders = append(b.State().UnionOrders, order)
 	} else {
-		b.orders = append(b.orders, order)
+		b.State().Orders = append(b.State().Orders, order)
 	}
 
 	return b
@@ -394,11 +394,11 @@ func (b *Builder) OrderByDesc(column any) *Builder { return b.OrderBy(column, "d
 // OrderByRaw adds a raw order clause. Mirrors Builder::orderByRaw().
 func (b *Builder) OrderByRaw(sql string, bindings []any) *Builder {
 	order := Order{Type: OrderRawType, SQL: sql}
-	if len(b.unions) > 0 {
-		b.unionOrders = append(b.unionOrders, order)
+	if len(b.State().Unions) > 0 {
+		b.State().UnionOrders = append(b.State().UnionOrders, order)
 		_ = b.AddBinding(bindings, "unionOrder")
 	} else {
-		b.orders = append(b.orders, order)
+		b.State().Orders = append(b.State().Orders, order)
 		_ = b.AddBinding(bindings, "order")
 	}
 
@@ -434,10 +434,10 @@ func (b *Builder) InRandomOrder(seed any) *Builder {
 
 // Reorder clears ordering then optionally adds one. Mirrors Builder::reorder().
 func (b *Builder) Reorder(column any, direction string) *Builder {
-	b.orders = nil
-	b.unionOrders = nil
-	b.bindings["order"] = []any{}
-	b.bindings["unionOrder"] = []any{}
+	b.State().Orders = nil
+	b.State().UnionOrders = nil
+	b.State().Bindings["order"] = []any{}
+	b.State().Bindings["unionOrder"] = []any{}
 
 	if column != nil {
 		return b.OrderBy(column, direction)
@@ -448,8 +448,8 @@ func (b *Builder) Reorder(column any, direction string) *Builder {
 
 // RemoveExistingOrdersFor drops orders on one column. Mirrors Builder::removeExistingOrdersFor().
 func (b *Builder) RemoveExistingOrdersFor(column string) []Order {
-	kept := make([]Order, 0, len(b.orders))
-	for _, order := range b.orders {
+	kept := make([]Order, 0, len(b.State().Orders))
+	for _, order := range b.State().Orders {
 		if existing, ok := order.Column.(string); ok && existing == column {
 			continue
 		}
@@ -465,10 +465,10 @@ func (b *Builder) Limit(value int) *Builder {
 		return b
 	}
 
-	if len(b.unions) > 0 {
-		b.unionLimit = &value
+	if len(b.State().Unions) > 0 {
+		b.State().UnionLimit = &value
 	} else {
-		b.limit = &value
+		b.State().Limit = &value
 	}
 
 	return b
@@ -480,10 +480,10 @@ func (b *Builder) Offset(value int) *Builder {
 		value = 0
 	}
 
-	if len(b.unions) > 0 {
-		b.unionOffset = &value
+	if len(b.State().Unions) > 0 {
+		b.State().UnionOffset = &value
 	} else {
-		b.offset = &value
+		b.State().Offset = &value
 	}
 
 	return b
@@ -498,21 +498,21 @@ func (b *Builder) Skip(value int) *Builder { return b.Offset(value) }
 // LimitValue reports the limit set on the builder, mirroring Builder::getLimit(). The bool is false
 // when no limit was set, so callers can tell "unlimited" from a limit of zero.
 func (b *Builder) LimitValue() (int, bool) {
-	if b.limit == nil {
+	if b.State().Limit == nil {
 		return 0, false
 	}
 
-	return *b.limit, true
+	return *b.State().Limit, true
 }
 
 // OffsetValue reports the offset set on the builder, mirroring Builder::getOffset(). The bool is
 // false when no offset was set.
 func (b *Builder) OffsetValue() (int, bool) {
-	if b.offset == nil {
+	if b.State().Offset == nil {
 		return 0, false
 	}
 
-	return *b.offset, true
+	return *b.State().Offset, true
 }
 
 // ForPage sets offset and limit for a page. Mirrors Builder::forPage(), whose signature is
@@ -540,7 +540,7 @@ func (b *Builder) ForPageBeforeId(perPage int, lastID any, column string) *Build
 		column = "id"
 	}
 
-	b.orders = b.RemoveExistingOrdersFor(column)
+	b.State().Orders = b.RemoveExistingOrdersFor(column)
 
 	if lastID == nil {
 		b.WhereNotNull(column, BooleanAnd)
@@ -559,7 +559,7 @@ func (b *Builder) ForPageAfterId(perPage int, lastID any, column string) *Builde
 		column = "id"
 	}
 
-	b.orders = b.RemoveExistingOrdersFor(column)
+	b.State().Orders = b.RemoveExistingOrdersFor(column)
 
 	if lastID == nil {
 		b.WhereNotNull(column, BooleanAnd)
@@ -582,7 +582,7 @@ func (b *Builder) Union(query any, all bool) *Builder {
 		union = existing
 	}
 
-	b.unions = append(b.unions, Union{Query: union, All: all})
+	b.State().Unions = append(b.State().Unions, Union{Query: union, All: all})
 
 	if union != nil {
 		_ = b.AddBinding(union.GetBindings(), "union")
@@ -596,7 +596,7 @@ func (b *Builder) UnionAll(query any) *Builder { return b.Union(query, true) }
 
 // Lock sets the lock value. Mirrors Builder::lock().
 func (b *Builder) Lock(value any) *Builder {
-	b.lock = value
+	b.State().Lock = value
 
 	return b
 }
@@ -647,7 +647,7 @@ func (b *Builder) JoinRaw(expression string, bindings []any, typ string) *Builde
 	join := NewJoinClause(b, typ, Expression{Value: expression})
 	_ = join.AddBinding(bindings, "join")
 
-	b.joins = append(b.joins, join)
+	b.State().Joins = append(b.State().Joins, join)
 	_ = b.AddBinding(join.GetBindings(), "join")
 
 	return b
@@ -682,7 +682,7 @@ func splitJoinClause(expression string) (typ string, rest string, ok bool) {
 
 // TableSource returns the table the query targets: a string, an Expression, or nil when unset.
 // database/db uses it to preserve the "table is required" error and to inspect the from clause.
-func (b *Builder) TableSource() any { return b.from }
+func (b *Builder) TableSource() any { return b.State().From }
 
 // InsertUsing mirrors Builder::insertUsing(): it applies the queued before-query callbacks at its
 // head — exactly as Laravel does — then resolves the subquery into a statement. createSub's argument

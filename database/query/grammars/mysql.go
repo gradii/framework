@@ -1,4 +1,4 @@
-package query
+package grammars
 
 import (
 	"strconv"
@@ -14,8 +14,8 @@ type MySqlGrammar struct {
 // NewMySqlGrammar creates the MySQL grammar, which quotes identifiers with backticks.
 func NewMySqlGrammar(prefix string) *MySqlGrammar {
 	g := &MySqlGrammar{BaseGrammar: NewBaseGrammar(prefix)}
-	g.BaseGrammar.Attach(g)
-	g.BaseGrammar.SetValueWrapper(func(value string) string {
+	g.Attach(g)
+	g.SetValueWrapper(func(value string) string {
 		if value == "*" {
 			return value
 		}
@@ -33,7 +33,7 @@ func (g *MySqlGrammar) GetOperators() []string {
 }
 
 // WhereLike mirrors MySqlGrammar::whereLike().
-func (g *MySqlGrammar) WhereLike(b *Builder, where Where) string {
+func (g *MySqlGrammar) WhereLike(b Query, where Where) string {
 	operator := ""
 	if where.Not {
 		operator = "not "
@@ -51,8 +51,8 @@ func (g *MySqlGrammar) WhereLike(b *Builder, where Where) string {
 }
 
 // WhereNull mirrors MySqlGrammar::whereNull().
-func (g *MySqlGrammar) WhereNull(b *Builder, where Where) string {
-	column := getValueString(where.Column)
+func (g *MySqlGrammar) WhereNull(b Query, where Where) string {
+	column := GetValueString(where.Column)
 	if g.IsJsonSelector(column) {
 		field, path := g.wrap.JsonFieldAndPath(column)
 
@@ -63,8 +63,8 @@ func (g *MySqlGrammar) WhereNull(b *Builder, where Where) string {
 }
 
 // WhereNotNull mirrors MySqlGrammar::whereNotNull().
-func (g *MySqlGrammar) WhereNotNull(b *Builder, where Where) string {
-	column := getValueString(where.Column)
+func (g *MySqlGrammar) WhereNotNull(b Query, where Where) string {
+	column := GetValueString(where.Column)
 	if g.IsJsonSelector(column) {
 		field, path := g.wrap.JsonFieldAndPath(column)
 
@@ -75,7 +75,7 @@ func (g *MySqlGrammar) WhereNotNull(b *Builder, where Where) string {
 }
 
 // WhereFullText mirrors MySqlGrammar::whereFullText().
-func (g *MySqlGrammar) WhereFullText(b *Builder, where Where) string {
+func (g *MySqlGrammar) WhereFullText(b Query, where Where) string {
 	columns := g.Columnize(where.Columns)
 	value := g.Parameter(where.Value)
 
@@ -93,7 +93,7 @@ func (g *MySqlGrammar) WhereFullText(b *Builder, where Where) string {
 }
 
 // CompileIndexHint mirrors MySqlGrammar::compileIndexHint().
-func (g *MySqlGrammar) CompileIndexHint(b *Builder, hint *IndexHint) string {
+func (g *MySqlGrammar) CompileIndexHint(b Query, hint *IndexHint) string {
 	switch hint.Type {
 	case "hint":
 		return "use index (" + hint.Index + ")"
@@ -105,7 +105,7 @@ func (g *MySqlGrammar) CompileIndexHint(b *Builder, hint *IndexHint) string {
 }
 
 // CompileInsert mirrors MySqlGrammar::compileInsert(): an empty insert becomes a default row.
-func (g *MySqlGrammar) CompileInsert(b *Builder, values []map[string]any) string {
+func (g *MySqlGrammar) CompileInsert(b Query, values []map[string]any) string {
 	if len(values) == 0 {
 		values = []map[string]any{{}}
 	}
@@ -114,17 +114,17 @@ func (g *MySqlGrammar) CompileInsert(b *Builder, values []map[string]any) string
 }
 
 // CompileInsertOrIgnore mirrors MySqlGrammar::compileInsertOrIgnore().
-func (g *MySqlGrammar) CompileInsertOrIgnore(b *Builder, values []map[string]any) string {
+func (g *MySqlGrammar) CompileInsertOrIgnore(b Query, values []map[string]any) string {
 	return strings.Replace(g.CompileInsert(b, values), "insert", "insert ignore", 1)
 }
 
 // CompileInsertOrIgnoreUsing mirrors MySqlGrammar::compileInsertOrIgnoreUsing().
-func (g *MySqlGrammar) CompileInsertOrIgnoreUsing(b *Builder, columns []any, sql string) string {
+func (g *MySqlGrammar) CompileInsertOrIgnoreUsing(b Query, columns []any, sql string) string {
 	return strings.Replace(g.CompileInsertUsing(b, columns, sql), "insert", "insert ignore", 1)
 }
 
 // CompileUpdateColumns mirrors MySqlGrammar::compileUpdateColumns().
-func (g *MySqlGrammar) CompileUpdateColumns(b *Builder, values UpdateValues) string {
+func (g *MySqlGrammar) CompileUpdateColumns(b Query, values UpdateValues) string {
 	parts := make([]string, 0, len(values))
 
 	for _, value := range values {
@@ -168,10 +168,10 @@ func (g *MySqlGrammar) PrepareBindingsForUpdate(bindings map[string][]any, value
 // copied columns read back through that alias instead of values(). An update entry that binds its own
 // value (a string key in Laravel's $update) still compiles as "col = ?"; the alias only changes the
 // value-copying form, exactly as Laravel's numeric-key branch decides.
-func (g *MySqlGrammar) CompileUpsert(b *Builder, values []map[string]any, uniqueBy []string, update []UpsertUpdate) string {
+func (g *MySqlGrammar) CompileUpsert(b Query, values []map[string]any, uniqueBy []string, update []UpsertUpdate) string {
 	sql := g.CompileInsert(b, values)
 
-	if b.useUpsertAlias {
+	if b.State().UseUpsertAlias {
 		sql += " as laravel_upsert_alias"
 	}
 
@@ -183,7 +183,7 @@ func (g *MySqlGrammar) CompileUpsert(b *Builder, values []map[string]any, unique
 			parts = append(parts, g.Wrap(item.Column)+" = "+g.Parameter(item.Value))
 			continue
 		}
-		if b.useUpsertAlias {
+		if b.State().UseUpsertAlias {
 			parts = append(parts, g.Wrap(item.Column)+" = "+g.Wrap("laravel_upsert_alias")+"."+g.Wrap(item.Column))
 			continue
 		}
@@ -194,40 +194,40 @@ func (g *MySqlGrammar) CompileUpsert(b *Builder, values []map[string]any, unique
 }
 
 // CompileUpdateWithoutJoins mirrors MySqlGrammar::compileUpdateWithoutJoins(): order by and limit.
-func (g *MySqlGrammar) CompileUpdateWithoutJoins(b *Builder, table string, columns string, where string) string {
+func (g *MySqlGrammar) CompileUpdateWithoutJoins(b Query, table string, columns string, where string) string {
 	sql := g.BaseGrammar.CompileUpdateWithoutJoins(b, table, columns, where)
 
-	if len(b.orders) > 0 {
-		sql += " " + g.CompileOrders(b, b.orders)
+	if len(b.State().Orders) > 0 {
+		sql += " " + g.CompileOrders(b, b.State().Orders)
 	}
-	if b.limit != nil {
-		sql += " " + g.CompileLimit(b, b.limit)
+	if b.State().Limit != nil {
+		sql += " " + g.CompileLimit(b, b.State().Limit)
 	}
 
 	return sql
 }
 
 // CompileDeleteWithoutJoins mirrors MySqlGrammar::compileDeleteWithoutJoins(): order by and limit.
-func (g *MySqlGrammar) CompileDeleteWithoutJoins(b *Builder, table string, where string) string {
+func (g *MySqlGrammar) CompileDeleteWithoutJoins(b Query, table string, where string) string {
 	sql := g.BaseGrammar.CompileDeleteWithoutJoins(b, table, where)
 
-	if len(b.orders) > 0 {
-		sql += " " + g.CompileOrders(b, b.orders)
+	if len(b.State().Orders) > 0 {
+		sql += " " + g.CompileOrders(b, b.State().Orders)
 	}
-	if b.limit != nil {
-		sql += " " + g.CompileLimit(b, b.limit)
+	if b.State().Limit != nil {
+		sql += " " + g.CompileLimit(b, b.State().Limit)
 	}
 
 	return sql
 }
 
 // CompileJoinLateral mirrors MySqlGrammar::compileJoinLateral().
-func (g *MySqlGrammar) CompileJoinLateral(join *JoinClause, expression string) string {
-	return strings.TrimSpace(join.Type + " join lateral " + expression + " on true")
+func (g *MySqlGrammar) CompileJoinLateral(join Join, expression string) string {
+	return strings.TrimSpace(join.JoinType() + " join lateral " + expression + " on true")
 }
 
 // CompileLock mirrors MySqlGrammar::compileLock().
-func (g *MySqlGrammar) CompileLock(b *Builder, value any) string {
+func (g *MySqlGrammar) CompileLock(b Query, value any) string {
 	if s, ok := value.(string); ok {
 		return s
 	}
@@ -240,7 +240,7 @@ func (g *MySqlGrammar) CompileLock(b *Builder, value any) string {
 }
 
 // CompileRandom mirrors MySqlGrammar::compileRandom().
-func (g *MySqlGrammar) CompileRandom(seed any) string { return "RAND(" + asString(seed) + ")" }
+func (g *MySqlGrammar) CompileRandom(seed any) string { return "RAND(" + AsString(seed) + ")" }
 
 // CompileJsonValueCast mirrors MySqlGrammar::compileJsonValueCast().
 func (g *MySqlGrammar) CompileJsonValueCast(value string) string {
@@ -313,10 +313,10 @@ func (g *MySqlGrammar) WrapJsonBooleanSelector(value string) string {
 
 // UseLegacyGroupLimit mirrors MySqlGrammar::useLegacyGroupLimit(). Without a live connection the
 // modern path is assumed, so this reports false.
-func (g *MySqlGrammar) UseLegacyGroupLimit(b *Builder) bool { return false }
+func (g *MySqlGrammar) UseLegacyGroupLimit(b Query) bool { return false }
 
 // CompileGroupLimit mirrors MySqlGrammar::compileGroupLimit().
-func (g *MySqlGrammar) CompileGroupLimit(b *Builder) string {
+func (g *MySqlGrammar) CompileGroupLimit(b Query) string {
 	if g.UseLegacyGroupLimit(b) {
 		return g.CompileLegacyGroupLimit(b)
 	}
@@ -325,23 +325,23 @@ func (g *MySqlGrammar) CompileGroupLimit(b *Builder) string {
 }
 
 // CompileLegacyGroupLimit mirrors MySqlGrammar::compileLegacyGroupLimit().
-func (g *MySqlGrammar) CompileLegacyGroupLimit(b *Builder) string {
-	limit := b.groupLimit
-	offset := b.offset
+func (g *MySqlGrammar) CompileLegacyGroupLimit(b Query) string {
+	limit := b.State().GroupLimit
+	offset := b.State().Offset
 	if offset != nil {
 		limit += *offset
-		b.offset = nil
+		b.State().Offset = nil
 	}
 
-	column := b.groupLimitColumn
+	column := b.State().GroupLimitColumn
 	parts := strings.Split(column, ".")
 	column = g.Wrap(parts[len(parts)-1])
 
 	partition := ", @laravel_row := if(@laravel_group = " + column + ", @laravel_row + 1, 1) as `laravel_row`"
 	partition += ", @laravel_group := " + column
 
-	orders := append([]Order{{Column: b.groupLimitColumn, Direction: "asc"}}, b.orders...)
-	b.orders = orders
+	orders := append([]Order{{Column: b.State().GroupLimitColumn, Direction: "asc"}}, b.State().Orders...)
+	b.State().Orders = orders
 
 	components := g.CompileComponents(b)
 

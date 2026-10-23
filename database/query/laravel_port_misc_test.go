@@ -212,52 +212,11 @@ func TestPipeCallback(t *testing.T) {
 // their order, not their rendering.
 func TestMergeWheresCanMergeWheresAndBindings(t *testing.T) {
 	builder := newTestBuilder()
-	builder.wheres = []Where{{Column: "foo"}}
+	builder.State().Wheres = []Where{{Column: "foo"}}
 	builder.MergeWheres([]Where{{Column: "wheres"}}, []any{"foo", "bar"})
 
-	assert.Equal(t, []Where{{Column: "foo"}, {Column: "wheres"}}, builder.wheres)
+	assert.Equal(t, []Where{{Column: "foo"}, {Column: "wheres"}}, builder.State().Wheres)
 	assert.Equal(t, []any{"foo", "bar"}, builder.GetBindings())
 }
 
-// --- Sibling grammar corpora (Database*QueryGrammarTest.php) ---
-//
-// The census covers DatabaseQueryBuilderTest.php's 409 methods. These port the sibling corpora's
-// methods that were portable and not already pinned elsewhere: DatabasePostgresQueryGrammarTest's
-// testCompileTruncate, and DatabaseQueryGrammarTest's two whereRaw return-value tests. The remaining
-// sibling methods are covered: the five testToRawSql variants by database/db/interpolate_test.go, and
-// the two compileOrdersAcceptExpression variants by the OrderByRaw assertions in
-// laravel_port_gap_selects_gap_test.go.
-
-// TestCompileTruncate ports Laravel's
-// DatabasePostgresQueryGrammarTest::testCompileTruncate: a Postgres truncate restarts identity and
-// cascades by default, CascadeOnTruncate(false) drops the cascade keyword, and turning it back on
-// restores it.
-func TestCompileTruncate(t *testing.T) {
-	// The toggle is process-wide, so hand back whatever value it held on entry rather than assuming the
-	// default, and start from Laravel's default so the first assertion does not depend on test order.
-	defer CascadeOnTruncate(!postgresTruncateWithoutCascade.Load())
-	CascadeOnTruncate(true)
-
-	g := NewPostgresGrammar("")
-	b := NewBuilder(g).From("users", "")
-
-	assert.Equal(t, `truncate "users" restart identity cascade`, g.CompileTruncate(b)[0].SQL)
-
-	CascadeOnTruncate(false)
-	assert.Equal(t, `truncate "users" restart identity`, g.CompileTruncate(b)[0].SQL)
-
-	CascadeOnTruncate(true)
-	assert.Equal(t, `truncate "users" restart identity cascade`, g.CompileTruncate(b)[0].SQL)
-}
-
-// TestWhereRawReturnsString ports Laravel's
-// DatabaseQueryGrammarTest::testWhereRawReturnsStringWhenExpressionPassed and
-// testWhereRawReturnsStringWhenStringPassed: Grammar::whereRaw returns the raw fragment whether it was
-// handed an Expression or a plain string.
-func TestWhereRawReturnsString(t *testing.T) {
-	g := NewBaseGrammar("")
-	b := newTestBuilder()
-
-	assert.Equal(t, `select * from "users"`, g.WhereRaw(b, Where{SQL: Raw(`select * from "users"`)}))
-	assert.Equal(t, `select * from "users"`, g.WhereRaw(b, Where{SQL: `select * from "users"`}))
-}
+// Direct sibling grammar cases live in grammars/laravel_port_test.go.

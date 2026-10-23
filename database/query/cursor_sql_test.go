@@ -11,7 +11,7 @@ import (
 
 // reverseCursorOrders flips every order's direction, mirroring the per-column reversal
 // ensureOrderForCursorPagination performs before the predicate is built. A reverse test can apply it
-// to b.orders to state the flip explicitly instead of leaning on the separate reversal helper, and
+// to b.State().Orders to state the flip explicitly instead of leaning on the separate reversal helper, and
 // the ORDER BY it leaves behind is exactly what a previous-page fetch emits.
 func reverseCursorOrders(orders []Order) []Order {
 	flipped := make([]Order, len(orders))
@@ -33,7 +33,7 @@ func TestAddCursorPredicateSingleParameter(t *testing.T) {
 	b := newTestBuilder().From("foobar", "").OrderBy("test", "asc")
 	cursor := NewCursor(CursorParameters{{Column: "test", Value: "bar"}}, true)
 
-	require.NoError(t, b.addCursorPredicate(cursor, b.orders))
+	require.NoError(t, b.addCursorPredicate(cursor, b.State().Orders))
 
 	sql, bindings := b.ToSelectSQL()
 	assert.Equal(t, `select * from "foobar" where ("test" > ?) order by "test" asc`, sql)
@@ -47,7 +47,7 @@ func TestAddCursorPredicateMultipleAscending(t *testing.T) {
 	b := newTestBuilder().From("foobar", "").OrderBy("test", "asc").OrderBy("another", "asc")
 	cursor := NewCursor(CursorParameters{{Column: "test", Value: "bar"}, {Column: "another", Value: "foo"}}, true)
 
-	require.NoError(t, b.addCursorPredicate(cursor, b.orders))
+	require.NoError(t, b.addCursorPredicate(cursor, b.State().Orders))
 
 	sql, bindings := b.ToSelectSQL()
 	assert.Equal(t, `select * from "foobar" where ("test" > ? or ("test" = ? and ("another" > ?))) order by "test" asc, "another" asc`, sql)
@@ -67,7 +67,7 @@ func TestAddCursorPredicateMixedDirection(t *testing.T) {
 		{Column: "baz", Value: 3},
 	}, true)
 
-	require.NoError(t, b.addCursorPredicate(cursor, b.orders))
+	require.NoError(t, b.addCursorPredicate(cursor, b.State().Orders))
 
 	sql, bindings := b.ToSelectSQL()
 	assert.Equal(t, `select * from "foobar" where ("foo" > ? or ("foo" = ? and ("bar" < ? or ("bar" = ? and ("baz" > ?))))) order by "foo" asc, "bar" desc, "baz" asc`, sql)
@@ -79,12 +79,12 @@ func TestAddCursorPredicateMixedDirection(t *testing.T) {
 // builder derives the operator from the already-flipped order, never by flipping the comparison.
 func TestAddCursorPredicateReverseSingle(t *testing.T) {
 	b := newTestBuilder().From("foobar", "").OrderBy("created_at", "asc")
-	b.orders = reverseCursorOrders(b.orders) // ensureOrder flips in place before the predicate is built
+	b.State().Orders = reverseCursorOrders(b.State().Orders) // ensureOrder flips in place before the predicate is built
 
 	ts := "2023-01-01 00:00:00"
 	cursor := NewCursor(CursorParameters{{Column: "created_at", Value: ts}}, false)
 
-	require.NoError(t, b.addCursorPredicate(cursor, b.orders))
+	require.NoError(t, b.addCursorPredicate(cursor, b.State().Orders))
 
 	sql, bindings := b.ToSelectSQL()
 	assert.Equal(t, `select * from "foobar" where ("created_at" < ?) order by "created_at" desc`, sql)
@@ -96,12 +96,12 @@ func TestAddCursorPredicateReverseSingle(t *testing.T) {
 // though both started from a mix that the flip swapped individually.
 func TestAddCursorPredicateReverseMultiple(t *testing.T) {
 	b := newTestBuilder().From("foobar", "").OrderBy("created_at", "asc").OrderBy("id", "desc")
-	b.orders = reverseCursorOrders(b.orders) // -> created_at desc, id asc
+	b.State().Orders = reverseCursorOrders(b.State().Orders) // -> created_at desc, id asc
 
 	ts := "2023-01-01 00:00:00"
 	cursor := NewCursor(CursorParameters{{Column: "created_at", Value: ts}, {Column: "id", Value: 1}}, false)
 
-	require.NoError(t, b.addCursorPredicate(cursor, b.orders))
+	require.NoError(t, b.addCursorPredicate(cursor, b.State().Orders))
 
 	sql, bindings := b.ToSelectSQL()
 	assert.Equal(t, `select * from "foobar" where ("created_at" < ? or ("created_at" = ? and ("id" > ?))) order by "created_at" desc, "id" asc`, sql)
@@ -118,7 +118,7 @@ func TestAddCursorPredicateAliasedOrderColumn(t *testing.T) {
 		OrderBy("test", "asc")
 	cursor := NewCursor(CursorParameters{{Column: "test", Value: "bar"}}, true)
 
-	require.NoError(t, b.addCursorPredicate(cursor, b.orders))
+	require.NoError(t, b.addCursorPredicate(cursor, b.State().Orders))
 
 	sql, bindings := b.ToSelectSQL()
 	assert.Equal(t, `select *, (CONCAT(firstname, ' ', lastname)) as test from "foobar" where ((CONCAT(firstname, ' ', lastname)) > ?) order by "test" asc`, sql)
@@ -135,7 +135,7 @@ func TestAddCursorPredicateRawOrderExcluded(t *testing.T) {
 	ts := "2023-01-01 00:00:00"
 	cursor := NewCursor(CursorParameters{{Column: "created_at", Value: ts}}, true)
 
-	require.NoError(t, b.addCursorPredicate(cursor, b.orders))
+	require.NoError(t, b.addCursorPredicate(cursor, b.State().Orders))
 
 	sql, bindings := b.ToSelectSQL()
 	assert.Equal(t, `select * from "foobar" where ("created_at" > ?) order by case when (id = 3) then 0 else 1 end, "created_at" asc`, sql)
@@ -148,7 +148,7 @@ func TestAddCursorPredicateNoOrder(t *testing.T) {
 	b := newTestBuilder().From("foobar", "")
 	cursor := NewCursor(CursorParameters{{Column: "test", Value: "bar"}}, true)
 
-	err := b.addCursorPredicate(cursor, b.orders)
+	err := b.addCursorPredicate(cursor, b.State().Orders)
 
 	assert.ErrorIs(t, err, errors.QueryOrderRequired)
 }
@@ -159,7 +159,7 @@ func TestAddCursorPredicateMissingParameter(t *testing.T) {
 	b := newTestBuilder().From("foobar", "").OrderBy("test", "asc").OrderBy("another", "asc")
 	cursor := NewCursor(CursorParameters{{Column: "test", Value: "bar"}}, true)
 
-	err := b.addCursorPredicate(cursor, b.orders)
+	err := b.addCursorPredicate(cursor, b.State().Orders)
 
 	assert.ErrorIs(t, err, errors.QueryCursorParameterMissing)
 }

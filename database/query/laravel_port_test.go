@@ -106,7 +106,7 @@ func TestWheres(t *testing.T) {
 			// Laravel's whereBitwise has no builder entry point here, though the grammar compiles the
 			// descriptor; the case queues what the entry point would, so the compilation is still covered.
 			builder := b.From("users", "")
-			builder.wheres = append(builder.wheres, Where{
+			builder.State().Wheres = append(builder.State().Wheres, Where{
 				Type:     WhereBitwise,
 				Column:   "flags",
 				Operator: "&",
@@ -1030,9 +1030,9 @@ func TestClone(t *testing.T) {
 // are set here directly, as the whereBitwise case does — so the compilation is what is covered.
 func TestGroupLimitRewrite(t *testing.T) {
 	builder := NewBuilder(NewBaseGrammar("")).From("users", "").Select("id").GroupBy("id")
-	builder.groupLimit = 1
-	builder.groupLimitSet = true
-	builder.groupLimitColumn = "id"
+	builder.State().GroupLimit = 1
+	builder.State().GroupLimitSet = true
+	builder.State().GroupLimitColumn = "id"
 
 	assert.Equal(t, `select * from (select "id", row_number() over (partition by "id") as "laravel_row" from "users" group by "id") as "laravel_table" where "laravel_row" <= 1 order by "laravel_row"`,
 		NewBaseGrammar("").CompileGroupLimit(builder))
@@ -1271,14 +1271,14 @@ func TestBitwiseHavingPerDialect(t *testing.T) {
 
 	t.Run("postgres casts to bool", func(t *testing.T) {
 		builder := NewBuilder(NewPostgresGrammar("")).From("users", "").GroupBy("name")
-		builder.havings = append(builder.havings, having)
+		builder.State().Havings = append(builder.State().Havings, having)
 
 		assert.Equal(t, `select * from "users" group by "name" having ("flags" & ?)::bool`, builder.ToSQL())
 	})
 
 	t.Run("sqlserver compares to zero", func(t *testing.T) {
 		builder := NewBuilder(NewSqlServerGrammar("")).From("users", "").GroupBy("name")
-		builder.havings = append(builder.havings, having)
+		builder.State().Havings = append(builder.State().Havings, having)
 
 		assert.Equal(t, "select * from [users] group by [name] having ([flags] & ?) != 0", builder.ToSQL())
 	})
@@ -1334,7 +1334,7 @@ func TestBitwiseWhereInheritedDialects(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			builder := NewBuilder(test.grammar).From("users", "")
-			builder.wheres = append(builder.wheres, Where{Type: WhereBitwise, Column: "flags", Operator: "&", Value: 4, Boolean: BooleanAnd})
+			builder.State().Wheres = append(builder.State().Wheres, Where{Type: WhereBitwise, Column: "flags", Operator: "&", Value: 4, Boolean: BooleanAnd})
 			builder.AddBinding(CleanBindings([]any{4}), "where")
 
 			assert.Equal(t, test.want, builder.ToSQL())
@@ -1372,7 +1372,7 @@ func TestJsonOverlapsSqliteIsRefused(t *testing.T) {
 // TestHavingExpression ports the raw-expression having.
 func TestHavingExpression(t *testing.T) {
 	builder := newTestBuilder().From("users", "").GroupBy("name")
-	builder.havings = append(builder.havings, Having{
+	builder.State().Havings = append(builder.State().Havings, Having{
 		Type:    HavingExpressionType,
 		Column:  Expression{Value: "count(*) > 1"},
 		Boolean: BooleanAnd,
