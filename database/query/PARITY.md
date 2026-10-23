@@ -301,6 +301,8 @@ These are intentional and must be documented in code, not treated as gaps.
 | Model attribute pipeline (casts, accessors, mutators, appends, hidden/visible, `toArray`/`toJson`) | out of scope | scope decision; the existing model layer stays |
 | `Collection` type | out of scope | scope decision |
 | Laravel-style `Relation` objects | existing descriptor system stays | scope decision |
+| SQL Server JSON path updates have no dedicated compiler | `JSON_MODIFY` assignments, with `JSON_QUERY` for arrays and objects and nested calls for multiple paths | preserve the framework's JSON update API and avoid duplicate assignments to one column |
+| SQL Server insert IDs are read by the PDO processor | DB and ORM inserts use `OUTPUT inserted.<key>` | go-mssqldb does not support `LastInsertId`; returning the key in the insert keeps it on the same connection |
 | `$component` presence via `isset` | explicit nil or presence flag | Go fields always exist |
 | `forPage($page, $perPage = 15)` | `ForPage(page int, perPage ...int)` | Go has no default arguments, so the default is a variadic. A surplus argument is ignored: `ForPage(2, 15, 20)` is `ForPage(2, 15)`. The builder has no error return, and a fluent call is the wrong place to panic on an arity slip |
 | `forPageBeforeId($perPage = 15, ...)` / `forPageAfterId($perPage = 15, ...)` | `ForPageBeforeId(perPage int, lastID any, column string)` | A leading default cannot be variadic in Go, so the caller passes the framework default explicitly; a passed zero is never replaced |

@@ -5,6 +5,7 @@ package tests
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"testing"
@@ -2645,8 +2646,8 @@ func (s *DBTestSuite) TestJsonColumnsUpdate() {
 				},
 			}
 			result, err := query.DB().Table("json_data").Insert(&data)
+			s.Require().NoError(err)
 			s.Equal(int64(1), result.RowsAffected)
-			s.NoError(err)
 
 			tests := []struct {
 				name   string
@@ -2673,8 +2674,12 @@ func (s *DBTestSuite) TestJsonColumnsUpdate() {
 					name:   "update float(pointer)",
 					update: map[string]any{"data->float": convert.Pointer(456.789)},
 					assert: func(before JsonData, after JsonData) {
-						s.NotContains(before.Data, "456.789")
-						s.Contains(after.Data, "456.789")
+						// SQL Server renders JSON floats using exponent notation.
+						var beforeValue, afterValue struct{ Float float64 }
+						s.Require().NoError(json.Unmarshal([]byte(before.Data), &beforeValue))
+						s.Require().NoError(json.Unmarshal([]byte(after.Data), &afterValue))
+						s.NotEqual(456.789, beforeValue.Float)
+						s.Equal(456.789, afterValue.Float)
 					},
 				},
 				{
@@ -2714,7 +2719,7 @@ func (s *DBTestSuite) TestJsonColumnsUpdate() {
 					var before, after JsonData
 					s.NoError(query.DB().Table("json_data").First(&before))
 					res, err := query.DB().Table("json_data").Where("id", before.ID).Update(tt.update)
-					s.NoError(err)
+					s.Require().NoError(err)
 					s.Equal(int64(1), res.RowsAffected)
 					s.NoError(query.DB().Table("json_data").Where("id", before.ID).First(&after))
 					s.NotEqual(before.Data, after.Data)

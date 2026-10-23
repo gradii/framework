@@ -224,10 +224,21 @@ func (g *SqlServerGrammar) CompileUpsert(b *Builder, values []map[string]any, un
 	return sql
 }
 
-// PrepareBindingsForUpdate mirrors SqlServerGrammar::prepareBindingsForUpdate().
+// PrepareBindingsForUpdate keeps Laravel's SQL Server binding order. JSON updates additionally
+// group their bindings with the JSON_MODIFY assignment and encode array and object values.
 func (g *SqlServerGrammar) PrepareBindingsForUpdate(bindings map[string][]any, values UpdateValues) []any {
 	out := make([]any, 0, len(values))
-	for _, value := range values {
+	for _, value := range g.groupJsonColumnsForUpdate(values) {
+		if group, ok := value.Value.(sqlServerJsonUpdate); ok {
+			for _, selector := range group {
+				binding := selector.Value
+				if isArrayValue(binding) {
+					binding = encodeJSON(binding)
+				}
+				out = g.AppendUpdateValueBinding(out, binding)
+			}
+			continue
+		}
 		out = g.AppendUpdateValueBinding(out, value.Value)
 	}
 

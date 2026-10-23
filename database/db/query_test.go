@@ -434,6 +434,22 @@ func (s *QueryTestSuite) TestInsertGetID() {
 	s.Equal(int64(1), id)
 }
 
+func (s *QueryTestSuite) TestInsertGetIDSqlServer() {
+	query := NewQuery(s.ctx, s.mockReadBuilder, s.mockWriteBuilder, querybuilder.NewSqlServerGrammar(""), querybuilder.DialectSqlServer, s.mockLogger, "users", nil)
+	const statement = "insert into [users] ([age], [name]) output inserted.[id] values (@p1, @p2)"
+	const explained = "insert into [users] ([age], [name]) output inserted.[id] values (25, 'John')"
+
+	s.mockWriteBuilder.EXPECT().GetContext(s.ctx, mock.Anything, statement, 25, "John").Run(func(_ context.Context, dest any, _ string, _ ...any) {
+		*(dest.(*int64)) = 17
+	}).Return(nil).Once()
+	s.mockWriteBuilder.EXPECT().Explain(statement, 25, "John").Return(explained).Once()
+	s.mockLogger.EXPECT().Trace(s.ctx, s.now, explained, int64(1), nil).Return().Once()
+
+	id, err := query.InsertGetID(map[string]any{"name": "John", "age": 25})
+	s.Require().NoError(err)
+	s.Equal(int64(17), id)
+}
+
 func (s *QueryTestSuite) TestUpdate() {
 	result := &MockResult{}
 	result.On("RowsAffected").Return(int64(1), nil)

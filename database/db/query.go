@@ -827,6 +827,10 @@ func (r *Query) buildInsertGetID(values []map[string]any) (string, []any, error)
 	if err := r.builder.Error(); err != nil {
 		return "", nil, err
 	}
+	if sqlServer, ok := r.grammar.(*querybuilder.SqlServerGrammar); ok {
+		// go-mssqldb cannot read LastInsertId; return the key from this insert's own connection.
+		sql = sqlServer.CompileInsertGetIdOutput(r.builder, values, "")
+	}
 
 	return querybuilder.ReplacePlaceholders(sql, r.driver), args, nil
 }
@@ -1681,7 +1685,8 @@ func (r *Query) InsertGetID(data any) (int64, error) {
 
 	// Postgres and SQL Server return the generated id from the insert statement itself, and their
 	// drivers do not support LastInsertId, so the row is read back instead.
-	if strings.Contains(strings.ToLower(sql), " returning ") {
+	lowered := strings.ToLower(sql)
+	if strings.Contains(lowered, " returning ") || strings.Contains(lowered, " output inserted.") {
 		var id int64
 		if err := r.writeBuilder.GetContext(r.ctx, &id, sql, args...); err != nil {
 			r.trace(r.writeBuilder, sql, args, now, -1, err)
