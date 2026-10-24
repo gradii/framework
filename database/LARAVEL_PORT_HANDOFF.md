@@ -50,7 +50,7 @@
 
 ## 测试环境提示
 
-- NO_COLOR=1 会破坏已有颜色快照，运行测试时 env -u NO_COLOR。
+- 颜色快照测试在各自 TestMain 中固定 ANSI 模式；可直接运行 go test -timeout 10m ./...，无需取消 NO_COLOR。
 - MariaDB 测试：GORAVEL_TEST_MARIADB=1；使用独立容器缓存键，并检查 ServerVersion。
 - macOS ARM 可以 GOOS=linux GOARCH=amd64 CGO_ENABLED=0 交叉编译 tests 二进制。
 - amd64 运行环境：moby-ci 容器，--user 0 --network host，挂载 Docker socket、仓库与二进制。

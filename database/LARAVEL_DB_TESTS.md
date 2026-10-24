@@ -78,16 +78,16 @@ PostGIS/pgvector 的外部扩展实例未单独启动，此项仅声明实现和
 以下命令保留复现方式。
 
 ```sh
-env -u NO_COLOR go test ./... -timeout 90s
-env -u NO_COLOR GOTOOLCHAIN=go1.26.2 go test ./... -timeout 90s
-env -u NO_COLOR go test -race ./database/db ./database/driver ./database/schema ./database/query/... -timeout 3m
+go test -timeout 10m ./...
+GOTOOLCHAIN=go1.26.2 go test ./... -timeout 90s
+go test -race ./database/db ./database/driver ./database/schema ./database/query/... -timeout 3m
 cd tests
-env -u NO_COLOR go test -v -count=1 -timeout 25m ./...
-env -u NO_COLOR GORAVEL_TEST_MARIADB=1 go test -v -count=1 -timeout 25m ./...
+go test -v -count=1 -timeout 25m ./...
+GORAVEL_TEST_MARIADB=1 go test -v -count=1 -timeout 25m ./...
 ```
 
 SQL Server 完整集成须在 amd64 执行。macOS ARM 可交叉编译 Linux amd64 测试二进制，
 在挂载 Docker socket 的容器中运行；容器需时区数据（可通过 ZONEINFO 指向 Go 的 zoneinfo.zip）。
 持久化容器的 /tmp 测试缓存以复用数据库；本地资源有限时使用 -test.parallel=1，SQL Server 测试实例限制为 2048 MB。
 MariaDB 测试使用独立的容器缓存键，且用 ServerVersion 断言验证实际后端。
-环境的 NO_COLOR 会影响已有终端颜色快照，应在测试命令中移除。
+颜色快照测试在各自 TestMain 中固定 ANSI 模式，外部 NO_COLOR 不再影响这些断言。
