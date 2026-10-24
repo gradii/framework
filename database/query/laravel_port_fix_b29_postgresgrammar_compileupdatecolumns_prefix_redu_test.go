@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -36,7 +37,7 @@ import (
 func TestUpdateMethodWithoutJoinsOnPostgres(t *testing.T) {
 	t.Run("qualified column is reduced", func(t *testing.T) {
 		sql, bindings := NewBuilder(NewPostgresGrammar("")).From("users", "").Where("id", "=", 1).
-			ToUpdateSQL(UpdateValues{
+			ToUpdateSQL(core.UpdateValues{
 				{Column: "users.email", Value: "foo"},
 				{Column: "name", Value: "bar"},
 			})
@@ -48,7 +49,7 @@ func TestUpdateMethodWithoutJoinsOnPostgres(t *testing.T) {
 	t.Run("a select binding is not part of the update", func(t *testing.T) {
 		sql, bindings := NewBuilder(NewPostgresGrammar("")).From("users", "").Where("id", "=", 1).
 			SelectRaw("?", []any{"ignore"}).
-			ToUpdateSQL(UpdateValues{
+			ToUpdateSQL(core.UpdateValues{
 				{Column: "users.email", Value: "foo"},
 				{Column: "name", Value: "bar"},
 			})
@@ -60,7 +61,7 @@ func TestUpdateMethodWithoutJoinsOnPostgres(t *testing.T) {
 	t.Run("a multi-segment qualifier keeps only the column", func(t *testing.T) {
 		sql, bindings := NewBuilder(NewPostgresGrammar("")).From("users.users", "").Where("id", "=", 1).
 			SelectRaw("?", []any{"ignore"}).
-			ToUpdateSQL(UpdateValues{
+			ToUpdateSQL(core.UpdateValues{
 				{Column: "users.users.email", Value: "foo"},
 				{Column: "name", Value: "bar"},
 			})
@@ -77,14 +78,14 @@ func TestUpdateMethodWithoutJoinsOnPostgres(t *testing.T) {
 func TestPostgresUpdateWrappingJson(t *testing.T) {
 	t.Run("qualified json selector is reduced", func(t *testing.T) {
 		sql, _ := NewBuilder(NewPostgresGrammar("")).From("users", "").
-			ToUpdateSQL(UpdateValues{{Column: "users.options->name->first_name", Value: "John"}})
+			ToUpdateSQL(core.UpdateValues{{Column: "users.options->name->first_name", Value: "John"}})
 
 		assert.Equal(t, `update "users" set "options" = jsonb_set("options"::jsonb, '{"name","first_name"}', ?)`, sql)
 	})
 
 	t.Run("unqualified json selector is unaffected", func(t *testing.T) {
 		sql, bindings := NewBuilder(NewPostgresGrammar("")).From("users", "").
-			ToUpdateSQL(UpdateValues{{Column: "options->language", Value: Raw("'null'")}})
+			ToUpdateSQL(core.UpdateValues{{Column: "options->language", Value: Raw("'null'")}})
 
 		assert.Equal(t, `update "users" set "options" = jsonb_set("options"::jsonb, '{"language"}', 'null')`, sql)
 		assert.Empty(t, bindings)

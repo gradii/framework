@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	"github.com/goravel/framework/database/query/core"
 )
 
 var (
@@ -88,7 +90,7 @@ func (g *PostgresGrammar) WhereBasic(b Query, where Where) string {
 // WhereDate mirrors PostgresGrammar::whereDate().
 func (g *PostgresGrammar) WhereDate(b Query, where Where) string {
 	column := g.Wrap(where.Column)
-	if g.IsJsonSelector(AsString(where.Column)) {
+	if g.IsJsonSelector(core.AsString(where.Column)) {
 		column = "(" + column + ")"
 	}
 
@@ -104,7 +106,7 @@ func (g *PostgresGrammar) dateBasedWhere(typ string, where Where) string {
 // with extract(), and a JSON selector is parenthesised before the cast the way the date clause is.
 func (g *PostgresGrammar) WhereTime(b Query, where Where) string {
 	column := g.Wrap(where.Column)
-	if g.IsJsonSelector(AsString(where.Column)) {
+	if g.IsJsonSelector(core.AsString(where.Column)) {
 		column = "(" + column + ")"
 	}
 
@@ -154,7 +156,7 @@ func (g *PostgresGrammar) CompileInsertGetId(b Query, values []map[string]any, s
 // CompileUpsert mirrors PostgresGrammar::compileUpsert(): on conflict do update.
 func (g *PostgresGrammar) CompileUpsert(b Query, values []map[string]any, uniqueBy []string, update []UpsertUpdate) string {
 	sql := g.CompileInsert(b, values)
-	sql += " on conflict (" + g.Columnize(anySlice(uniqueBy)) + ") do update set "
+	sql += " on conflict (" + g.Columnize(core.StringsToAny(uniqueBy)) + ") do update set "
 
 	parts := make([]string, 0, len(update))
 	for _, item := range update {
@@ -259,7 +261,7 @@ func (g *PostgresGrammar) appendUpdateBindings(out []any, value UpdateValue) []a
 // appendUpdateBinding applies the per-value rule: an array value and a non-expression JSON-selector
 // value are json-encoded; anything else is appended as-is, so a sub-select splices in its own bindings.
 func (g *PostgresGrammar) appendUpdateBinding(out []any, column string, value any) []any {
-	if isArrayValue(value) || (g.IsJsonSelector(column) && !IsExpression(value)) {
+	if core.IsArrayValue(value) || (g.IsJsonSelector(column) && !core.IsExpression(value)) {
 		return append(out, encodeJSON(value))
 	}
 
@@ -413,18 +415,18 @@ func encodeJSON(value any) any {
 		return encodeJSON(rv.Elem().Interface())
 	}
 
-	if isArrayValue(value) {
-		return encodeJSONArray(ToAnySlice(value))
+	if core.IsArrayValue(value) {
+		return encodeJSONArray(core.ToAnySlice(value))
 	}
 
-	return AsString(value)
+	return core.AsString(value)
 }
 
 // encodeJSONArray renders a slice as a JSON array.
 func encodeJSONArray(values []any) string {
 	parts := make([]string, len(values))
 	for i, item := range values {
-		parts[i] = AsString(encodeJSON(item))
+		parts[i] = core.AsString(encodeJSON(item))
 	}
 
 	return "[" + strings.Join(parts, ",") + "]"
@@ -433,10 +435,10 @@ func encodeJSONArray(values []any) string {
 // encodeJSONObject renders a map as a JSON object with its keys sorted, the order a Go map can give
 // deterministically.
 func encodeJSONObject(values map[string]any) string {
-	keys := SortedKeys(values)
+	keys := core.SortedKeys(values)
 	parts := make([]string, 0, len(keys))
 	for _, key := range keys {
-		parts = append(parts, jsonString(key)+":"+AsString(encodeJSON(values[key])))
+		parts = append(parts, jsonString(key)+":"+core.AsString(encodeJSON(values[key])))
 	}
 
 	return "{" + strings.Join(parts, ",") + "}"
@@ -533,7 +535,7 @@ func (g *PostgresGrammar) CompileUpdateColumns(b Query, values UpdateValues) str
 			continue
 		}
 
-		parts = append(parts, g.Wrap(lastDotSegment(value.Column))+" = "+g.Parameter(value.Value))
+		parts = append(parts, g.Wrap(core.LastDotSegment(value.Column))+" = "+g.Parameter(value.Value))
 	}
 
 	return strings.Join(parts, ", ")
@@ -554,7 +556,7 @@ func (g *PostgresGrammar) groupJsonColumnsForUpdate(values UpdateValues) UpdateV
 			continue
 		}
 
-		segments := strings.Split(lastDotSegment(value.Column), "->")
+		segments := strings.Split(core.LastDotSegment(value.Column), "->")
 		field := segments[0]
 		path := "'{" + strings.Join(g.WrapJsonPathAttributes(segments[1:], `"`), ",") + "}'"
 
@@ -568,7 +570,7 @@ func (g *PostgresGrammar) groupJsonColumnsForUpdate(values UpdateValues) UpdateV
 
 		index[field] = len(merged)
 		merged = append(merged, UpdateValue{
-			Column: lastDotSegment(value.Column),
+			Column: core.LastDotSegment(value.Column),
 			Value:  postgresJsonUpdate{paths: []string{path}, values: []any{value.Value}},
 		})
 	}

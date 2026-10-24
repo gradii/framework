@@ -1,4 +1,4 @@
-package grammars
+package core
 
 // Expression is a raw SQL fragment. The grammar emits Value verbatim and records no binding for it.
 //

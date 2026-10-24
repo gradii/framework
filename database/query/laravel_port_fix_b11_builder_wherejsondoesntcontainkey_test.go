@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -25,13 +26,13 @@ import (
 func TestWhereJsonDoesntContainKeyMySql(t *testing.T) {
 	runDialectCases(t, []dialectCase{
 		{"key", NewMySqlGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonDoesntContainKey("options->languages", BooleanAnd)
+			return b.Select("*").From("users", "").WhereJsonDoesntContainKey("options->languages", core.BooleanAnd)
 		}, "select * from `users` where not ifnull(json_contains_path(`options`, 'one', '$.\"languages\"'), 0)"},
 		{"or where key", NewMySqlGrammar(""), func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", "=", 1).OrWhereJsonDoesntContainKey("options->languages")
 		}, "select * from `users` where `id` = ? or not ifnull(json_contains_path(`options`, 'one', '$.\"languages\"'), 0)"},
 		{"indexed path", NewMySqlGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonDoesntContainKey("options->languages[0][1]", BooleanAnd)
+			return b.Select("*").From("users", "").WhereJsonDoesntContainKey("options->languages[0][1]", core.BooleanAnd)
 		}, "select * from `users` where not ifnull(json_contains_path(`options`, 'one', '$.\"languages\"[0][1]'), 0)"},
 	})
 
@@ -43,16 +44,16 @@ func TestWhereJsonDoesntContainKeyMySql(t *testing.T) {
 func TestWhereJsonDoesntContainKeyPostgres(t *testing.T) {
 	runDialectCases(t, []dialectCase{
 		{"key", NewPostgresGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonDoesntContainKey("options->languages", BooleanAnd)
+			return b.Select("*").From("users", "").WhereJsonDoesntContainKey("options->languages", core.BooleanAnd)
 		}, `select * from "users" where not coalesce(("options")::jsonb ?? 'languages', false)`},
 		{"or where key", NewPostgresGrammar(""), func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", "=", 1).OrWhereJsonDoesntContainKey("options->languages")
 		}, `select * from "users" where "id" = ? or not coalesce(("options")::jsonb ?? 'languages', false)`},
 		{"indexed path", NewPostgresGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonDoesntContainKey("options->languages[0][1]", BooleanAnd)
+			return b.Select("*").From("users", "").WhereJsonDoesntContainKey("options->languages[0][1]", core.BooleanAnd)
 		}, `select * from "users" where not case when jsonb_typeof(("options"->'languages'->0)::jsonb) = 'array' then jsonb_array_length(("options"->'languages'->0)::jsonb) >= 2 else false end`},
 		{"negative index", NewPostgresGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonDoesntContainKey("options->languages[-1]", BooleanAnd)
+			return b.Select("*").From("users", "").WhereJsonDoesntContainKey("options->languages[-1]", core.BooleanAnd)
 		}, `select * from "users" where not case when jsonb_typeof(("options"->'languages')::jsonb) = 'array' then jsonb_array_length(("options"->'languages')::jsonb) >= 1 else false end`},
 	})
 
@@ -64,7 +65,7 @@ func TestWhereJsonDoesntContainKeyPostgres(t *testing.T) {
 func TestWhereJsonDoesntContainKeySqlite(t *testing.T) {
 	runDialectCases(t, []dialectCase{
 		{"key", NewSqliteGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonDoesntContainKey("options->languages", BooleanAnd)
+			return b.Select("*").From("users", "").WhereJsonDoesntContainKey("options->languages", core.BooleanAnd)
 		}, `select * from "users" where not json_type("options", '$."languages"') is not null`},
 		{"or where key", NewSqliteGrammar(""), func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", "=", 1).OrWhereJsonDoesntContainKey("options->languages")
@@ -82,7 +83,7 @@ func TestWhereJsonDoesntContainKeySqlite(t *testing.T) {
 func TestWhereJsonDoesntContainKeySqlServer(t *testing.T) {
 	runDialectCases(t, []dialectCase{
 		{"key", NewSqlServerGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonDoesntContainKey("options->languages", BooleanAnd)
+			return b.Select("*").From("users", "").WhereJsonDoesntContainKey("options->languages", core.BooleanAnd)
 		}, `select * from [users] where not 'languages' in (select [key] from openjson([options]))`},
 		{"or where key", NewSqlServerGrammar(""), func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", "=", 1).OrWhereJsonDoesntContainKey("options->languages")

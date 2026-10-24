@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/goravel/framework/database/schema"
 )
 
@@ -63,8 +64,8 @@ func (g *BaseGrammar) Prefix() string { return g.prefix }
 
 // Wrap quotes a column or value. Mirrors Grammar::wrap().
 func (g *BaseGrammar) Wrap(value any) string {
-	if IsExpression(value) {
-		return ExpressionValue(value)
+	if core.IsExpression(value) {
+		return core.ExpressionValue(value)
 	}
 
 	if s, ok := value.(string); ok {
@@ -79,8 +80,8 @@ func (g *BaseGrammar) Wrap(value any) string {
 
 // WrapTable quotes a table. Mirrors Grammar::wrapTable().
 func (g *BaseGrammar) WrapTable(table any) string {
-	if IsExpression(table) {
-		return ExpressionValue(table)
+	if core.IsExpression(table) {
+		return core.ExpressionValue(table)
 	}
 
 	if s, ok := table.(string); ok {
@@ -95,8 +96,8 @@ func (g *BaseGrammar) GetValue(expression Expression) string { return expression
 
 // Parameter returns the placeholder for a value. Mirrors Grammar::parameter().
 func (g *BaseGrammar) Parameter(value any) string {
-	if IsExpression(value) {
-		return ExpressionValue(value)
+	if core.IsExpression(value) {
+		return core.ExpressionValue(value)
 	}
 
 	return "?"
@@ -432,7 +433,7 @@ func (g *BaseGrammar) compileHavingBetween(having Having) string {
 		between = "not between"
 	}
 
-	min, max := firstAndLast(having.Values)
+	min, max := core.FirstAndLast(having.Values)
 
 	return g.dialect().Wrap(having.Column) + " " + between + " " + g.dialect().Parameter(min) + " and " + g.dialect().Parameter(max)
 }
@@ -446,7 +447,7 @@ func (g *BaseGrammar) CompileOrders(b Query, orders []Order) string {
 	parts := make([]string, 0, len(orders))
 	for _, order := range orders {
 		if order.SQL != nil || order.Type == OrderRawType {
-			parts = append(parts, GetValueString(order.SQL))
+			parts = append(parts, core.GetValueString(order.SQL))
 			continue
 		}
 		parts = append(parts, g.dialect().Wrap(order.Column)+" "+order.Direction)

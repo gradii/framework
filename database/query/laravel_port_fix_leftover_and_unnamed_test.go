@@ -3,9 +3,9 @@ package query
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
+	"github.com/goravel/framework/database/query/core"
 	"github.com/goravel/framework/errors"
+	"github.com/stretchr/testify/assert"
 )
 
 // This file ports the "leftover and unnamed" corpus rows: rows no blocker entry in the port plan
@@ -25,7 +25,7 @@ func TestLeftJoinLateral(t *testing.T) {
 	runDialectCases(t, []dialectCase{
 		{"mysql left join lateral", NewMySqlGrammar(""), func(b *Builder) *Builder {
 			sub := NewBuilder(NewMySqlGrammar("")).From("contacts", "").
-				WhereColumn("contracts.user_id", "=", "users.id", BooleanAnd)
+				WhereColumn("contracts.user_id", "=", "users.id", core.BooleanAnd)
 
 			return b.From("users", "").LeftJoinLateral(sub, "sub")
 		}, "select * from `users` left join lateral (select * from `contacts` where `contracts`.`user_id` = `users`.`id`) as `sub` on true"},
@@ -43,7 +43,7 @@ func TestLeftJoinLateralSqlServer(t *testing.T) {
 	runDialectCases(t, []dialectCase{
 		{"sqlserver left join lateral becomes outer apply", NewSqlServerGrammar(""), func(b *Builder) *Builder {
 			return b.From("users", "").LeftJoinLateral(func(q *Builder) *Builder {
-				return q.From("contacts", "").WhereColumn("contracts.user_id", "=", "users.id", BooleanAnd)
+				return q.From("contacts", "").WhereColumn("contracts.user_id", "=", "users.id", core.BooleanAnd)
 			}, "sub")
 		}, "select * from [users] outer apply (select * from [contacts] where [contracts].[user_id] = [users].[id]) as [sub]"},
 	})
@@ -56,16 +56,16 @@ func TestLeftJoinLateralSqlServer(t *testing.T) {
 func TestRawHavings(t *testing.T) {
 	runLaravelCases(t, []laravelCase{
 		{"raw having only", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").HavingRaw("user_foo < user_bar", nil, BooleanAnd)
+			return b.Select("*").From("users", "").HavingRaw("user_foo < user_bar", nil, core.BooleanAnd)
 		}, `select * from "users" having user_foo < user_bar`},
 		{"having then raw or having", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Having("baz", "=", 1).
-				HavingRaw("user_foo < user_bar", nil, BooleanOr)
+				HavingRaw("user_foo < user_bar", nil, core.BooleanOr)
 		}, `select * from "users" having "baz" = ? or user_foo < user_bar`},
 		{"having between then raw or having", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").
-				HavingBetween("last_login_date", []any{"2018-11-16", "2018-12-16"}, BooleanAnd, false).
-				HavingRaw("user_foo < user_bar", nil, BooleanOr)
+				HavingBetween("last_login_date", []any{"2018-11-16", "2018-12-16"}, core.BooleanAnd, false).
+				HavingRaw("user_foo < user_bar", nil, core.BooleanOr)
 		}, `select * from "users" having "last_login_date" between ? and ? or user_foo < user_bar`},
 	})
 }
@@ -101,16 +101,16 @@ func TestWhereExists(t *testing.T) {
 
 	runLaravelCases(t, []laravelCase{
 		{"where exists", func(b *Builder) *Builder {
-			return b.Select("*").From("orders", "").WhereExists(sub, BooleanAnd, false)
+			return b.Select("*").From("orders", "").WhereExists(sub, core.BooleanAnd, false)
 		}, `select * from "orders" where exists (select * from "products" where "products"."id" = "orders"."id")`},
 		{"where not exists", func(b *Builder) *Builder {
-			return b.Select("*").From("orders", "").WhereExists(sub, BooleanAnd, true)
+			return b.Select("*").From("orders", "").WhereExists(sub, core.BooleanAnd, true)
 		}, `select * from "orders" where not exists (select * from "products" where "products"."id" = "orders"."id")`},
 		{"or where exists", func(b *Builder) *Builder {
-			return b.Select("*").From("orders", "").Where("id", "=", 1).WhereExists(sub, BooleanOr, false)
+			return b.Select("*").From("orders", "").Where("id", "=", 1).WhereExists(sub, core.BooleanOr, false)
 		}, `select * from "orders" where "id" = ? or exists (select * from "products" where "products"."id" = "orders"."id")`},
 		{"or where not exists", func(b *Builder) *Builder {
-			return b.Select("*").From("orders", "").Where("id", "=", 1).WhereExists(sub, BooleanOr, true)
+			return b.Select("*").From("orders", "").Where("id", "=", 1).WhereExists(sub, core.BooleanOr, true)
 		}, `select * from "orders" where "id" = ? or not exists (select * from "products" where "products"."id" = "orders"."id")`},
 	})
 }
@@ -119,17 +119,17 @@ func TestWhereExists(t *testing.T) {
 // column, a qualified column with a JSON path, and the or form with a raw value.
 func TestWhereJsonOverlapsMySql(t *testing.T) {
 	builder := NewBuilder(NewMySqlGrammar("")).Select("*").From("users", "").
-		WhereJsonOverlaps("options", []any{"en", "fr"}, BooleanAnd, false)
+		WhereJsonOverlaps("options", []any{"en", "fr"}, core.BooleanAnd, false)
 	assert.Equal(t, "select * from `users` where json_overlaps(`options`, ?)", builder.ToSQL())
 	assert.Equal(t, []any{`["en","fr"]`}, builder.GetBindings())
 
 	builder = NewBuilder(NewMySqlGrammar("")).Select("*").From("users", "").
-		WhereJsonOverlaps("users.options->languages", []any{"en", "fr"}, BooleanAnd, false)
+		WhereJsonOverlaps("users.options->languages", []any{"en", "fr"}, core.BooleanAnd, false)
 	assert.Equal(t, "select * from `users` where json_overlaps(`users`.`options`, ?, '$.\"languages\"')", builder.ToSQL())
 	assert.Equal(t, []any{`["en","fr"]`}, builder.GetBindings())
 
 	builder = NewBuilder(NewMySqlGrammar("")).Select("*").From("users", "").Where("id", "=", 1).
-		WhereJsonOverlaps("options->languages", Raw(`'["en", "fr"]'`), BooleanOr, false)
+		WhereJsonOverlaps("options->languages", Raw(`'["en", "fr"]'`), core.BooleanOr, false)
 	assert.Equal(t, "select * from `users` where `id` = ? or json_overlaps(`options`, '[\"en\", \"fr\"]', '$.\"languages\"')", builder.ToSQL())
 	assert.Equal(t, []any{1}, builder.GetBindings())
 }
@@ -138,12 +138,12 @@ func TestWhereJsonOverlapsMySql(t *testing.T) {
 // the negated form, whose "not " prefix the base whereJsonOverlaps compiler adds.
 func TestWhereJsonDoesntOverlapMySql(t *testing.T) {
 	builder := NewBuilder(NewMySqlGrammar("")).Select("*").From("users", "").
-		WhereJsonOverlaps("options->languages", []any{"en", "fr"}, BooleanAnd, true)
+		WhereJsonOverlaps("options->languages", []any{"en", "fr"}, core.BooleanAnd, true)
 	assert.Equal(t, "select * from `users` where not json_overlaps(`options`, ?, '$.\"languages\"')", builder.ToSQL())
 	assert.Equal(t, []any{`["en","fr"]`}, builder.GetBindings())
 
 	builder = NewBuilder(NewMySqlGrammar("")).Select("*").From("users", "").Where("id", "=", 1).
-		WhereJsonOverlaps("options->languages", Raw(`'["en", "fr"]'`), BooleanOr, true)
+		WhereJsonOverlaps("options->languages", Raw(`'["en", "fr"]'`), core.BooleanOr, true)
 	assert.Equal(t, "select * from `users` where `id` = ? or not json_overlaps(`options`, '[\"en\", \"fr\"]', '$.\"languages\"')", builder.ToSQL())
 	assert.Equal(t, []any{1}, builder.GetBindings())
 }
@@ -186,7 +186,7 @@ func TestSqlServerLimitsAndOffsets(t *testing.T) {
 		OrderBy(func(q *Builder) *Builder {
 			return q.Select("created_at").From("logins", "").
 				Where("users.name", "nameBinding").
-				WhereColumn("user_id", "=", "users.id", BooleanAnd).
+				WhereColumn("user_id", "=", "users.id", core.BooleanAnd).
 				Limit(1)
 		}, "asc").Offset(10).Limit(10)
 
@@ -199,7 +199,7 @@ func TestSqlServerLimitsAndOffsets(t *testing.T) {
 // directly here: compileUpdateFrom for the SQL and prepareBindingsForUpdateFrom for the bindings, whose
 // order is the set values first, then the base where, then the join constraints.
 func TestUpdateFromMethodWithJoinsOnPostgres(t *testing.T) {
-	values := UpdateValues{{Column: "email", Value: "foo"}, {Column: "name", Value: "bar"}}
+	values := core.UpdateValues{{Column: "email", Value: "foo"}, {Column: "name", Value: "bar"}}
 	grammar := NewPostgresGrammar("")
 
 	t.Run("a plain join condition", func(t *testing.T) {
@@ -215,7 +215,7 @@ func TestUpdateFromMethodWithJoinsOnPostgres(t *testing.T) {
 	t.Run("a join callback condition", func(t *testing.T) {
 		builder := NewBuilder(grammar).From("users", "").
 			Join("orders", func(join *Builder) *Builder {
-				return join.WhereColumn("users.id", "=", "orders.user_id", BooleanAnd).
+				return join.WhereColumn("users.id", "=", "orders.user_id", core.BooleanAnd).
 					Where("users.id", "=", 1)
 			}, nil, "", "inner", false)
 
@@ -227,7 +227,7 @@ func TestUpdateFromMethodWithJoinsOnPostgres(t *testing.T) {
 	t.Run("a base where before the join conditions", func(t *testing.T) {
 		builder := NewBuilder(grammar).From("users", "").
 			Join("orders", func(join *Builder) *Builder {
-				return join.WhereColumn("users.id", "=", "orders.user_id", BooleanAnd).
+				return join.WhereColumn("users.id", "=", "orders.user_id", core.BooleanAnd).
 					Where("users.id", "=", 1)
 			}, nil, "", "inner", false).
 			Where("name", "baz")

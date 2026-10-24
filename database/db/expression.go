@@ -7,7 +7,7 @@ import (
 
 	dbdriver "github.com/goravel/framework/database/driver"
 	querybuilder "github.com/goravel/framework/database/query"
-	"github.com/goravel/framework/database/query/grammars"
+	"github.com/goravel/framework/database/query/core"
 )
 
 // Expr is a raw SQL fragment. It is an alias for the query builder's Expression, so the two names
@@ -239,4 +239,4 @@ func interpolateNumbered(expr string, args []any, prefix string) string {
 }
 
 // renderLiteral shares the SQL preview value formatter with query grammars.
-func renderLiteral(value any) string { return grammars.RenderLiteral(value) }
+func renderLiteral(value any) string { return core.RenderLiteral(value) }

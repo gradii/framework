@@ -1,4 +1,4 @@
-package grammars
+package core
 
 import (
 	"database/sql/driver"

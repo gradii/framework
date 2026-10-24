@@ -3,9 +3,9 @@ package query
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
+	"github.com/goravel/framework/database/query/core"
 	"github.com/goravel/framework/errors"
+	"github.com/stretchr/testify/assert"
 )
 
 // This file ports the selects-gap group of Laravel's tests/Database/DatabaseQueryBuilderTest.php
@@ -131,9 +131,9 @@ func TestGroupBys(t *testing.T) {
 	assert.Equal(t, []any{"foo"}, raw.GetBindings())
 
 	ordering := newTestBuilder().
-		HavingRaw("?", []any{"havingRawBinding"}, BooleanAnd).
+		HavingRaw("?", []any{"havingRawBinding"}, core.BooleanAnd).
 		GroupByRaw("?", []any{"groupByRawBinding"}).
-		WhereRaw("?", []any{"whereRawBinding"}, BooleanAnd)
+		WhereRaw("?", []any{"whereRawBinding"}, core.BooleanAnd)
 	assert.Equal(t, []any{"whereRawBinding", "groupByRawBinding", "havingRawBinding"}, ordering.GetBindings())
 }
 
@@ -238,18 +238,18 @@ func TestOrderByInvalidDirectionParam(t *testing.T) {
 // explicitly (Laravel defaults it to asc), so the default-direction case passes "asc".
 func TestOrderBySubQueries(t *testing.T) {
 	sub := func(q *Builder) *Builder {
-		return q.Select("created_at").From("logins", "").WhereColumn("user_id", "=", "users.id", BooleanAnd).Limit(1)
+		return q.Select("created_at").From("logins", "").WhereColumn("user_id", "=", "users.id", core.BooleanAnd).Limit(1)
 	}
 
 	runLaravelCases(t, []laravelCase{
 		{"order by closure defaults to asc", func(b *Builder) *Builder {
 			return b.From("users", "").Select("*").OrderBy(func(q *Builder) *Builder {
-				return q.Select("created_at").From("logins", "").WhereColumn("user_id", "=", "users.id", BooleanAnd).Limit(1)
+				return q.Select("created_at").From("logins", "").WhereColumn("user_id", "=", "users.id", core.BooleanAnd).Limit(1)
 			}, "asc")
 		}, `select * from "users" order by (select "created_at" from "logins" where "user_id" = "users"."id" limit 1) asc`},
 		{"order by closure desc", func(b *Builder) *Builder {
 			return b.From("users", "").Select("*").OrderBy(func(q *Builder) *Builder {
-				return q.Select("created_at").From("logins", "").WhereColumn("user_id", "=", "users.id", BooleanAnd).Limit(1)
+				return q.Select("created_at").From("logins", "").WhereColumn("user_id", "=", "users.id", core.BooleanAnd).Limit(1)
 			}, "desc")
 		}, `select * from "users" order by (select "created_at" from "logins" where "user_id" = "users"."id" limit 1) desc`},
 		{"order by desc closure", func(b *Builder) *Builder {

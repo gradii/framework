@@ -2,6 +2,8 @@ package grammars
 
 import (
 	"strings"
+
+	"github.com/goravel/framework/database/query/core"
 )
 
 // SqliteGrammar mirrors Illuminate\Database\Query\Grammars\SQLiteGrammar. Only the methods whose SQL
@@ -141,7 +143,7 @@ func (g *SqliteGrammar) CompileUpdateColumns(b Query, values UpdateValues) strin
 
 	parts := make([]string, 0, len(merged))
 	for _, value := range merged {
-		column := lastDotSegment(value.Column)
+		column := core.LastDotSegment(value.Column)
 
 		compiled := g.Parameter(value.Value)
 		if isGroup[value.Column] {
@@ -178,7 +180,7 @@ func (g *SqliteGrammar) CompileDelete(b Query) string {
 // CompileUpsert mirrors SQLiteGrammar::compileUpsert(): on conflict do update with excluded.
 func (g *SqliteGrammar) CompileUpsert(b Query, values []map[string]any, uniqueBy []string, update []UpsertUpdate) string {
 	sql := g.CompileInsert(b, values)
-	sql += " on conflict (" + g.Columnize(anySlice(uniqueBy)) + ") do update set "
+	sql += " on conflict (" + g.Columnize(core.StringsToAny(uniqueBy)) + ") do update set "
 
 	parts := make([]string, 0, len(update))
 	for _, item := range update {
@@ -198,7 +200,7 @@ func (g *SqliteGrammar) CompileUpsert(b Query, values []map[string]any, uniqueBy
 // reference on ".", so the same split is done here: a schema-qualified table keeps its schema on the
 // sqlite_sequence delete, and only the bare table name is prefixed in the binding.
 func (g *SqliteGrammar) CompileTruncate(b Query) []Statement {
-	reference := AsString(b.State().From)
+	reference := core.AsString(b.State().From)
 	schema := ""
 	table := reference
 	if index := strings.LastIndex(reference, "."); index >= 0 {
@@ -257,11 +259,11 @@ func (g *SqliteGrammar) CompileJsonContains(column string, value string) string 
 // it makes the clause the exact negation of its positive form. Negating each predicate instead would
 // read "contains none" and quietly diverge from the other two dialects for the same call.
 func (g *SqliteGrammar) WhereJsonContains(b Query, where Where) string {
-	if IsExpression(where.Value) || !isArrayValue(where.Value) {
+	if core.IsExpression(where.Value) || !core.IsArrayValue(where.Value) {
 		return g.BaseGrammar.WhereJsonContains(b, where)
 	}
 
-	values := ToAnySlice(where.Value)
+	values := core.ToAnySlice(where.Value)
 	if len(values) == 0 {
 		// An empty list cannot be ANDed into a predicate, and the base grammar's single
 		// "json_each.value is ?" placeholder would be left without a binding: the empty slice
@@ -278,7 +280,7 @@ func (g *SqliteGrammar) WhereJsonContains(b Query, where Where) string {
 
 	parts := make([]string, 0, len(values))
 	for _, value := range values {
-		compiled := g.CompileJsonContains(AsString(where.Column), g.Parameter(value))
+		compiled := g.CompileJsonContains(core.AsString(where.Column), g.Parameter(value))
 		if compiled == "" {
 			b.SetError(errJsonContainsNotSupported)
 
@@ -319,7 +321,7 @@ func (g *SqliteGrammar) PrepareBindingsForUpdate(bindings map[string][]any, valu
 
 	out := make([]any, 0, len(merged)+len(bindings))
 	for _, value := range merged {
-		if isArrayValue(value.Value) {
+		if core.IsArrayValue(value.Value) {
 			out = append(out, encodeJSON(value.Value))
 			continue
 		}
@@ -430,7 +432,7 @@ func (g *SqliteGrammar) CompileGroupLimit(b Query) string {
 
 // aliasOf returns the alias of a "table as alias" source, or the table itself.
 func aliasOf(from any) string {
-	value := AsString(from)
+	value := core.AsString(from)
 	if index := strings.LastIndex(strings.ToLower(value), " as "); index >= 0 {
 		return strings.TrimSpace(value[index+4:])
 	}

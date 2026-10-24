@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/goravel/framework/errors"
 )
 
@@ -37,7 +38,7 @@ var (
 // numeric amounts) fell through to the non-associative guard. Any map with string keys is accepted, in
 // ascending key order (Go maps carry no insertion order); a map with integer keys reports false, since
 // PHP would treat it as a non-associative array.
-func mapEntries(value any) (UpdateValues, bool) {
+func mapEntries(value any) (core.UpdateValues, bool) {
 	if value == nil {
 		return nil, false
 	}
@@ -50,9 +51,9 @@ func mapEntries(value any) (UpdateValues, bool) {
 	keys := rv.MapKeys()
 	sort.Slice(keys, func(i, j int) bool { return keys[i].String() < keys[j].String() })
 
-	entries := make(UpdateValues, 0, len(keys))
+	entries := make(core.UpdateValues, 0, len(keys))
 	for _, key := range keys {
-		entries = append(entries, UpdateValue{Column: key.String(), Value: rv.MapIndex(key).Interface()})
+		entries = append(entries, core.UpdateValue{Column: key.String(), Value: rv.MapIndex(key).Interface()})
 	}
 
 	return entries, true
@@ -105,7 +106,7 @@ func flatten(values []any, depth int) []any {
 			continue
 		}
 
-		inner := toAnySlice(value)
+		inner := core.ToAnySlice(value)
 		if depth == 1 {
 			out = append(out, inner...)
 		} else {
@@ -215,19 +216,19 @@ func phpIntCast(s string) int {
 // UpdateValues (or []UpdateValue) is used as given; a map[string]any is ordered by column name, which
 // keeps the behaviour callers had before the ordered form existed. Laravel's Builder::update() takes an
 // array and keeps its insertion order, which is what an UpdateValues carries.
-func updateValuesFrom(values any) UpdateValues {
+func updateValuesFrom(values any) core.UpdateValues {
 	switch v := values.(type) {
 	case nil:
 		return nil
-	case UpdateValues:
+	case core.UpdateValues:
 		return v
-	case []UpdateValue:
-		return UpdateValues(v)
+	case []core.UpdateValue:
+		return core.UpdateValues(v)
 	case map[string]any:
-		keys := sortedKeys(v)
-		ordered := make(UpdateValues, 0, len(keys))
+		keys := core.SortedKeys(v)
+		ordered := make(core.UpdateValues, 0, len(keys))
 		for _, key := range keys {
-			ordered = append(ordered, UpdateValue{Column: key, Value: v[key]})
+			ordered = append(ordered, core.UpdateValue{Column: key, Value: v[key]})
 		}
 		return ordered
 	default:
@@ -301,7 +302,7 @@ func amountString(amount any) string {
 
 // mergeUpdateValues mirrors array_merge() for string keys: an extra assignment to a column already
 // present keeps that column's position and replaces its value, and a new column is appended.
-func mergeUpdateValues(base UpdateValues, extra []UpdateValue) UpdateValues {
+func mergeUpdateValues(base core.UpdateValues, extra []core.UpdateValue) core.UpdateValues {
 	for _, item := range extra {
 		replaced := false
 		for i := range base {
@@ -405,7 +406,7 @@ func originalCursorColumn(columns []any, parameter string, grammar Grammar) stri
 	}
 
 	for _, column := range columns {
-		value := getValueString(column)
+		value := core.GetValueString(column)
 
 		position := strings.LastIndex(strings.ToLower(value), " as ")
 		if position < 0 {

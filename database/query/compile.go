@@ -1,6 +1,10 @@
 package query
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/goravel/framework/database/query/core"
+)
 
 // ToSelectSQL compiles a select statement and its bindings.
 func (b *Builder) ToSelectSQL() (string, []any) {
@@ -50,7 +54,7 @@ func insertGetIdRecords(values any) ([]map[string]any, []string) {
 	switch v := values.(type) {
 	case nil:
 		return nil, nil
-	case InsertValues:
+	case core.InsertValues:
 		if len(v) == 0 {
 			return nil, nil
 		}
@@ -82,7 +86,7 @@ func (b *Builder) ToInsertOrIgnoreSQL(values []map[string]any) (string, []any) {
 }
 
 // ToUpsertSQL compiles an upsert statement and its bindings.
-func (b *Builder) ToUpsertSQL(values []map[string]any, uniqueBy []string, update []UpsertUpdate) (string, []any) {
+func (b *Builder) ToUpsertSQL(values []map[string]any, uniqueBy []string, update []core.UpsertUpdate) (string, []any) {
 	if b.grammar == nil {
 		return "", nil
 	}
@@ -121,9 +125,9 @@ func (b *Builder) ToUpdateSQL(values any) (string, []any) {
 // Builder::update() performs before compileUpdate()/prepareBindingsForUpdate(): a value that is a
 // Builder becomes Expression("(subSql)") carrying the sub-select's bindings, and every other value is
 // carried unchanged. Only a *Builder is resolved, matching Laravel's `instanceof Builder` guard.
-func (b *Builder) resolveUpdateValues(ordered UpdateValues) (UpdateValues, UpdateValues) {
-	compiled := make(UpdateValues, len(ordered))
-	contributions := make(UpdateValues, len(ordered))
+func (b *Builder) resolveUpdateValues(ordered core.UpdateValues) (core.UpdateValues, core.UpdateValues) {
+	compiled := make(core.UpdateValues, len(ordered))
+	contributions := make(core.UpdateValues, len(ordered))
 
 	for i, value := range ordered {
 		compiled[i] = value
@@ -131,8 +135,8 @@ func (b *Builder) resolveUpdateValues(ordered UpdateValues) (UpdateValues, Updat
 
 		if query, ok := value.Value.(*Builder); ok {
 			sql, bindings := b.parseSub(query)
-			compiled[i] = UpdateValue{Column: value.Column, Value: Expression{Value: "(" + sql + ")"}}
-			contributions[i] = UpdateValue{Column: value.Column, Value: subQueryBindings{Values: bindings}}
+			compiled[i] = core.UpdateValue{Column: value.Column, Value: Expression{Value: "(" + sql + ")"}}
+			contributions[i] = core.UpdateValue{Column: value.Column, Value: core.SubQueryBindings{Values: bindings}}
 		}
 	}
 
@@ -179,7 +183,7 @@ func (b *Builder) ToExistsSQL() (string, []any) {
 //
 // setAggregate() also drops the orders and their bindings when the query has no groups, which is
 // why an aggregate over an ordered query compiles without an order by clause.
-func (b *Builder) ToAggregateSQL(aggregate Aggregate) (string, []any) {
+func (b *Builder) ToAggregateSQL(aggregate core.Aggregate) (string, []any) {
 	if b.grammar == nil {
 		return "", nil
 	}
@@ -233,7 +237,7 @@ func (b *Builder) GetCountForPagination(columns ...any) (string, []any) {
 		clone := b.CloneWithout("orders", "limit", "offset").CloneWithoutBindings("order")
 
 		if clone.State().Columns == nil && len(b.State().Joins) > 0 {
-			clone.Select(asString(clone.State().From) + ".*")
+			clone.Select(core.AsString(clone.State().From) + ".*")
 		}
 
 		query := b.NewQuery()
@@ -281,7 +285,7 @@ func (b *Builder) withoutSelectAliases(columns []any) []any {
 }
 
 // ToTruncateSQL compiles the truncate statements. SQLite needs two.
-func (b *Builder) ToTruncateSQL() []Statement {
+func (b *Builder) ToTruncateSQL() []core.Statement {
 	if b.grammar == nil {
 		return nil
 	}
@@ -300,7 +304,7 @@ func insertBindings(values []map[string]any, columns []string) []any {
 	}
 
 	if columns == nil {
-		columns = sortedKeys(values[0])
+		columns = core.SortedKeys(values[0])
 	}
 
 	out := make([]any, 0, len(values)*len(columns))

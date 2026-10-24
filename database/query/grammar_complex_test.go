@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -14,10 +15,10 @@ func complexQuery(g Grammar) *Builder {
 		Select("users.id", "users.name").
 		LeftJoin("posts", "posts.user_id", "=", "users.id").
 		Where("users.active", true).
-		WhereIn("users.role", []any{"admin", "editor"}, BooleanAnd, false).
-		WhereNull("users.deleted_at", BooleanAnd, false).
+		WhereIn("users.role", []any{"admin", "editor"}, core.BooleanAnd, false).
+		WhereNull("users.deleted_at", core.BooleanAnd, false).
 		GroupBy("users.id", "users.name").
-		HavingRaw("count(*) > ?", []any{1}, BooleanAnd).
+		HavingRaw("count(*) > ?", []any{1}, core.BooleanAnd).
 		OrderBy("users.created_at", "desc").
 		Limit(10).
 		Offset(5)
@@ -48,7 +49,7 @@ func TestComplexQuery(t *testing.T) {
 			LeftJoin("posts", "posts.user_id", "=", "users.id").
 			Where("users.active", true).
 			GroupBy("users.id").
-			HavingRaw("count(*) > ?", []any{1}, BooleanAnd).
+			HavingRaw("count(*) > ?", []any{1}, core.BooleanAnd).
 			OrderBy("users.created_at", "desc").
 			Limit(10)
 
@@ -78,7 +79,7 @@ func TestUnionsAndAggregate(t *testing.T) {
 		b.UnionAll(func(q *Builder) *Builder {
 			return q.From("archived_users", "").Select("name")
 		})
-		b.State().Aggregate = &Aggregate{Function: "count", Columns: []any{"*"}}
+		b.State().Aggregate = &core.Aggregate{Function: "count", Columns: []any{"*"}}
 
 		sql, _ := b.ToSelectSQL()
 		assert.Contains(t, sql, "select count(*) as aggregate from (")

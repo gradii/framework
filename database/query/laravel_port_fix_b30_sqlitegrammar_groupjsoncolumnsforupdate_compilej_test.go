@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -34,7 +35,7 @@ var b30Date = time.Date(2019, 8, 6, 0, 0, 0, 0, time.UTC)
 // L4864-4881): the three options-> selectors fold into one json_patch on "options", appended after the
 // non-selector assignments (group_id, created_at), and the Raw renders inline with no binding.
 func TestSQLiteUpdateWrappingNestedJsonArray(t *testing.T) {
-	values := UpdateValues{
+	values := core.UpdateValues{
 		{Column: "options->name", Value: "Taylor"},
 		{Column: "group_id", Value: Raw("45")},
 		{Column: "options->security", Value: map[string]any{"2fa": false, "presets": []any{"laravel", "vue"}}},
@@ -62,7 +63,7 @@ func TestSQLiteUpdateWrappingNestedJsonArray(t *testing.T) {
 // present '$."[1]"."2fa"') is the separate b31 item. It is deliberately not asserted here so the pre-b31
 // rendering is not pinned; only b30's SET list and the corpus bindings are.
 func TestSQLiteUpdateWrappingJsonPathArrayIndex(t *testing.T) {
-	values := UpdateValues{
+	values := core.UpdateValues{
 		{Column: "options->[1]->2fa", Value: false},
 		{Column: "meta->tags[0][2]", Value: "large"},
 	}

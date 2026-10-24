@@ -3,9 +3,9 @@ package query
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
+	"github.com/goravel/framework/database/query/core"
 	"github.com/goravel/framework/support/carbon"
+	"github.com/stretchr/testify/assert"
 )
 
 // This file ports the "where today" cases of Laravel's tests/Database/DatabaseQueryBuilderTest.php:
@@ -40,7 +40,7 @@ func TestWhereTodayMySQL(t *testing.T) {
 
 	runDialectCases(t, []dialectCase{
 		{"whereToday", NewMySqlGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("posts", "").WhereToday("published_at", BooleanAnd)
+			return b.Select("*").From("posts", "").WhereToday("published_at", core.BooleanAnd)
 		}, "select * from `posts` where date(`published_at`) = ?"},
 		{"where id = 1 orWhereToday", NewMySqlGrammar(""), func(b *Builder) *Builder {
 			return b.Select("*").From("posts", "").Where("id", "=", 1).OrWhereToday("published_at")
@@ -48,7 +48,7 @@ func TestWhereTodayMySQL(t *testing.T) {
 	})
 
 	assert.Equal(t, []any{"2022-04-20"}, NewBuilder(NewMySqlGrammar("")).Select("*").From("posts", "").
-		WhereToday("published_at", BooleanAnd).GetBindings())
+		WhereToday("published_at", core.BooleanAnd).GetBindings())
 	assert.Equal(t, []any{1, "2022-04-20"}, NewBuilder(NewMySqlGrammar("")).Select("*").From("posts", "").
 		Where("id", "=", 1).OrWhereToday("published_at").GetBindings())
 }
@@ -60,7 +60,7 @@ func TestPassingArrayToWhereTodayMySQL(t *testing.T) {
 
 	runDialectCases(t, []dialectCase{
 		{"whereToday array", NewMySqlGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("posts", "").WhereToday([]any{"published_at", "held_at"}, BooleanAnd)
+			return b.Select("*").From("posts", "").WhereToday([]any{"published_at", "held_at"}, core.BooleanAnd)
 		}, "select * from `posts` where date(`published_at`) = ? and date(`held_at`) = ?"},
 		{"orWhereToday array", NewMySqlGrammar(""), func(b *Builder) *Builder {
 			return b.Select("*").From("posts", "").Where("id", "=", 1).OrWhereToday([]any{"published_at", "held_at"})
@@ -68,7 +68,7 @@ func TestPassingArrayToWhereTodayMySQL(t *testing.T) {
 	})
 
 	assert.Equal(t, []any{"2022-04-20", "2022-04-20"}, NewBuilder(NewMySqlGrammar("")).Select("*").From("posts", "").
-		WhereToday([]any{"published_at", "held_at"}, BooleanAnd).GetBindings())
+		WhereToday([]any{"published_at", "held_at"}, core.BooleanAnd).GetBindings())
 	assert.Equal(t, []any{1, "2022-04-20", "2022-04-20"}, NewBuilder(NewMySqlGrammar("")).Select("*").From("posts", "").
 		Where("id", "=", 1).OrWhereToday([]any{"published_at", "held_at"}).GetBindings())
 }
@@ -80,7 +80,7 @@ func TestWhereTodaySqlServer(t *testing.T) {
 
 	runDialectCases(t, []dialectCase{
 		{"whereToday", NewSqlServerGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("posts", "").WhereToday("published_at", BooleanAnd)
+			return b.Select("*").From("posts", "").WhereToday("published_at", core.BooleanAnd)
 		}, "select * from [posts] where cast([published_at] as date) = ?"},
 		{"where id = 1 orWhereToday", NewSqlServerGrammar(""), func(b *Builder) *Builder {
 			return b.Select("*").From("posts", "").Where("id", "=", 1).OrWhereToday("published_at")
@@ -88,7 +88,7 @@ func TestWhereTodaySqlServer(t *testing.T) {
 	})
 
 	assert.Equal(t, []any{"2022-04-20"}, NewBuilder(NewSqlServerGrammar("")).Select("*").From("posts", "").
-		WhereToday("published_at", BooleanAnd).GetBindings())
+		WhereToday("published_at", core.BooleanAnd).GetBindings())
 	assert.Equal(t, []any{1, "2022-04-20"}, NewBuilder(NewSqlServerGrammar("")).Select("*").From("posts", "").
 		Where("id", "=", 1).OrWhereToday("published_at").GetBindings())
 }
@@ -99,7 +99,7 @@ func TestPassingArrayToWhereTodaySqlServer(t *testing.T) {
 
 	runDialectCases(t, []dialectCase{
 		{"whereToday array", NewSqlServerGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("posts", "").WhereToday([]any{"published_at", "held_at"}, BooleanAnd)
+			return b.Select("*").From("posts", "").WhereToday([]any{"published_at", "held_at"}, core.BooleanAnd)
 		}, "select * from [posts] where cast([published_at] as date) = ? and cast([held_at] as date) = ?"},
 		{"orWhereToday array", NewSqlServerGrammar(""), func(b *Builder) *Builder {
 			return b.Select("*").From("posts", "").Where("id", "=", 1).OrWhereToday([]any{"published_at", "held_at"})
@@ -107,7 +107,7 @@ func TestPassingArrayToWhereTodaySqlServer(t *testing.T) {
 	})
 
 	assert.Equal(t, []any{"2022-04-20", "2022-04-20"}, NewBuilder(NewSqlServerGrammar("")).Select("*").From("posts", "").
-		WhereToday([]any{"published_at", "held_at"}, BooleanAnd).GetBindings())
+		WhereToday([]any{"published_at", "held_at"}, core.BooleanAnd).GetBindings())
 	assert.Equal(t, []any{1, "2022-04-20", "2022-04-20"}, NewBuilder(NewSqlServerGrammar("")).Select("*").From("posts", "").
 		Where("id", "=", 1).OrWhereToday([]any{"published_at", "held_at"}).GetBindings())
 }
@@ -120,16 +120,16 @@ func TestWhereTodayBaseGrammar(t *testing.T) {
 
 	runLaravelCases(t, []laravelCase{
 		{"whereToday", func(b *Builder) *Builder {
-			return b.Select("*").From("posts", "").WhereToday("published_at", BooleanAnd)
+			return b.Select("*").From("posts", "").WhereToday("published_at", core.BooleanAnd)
 		}, `select * from "posts" where date("published_at") = ?`},
 		{"orWhereToday", func(b *Builder) *Builder {
 			return b.Select("*").From("posts", "").Where("id", "=", 1).OrWhereToday("published_at")
 		}, `select * from "posts" where "id" = ? or date("published_at") = ?`},
 		{"whereToday array", func(b *Builder) *Builder {
-			return b.Select("*").From("posts", "").WhereToday([]string{"published_at", "held_at"}, BooleanAnd)
+			return b.Select("*").From("posts", "").WhereToday([]string{"published_at", "held_at"}, core.BooleanAnd)
 		}, `select * from "posts" where date("published_at") = ? and date("held_at") = ?`},
 	})
 
 	assert.Equal(t, []any{"2022-04-20"}, newTestBuilder().Select("*").From("posts", "").
-		WhereToday("published_at", BooleanAnd).GetBindings())
+		WhereToday("published_at", core.BooleanAnd).GetBindings())
 }

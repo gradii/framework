@@ -10,9 +10,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/spf13/cast"
-	gormio "gorm.io/gorm"
-
 	"github.com/goravel/framework/contracts/config"
 	contractsdatabase "github.com/goravel/framework/contracts/database"
 	contractsdb "github.com/goravel/framework/contracts/database/db"
@@ -24,12 +21,15 @@ import (
 	"github.com/goravel/framework/database/db"
 	databasedriver "github.com/goravel/framework/database/driver"
 	querybuilder "github.com/goravel/framework/database/query"
+	"github.com/goravel/framework/database/query/core"
 	"github.com/goravel/framework/database/utils"
 	"github.com/goravel/framework/errors"
 	"github.com/goravel/framework/support/carbon"
 	"github.com/goravel/framework/support/database"
 	"github.com/goravel/framework/support/deep"
 	"github.com/goravel/framework/support/str"
+	"github.com/spf13/cast"
+	gormio "gorm.io/gorm"
 )
 
 type Query struct {
@@ -651,7 +651,7 @@ func (r *Query) Having(query any, args ...any) contractsorm.Query {
 	if value, ok := query.(string); ok && containsPlaceholder(value) {
 		conditions.having = &contractsdriver.Having{
 			Query: func(builder *querybuilder.Builder) *querybuilder.Builder {
-				return builder.HavingRaw(value, args, querybuilder.BooleanAnd)
+				return builder.HavingRaw(value, args, core.BooleanAnd)
 			},
 		}
 

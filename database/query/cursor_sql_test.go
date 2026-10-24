@@ -3,25 +3,25 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
+	"github.com/goravel/framework/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/goravel/framework/errors"
 )
 
 // reverseCursorOrders flips every order's direction, mirroring the per-column reversal
 // ensureOrderForCursorPagination performs before the predicate is built. A reverse test can apply it
 // to b.State().Orders to state the flip explicitly instead of leaning on the separate reversal helper, and
 // the ORDER BY it leaves behind is exactly what a previous-page fetch emits.
-func reverseCursorOrders(orders []Order) []Order {
-	flipped := make([]Order, len(orders))
+func reverseCursorOrders(orders []core.Order) []core.Order {
+	flipped := make([]core.Order, len(orders))
 	for i, order := range orders {
 		direction := "asc"
 		if order.Direction == "asc" {
 			direction = "desc"
 		}
 
-		flipped[i] = Order{Column: order.Column, Direction: direction}
+		flipped[i] = core.Order{Column: order.Column, Direction: direction}
 	}
 
 	return flipped

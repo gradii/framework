@@ -1,6 +1,10 @@
 package grammars
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/goravel/framework/database/query/core"
+)
 
 // CompileInsert mirrors Grammar::compileInsert().
 func (g *BaseGrammar) CompileInsert(b Query, values []map[string]any) string {
@@ -18,11 +22,11 @@ func (g *BaseGrammar) compileInsert(b Query, values []map[string]any, output str
 	// Laravel keys the column list off the first record and ksort()s every record so the column
 	// order and the placeholder order agree. Go maps are unordered, so the order is fixed here and
 	// reused for every record.
-	columns := SortedKeys(values[0])
+	columns := core.SortedKeys(values[0])
 	if len(b.State().InsertColumns) > 0 {
 		columns = b.State().InsertColumns
 	}
-	columnList := g.dialect().Columnize(anySlice(columns))
+	columnList := g.dialect().Columnize(core.StringsToAny(columns))
 
 	rows := make([]string, 0, len(values))
 	for _, record := range values {

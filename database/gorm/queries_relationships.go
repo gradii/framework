@@ -12,14 +12,14 @@ import (
 	"fmt"
 	"strings"
 
-	gormio "gorm.io/gorm"
-
 	contractsdriver "github.com/goravel/framework/contracts/database/driver"
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
 	querybuilder "github.com/goravel/framework/database/query"
+	"github.com/goravel/framework/database/query/core"
 	"github.com/goravel/framework/errors"
 	"github.com/goravel/framework/support/deep"
 	"github.com/goravel/framework/support/str"
+	gormio "gorm.io/gorm"
 )
 
 // ---------------------------------------------------------------------------
@@ -339,26 +339,26 @@ func (r *Query) compileExistenceSubquery(desc *relationDescriptor, callback cont
 	switch desc.kind {
 	case relKindHasOne, relKindHasMany, relKindBelongsTo, relKindMorphOne, relKindMorphMany:
 		for _, ref := range desc.references {
-			builder.WhereRaw(r.ident(ref.primaryTable, ref.primaryColumn)+" = "+r.ident(ref.foreignTable, ref.foreignColumn), nil, querybuilder.BooleanAnd)
+			builder.WhereRaw(r.ident(ref.primaryTable, ref.primaryColumn)+" = "+r.ident(ref.foreignTable, ref.foreignColumn), nil, core.BooleanAnd)
 		}
 		if desc.kind == relKindMorphOne || desc.kind == relKindMorphMany {
-			builder.WhereRaw(r.ident(desc.relatedTable, desc.morphTypeColumn)+" = ?", []any{desc.morphValue}, querybuilder.BooleanAnd)
+			builder.WhereRaw(r.ident(desc.relatedTable, desc.morphTypeColumn)+" = ?", []any{desc.morphValue}, core.BooleanAnd)
 		}
 	case relKindMany2Many, relKindMorphToMany:
 		builder.JoinRaw(r.tableRef(desc.pivotTable)+" on "+
 			r.ident(desc.pivotTable, desc.pivotRelatedRef.foreignColumn)+" = "+
 			r.ident(desc.relatedTable, desc.pivotRelatedRef.primaryColumn), nil, "inner")
 		builder.WhereRaw(r.ident(desc.pivotParentRef.primaryTable, desc.pivotParentRef.primaryColumn)+" = "+
-			r.ident(desc.pivotTable, desc.pivotParentRef.foreignColumn), nil, querybuilder.BooleanAnd)
+			r.ident(desc.pivotTable, desc.pivotParentRef.foreignColumn), nil, core.BooleanAnd)
 		if desc.kind == relKindMorphToMany {
-			builder.WhereRaw(r.ident(desc.pivotTable, desc.morphTypeColumn)+" = ?", []any{desc.morphValue}, querybuilder.BooleanAnd)
+			builder.WhereRaw(r.ident(desc.pivotTable, desc.morphTypeColumn)+" = ?", []any{desc.morphValue}, core.BooleanAnd)
 		}
 	case relKindHasOneThrough, relKindHasManyThrough:
 		builder.JoinRaw(r.tableRef(desc.throughTable)+" on "+
 			r.ident(desc.relatedTable, desc.secondKey)+" = "+
 			r.ident(desc.throughTable, desc.secondLocalKey), nil, "inner")
 		builder.WhereRaw(r.ident(desc.parentTable, desc.localKey)+" = "+
-			r.ident(desc.throughTable, desc.firstKey), nil, querybuilder.BooleanAnd)
+			r.ident(desc.throughTable, desc.firstKey), nil, core.BooleanAnd)
 	default:
 		return nil, errors.OrmRelationUnsupported.Args(desc.name, desc.parentTable, fmt.Sprintf("kind=%d", desc.kind))
 	}
@@ -377,7 +377,7 @@ func (r *Query) compileExistenceSubquery(desc *relationDescriptor, callback cont
 		}
 		if nested != nil {
 			nestedSQL, nestedBindings := nested.ToSelectSQL()
-			builder.WhereRaw("exists ("+nestedSQL+")", nestedBindings, querybuilder.BooleanAnd)
+			builder.WhereRaw("exists ("+nestedSQL+")", nestedBindings, core.BooleanAnd)
 		}
 	}
 
@@ -391,9 +391,9 @@ func (r *Query) compileExistenceSubquery(desc *relationDescriptor, callback cont
 func (r *Query) compileMorphExistenceSubquery(desc *relationDescriptor, morphValue string, callback contractsorm.RelationCallback) *querybuilder.Builder {
 	builder := r.subqueryBuilder(desc.relatedTable)
 	for _, ref := range desc.references {
-		builder.WhereRaw(r.ident(ref.primaryTable, ref.primaryColumn)+" = "+r.ident(ref.foreignTable, ref.foreignColumn), nil, querybuilder.BooleanAnd)
+		builder.WhereRaw(r.ident(ref.primaryTable, ref.primaryColumn)+" = "+r.ident(ref.foreignTable, ref.foreignColumn), nil, core.BooleanAnd)
 	}
-	builder.WhereRaw(r.ident(desc.relatedTable, desc.morphTypeColumn)+" = ?", []any{morphValue}, querybuilder.BooleanAnd)
+	builder.WhereRaw(r.ident(desc.relatedTable, desc.morphTypeColumn)+" = ?", []any{morphValue}, core.BooleanAnd)
 	r.applyRelationScope(builder, desc.onQuery)
 	r.applyRelationScope(builder, callback)
 	r.applySubquerySoftDelete(builder, desc.relatedTable, desc.relatedModel)
@@ -452,9 +452,9 @@ func (r *Query) applyRelations(builder *querybuilder.Builder) error {
 	}
 
 	for _, item := range r.conditions.relations {
-		boolean := querybuilder.BooleanAnd
+		boolean := core.BooleanAnd
 		if item.conjunction == "or" {
-			boolean = querybuilder.BooleanOr
+			boolean = core.BooleanOr
 		}
 
 		if len(item.morphTypes) > 0 {
@@ -539,16 +539,16 @@ func (r *Query) applyMorphTypeClause(builder *querybuilder.Builder, desc *relati
 	if desc.kind == relKindMorphTo {
 		inner := r.compileMorphToExistenceSubquery(desc, relatedTable, typeModel, callback)
 
-		builder.WhereRaw(r.ident(desc.parentTable, desc.morphTypeColumn)+" = ?", []any{morphValue}, querybuilder.BooleanAnd)
+		builder.WhereRaw(r.ident(desc.parentTable, desc.morphTypeColumn)+" = ?", []any{morphValue}, core.BooleanAnd)
 
-		applyExistenceClause(builder, inner, item.operator, item.count, querybuilder.BooleanAnd)
+		applyExistenceClause(builder, inner, item.operator, item.count, core.BooleanAnd)
 
 		return nil
 	}
 
 	inner := r.compileMorphExistenceSubquery(desc, morphValue, callback)
 
-	applyExistenceClause(builder, inner, item.operator, item.count, querybuilder.BooleanAnd)
+	applyExistenceClause(builder, inner, item.operator, item.count, core.BooleanAnd)
 
 	return nil
 }
@@ -567,7 +567,7 @@ func (r *Query) compileMorphToExistenceSubquery(desc *relationDescriptor, relate
 	}
 
 	builder := r.subqueryBuilder(relatedTable)
-	builder.WhereRaw(r.ident(relatedTable, ownerKey)+" = "+r.ident(desc.parentTable, desc.morphIDColumn), nil, querybuilder.BooleanAnd)
+	builder.WhereRaw(r.ident(relatedTable, ownerKey)+" = "+r.ident(desc.parentTable, desc.morphIDColumn), nil, core.BooleanAnd)
 
 	r.applyRelationScope(builder, desc.onQuery)
 	r.applyRelationScope(builder, callback)
@@ -643,7 +643,7 @@ func (r *Query) applySubquerySoftDelete(builder *querybuilder.Builder, table str
 		return
 	}
 
-	builder.WhereRaw(r.ident(table, column)+" IS NULL", nil, querybuilder.BooleanAnd)
+	builder.WhereRaw(r.ident(table, column)+" IS NULL", nil, core.BooleanAnd)
 }
 
 // subqueryBuilder starts a framework builder for a correlated subquery over table.

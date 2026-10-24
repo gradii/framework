@@ -9,15 +9,15 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jmoiron/sqlx"
-
 	"github.com/goravel/framework/contracts/database/db"
 	"github.com/goravel/framework/contracts/database/logger"
 	querybuilder "github.com/goravel/framework/database/query"
+	"github.com/goravel/framework/database/query/core"
 	"github.com/goravel/framework/database/utils"
 	"github.com/goravel/framework/errors"
 	"github.com/goravel/framework/support/carbon"
 	"github.com/goravel/framework/support/str"
+	"github.com/jmoiron/sqlx"
 )
 
 // Query is the DB facade query builder. All SQL is produced by database/query, a port of
@@ -82,22 +82,22 @@ func (r *Query) clone() *Query {
 
 // Where adds a where clause. Mirrors db.Query::Where.
 func (r *Query) Where(query any, args ...any) db.Query {
-	return r.applyWhere(query, args, querybuilder.BooleanAnd)
+	return r.applyWhere(query, args, core.BooleanAnd)
 }
 
 // OrWhere adds an or where clause.
 func (r *Query) OrWhere(query any, args ...any) db.Query {
-	return r.applyWhere(query, args, querybuilder.BooleanOr)
+	return r.applyWhere(query, args, core.BooleanOr)
 }
 
 // WhereNot adds a negated where clause.
 func (r *Query) WhereNot(query any, args ...any) db.Query {
-	return r.applyWhere(query, args, querybuilder.BooleanAndNot)
+	return r.applyWhere(query, args, core.BooleanAndNot)
 }
 
 // OrWhereNot adds a negated or where clause.
 func (r *Query) OrWhereNot(query any, args ...any) db.Query {
-	return r.applyWhere(query, args, querybuilder.BooleanOrNot)
+	return r.applyWhere(query, args, core.BooleanOrNot)
 }
 
 // applyWhere translates the DB facade's where shorthands onto the builder.
@@ -150,11 +150,11 @@ func (r *Query) applyWhere(query any, args []any, boolean string) *Query {
 // addSimpleWhere routes to the builder method that matches the connector.
 func (r *Query) addSimpleWhere(query any, args []any, boolean string) {
 	switch boolean {
-	case querybuilder.BooleanOr:
+	case core.BooleanOr:
 		r.builder.OrWhere(query, args...)
-	case querybuilder.BooleanAndNot:
+	case core.BooleanAndNot:
 		r.builder.WhereNot(query, args...)
-	case querybuilder.BooleanOrNot:
+	case core.BooleanOrNot:
 		r.builder.OrWhereNot(query, args...)
 	default:
 		r.builder.Where(query, args...)
@@ -214,98 +214,98 @@ func isByteSlice(value any) bool {
 
 // WhereRaw adds a raw where clause.
 func (r *Query) WhereRaw(raw string, args []any) db.Query {
-	r.builder.WhereRaw(raw, args, querybuilder.BooleanAnd)
+	r.builder.WhereRaw(raw, args, core.BooleanAnd)
 
 	return r
 }
 
 // OrWhereRaw adds a raw or where clause.
 func (r *Query) OrWhereRaw(raw string, args []any) db.Query {
-	r.builder.WhereRaw(raw, args, querybuilder.BooleanOr)
+	r.builder.WhereRaw(raw, args, core.BooleanOr)
 
 	return r
 }
 
 // WhereIn adds an in clause.
 func (r *Query) WhereIn(column string, values any) db.Query {
-	r.builder.WhereIn(column, r.subquery(values), querybuilder.BooleanAnd, false)
+	r.builder.WhereIn(column, r.subquery(values), core.BooleanAnd, false)
 
 	return r
 }
 
 // OrWhereIn adds an or in clause.
 func (r *Query) OrWhereIn(column string, values any) db.Query {
-	r.builder.WhereIn(column, r.subquery(values), querybuilder.BooleanOr, false)
+	r.builder.WhereIn(column, r.subquery(values), core.BooleanOr, false)
 
 	return r
 }
 
 // WhereNotIn adds a not in clause.
 func (r *Query) WhereNotIn(column string, values any) db.Query {
-	r.builder.WhereNotIn(column, r.subquery(values), querybuilder.BooleanAnd)
+	r.builder.WhereNotIn(column, r.subquery(values), core.BooleanAnd)
 
 	return r
 }
 
 // OrWhereNotIn adds an or not in clause.
 func (r *Query) OrWhereNotIn(column string, values any) db.Query {
-	r.builder.WhereNotIn(column, r.subquery(values), querybuilder.BooleanOr)
+	r.builder.WhereNotIn(column, r.subquery(values), core.BooleanOr)
 
 	return r
 }
 
 // WhereBetween adds a between clause.
 func (r *Query) WhereBetween(column string, x, y any) db.Query {
-	r.builder.WhereBetween(column, []any{x, y}, querybuilder.BooleanAnd, false)
+	r.builder.WhereBetween(column, []any{x, y}, core.BooleanAnd, false)
 
 	return r
 }
 
 // OrWhereBetween adds an or between clause.
 func (r *Query) OrWhereBetween(column string, x, y any) db.Query {
-	r.builder.WhereBetween(column, []any{x, y}, querybuilder.BooleanOr, false)
+	r.builder.WhereBetween(column, []any{x, y}, core.BooleanOr, false)
 
 	return r
 }
 
 // WhereNotBetween adds a not between clause.
 func (r *Query) WhereNotBetween(column string, x, y any) db.Query {
-	r.builder.WhereBetween(column, []any{x, y}, querybuilder.BooleanAnd, true)
+	r.builder.WhereBetween(column, []any{x, y}, core.BooleanAnd, true)
 
 	return r
 }
 
 // OrWhereNotBetween adds an or not between clause.
 func (r *Query) OrWhereNotBetween(column string, x, y any) db.Query {
-	r.builder.WhereBetween(column, []any{x, y}, querybuilder.BooleanOr, true)
+	r.builder.WhereBetween(column, []any{x, y}, core.BooleanOr, true)
 
 	return r
 }
 
 // WhereNull adds an is null clause.
 func (r *Query) WhereNull(column string) db.Query {
-	r.builder.WhereNull(column, querybuilder.BooleanAnd, false)
+	r.builder.WhereNull(column, core.BooleanAnd, false)
 
 	return r
 }
 
 // OrWhereNull adds an or is null clause.
 func (r *Query) OrWhereNull(column string) db.Query {
-	r.builder.WhereNull(column, querybuilder.BooleanOr, false)
+	r.builder.WhereNull(column, core.BooleanOr, false)
 
 	return r
 }
 
 // WhereNotNull adds an is not null clause.
 func (r *Query) WhereNotNull(column string) db.Query {
-	r.builder.WhereNotNull(column, querybuilder.BooleanAnd)
+	r.builder.WhereNotNull(column, core.BooleanAnd)
 
 	return r
 }
 
 // OrWhereNotNull adds an or is not null clause.
 func (r *Query) OrWhereNotNull(column string) db.Query {
-	r.builder.WhereNotNull(column, querybuilder.BooleanOr)
+	r.builder.WhereNotNull(column, core.BooleanOr)
 
 	return r
 }
@@ -318,7 +318,7 @@ func (r *Query) WhereColumn(column1 string, column2 ...string) db.Query {
 		r.err = err
 		return r
 	}
-	r.builder.WhereColumn(column1, operator, second, querybuilder.BooleanAnd)
+	r.builder.WhereColumn(column1, operator, second, core.BooleanAnd)
 
 	return r
 }
@@ -330,98 +330,98 @@ func (r *Query) OrWhereColumn(column1 string, column2 ...string) db.Query {
 		r.err = err
 		return r
 	}
-	r.builder.WhereColumn(column1, operator, second, querybuilder.BooleanOr)
+	r.builder.WhereColumn(column1, operator, second, core.BooleanOr)
 
 	return r
 }
 
 // WhereLike adds a like clause.
 func (r *Query) WhereLike(column string, value string, caseSensitive ...bool) db.Query {
-	r.builder.WhereLike(column, value, len(caseSensitive) > 0 && caseSensitive[0], querybuilder.BooleanAnd, false)
+	r.builder.WhereLike(column, value, len(caseSensitive) > 0 && caseSensitive[0], core.BooleanAnd, false)
 
 	return r
 }
 
 // OrWhereLike adds an or like clause.
 func (r *Query) OrWhereLike(column string, value string, caseSensitive ...bool) db.Query {
-	r.builder.WhereLike(column, value, len(caseSensitive) > 0 && caseSensitive[0], querybuilder.BooleanOr, false)
+	r.builder.WhereLike(column, value, len(caseSensitive) > 0 && caseSensitive[0], core.BooleanOr, false)
 
 	return r
 }
 
 // WhereNotLike adds a not like clause.
 func (r *Query) WhereNotLike(column string, value string, caseSensitive ...bool) db.Query {
-	r.builder.WhereLike(column, value, len(caseSensitive) > 0 && caseSensitive[0], querybuilder.BooleanAnd, true)
+	r.builder.WhereLike(column, value, len(caseSensitive) > 0 && caseSensitive[0], core.BooleanAnd, true)
 
 	return r
 }
 
 // OrWhereNotLike adds an or not like clause.
 func (r *Query) OrWhereNotLike(column string, value string, caseSensitive ...bool) db.Query {
-	r.builder.WhereLike(column, value, len(caseSensitive) > 0 && caseSensitive[0], querybuilder.BooleanOr, true)
+	r.builder.WhereLike(column, value, len(caseSensitive) > 0 && caseSensitive[0], core.BooleanOr, true)
 
 	return r
 }
 
 // WhereExists adds an exists clause.
 func (r *Query) WhereExists(query any) db.Query {
-	r.builder.WhereExists(r.subquery(query), querybuilder.BooleanAnd, false)
+	r.builder.WhereExists(r.subquery(query), core.BooleanAnd, false)
 
 	return r
 }
 
 // WhereJsonContains adds a JSON contains clause.
 func (r *Query) WhereJsonContains(column string, value any) db.Query {
-	r.builder.WhereJsonContains(column, value, querybuilder.BooleanAnd, false)
+	r.builder.WhereJsonContains(column, value, core.BooleanAnd, false)
 
 	return r
 }
 
 // OrWhereJsonContains adds an or JSON contains clause.
 func (r *Query) OrWhereJsonContains(column string, value any) db.Query {
-	r.builder.WhereJsonContains(column, value, querybuilder.BooleanOr, false)
+	r.builder.WhereJsonContains(column, value, core.BooleanOr, false)
 
 	return r
 }
 
 // WhereJsonDoesntContain adds a negated JSON contains clause.
 func (r *Query) WhereJsonDoesntContain(column string, value any) db.Query {
-	r.builder.WhereJsonContains(column, value, querybuilder.BooleanAnd, true)
+	r.builder.WhereJsonContains(column, value, core.BooleanAnd, true)
 
 	return r
 }
 
 // OrWhereJsonDoesntContain adds a negated or JSON contains clause.
 func (r *Query) OrWhereJsonDoesntContain(column string, value any) db.Query {
-	r.builder.WhereJsonContains(column, value, querybuilder.BooleanOr, true)
+	r.builder.WhereJsonContains(column, value, core.BooleanOr, true)
 
 	return r
 }
 
 // WhereJsonContainsKey adds a JSON key existence clause.
 func (r *Query) WhereJsonContainsKey(column string) db.Query {
-	r.builder.WhereJsonContainsKey(column, querybuilder.BooleanAnd, false)
+	r.builder.WhereJsonContainsKey(column, core.BooleanAnd, false)
 
 	return r
 }
 
 // OrWhereJsonContainsKey adds an or JSON key existence clause.
 func (r *Query) OrWhereJsonContainsKey(column string) db.Query {
-	r.builder.WhereJsonContainsKey(column, querybuilder.BooleanOr, false)
+	r.builder.WhereJsonContainsKey(column, core.BooleanOr, false)
 
 	return r
 }
 
 // WhereJsonDoesntContainKey adds a negated JSON key existence clause.
 func (r *Query) WhereJsonDoesntContainKey(column string) db.Query {
-	r.builder.WhereJsonContainsKey(column, querybuilder.BooleanAnd, true)
+	r.builder.WhereJsonContainsKey(column, core.BooleanAnd, true)
 
 	return r
 }
 
 // OrWhereJsonDoesntContainKey adds a negated or JSON key existence clause.
 func (r *Query) OrWhereJsonDoesntContainKey(column string) db.Query {
-	r.builder.WhereJsonContainsKey(column, querybuilder.BooleanOr, true)
+	r.builder.WhereJsonContainsKey(column, core.BooleanOr, true)
 
 	return r
 }
@@ -451,11 +451,11 @@ func (r *Query) WhereAll(columns []string, args ...any) db.Query {
 		r.err = err
 		return r
 	}
-	if r.expandInGroup(columns, operator, value, querybuilder.BooleanAnd, querybuilder.BooleanAnd) {
+	if r.expandInGroup(columns, operator, value, core.BooleanAnd, core.BooleanAnd) {
 		return r
 	}
 
-	r.builder.WhereAll(toStrings(columns), operator, value, querybuilder.BooleanAnd)
+	r.builder.WhereAll(toStrings(columns), operator, value, core.BooleanAnd)
 
 	return r
 }
@@ -469,11 +469,11 @@ func (r *Query) WhereAny(columns []string, args ...any) db.Query {
 		r.err = err
 		return r
 	}
-	if r.expandInGroup(columns, operator, value, querybuilder.BooleanOr, querybuilder.BooleanAnd) {
+	if r.expandInGroup(columns, operator, value, core.BooleanOr, core.BooleanAnd) {
 		return r
 	}
 
-	r.builder.WhereAny(toStrings(columns), operator, value, querybuilder.BooleanAnd)
+	r.builder.WhereAny(toStrings(columns), operator, value, core.BooleanAnd)
 
 	return r
 }
@@ -485,11 +485,11 @@ func (r *Query) WhereNone(columns []string, args ...any) db.Query {
 		r.err = err
 		return r
 	}
-	if r.expandInGroup(columns, operator, value, querybuilder.BooleanOr, querybuilder.BooleanAnd+" not") {
+	if r.expandInGroup(columns, operator, value, core.BooleanOr, core.BooleanAnd+" not") {
 		return r
 	}
 
-	r.builder.WhereNone(toStrings(columns), operator, value, querybuilder.BooleanAnd)
+	r.builder.WhereNone(toStrings(columns), operator, value, core.BooleanAnd)
 
 	return r
 }
@@ -547,7 +547,7 @@ func (r *Query) Having(query any, args ...any) db.Query {
 // and bindings intact. This mirrors applyWhere's placeholder handling for Where.
 func (r *Query) applyHaving(query any, args []any) {
 	if value, ok := query.(string); ok && strings.Contains(value, "?") {
-		r.builder.HavingRaw(value, args, querybuilder.BooleanAnd)
+		r.builder.HavingRaw(value, args, core.BooleanAnd)
 
 		return
 	}

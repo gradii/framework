@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -70,8 +71,8 @@ func TestCrossJoins(t *testing.T) {
 func TestComplexJoin(t *testing.T) {
 	t.Run("on and or on", func(t *testing.T) {
 		b := newTestBuilder().From("users", "").Select("*").Join("contacts", func(j *Builder) *Builder {
-			return j.WhereColumn("users.id", "=", "contacts.id", BooleanAnd).
-				WhereColumn("users.name", "=", "contacts.name", BooleanOr)
+			return j.WhereColumn("users.id", "=", "contacts.id", core.BooleanAnd).
+				WhereColumn("users.name", "=", "contacts.name", core.BooleanOr)
 		}, "", "", "inner", false)
 
 		assert.Equal(t, `select * from "users" inner join "contacts" on "users"."id" = "contacts"."id" or "users"."name" = "contacts"."name"`, b.ToSQL())
@@ -92,13 +93,13 @@ func TestJoinWhereNull(t *testing.T) {
 	runLaravelCases(t, []laravelCase{
 		{"and where null", func(b *Builder) *Builder {
 			return b.From("users", "").Select("*").Join("contacts", func(j *Builder) *Builder {
-				return j.WhereColumn("users.id", "=", "contacts.id", BooleanAnd).
-					WhereNull("contacts.deleted_at", BooleanAnd, false)
+				return j.WhereColumn("users.id", "=", "contacts.id", core.BooleanAnd).
+					WhereNull("contacts.deleted_at", core.BooleanAnd, false)
 			}, "", "", "inner", false)
 		}, `select * from "users" inner join "contacts" on "users"."id" = "contacts"."id" and "contacts"."deleted_at" is null`},
 		{"or where null", func(b *Builder) *Builder {
 			return b.From("users", "").Select("*").Join("contacts", func(j *Builder) *Builder {
-				return j.WhereColumn("users.id", "=", "contacts.id", BooleanAnd).
+				return j.WhereColumn("users.id", "=", "contacts.id", core.BooleanAnd).
 					OrWhereNull("contacts.deleted_at")
 			}, "", "", "inner", false)
 		}, `select * from "users" inner join "contacts" on "users"."id" = "contacts"."id" or "contacts"."deleted_at" is null`},
@@ -110,13 +111,13 @@ func TestJoinWhereNotNull(t *testing.T) {
 	runLaravelCases(t, []laravelCase{
 		{"and where not null", func(b *Builder) *Builder {
 			return b.From("users", "").Select("*").Join("contacts", func(j *Builder) *Builder {
-				return j.WhereColumn("users.id", "=", "contacts.id", BooleanAnd).
-					WhereNotNull("contacts.deleted_at", BooleanAnd)
+				return j.WhereColumn("users.id", "=", "contacts.id", core.BooleanAnd).
+					WhereNotNull("contacts.deleted_at", core.BooleanAnd)
 			}, "", "", "inner", false)
 		}, `select * from "users" inner join "contacts" on "users"."id" = "contacts"."id" and "contacts"."deleted_at" is not null`},
 		{"or where not null", func(b *Builder) *Builder {
 			return b.From("users", "").Select("*").Join("contacts", func(j *Builder) *Builder {
-				return j.WhereColumn("users.id", "=", "contacts.id", BooleanAnd).
+				return j.WhereColumn("users.id", "=", "contacts.id", core.BooleanAnd).
 					OrWhereNotNull("contacts.deleted_at")
 			}, "", "", "inner", false)
 		}, `select * from "users" inner join "contacts" on "users"."id" = "contacts"."id" or "contacts"."deleted_at" is not null`},
@@ -127,8 +128,8 @@ func TestJoinWhereNotNull(t *testing.T) {
 func TestJoinWhereIn(t *testing.T) {
 	t.Run("and where in", func(t *testing.T) {
 		b := newTestBuilder().From("users", "").Select("*").Join("contacts", func(j *Builder) *Builder {
-			return j.WhereColumn("users.id", "=", "contacts.id", BooleanAnd).
-				WhereIn("contacts.name", []any{48, "baz", nil}, BooleanAnd, false)
+			return j.WhereColumn("users.id", "=", "contacts.id", core.BooleanAnd).
+				WhereIn("contacts.name", []any{48, "baz", nil}, core.BooleanAnd, false)
 		}, "", "", "inner", false)
 
 		assert.Equal(t, `select * from "users" inner join "contacts" on "users"."id" = "contacts"."id" and "contacts"."name" in (?, ?, ?)`, b.ToSQL())
@@ -137,7 +138,7 @@ func TestJoinWhereIn(t *testing.T) {
 
 	t.Run("or where in", func(t *testing.T) {
 		b := newTestBuilder().From("users", "").Select("*").Join("contacts", func(j *Builder) *Builder {
-			return j.WhereColumn("users.id", "=", "contacts.id", BooleanAnd).
+			return j.WhereColumn("users.id", "=", "contacts.id", core.BooleanAnd).
 				OrWhereIn("contacts.name", []any{48, "baz", nil})
 		}, "", "", "inner", false)
 
@@ -151,8 +152,8 @@ func TestJoinWhereInSubquery(t *testing.T) {
 	t.Run("and where in subquery", func(t *testing.T) {
 		sub := newTestBuilder().Select("name").From("contacts", "").Where("name", "baz")
 		b := newTestBuilder().From("users", "").Select("*").Join("contacts", func(j *Builder) *Builder {
-			return j.WhereColumn("users.id", "=", "contacts.id", BooleanAnd).
-				WhereIn("contacts.name", sub, BooleanAnd, false)
+			return j.WhereColumn("users.id", "=", "contacts.id", core.BooleanAnd).
+				WhereIn("contacts.name", sub, core.BooleanAnd, false)
 		}, "", "", "inner", false)
 
 		assert.Equal(t, `select * from "users" inner join "contacts" on "users"."id" = "contacts"."id" and "contacts"."name" in (select "name" from "contacts" where "name" = ?)`, b.ToSQL())
@@ -162,7 +163,7 @@ func TestJoinWhereInSubquery(t *testing.T) {
 	t.Run("or where in subquery", func(t *testing.T) {
 		sub := newTestBuilder().Select("name").From("contacts", "").Where("name", "baz")
 		b := newTestBuilder().From("users", "").Select("*").Join("contacts", func(j *Builder) *Builder {
-			return j.WhereColumn("users.id", "=", "contacts.id", BooleanAnd).
+			return j.WhereColumn("users.id", "=", "contacts.id", core.BooleanAnd).
 				OrWhereIn("contacts.name", sub)
 		}, "", "", "inner", false)
 
@@ -175,8 +176,8 @@ func TestJoinWhereInSubquery(t *testing.T) {
 func TestJoinWhereNotIn(t *testing.T) {
 	t.Run("and where not in", func(t *testing.T) {
 		b := newTestBuilder().From("users", "").Select("*").Join("contacts", func(j *Builder) *Builder {
-			return j.WhereColumn("users.id", "=", "contacts.id", BooleanAnd).
-				WhereNotIn("contacts.name", []any{48, "baz", nil}, BooleanAnd)
+			return j.WhereColumn("users.id", "=", "contacts.id", core.BooleanAnd).
+				WhereNotIn("contacts.name", []any{48, "baz", nil}, core.BooleanAnd)
 		}, "", "", "inner", false)
 
 		assert.Equal(t, `select * from "users" inner join "contacts" on "users"."id" = "contacts"."id" and "contacts"."name" not in (?, ?, ?)`, b.ToSQL())
@@ -185,7 +186,7 @@ func TestJoinWhereNotIn(t *testing.T) {
 
 	t.Run("or where not in", func(t *testing.T) {
 		b := newTestBuilder().From("users", "").Select("*").Join("contacts", func(j *Builder) *Builder {
-			return j.WhereColumn("users.id", "=", "contacts.id", BooleanAnd).
+			return j.WhereColumn("users.id", "=", "contacts.id", core.BooleanAnd).
 				OrWhereNotIn("contacts.name", []any{48, "baz", nil})
 		}, "", "", "inner", false)
 
@@ -198,10 +199,10 @@ func TestJoinWhereNotIn(t *testing.T) {
 func TestJoinsWithNestedConditions(t *testing.T) {
 	t.Run("nested where on a left join", func(t *testing.T) {
 		b := newTestBuilder().From("users", "").Select("*").LeftJoin("contacts", func(j *Builder) *Builder {
-			return j.WhereColumn("users.id", "=", "contacts.id", BooleanAnd).
+			return j.WhereColumn("users.id", "=", "contacts.id", core.BooleanAnd).
 				WhereNested(func(n *Builder) *Builder {
 					return n.Where("contacts.country", "=", "US").OrWhere("contacts.is_partner", "=", 1)
-				}, BooleanAnd)
+				}, core.BooleanAnd)
 		}, "", "")
 
 		assert.Equal(t, `select * from "users" left join "contacts" on "users"."id" = "contacts"."id" and ("contacts"."country" = ? or "contacts"."is_partner" = ?)`, b.ToSQL())
@@ -210,18 +211,18 @@ func TestJoinsWithNestedConditions(t *testing.T) {
 
 	t.Run("nested where and or on", func(t *testing.T) {
 		b := newTestBuilder().From("users", "").Select("*").LeftJoin("contacts", func(j *Builder) *Builder {
-			return j.WhereColumn("users.id", "=", "contacts.id", BooleanAnd).
+			return j.WhereColumn("users.id", "=", "contacts.id", core.BooleanAnd).
 				Where("contacts.is_active", "=", 1).
 				// orOn with a closure is whereNested with an "or" boolean.
 				WhereNested(func(n *Builder) *Builder {
 					return n.WhereNested(func(m *Builder) *Builder {
 						return m.Where("contacts.country", "=", "UK").
-							WhereColumn("contacts.type", "=", "users.type", BooleanOr)
-					}, BooleanOr).WhereNested(func(m *Builder) *Builder {
+							WhereColumn("contacts.type", "=", "users.type", core.BooleanOr)
+					}, core.BooleanOr).WhereNested(func(m *Builder) *Builder {
 						return m.Where("contacts.country", "=", "US").
 							OrWhereNull("contacts.is_partner")
-					}, BooleanAnd)
-				}, BooleanOr)
+					}, core.BooleanAnd)
+				}, core.BooleanOr)
 		}, "", "")
 
 		assert.Equal(t, `select * from "users" left join "contacts" on "users"."id" = "contacts"."id" and "contacts"."is_active" = ? or (("contacts"."country" = ? or "contacts"."type" = "users"."type") and ("contacts"."country" = ? or "contacts"."is_partner" is null))`, b.ToSQL())
@@ -233,12 +234,12 @@ func TestJoinsWithNestedConditions(t *testing.T) {
 func TestJoinsWithSubqueryCondition(t *testing.T) {
 	t.Run("where in a subquery", func(t *testing.T) {
 		b := newTestBuilder().From("users", "").Select("*").LeftJoin("contacts", func(j *Builder) *Builder {
-			return j.WhereColumn("users.id", "=", "contacts.id", BooleanAnd).
+			return j.WhereColumn("users.id", "=", "contacts.id", core.BooleanAnd).
 				WhereIn("contact_type_id", func(q *Builder) *Builder {
 					return q.Select("id").From("contact_types", "").
 						Where("category_id", "1").
-						WhereNull("deleted_at", BooleanAnd, false)
-				}, BooleanAnd, false)
+						WhereNull("deleted_at", core.BooleanAnd, false)
+				}, core.BooleanAnd, false)
 		}, "", "")
 
 		assert.Equal(t, `select * from "users" left join "contacts" on "users"."id" = "contacts"."id" and "contact_type_id" in (select "id" from "contact_types" where "category_id" = ? and "deleted_at" is null)`, b.ToSQL())
@@ -247,13 +248,13 @@ func TestJoinsWithSubqueryCondition(t *testing.T) {
 
 	t.Run("where exists", func(t *testing.T) {
 		b := newTestBuilder().From("users", "").Select("*").LeftJoin("contacts", func(j *Builder) *Builder {
-			return j.WhereColumn("users.id", "=", "contacts.id", BooleanAnd).
+			return j.WhereColumn("users.id", "=", "contacts.id", core.BooleanAnd).
 				WhereExists(func(q *Builder) *Builder {
 					return q.SelectRaw("1", nil).From("contact_types", "").
-						WhereRaw("contact_types.id = contacts.contact_type_id", nil, BooleanAnd).
+						WhereRaw("contact_types.id = contacts.contact_type_id", nil, core.BooleanAnd).
 						Where("category_id", "1").
-						WhereNull("deleted_at", BooleanAnd, false)
-				}, BooleanAnd, false)
+						WhereNull("deleted_at", core.BooleanAnd, false)
+				}, core.BooleanAnd, false)
 		}, "", "")
 
 		assert.Equal(t, `select * from "users" left join "contacts" on "users"."id" = "contacts"."id" and exists (select 1 from "contact_types" where contact_types.id = contacts.contact_type_id and "category_id" = ? and "deleted_at" is null)`, b.ToSQL())
@@ -264,16 +265,16 @@ func TestJoinsWithSubqueryCondition(t *testing.T) {
 // TestJoinsWithAdvancedSubqueryCondition ports Laravel's testJoinsWithAdvancedSubqueryCondition.
 func TestJoinsWithAdvancedSubqueryCondition(t *testing.T) {
 	b := newTestBuilder().From("users", "").Select("*").LeftJoin("contacts", func(j *Builder) *Builder {
-		return j.WhereColumn("users.id", "=", "contacts.id", BooleanAnd).
+		return j.WhereColumn("users.id", "=", "contacts.id", core.BooleanAnd).
 			WhereExists(func(q *Builder) *Builder {
 				return q.SelectRaw("1", nil).From("contact_types", "").
-					WhereRaw("contact_types.id = contacts.contact_type_id", nil, BooleanAnd).
+					WhereRaw("contact_types.id = contacts.contact_type_id", nil, core.BooleanAnd).
 					Where("category_id", "1").
-					WhereNull("deleted_at", BooleanAnd, false).
+					WhereNull("deleted_at", core.BooleanAnd, false).
 					WhereIn("level_id", func(l *Builder) *Builder {
 						return l.Select("id").From("levels", "").Where("is_active", true)
-					}, BooleanAnd, false)
-			}, BooleanAnd, false)
+					}, core.BooleanAnd, false)
+			}, core.BooleanAnd, false)
 	}, "", "")
 
 	assert.Equal(t, `select * from "users" left join "contacts" on "users"."id" = "contacts"."id" and exists (select 1 from "contact_types" where contact_types.id = contacts.contact_type_id and "category_id" = ? and "deleted_at" is null and "level_id" in (select "id" from "levels" where "is_active" = ?))`, b.ToSQL())
@@ -286,7 +287,7 @@ func TestJoinsWithNestedJoins(t *testing.T) {
 		{"join nested inside a left join", func(b *Builder) *Builder {
 			return b.From("users", "").Select("users.id", "contacts.id", "contact_types.id").
 				LeftJoin("contacts", func(j *Builder) *Builder {
-					return j.WhereColumn("users.id", "=", "contacts.id", BooleanAnd).
+					return j.WhereColumn("users.id", "=", "contacts.id", core.BooleanAnd).
 						Join("contact_types", "contacts.contact_type_id", "=", "contact_types.id", "inner", false)
 				}, "", "")
 		}, `select "users"."id", "contacts"."id", "contact_types"."id" from "users" left join ("contacts" inner join "contact_types" on "contacts"."contact_type_id" = "contact_types"."id") on "users"."id" = "contacts"."id"`},
@@ -298,12 +299,12 @@ func TestJoinsWithMultipleNestedJoins(t *testing.T) {
 	b := newTestBuilder().From("users", "").
 		Select("users.id", "contacts.id", "contact_types.id", "countries.id", "planets.id").
 		LeftJoin("contacts", func(j *Builder) *Builder {
-			return j.WhereColumn("users.id", "=", "contacts.id", BooleanAnd).
+			return j.WhereColumn("users.id", "=", "contacts.id", core.BooleanAnd).
 				Join("contact_types", "contacts.contact_type_id", "=", "contact_types.id", "inner", false).
 				LeftJoin("countries", func(q *Builder) *Builder {
-					return q.WhereColumn("contacts.country", "=", "countries.country", BooleanAnd).
+					return q.WhereColumn("contacts.country", "=", "countries.country", core.BooleanAnd).
 						Join("planets", func(p *Builder) *Builder {
-							return p.WhereColumn("countries.planet_id", "=", "planet.id", BooleanAnd).
+							return p.WhereColumn("countries.planet_id", "=", "planet.id", core.BooleanAnd).
 								Where("planet.is_settled", "=", 1).
 								Where("planet.population", ">=", 10000)
 						}, "", "", "inner", false)
@@ -319,17 +320,17 @@ func TestJoinsWithMultipleNestedJoins(t *testing.T) {
 func TestJoinsWithNestedJoinWithAdvancedSubqueryCondition(t *testing.T) {
 	b := newTestBuilder().From("users", "").Select("users.id", "contacts.id", "contact_types.id").
 		LeftJoin("contacts", func(j *Builder) *Builder {
-			return j.WhereColumn("users.id", "=", "contacts.id", BooleanAnd).
+			return j.WhereColumn("users.id", "=", "contacts.id", core.BooleanAnd).
 				Join("contact_types", "contacts.contact_type_id", "=", "contact_types.id", "inner", false).
 				WhereExists(func(q *Builder) *Builder {
 					return q.Select("*").From("countries", "").
-						WhereColumn("contacts.country", "=", "countries.country", BooleanAnd).
+						WhereColumn("contacts.country", "=", "countries.country", core.BooleanAnd).
 						Join("planets", func(p *Builder) *Builder {
-							return p.WhereColumn("countries.planet_id", "=", "planet.id", BooleanAnd).
+							return p.WhereColumn("countries.planet_id", "=", "planet.id", core.BooleanAnd).
 								Where("planet.is_settled", "=", 1)
 						}, "", "", "inner", false).
 						Where("planet.population", ">=", 10000)
-				}, BooleanAnd, false)
+				}, core.BooleanAnd, false)
 		}, "", "")
 
 	assert.Equal(t, `select "users"."id", "contacts"."id", "contact_types"."id" from "users" left join ("contacts" inner join "contact_types" on "contacts"."contact_type_id" = "contact_types"."id") on "users"."id" = "contacts"."id" and exists (select * from "countries" inner join "planets" on "countries"."planet_id" = "planet"."id" and "planet"."is_settled" = ? where "contacts"."country" = "countries"."country" and "planet"."population" >= ?)`, b.ToSQL())
@@ -341,8 +342,8 @@ func TestJoinsWithNestedJoinWithAdvancedSubqueryCondition(t *testing.T) {
 func TestJoinWithNestedOnCondition(t *testing.T) {
 	nested := newTestBuilder().Where("contacts.id", 1)
 	b := newTestBuilder().From("users", "").Select("users.id").Join("contacts", func(j *Builder) *Builder {
-		return j.WhereColumn("users.id", "contacts.id", nil, BooleanAnd).
-			AddNestedWhereQuery(nested, BooleanAnd)
+		return j.WhereColumn("users.id", "contacts.id", nil, core.BooleanAnd).
+			AddNestedWhereQuery(nested, core.BooleanAnd)
 	}, "", "", "inner", false)
 
 	assert.Equal(t, `select "users"."id" from "users" inner join "contacts" on "users"."id" = "contacts"."id" and ("contacts"."id" = ?)`, b.ToSQL())
@@ -426,7 +427,7 @@ func TestCrossJoinSubs(t *testing.T) {
 // the same shape TestJoinLateralSQLite uses for the base grammar's refusal.
 func TestJoinLateralMariaDb(t *testing.T) {
 	builder := NewBuilder(NewMariaDbGrammar("")).From("users", "").JoinLateral(func(q *Builder) *Builder {
-		return q.From("contacts", "").WhereColumn("contracts.user_id", "=", "users.id", BooleanAnd)
+		return q.From("contacts", "").WhereColumn("contracts.user_id", "=", "users.id", core.BooleanAnd)
 	}, "sub", "inner")
 
 	// Laravel's toSql() throws; the port records the error on the builder and keeps building.

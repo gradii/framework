@@ -3,6 +3,7 @@ package db
 import (
 	"github.com/goravel/framework/contracts/database/db"
 	querybuilder "github.com/goravel/framework/database/query"
+	"github.com/goravel/framework/database/query/core"
 )
 
 func (r *Query) SelectRaw(sql string, bindings ...any) db.Query {
@@ -86,7 +87,7 @@ func (r *Query) OrHaving(column any, args ...any) db.Query {
 }
 
 func (r *Query) HavingRaw(sql string, bindings ...any) db.Query {
-	r.builder.HavingRaw(sql, bindings, querybuilder.BooleanAnd)
+	r.builder.HavingRaw(sql, bindings, core.BooleanAnd)
 	return r
 }
 
@@ -96,12 +97,12 @@ func (r *Query) OrHavingRaw(sql string, bindings ...any) db.Query {
 }
 
 func (r *Query) HavingNull(columns ...string) db.Query {
-	r.builder.HavingNull(columns, querybuilder.BooleanAnd, false)
+	r.builder.HavingNull(columns, core.BooleanAnd, false)
 	return r
 }
 
 func (r *Query) HavingNotNull(columns ...string) db.Query {
-	r.builder.HavingNotNull(columns, querybuilder.BooleanAnd)
+	r.builder.HavingNotNull(columns, core.BooleanAnd)
 	return r
 }
 
@@ -116,12 +117,12 @@ func (r *Query) OrHavingNotNull(columns ...string) db.Query {
 }
 
 func (r *Query) HavingBetween(column string, lower, upper any) db.Query {
-	r.builder.HavingBetween(column, []any{lower, upper}, querybuilder.BooleanAnd, false)
+	r.builder.HavingBetween(column, []any{lower, upper}, core.BooleanAnd, false)
 	return r
 }
 
 func (r *Query) HavingNotBetween(column string, lower, upper any) db.Query {
-	r.builder.HavingBetween(column, []any{lower, upper}, querybuilder.BooleanAnd, true)
+	r.builder.HavingBetween(column, []any{lower, upper}, core.BooleanAnd, true)
 	return r
 }
 
@@ -176,7 +177,7 @@ func (r *Query) Lock(value any) db.Query {
 }
 
 func (r *Query) WhereBetweenColumns(column, lower, upper string) db.Query {
-	r.builder.WhereBetweenColumns(column, []any{lower, upper}, querybuilder.BooleanAnd, false)
+	r.builder.WhereBetweenColumns(column, []any{lower, upper}, core.BooleanAnd, false)
 	return r
 }
 
@@ -186,7 +187,7 @@ func (r *Query) OrWhereBetweenColumns(column, lower, upper string) db.Query {
 }
 
 func (r *Query) WhereNotBetweenColumns(column, lower, upper string) db.Query {
-	r.builder.WhereNotBetweenColumns(column, []any{lower, upper}, querybuilder.BooleanAnd)
+	r.builder.WhereNotBetweenColumns(column, []any{lower, upper}, core.BooleanAnd)
 	return r
 }
 
@@ -196,7 +197,7 @@ func (r *Query) OrWhereNotBetweenColumns(column, lower, upper string) db.Query {
 }
 
 func (r *Query) WhereValueBetween(value any, lower, upper string) db.Query {
-	r.builder.WhereValueBetween(value, []any{lower, upper}, querybuilder.BooleanAnd, false)
+	r.builder.WhereValueBetween(value, []any{lower, upper}, core.BooleanAnd, false)
 	return r
 }
 
@@ -206,7 +207,7 @@ func (r *Query) OrWhereValueBetween(value any, lower, upper string) db.Query {
 }
 
 func (r *Query) WhereValueNotBetween(value any, lower, upper string) db.Query {
-	r.builder.WhereValueNotBetween(value, []any{lower, upper}, querybuilder.BooleanAnd)
+	r.builder.WhereValueNotBetween(value, []any{lower, upper}, core.BooleanAnd)
 	return r
 }
 
@@ -216,7 +217,7 @@ func (r *Query) OrWhereValueNotBetween(value any, lower, upper string) db.Query 
 }
 
 func (r *Query) WhereIntegerInRaw(column string, values []any) db.Query {
-	r.builder.WhereIntegerInRaw(column, values, querybuilder.BooleanAnd, false)
+	r.builder.WhereIntegerInRaw(column, values, core.BooleanAnd, false)
 	return r
 }
 
@@ -226,7 +227,7 @@ func (r *Query) OrWhereIntegerInRaw(column string, values []any) db.Query {
 }
 
 func (r *Query) WhereIntegerNotInRaw(column string, values []any) db.Query {
-	r.builder.WhereIntegerNotInRaw(column, values, querybuilder.BooleanAnd)
+	r.builder.WhereIntegerNotInRaw(column, values, core.BooleanAnd)
 	return r
 }
 
@@ -246,7 +247,7 @@ func (r *Query) OrWhereRowValues(columns []string, operator string, values []any
 }
 
 func (r *Query) WhereJsonOverlaps(column string, value any) db.Query {
-	r.builder.WhereJsonOverlaps(column, value, querybuilder.BooleanAnd, false)
+	r.builder.WhereJsonOverlaps(column, value, core.BooleanAnd, false)
 	return r
 }
 
@@ -256,7 +257,7 @@ func (r *Query) OrWhereJsonOverlaps(column string, value any) db.Query {
 }
 
 func (r *Query) WhereJsonDoesntOverlap(column string, value any) db.Query {
-	r.builder.WhereJsonDoesntOverlap(column, value, querybuilder.BooleanAnd)
+	r.builder.WhereJsonDoesntOverlap(column, value, core.BooleanAnd)
 	return r
 }
 
@@ -266,7 +267,7 @@ func (r *Query) OrWhereJsonDoesntOverlap(column string, value any) db.Query {
 }
 
 func (r *Query) WhereFullText(columns []string, value string, options ...string) db.Query {
-	r.builder.WhereFullText(columns, value, options, querybuilder.BooleanAnd)
+	r.builder.WhereFullText(columns, value, options, core.BooleanAnd)
 	return r
 }
 
@@ -426,7 +427,7 @@ func (r *Query) OrWhereTodayOrAfter(columns ...string) db.Query {
 }
 
 func (r *Query) WhereToday(columns ...string) db.Query {
-	r.builder.WhereToday(columns, querybuilder.BooleanAnd)
+	r.builder.WhereToday(columns, core.BooleanAnd)
 	return r
 }
 
@@ -436,17 +437,17 @@ func (r *Query) OrWhereToday(columns ...string) db.Query {
 }
 
 func (r *Query) OrWhereExists(query any) db.Query {
-	r.builder.WhereExists(r.subquery(query), querybuilder.BooleanOr, false)
+	r.builder.WhereExists(r.subquery(query), core.BooleanOr, false)
 	return r
 }
 
 func (r *Query) WhereNotExists(query any) db.Query {
-	r.builder.WhereExists(r.subquery(query), querybuilder.BooleanAnd, true)
+	r.builder.WhereExists(r.subquery(query), core.BooleanAnd, true)
 	return r
 }
 
 func (r *Query) OrWhereNotExists(query any) db.Query {
-	r.builder.WhereExists(r.subquery(query), querybuilder.BooleanOr, true)
+	r.builder.WhereExists(r.subquery(query), core.BooleanOr, true)
 	return r
 }
 
@@ -553,7 +554,7 @@ func (r *Query) AddBinding(value any, component string) db.Query {
 }
 func (r *Query) WhereNested(callback func(db.Query) db.Query) db.Query { return r.Where(callback) }
 func (r *Query) HavingNested(callback func(db.Query) db.Query) db.Query {
-	r.builder.HavingNested(func(b *querybuilder.Builder) *querybuilder.Builder { return r.nested(callback, b) }, querybuilder.BooleanAnd)
+	r.builder.HavingNested(func(b *querybuilder.Builder) *querybuilder.Builder { return r.nested(callback, b) }, core.BooleanAnd)
 	return r
 }
 func (r *Query) BeforeQuery(callback func(db.Query) db.Query) db.Query {

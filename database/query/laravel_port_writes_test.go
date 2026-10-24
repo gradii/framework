@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -168,7 +169,7 @@ func TestUpdateMethodWithJoins(t *testing.T) {
 	t.Run("base closure join", func(t *testing.T) {
 		sql, bindings := newTestBuilder().From("users", "").
 			Join("orders", func(join *Builder) *Builder {
-				return join.WhereColumn("users.id", "=", "orders.user_id", BooleanAnd).Where("users.id", 1)
+				return join.WhereColumn("users.id", "=", "orders.user_id", core.BooleanAnd).Where("users.id", 1)
 			}, "", "", "inner", false).
 			ToUpdateSQL(map[string]any{"email": "foo", "name": "bar"})
 
@@ -193,7 +194,7 @@ func TestUpdateMethodWithJoinsOnSqlServer(t *testing.T) {
 	t.Run("sqlserver closure join", func(t *testing.T) {
 		sql, bindings := NewBuilder(NewSqlServerGrammar("")).From("users", "").
 			Join("orders", func(join *Builder) *Builder {
-				return join.WhereColumn("users.id", "=", "orders.user_id", BooleanAnd).Where("users.id", 1)
+				return join.WhereColumn("users.id", "=", "orders.user_id", core.BooleanAnd).Where("users.id", 1)
 			}, "", "", "inner", false).
 			ToUpdateSQL(map[string]any{"email": "foo", "name": "bar"})
 
@@ -218,7 +219,7 @@ func TestUpdateMethodWithJoinsOnMySql(t *testing.T) {
 	t.Run("mysql closure join", func(t *testing.T) {
 		sql, bindings := NewBuilder(NewMySqlGrammar("")).From("users", "").
 			Join("orders", func(join *Builder) *Builder {
-				return join.WhereColumn("users.id", "=", "orders.user_id", BooleanAnd).Where("users.id", 1)
+				return join.WhereColumn("users.id", "=", "orders.user_id", core.BooleanAnd).Where("users.id", 1)
 			}, "", "", "inner", false).
 			ToUpdateSQL(map[string]any{"email": "foo", "name": "bar"})
 
@@ -253,7 +254,7 @@ func TestUpdateMethodWithJoinsOnSQLite(t *testing.T) {
 	t.Run("sqlite with a closure join", func(t *testing.T) {
 		sql, bindings := NewBuilder(NewSqliteGrammar("")).From("users", "").
 			Join("orders", func(join *Builder) *Builder {
-				return join.WhereColumn("users.id", "=", "orders.user_id", BooleanAnd).Where("users.id", 1)
+				return join.WhereColumn("users.id", "=", "orders.user_id", core.BooleanAnd).Where("users.id", 1)
 			}, "", "", "inner", false).
 			ToUpdateSQL(map[string]any{"email": "foo", "name": "bar"})
 
@@ -300,7 +301,7 @@ func TestUpdateMethodWithJoinsOnPostgres(t *testing.T) {
 	t.Run("postgres closure join", func(t *testing.T) {
 		sql, bindings := NewBuilder(NewPostgresGrammar("")).From("users", "").
 			Join("orders", func(join *Builder) *Builder {
-				return join.WhereColumn("users.id", "=", "orders.user_id", BooleanAnd).Where("users.id", 1)
+				return join.WhereColumn("users.id", "=", "orders.user_id", core.BooleanAnd).Where("users.id", 1)
 			}, "", "", "inner", false).
 			ToUpdateSQL(map[string]any{"email": "foo", "name": "bar"})
 
@@ -311,7 +312,7 @@ func TestUpdateMethodWithJoinsOnPostgres(t *testing.T) {
 	t.Run("postgres closure join with an outer where", func(t *testing.T) {
 		sql, bindings := NewBuilder(NewPostgresGrammar("")).From("users", "").
 			Join("orders", func(join *Builder) *Builder {
-				return join.WhereColumn("users.id", "=", "orders.user_id", BooleanAnd).Where("users.id", 1)
+				return join.WhereColumn("users.id", "=", "orders.user_id", core.BooleanAnd).Where("users.id", 1)
 			}, "", "", "inner", false).
 			Where("name", "baz").
 			ToUpdateSQL(map[string]any{"email": "foo", "name": "bar"})
@@ -349,7 +350,7 @@ func TestPostgresInsertGetId(t *testing.T) {
 // expressed as an ordered InsertValues, the entry point ToInsertGetIdSQL now accepts.
 func TestInsertGetIdMethodRemovesExpressions(t *testing.T) {
 	sql, bindings := newTestBuilder().From("users", "").
-		ToInsertGetIdSQL(InsertValues{
+		ToInsertGetIdSQL(core.InsertValues{
 			{Column: "email", Value: "foo"},
 			{Column: "bar", Value: Raw("bar")},
 		}, "id")
@@ -378,7 +379,7 @@ func TestInsertGetIdMapFallbackKeepsSorting(t *testing.T) {
 func TestUpdateMethodWorksWithQueryAsValue(t *testing.T) {
 	sub := newTestBuilder().From("transactions", "").
 		SelectRaw("sum(credits)", nil).
-		WhereColumn("transactions.user_id", "=", "users.id", BooleanAnd).
+		WhereColumn("transactions.user_id", "=", "users.id", core.BooleanAnd).
 		Where("type", "foo")
 
 	sql, bindings := newTestBuilder().From("users", "").Where("id", 1).

@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/goravel/framework/errors"
 )
 
@@ -39,7 +40,7 @@ type Builder struct {
 	// `<wrapped column> + <amount>` expression, followed by the extra values. Laravel's incrementEach
 	// hands the merged array to update(), which executes against its connection; the builder here holds
 	// none, so the descriptor is left for the caller to compile with ToUpdateSQL.
-	updateValues UpdateValues
+	updateValues core.UpdateValues
 }
 
 // NewBuilder binds SQL compilation and result processing. A SQL-only builder may omit the
@@ -276,7 +277,7 @@ func (b *Builder) MergeBindings(other *Builder) {
 // "where" component in order - array_values(array_merge(...)) in Laravel, which a slice append
 // reproduces without the PHP array keys. Laravel stores the merged bindings as given, without
 // castBinding (which runs only in addBinding and cleanBindings), and so does this.
-func (b *Builder) MergeWheres(wheres []Where, bindings []any) *Builder {
+func (b *Builder) MergeWheres(wheres []core.Where, bindings []any) *Builder {
 	b.State().Wheres = append(b.State().Wheres, wheres...)
 	b.State().Bindings["where"] = append(append([]any{}, b.State().Bindings["where"]...), bindings...)
 

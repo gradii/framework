@@ -1,5 +1,7 @@
 package query
 
+import "github.com/goravel/framework/database/query/core"
+
 // JoinClause is a builder specialised to a join. It embeds *Builder, mirroring PHP's
 // `class JoinClause extends Builder`, so on clauses are stored in the same where descriptors and
 // compiled by the same compileWheres. Because isJoinClause is set, that compilation emits `on ...`
@@ -48,7 +50,7 @@ func (j *JoinClause) On(first any, operator any, second any, boolean string) *Jo
 
 // OrOn adds an "or on" clause. Mirrors JoinClause::orOn().
 func (j *JoinClause) OrOn(first any, operator any, second any) *JoinClause {
-	return j.On(first, operator, second, BooleanOr)
+	return j.On(first, operator, second, core.BooleanOr)
 }
 
 func (j *JoinClause) JoinType() string { return j.Type }

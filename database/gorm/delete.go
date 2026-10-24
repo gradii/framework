@@ -5,6 +5,7 @@ import (
 
 	contractsdb "github.com/goravel/framework/contracts/database/db"
 	querybuilder "github.com/goravel/framework/database/query"
+	"github.com/goravel/framework/database/query/core"
 	basedatabase "github.com/goravel/framework/support/database"
 )
 
@@ -120,7 +121,7 @@ func (r *Query) applyKeyWhere(builder *querybuilder.Builder, model any) bool {
 		return true
 	}
 
-	builder.WhereIn(column, values, querybuilder.BooleanAnd, false)
+	builder.WhereIn(column, values, core.BooleanAnd, false)
 
 	return true
 }

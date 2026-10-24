@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -30,10 +31,10 @@ import (
 func TestWhereJsonContainsMySql(t *testing.T) {
 	runDialectCases(t, []dialectCase{
 		{"where", NewMySqlGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonContains("options", []any{"en"}, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereJsonContains("options", []any{"en"}, core.BooleanAnd, false)
 		}, "select * from `users` where json_contains(`options`, ?)"},
 		{"where with a path", NewMySqlGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonContains("users.options->languages", []any{"en"}, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereJsonContains("users.options->languages", []any{"en"}, core.BooleanAnd, false)
 		}, "select * from `users` where json_contains(`users`.`options`, ?, '$.\"languages\"')"},
 		{"or where", NewMySqlGrammar(""), func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", "=", 1).OrWhereJsonContains("options->languages", Raw(`'["en"]'`))
@@ -42,7 +43,7 @@ func TestWhereJsonContainsMySql(t *testing.T) {
 
 	// An array value is bound as JSON, exactly as Laravel's json_encode produces it.
 	assert.Equal(t, []any{"[\"en\"]"}, NewBuilder(NewMySqlGrammar("")).Select("*").From("users", "").
-		WhereJsonContains("options", []any{"en"}, BooleanAnd, false).GetBindings())
+		WhereJsonContains("options", []any{"en"}, core.BooleanAnd, false).GetBindings())
 	// A Raw value is inlined and contributes no binding of its own; only the id remains.
 	assert.Equal(t, []any{1}, NewBuilder(NewMySqlGrammar("")).Select("*").From("users", "").
 		Where("id", "=", 1).OrWhereJsonContains("options->languages", Raw(`'["en"]'`)).GetBindings())
@@ -52,10 +53,10 @@ func TestWhereJsonContainsMySql(t *testing.T) {
 func TestWhereJsonContainsPostgres(t *testing.T) {
 	runDialectCases(t, []dialectCase{
 		{"where", NewPostgresGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonContains("options", []any{"en"}, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereJsonContains("options", []any{"en"}, core.BooleanAnd, false)
 		}, `select * from "users" where ("options")::jsonb @> ?`},
 		{"where with a path", NewPostgresGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonContains("users.options->languages", []any{"en"}, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereJsonContains("users.options->languages", []any{"en"}, core.BooleanAnd, false)
 		}, `select * from "users" where ("users"."options"->'languages')::jsonb @> ?`},
 		{"or where", NewPostgresGrammar(""), func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", "=", 1).OrWhereJsonContains("options->languages", Raw(`'["en"]'`))
@@ -63,7 +64,7 @@ func TestWhereJsonContainsPostgres(t *testing.T) {
 	})
 
 	assert.Equal(t, []any{"[\"en\"]"}, NewBuilder(NewPostgresGrammar("")).Select("*").From("users", "").
-		WhereJsonContains("options", []any{"en"}, BooleanAnd, false).GetBindings())
+		WhereJsonContains("options", []any{"en"}, core.BooleanAnd, false).GetBindings())
 	assert.Equal(t, []any{1}, NewBuilder(NewPostgresGrammar("")).Select("*").From("users", "").
 		Where("id", "=", 1).OrWhereJsonContains("options->languages", Raw(`'["en"]'`)).GetBindings())
 }
@@ -72,10 +73,10 @@ func TestWhereJsonContainsPostgres(t *testing.T) {
 func TestWhereJsonContainsSqlServer(t *testing.T) {
 	runDialectCases(t, []dialectCase{
 		{"where", NewSqlServerGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonContains("options", true, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereJsonContains("options", true, core.BooleanAnd, false)
 		}, `select * from [users] where ? in (select [value] from openjson([options]))`},
 		{"where with a path", NewSqlServerGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonContains("users.options->languages", "en", BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereJsonContains("users.options->languages", "en", core.BooleanAnd, false)
 		}, `select * from [users] where ? in (select [value] from openjson([users].[options], '$."languages"'))`},
 		{"or where", NewSqlServerGrammar(""), func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", "=", 1).OrWhereJsonContains("options->languages", Raw(`'en'`))
@@ -84,7 +85,7 @@ func TestWhereJsonContainsSqlServer(t *testing.T) {
 
 	// SQL Server passes booleans as the strings "true"/"false".
 	assert.Equal(t, []any{"true"}, NewBuilder(NewSqlServerGrammar("")).Select("*").From("users", "").
-		WhereJsonContains("options", true, BooleanAnd, false).GetBindings())
+		WhereJsonContains("options", true, core.BooleanAnd, false).GetBindings())
 	assert.Equal(t, []any{1}, NewBuilder(NewSqlServerGrammar("")).Select("*").From("users", "").
 		Where("id", "=", 1).OrWhereJsonContains("options->languages", Raw(`'en'`)).GetBindings())
 }

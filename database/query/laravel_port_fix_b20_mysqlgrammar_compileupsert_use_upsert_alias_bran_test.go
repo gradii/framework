@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -35,7 +36,7 @@ func TestMySqlUpsertMethodUseUpsertAlias(t *testing.T) {
 	values := []map[string]any{{"email": "foo", "name": "bar"}, {"name": "bar2", "email": "foo2"}}
 	// upsert($values, 'email') derives $update from the first record's keys, so the update list is
 	// the value-copying form for both columns.
-	update := []UpsertUpdate{{Column: "email"}, {Column: "name"}}
+	update := []core.UpsertUpdate{{Column: "email"}, {Column: "name"}}
 
 	t.Run("use_upsert_alias=false", func(t *testing.T) {
 		sql, bindings := mysqlUpsertBuilder(false).ToUpsertSQL(values, []string{"email"}, update)
@@ -58,7 +59,7 @@ func TestMySqlUpsertMethodUseUpsertAlias(t *testing.T) {
 // testUpsertMethodWithUpdateColumns (corpus L4143-4174).
 func TestMySqlUpsertMethodWithUpdateColumnsUseUpsertAlias(t *testing.T) {
 	values := []map[string]any{{"email": "foo", "name": "bar"}, {"name": "bar2", "email": "foo2"}}
-	update := []UpsertUpdate{{Column: "name"}}
+	update := []core.UpsertUpdate{{Column: "name"}}
 
 	t.Run("use_upsert_alias=false", func(t *testing.T) {
 		sql, bindings := mysqlUpsertBuilder(false).ToUpsertSQL(values, []string{"email"}, update)
@@ -85,7 +86,7 @@ func TestMySqlPreservedAreAppliedByUpsertUseUpsertAlias(t *testing.T) {
 	b.SetUseUpsertAlias(true)
 	b.BeforeQuery(func(q *Builder) *Builder { return q.From("users", "") })
 
-	sql, bindings := b.ToUpsertSQL([]map[string]any{{"email": "foo"}}, []string{"id"}, []UpsertUpdate{{Column: "email"}})
+	sql, bindings := b.ToUpsertSQL([]map[string]any{{"email": "foo"}}, []string{"id"}, []core.UpsertUpdate{{Column: "email"}})
 
 	assert.Equal(t, "insert into `users` (`email`) values (?) as laravel_upsert_alias "+
 		"on duplicate key update `email` = `laravel_upsert_alias`.`email`", sql)
@@ -97,7 +98,7 @@ func TestMySqlPreservedAreAppliedByUpsertUseUpsertAlias(t *testing.T) {
 // the value-copying form switches to the alias. (Oracle: bound alias=true -> `name` = ?.)
 func TestMySqlUpsertAliasKeepsBoundUpdates(t *testing.T) {
 	values := []map[string]any{{"email": "foo", "name": "bar"}}
-	update := []UpsertUpdate{{Column: "name", Value: "baz", Bound: true}}
+	update := []core.UpsertUpdate{{Column: "name", Value: "baz", Bound: true}}
 
 	sql, bindings := mysqlUpsertBuilder(true).ToUpsertSQL(values, []string{"email"}, update)
 
@@ -110,7 +111,7 @@ func TestMySqlUpsertAliasKeepsBoundUpdates(t *testing.T) {
 // form, so existing callers are unaffected.
 func TestMySqlUpsertAliasOffByDefault(t *testing.T) {
 	sql, _ := mysqlUpsertBuilder(false).ToUpsertSQL(
-		[]map[string]any{{"email": "foo"}}, []string{"id"}, []UpsertUpdate{{Column: "email"}})
+		[]map[string]any{{"email": "foo"}}, []string{"id"}, []core.UpsertUpdate{{Column: "email"}})
 
 	assert.Equal(t, "insert into `users` (`email`) values (?) on duplicate key update `email` = values(`email`)", sql)
 }

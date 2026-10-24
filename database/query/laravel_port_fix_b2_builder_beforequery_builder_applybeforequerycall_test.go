@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -72,7 +73,7 @@ func TestPreservedAreAppliedByUpsert(t *testing.T) {
 	b := NewBuilder(NewMySqlGrammar(""))
 	b.BeforeQuery(func(q *Builder) *Builder { return q.From("users", "") })
 
-	sql, bindings := b.ToUpsertSQL([]map[string]any{{"email": "foo"}}, []string{"id"}, []UpsertUpdate{{Column: "email"}})
+	sql, bindings := b.ToUpsertSQL([]map[string]any{{"email": "foo"}}, []string{"id"}, []core.UpsertUpdate{{Column: "email"}})
 
 	assert.Equal(t, "insert into `users` (`email`) values (?) on duplicate key update `email` = values(`email`)", sql)
 	assert.Equal(t, []any{"foo"}, bindings)

@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -61,7 +62,7 @@ func TestDynamicWhereIsNotGreedy(t *testing.T) {
 // cases do. Inside the nested group, $j->whereRole('admin') is the dynamic where this item adds.
 func TestJoinsWithAdvancedConditions(t *testing.T) {
 	builder := newTestBuilder().From("users", "").Select("*").LeftJoin("contacts", func(j *Builder) *Builder {
-		return j.WhereColumn("users.id", "contacts.id", nil, BooleanAnd).
+		return j.WhereColumn("users.id", "contacts.id", nil, core.BooleanAnd).
 			Where(func(nested *Builder) *Builder {
 				return nested.DynamicWhere("whereRole", []any{"admin"}).
 					OrWhereNull("contacts.disabled").

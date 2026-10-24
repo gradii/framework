@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -45,7 +46,7 @@ func aggregateSubSelect(b *Builder) *Builder {
 func TestAggregateWithSubSelectBindings(t *testing.T) {
 	builder := aggregateSubSelect(newTestBuilder())
 
-	sql, bindings := builder.ToAggregateSQL(Aggregate{Function: "count", Columns: []any{"*"}})
+	sql, bindings := builder.ToAggregateSQL(core.Aggregate{Function: "count", Columns: []any{"*"}})
 
 	assert.Equal(t, `select count(*) as aggregate from "users"`, sql)
 	// Emphatically empty: the subselect's "foo" must not reach the executor. A nil and an empty
@@ -78,7 +79,7 @@ func TestAggregateBindingsPerDialect(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			builder := aggregateSubSelect(NewBuilder(test.grammar))
 
-			sql, bindings := builder.ToAggregateSQL(Aggregate{Function: "count", Columns: []any{"*"}})
+			sql, bindings := builder.ToAggregateSQL(core.Aggregate{Function: "count", Columns: []any{"*"}})
 
 			assert.Equal(t, test.want, sql)
 			assert.Empty(t, bindings)
@@ -118,7 +119,7 @@ func TestAggregateKeepsSelectBindingsWithUnion(t *testing.T) {
 			builder := aggregateSubSelect(NewBuilder(test.grammar))
 			builder.Union(NewBuilder(test.grammar).From("videos", ""), false)
 
-			sql, bindings := builder.ToAggregateSQL(Aggregate{Function: "count", Columns: []any{"*"}})
+			sql, bindings := builder.ToAggregateSQL(core.Aggregate{Function: "count", Columns: []any{"*"}})
 
 			assert.Equal(t, test.want, sql)
 			assert.Equal(t, []any{"foo"}, bindings)
@@ -157,7 +158,7 @@ func TestAggregateKeepsSelectBindingsWithHaving(t *testing.T) {
 			builder := aggregateSubSelect(NewBuilder(test.grammar))
 			builder.GroupBy("team").Having("team", ">", 1)
 
-			sql, bindings := builder.ToAggregateSQL(Aggregate{Function: "count", Columns: []any{"*"}})
+			sql, bindings := builder.ToAggregateSQL(core.Aggregate{Function: "count", Columns: []any{"*"}})
 
 			assert.Equal(t, test.want, sql)
 			assert.Equal(t, []any{"foo", 1}, bindings)
@@ -169,7 +170,7 @@ func TestAggregateKeepsSelectBindingsWithHaving(t *testing.T) {
 // groups the orders, and the bindings they carry, are cleared before compiling, so an aggregate over
 // an ordered query has no order by clause. With a group by the order survives.
 func TestAggregateDropsOrdersWithoutGroups(t *testing.T) {
-	count := Aggregate{Function: "count", Columns: []any{"*"}}
+	count := core.Aggregate{Function: "count", Columns: []any{"*"}}
 
 	t.Run("no groups", func(t *testing.T) {
 		builder := aggregateSubSelect(newTestBuilder()).OrderBy("name", "asc")
@@ -214,7 +215,7 @@ func TestAggregateDropsOrdersWithoutGroups(t *testing.T) {
 func TestAggregateBindingsWithWhere(t *testing.T) {
 	builder := aggregateSubSelect(newTestBuilder()).Where("active", 1)
 
-	sql, bindings := builder.ToAggregateSQL(Aggregate{Function: "count", Columns: []any{"*"}})
+	sql, bindings := builder.ToAggregateSQL(core.Aggregate{Function: "count", Columns: []any{"*"}})
 
 	assert.Equal(t, `select count(*) as aggregate from "users" where "active" = ?`, sql)
 	assert.Equal(t, []any{1}, bindings)

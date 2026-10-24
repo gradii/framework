@@ -3,9 +3,9 @@ package query
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
+	"github.com/goravel/framework/database/query/core"
 	"github.com/goravel/framework/errors"
+	"github.com/stretchr/testify/assert"
 )
 
 // This file ports the "wheres-gap" group of the Laravel port plan: the 35 wheres-family methods of
@@ -71,7 +71,7 @@ func runWheresGapDialectCases(t *testing.T, cases []wheresGapDialectCase) {
 func TestArrayWhereNulls(t *testing.T) {
 	runWheresGapCases(t, []wheresGapCase{
 		{laravelCase{"where null array", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereNull([]any{"id", "expires_at"}, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereNull([]any{"id", "expires_at"}, core.BooleanAnd, false)
 		}, `select * from "users" where "id" is null and "expires_at" is null`}, nil},
 		{laravelCase{"or where null array", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", "=", 1).OrWhereNull([]any{"id", "expires_at"})
@@ -84,7 +84,7 @@ func TestArrayWhereNulls(t *testing.T) {
 func TestArrayWhereNotNulls(t *testing.T) {
 	runWheresGapCases(t, []wheresGapCase{
 		{laravelCase{"where not null array", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereNotNull([]any{"id", "expires_at"}, BooleanAnd)
+			return b.Select("*").From("users", "").WhereNotNull([]any{"id", "expires_at"}, core.BooleanAnd)
 		}, `select * from "users" where "id" is not null and "expires_at" is not null`}, nil},
 		{laravelCase{"or where not null array", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", ">", 1).OrWhereNotNull([]any{"id", "expires_at"})
@@ -96,7 +96,7 @@ func TestArrayWhereNotNulls(t *testing.T) {
 func TestBasicWhereNulls(t *testing.T) {
 	runWheresGapCases(t, []wheresGapCase{
 		{laravelCase{"where null", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereNull("id", BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereNull("id", core.BooleanAnd, false)
 		}, `select * from "users" where "id" is null`}, nil},
 		{laravelCase{"or where null", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", "=", 1).OrWhereNull("id")
@@ -108,7 +108,7 @@ func TestBasicWhereNulls(t *testing.T) {
 func TestBasicWhereNotNulls(t *testing.T) {
 	runWheresGapCases(t, []wheresGapCase{
 		{laravelCase{"where not null", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereNotNull("id", BooleanAnd)
+			return b.Select("*").From("users", "").WhereNotNull("id", core.BooleanAnd)
 		}, `select * from "users" where "id" is not null`}, nil},
 		{laravelCase{"or where not null", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", ">", 1).OrWhereNotNull("id")
@@ -121,7 +121,7 @@ func TestBasicWhereNotNulls(t *testing.T) {
 func TestBasicWhereNullExpressionsMysql(t *testing.T) {
 	runWheresGapDialectCases(t, []wheresGapDialectCase{
 		{dialectCase{"expression where null", NewMySqlGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereNull(Raw("id"), BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereNull(Raw("id"), core.BooleanAnd, false)
 		}, "select * from `users` where id is null"}, nil},
 		{dialectCase{"expression or where null", NewMySqlGrammar(""), func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", "=", 1).OrWhereNull(Raw("id"))
@@ -155,11 +155,11 @@ func TestBasicWhereColumn(t *testing.T) {
 	runWheresGapCases(t, []wheresGapCase{
 		{laravelCase{"where column without operator", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").
-				WhereColumn("first_name", "last_name", "", BooleanAnd).
+				WhereColumn("first_name", "last_name", "", core.BooleanAnd).
 				OrWhereColumn("first_name", "middle_name", "")
 		}, `select * from "users" where "first_name" = "last_name" or "first_name" = "middle_name"`}, nil},
 		{laravelCase{"where column with operator", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereColumn("updated_at", ">", "created_at", BooleanAnd)
+			return b.Select("*").From("users", "").WhereColumn("updated_at", ">", "created_at", core.BooleanAnd)
 		}, `select * from "users" where "updated_at" > "created_at"`}, nil},
 	})
 }
@@ -168,10 +168,10 @@ func TestBasicWhereColumn(t *testing.T) {
 func TestBasicWhereNotIns(t *testing.T) {
 	runWheresGapCases(t, []wheresGapCase{
 		{laravelCase{"where not in", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereIn("id", []any{1, 2, 3}, BooleanAnd, true)
+			return b.Select("*").From("users", "").WhereIn("id", []any{1, 2, 3}, core.BooleanAnd, true)
 		}, `select * from "users" where "id" not in (?, ?, ?)`}, []any{1, 2, 3}},
 		{laravelCase{"or where not in", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").Where("id", "=", 1).WhereIn("id", []any{1, 2, 3}, BooleanOr, true)
+			return b.Select("*").From("users", "").Where("id", "=", 1).WhereIn("id", []any{1, 2, 3}, core.BooleanOr, true)
 		}, `select * from "users" where "id" = ? or "id" not in (?, ?, ?)`}, []any{1, 1, 2, 3}},
 	})
 }
@@ -181,10 +181,10 @@ func TestBasicWhereNotIns(t *testing.T) {
 func TestEmptyWhereIns(t *testing.T) {
 	runWheresGapCases(t, []wheresGapCase{
 		{laravelCase{"empty where in", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereIn("id", []any{}, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereIn("id", []any{}, core.BooleanAnd, false)
 		}, `select * from "users" where 0 = 1`}, nil},
 		{laravelCase{"empty or where in", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").Where("id", 1).WhereIn("id", []any{}, BooleanOr, false)
+			return b.Select("*").From("users", "").Where("id", 1).WhereIn("id", []any{}, core.BooleanOr, false)
 		}, `select * from "users" where "id" = ? or 0 = 1`}, []any{1}},
 	})
 }
@@ -193,10 +193,10 @@ func TestEmptyWhereIns(t *testing.T) {
 func TestEmptyWhereNotIns(t *testing.T) {
 	runWheresGapCases(t, []wheresGapCase{
 		{laravelCase{"empty where not in", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereIn("id", []any{}, BooleanAnd, true)
+			return b.Select("*").From("users", "").WhereIn("id", []any{}, core.BooleanAnd, true)
 		}, `select * from "users" where 1 = 1`}, nil},
 		{laravelCase{"empty or where not in", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").Where("id", 1).WhereIn("id", []any{}, BooleanOr, true)
+			return b.Select("*").From("users", "").Where("id", 1).WhereIn("id", []any{}, core.BooleanOr, true)
 		}, `select * from "users" where "id" = ? or 1 = 1`}, []any{1}},
 	})
 }
@@ -205,7 +205,7 @@ func TestEmptyWhereNotIns(t *testing.T) {
 func TestEmptyWhereIntegerInRaw(t *testing.T) {
 	runWheresGapCases(t, []wheresGapCase{
 		{laravelCase{"empty integer in raw", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereIntegerInRaw("id", []any{}, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereIntegerInRaw("id", []any{}, core.BooleanAnd, false)
 		}, `select * from "users" where 0 = 1`}, nil},
 	})
 }
@@ -215,7 +215,7 @@ func TestEmptyWhereIntegerInRaw(t *testing.T) {
 func TestEmptyWhereIntegerNotInRaw(t *testing.T) {
 	runWheresGapCases(t, []wheresGapCase{
 		{laravelCase{"empty integer not in raw", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereIntegerInRaw("id", []any{}, BooleanAnd, true)
+			return b.Select("*").From("users", "").WhereIntegerInRaw("id", []any{}, core.BooleanAnd, true)
 		}, `select * from "users" where 1 = 1`}, nil},
 	})
 }
@@ -225,10 +225,10 @@ func TestEmptyWhereIntegerNotInRaw(t *testing.T) {
 func TestRawWhereIns(t *testing.T) {
 	runWheresGapCases(t, []wheresGapCase{
 		{laravelCase{"raw where in", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereIn("id", []any{Raw("1")}, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereIn("id", []any{Raw("1")}, core.BooleanAnd, false)
 		}, `select * from "users" where "id" in (1)`}, nil},
 		{laravelCase{"raw or where in", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").Where("id", "=", 1).WhereIn("id", []any{Raw("1")}, BooleanOr, false)
+			return b.Select("*").From("users", "").Where("id", "=", 1).WhereIn("id", []any{Raw("1")}, core.BooleanOr, false)
 		}, `select * from "users" where "id" = ? or "id" in (1)`}, []any{1}},
 	})
 }
@@ -237,7 +237,7 @@ func TestRawWhereIns(t *testing.T) {
 func TestRawWheres(t *testing.T) {
 	runWheresGapCases(t, []wheresGapCase{
 		{laravelCase{"raw where", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereRaw("id = ? or email = ?", []any{1, "foo"}, BooleanAnd)
+			return b.Select("*").From("users", "").WhereRaw("id = ? or email = ?", []any{1, "foo"}, core.BooleanAnd)
 		}, `select * from "users" where id = ? or email = ?`}, []any{1, "foo"}},
 	})
 }
@@ -307,15 +307,15 @@ func TestWhereBetweenColumns(t *testing.T) {
 	runWheresGapCases(t, []wheresGapCase{
 		{laravelCase{"between columns", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").
-				WhereBetweenColumns("id", []any{"users.created_at", "users.updated_at"}, BooleanAnd, false)
+				WhereBetweenColumns("id", []any{"users.created_at", "users.updated_at"}, core.BooleanAnd, false)
 		}, `select * from "users" where "id" between "users"."created_at" and "users"."updated_at"`}, nil},
 		{laravelCase{"not between columns", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").
-				WhereBetweenColumns("id", []any{"created_at", "updated_at"}, BooleanAnd, true)
+				WhereBetweenColumns("id", []any{"created_at", "updated_at"}, core.BooleanAnd, true)
 		}, `select * from "users" where "id" not between "created_at" and "updated_at"`}, nil},
 		{laravelCase{"between columns raw", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").
-				WhereBetweenColumns("id", []any{Raw("1"), Raw("2")}, BooleanAnd, false)
+				WhereBetweenColumns("id", []any{Raw("1"), Raw("2")}, core.BooleanAnd, false)
 		}, `select * from "users" where "id" between 1 and 2`}, nil},
 	})
 }
@@ -325,15 +325,15 @@ func TestOrWhereBetweenColumns(t *testing.T) {
 	runWheresGapCases(t, []wheresGapCase{
 		{laravelCase{"or between qualified columns", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", 2).
-				WhereBetweenColumns("id", []any{"users.created_at", "users.updated_at"}, BooleanOr, false)
+				WhereBetweenColumns("id", []any{"users.created_at", "users.updated_at"}, core.BooleanOr, false)
 		}, `select * from "users" where "id" = ? or "id" between "users"."created_at" and "users"."updated_at"`}, []any{2}},
 		{laravelCase{"or between columns", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", 2).
-				WhereBetweenColumns("id", []any{"created_at", "updated_at"}, BooleanOr, false)
+				WhereBetweenColumns("id", []any{"created_at", "updated_at"}, core.BooleanOr, false)
 		}, `select * from "users" where "id" = ? or "id" between "created_at" and "updated_at"`}, []any{2}},
 		{laravelCase{"or between raw columns", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", 2).
-				WhereBetweenColumns("id", []any{Raw("1"), Raw("2")}, BooleanOr, false)
+				WhereBetweenColumns("id", []any{Raw("1"), Raw("2")}, core.BooleanOr, false)
 		}, `select * from "users" where "id" = ? or "id" between 1 and 2`}, []any{2}},
 	})
 }
@@ -343,15 +343,15 @@ func TestOrWhereNotBetweenColumns(t *testing.T) {
 	runWheresGapCases(t, []wheresGapCase{
 		{laravelCase{"or not between qualified columns", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", 2).
-				WhereBetweenColumns("id", []any{"users.created_at", "users.updated_at"}, BooleanOr, true)
+				WhereBetweenColumns("id", []any{"users.created_at", "users.updated_at"}, core.BooleanOr, true)
 		}, `select * from "users" where "id" = ? or "id" not between "users"."created_at" and "users"."updated_at"`}, []any{2}},
 		{laravelCase{"or not between columns", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", 2).
-				WhereBetweenColumns("id", []any{"created_at", "updated_at"}, BooleanOr, true)
+				WhereBetweenColumns("id", []any{"created_at", "updated_at"}, core.BooleanOr, true)
 		}, `select * from "users" where "id" = ? or "id" not between "created_at" and "updated_at"`}, []any{2}},
 		{laravelCase{"or not between raw columns", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", 2).
-				WhereBetweenColumns("id", []any{Raw("1"), Raw("2")}, BooleanOr, true)
+				WhereBetweenColumns("id", []any{Raw("1"), Raw("2")}, core.BooleanOr, true)
 		}, `select * from "users" where "id" = ? or "id" not between 1 and 2`}, []any{2}},
 	})
 }
@@ -362,21 +362,21 @@ func TestWhereValueBetween(t *testing.T) {
 	runWheresGapCases(t, []wheresGapCase{
 		{laravelCase{"value between columns", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").
-				WhereValueBetween("2020-01-01 19:30:00", []any{"created_at", "updated_at"}, BooleanAnd, false)
+				WhereValueBetween("2020-01-01 19:30:00", []any{"created_at", "updated_at"}, core.BooleanAnd, false)
 		}, `select * from "users" where ? between "created_at" and "updated_at"`}, []any{"2020-01-01 19:30:00"}},
 		{laravelCase{"value between columns again", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").
-				WhereValueBetween("2020-01-01 19:30:00", []any{"created_at", "updated_at"}, BooleanAnd, false)
+				WhereValueBetween("2020-01-01 19:30:00", []any{"created_at", "updated_at"}, core.BooleanAnd, false)
 		}, `select * from "users" where ? between "created_at" and "updated_at"`}, []any{"2020-01-01 19:30:00"}},
 		{laravelCase{"value between raw columns", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").
-				WhereValueBetween("2020-01-01 19:30:00", []any{Raw("1"), Raw("2")}, BooleanAnd, false)
+				WhereValueBetween("2020-01-01 19:30:00", []any{Raw("1"), Raw("2")}, core.BooleanAnd, false)
 		}, `select * from "users" where ? between 1 and 2`}, []any{"2020-01-01 19:30:00"}},
 	})
 
 	// The last block is raw on both sides; the corpus asserts the SQL only, so the case does too.
 	builder := newTestBuilder().Select("*").From("users", "").
-		WhereValueBetween(Raw("1"), []any{"created_at", "updated_at"}, BooleanAnd, false)
+		WhereValueBetween(Raw("1"), []any{"created_at", "updated_at"}, core.BooleanAnd, false)
 
 	assert.Equal(t, `select * from "users" where 1 between "created_at" and "updated_at"`, builder.ToSQL())
 }
@@ -387,21 +387,21 @@ func TestWhereValueNotBetween(t *testing.T) {
 	runWheresGapCases(t, []wheresGapCase{
 		{laravelCase{"value not between columns", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").
-				WhereValueBetween("2020-01-01 19:30:00", []any{"created_at", "updated_at"}, BooleanAnd, true)
+				WhereValueBetween("2020-01-01 19:30:00", []any{"created_at", "updated_at"}, core.BooleanAnd, true)
 		}, `select * from "users" where ? not between "created_at" and "updated_at"`}, []any{"2020-01-01 19:30:00"}},
 		{laravelCase{"value not between columns again", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").
-				WhereValueBetween("2020-01-01 19:30:00", []any{"created_at", "updated_at"}, BooleanAnd, true)
+				WhereValueBetween("2020-01-01 19:30:00", []any{"created_at", "updated_at"}, core.BooleanAnd, true)
 		}, `select * from "users" where ? not between "created_at" and "updated_at"`}, []any{"2020-01-01 19:30:00"}},
 		{laravelCase{"value not between raw columns", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").
-				WhereValueBetween("2020-01-01 19:30:00", []any{Raw("1"), Raw("2")}, BooleanAnd, true)
+				WhereValueBetween("2020-01-01 19:30:00", []any{Raw("1"), Raw("2")}, core.BooleanAnd, true)
 		}, `select * from "users" where ? not between 1 and 2`}, []any{"2020-01-01 19:30:00"}},
 	})
 
 	// The raw-value block again asserts SQL only in the corpus.
 	builder := newTestBuilder().Select("*").From("users", "").
-		WhereValueBetween(Raw("1"), []any{"created_at", "updated_at"}, BooleanAnd, true)
+		WhereValueBetween(Raw("1"), []any{"created_at", "updated_at"}, core.BooleanAnd, true)
 
 	assert.Equal(t, `select * from "users" where 1 not between "created_at" and "updated_at"`, builder.ToSQL())
 }
@@ -412,21 +412,21 @@ func TestOrWhereValueBetween(t *testing.T) {
 	runWheresGapCases(t, []wheresGapCase{
 		{laravelCase{"or value between", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", 2).
-				WhereValueBetween("2020-01-01 19:30:00", []any{"created_at", "updated_at"}, BooleanOr, false)
+				WhereValueBetween("2020-01-01 19:30:00", []any{"created_at", "updated_at"}, core.BooleanOr, false)
 		}, `select * from "users" where "id" = ? or ? between "created_at" and "updated_at"`}, []any{2, "2020-01-01 19:30:00"}},
 		{laravelCase{"or value between again", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", 2).
-				WhereValueBetween("2020-01-01 19:30:00", []any{"created_at", "updated_at"}, BooleanOr, false)
+				WhereValueBetween("2020-01-01 19:30:00", []any{"created_at", "updated_at"}, core.BooleanOr, false)
 		}, `select * from "users" where "id" = ? or ? between "created_at" and "updated_at"`}, []any{2, "2020-01-01 19:30:00"}},
 		{laravelCase{"or value between raw columns", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", 2).
-				WhereValueBetween("2020-01-01 19:30:00", []any{Raw("1"), Raw("2")}, BooleanOr, false)
+				WhereValueBetween("2020-01-01 19:30:00", []any{Raw("1"), Raw("2")}, core.BooleanOr, false)
 		}, `select * from "users" where "id" = ? or ? between 1 and 2`}, []any{2, "2020-01-01 19:30:00"}},
 	})
 
 	// The raw-value block asserts SQL only in the corpus.
 	builder := newTestBuilder().Select("*").From("users", "").Where("id", 2).
-		WhereValueBetween(Raw("1"), []any{"created_at", "updated_at"}, BooleanOr, false)
+		WhereValueBetween(Raw("1"), []any{"created_at", "updated_at"}, core.BooleanOr, false)
 
 	assert.Equal(t, `select * from "users" where "id" = ? or 1 between "created_at" and "updated_at"`, builder.ToSQL())
 }
@@ -436,21 +436,21 @@ func TestOrWhereValueNotBetween(t *testing.T) {
 	runWheresGapCases(t, []wheresGapCase{
 		{laravelCase{"or value not between", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", 2).
-				WhereValueBetween("2020-01-01 19:30:00", []any{"created_at", "updated_at"}, BooleanOr, true)
+				WhereValueBetween("2020-01-01 19:30:00", []any{"created_at", "updated_at"}, core.BooleanOr, true)
 		}, `select * from "users" where "id" = ? or ? not between "created_at" and "updated_at"`}, []any{2, "2020-01-01 19:30:00"}},
 		{laravelCase{"or value not between again", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", 2).
-				WhereValueBetween("2020-01-01 19:30:00", []any{"created_at", "updated_at"}, BooleanOr, true)
+				WhereValueBetween("2020-01-01 19:30:00", []any{"created_at", "updated_at"}, core.BooleanOr, true)
 		}, `select * from "users" where "id" = ? or ? not between "created_at" and "updated_at"`}, []any{2, "2020-01-01 19:30:00"}},
 		{laravelCase{"or value not between raw columns", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", 2).
-				WhereValueBetween("2020-01-01 19:30:00", []any{Raw("1"), Raw("2")}, BooleanOr, true)
+				WhereValueBetween("2020-01-01 19:30:00", []any{Raw("1"), Raw("2")}, core.BooleanOr, true)
 		}, `select * from "users" where "id" = ? or ? not between 1 and 2`}, []any{2, "2020-01-01 19:30:00"}},
 	})
 
 	// The raw-value block asserts SQL only in the corpus.
 	builder := newTestBuilder().Select("*").From("users", "").Where("id", 2).
-		WhereValueBetween(Raw("1"), []any{"created_at", "updated_at"}, BooleanOr, true)
+		WhereValueBetween(Raw("1"), []any{"created_at", "updated_at"}, core.BooleanOr, true)
 
 	assert.Equal(t, `select * from "users" where "id" = ? or 1 not between "created_at" and "updated_at"`, builder.ToSQL())
 }
@@ -461,16 +461,16 @@ func TestOrWhereValueNotBetween(t *testing.T) {
 func TestWhereAll(t *testing.T) {
 	runWheresGapCases(t, []wheresGapCase{
 		{laravelCase{"where all equality", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereAll([]any{"last_name", "email"}, "=", "%Otwell%", BooleanAnd)
+			return b.Select("*").From("users", "").WhereAll([]any{"last_name", "email"}, "=", "%Otwell%", core.BooleanAnd)
 		}, `select * from "users" where ("last_name" = ? and "email" = ?)`}, []any{"%Otwell%", "%Otwell%"}},
 		{laravelCase{"where all not like", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereAll([]any{"last_name", "email"}, "not like", "%Otwell%", BooleanAnd)
+			return b.Select("*").From("users", "").WhereAll([]any{"last_name", "email"}, "not like", "%Otwell%", core.BooleanAnd)
 		}, `select * from "users" where ("last_name" not like ? and "email" not like ?)`}, []any{"%Otwell%", "%Otwell%"}},
 		{laravelCase{"where all closures", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").WhereAll([]any{
 				func(q *Builder) *Builder { return q.Where("last_name", "like", "%Otwell%") },
 				func(q *Builder) *Builder { return q.Where("email", "like", "%Otwell%") },
-			}, nil, nil, BooleanAnd)
+			}, nil, nil, core.BooleanAnd)
 		}, `select * from "users" where (("last_name" like ?) and ("email" like ?))`}, []any{"%Otwell%", "%Otwell%"}},
 	})
 }
@@ -479,16 +479,16 @@ func TestWhereAll(t *testing.T) {
 func TestWhereAny(t *testing.T) {
 	runWheresGapCases(t, []wheresGapCase{
 		{laravelCase{"where any like", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereAny([]any{"last_name", "email"}, "like", "%Otwell%", BooleanAnd)
+			return b.Select("*").From("users", "").WhereAny([]any{"last_name", "email"}, "like", "%Otwell%", core.BooleanAnd)
 		}, `select * from "users" where ("last_name" like ? or "email" like ?)`}, []any{"%Otwell%", "%Otwell%"}},
 		{laravelCase{"where any equality", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereAny([]any{"last_name", "email"}, "=", "%Otwell%", BooleanAnd)
+			return b.Select("*").From("users", "").WhereAny([]any{"last_name", "email"}, "=", "%Otwell%", core.BooleanAnd)
 		}, `select * from "users" where ("last_name" = ? or "email" = ?)`}, []any{"%Otwell%", "%Otwell%"}},
 		{laravelCase{"where any closures", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").WhereAny([]any{
 				func(q *Builder) *Builder { return q.Where("last_name", "like", "%Otwell%") },
 				func(q *Builder) *Builder { return q.Where("email", "like", "%Otwell%") },
-			}, nil, nil, BooleanAnd)
+			}, nil, nil, core.BooleanAnd)
 		}, `select * from "users" where (("last_name" like ?) or ("email" like ?))`}, []any{"%Otwell%", "%Otwell%"}},
 	})
 }
@@ -498,22 +498,22 @@ func TestWhereAny(t *testing.T) {
 func TestWhereNone(t *testing.T) {
 	runWheresGapCases(t, []wheresGapCase{
 		{laravelCase{"where none like", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereNone([]any{"last_name", "email"}, "like", "%Otwell%", BooleanAnd)
+			return b.Select("*").From("users", "").WhereNone([]any{"last_name", "email"}, "like", "%Otwell%", core.BooleanAnd)
 		}, `select * from "users" where not ("last_name" like ? or "email" like ?)`}, []any{"%Otwell%", "%Otwell%"}},
 		{laravelCase{"where none equality", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereNone([]any{"last_name", "email"}, "=", "Otwell", BooleanAnd)
+			return b.Select("*").From("users", "").WhereNone([]any{"last_name", "email"}, "=", "Otwell", core.BooleanAnd)
 		}, `select * from "users" where not ("last_name" = ? or "email" = ?)`}, []any{"Otwell", "Otwell"}},
 		{laravelCase{"where then where none", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").
 				Where("first_name", "like", "%Taylor%").
-				WhereNone([]any{"last_name", "email"}, "like", "%Otwell%", BooleanAnd)
+				WhereNone([]any{"last_name", "email"}, "like", "%Otwell%", core.BooleanAnd)
 		}, `select * from "users" where "first_name" like ? and not ("last_name" like ? or "email" like ?)`},
 			[]any{"%Taylor%", "%Otwell%", "%Otwell%"}},
 		{laravelCase{"where none closures", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").WhereNone([]any{
 				func(q *Builder) *Builder { return q.Where("last_name", "like", "%Otwell%") },
 				func(q *Builder) *Builder { return q.Where("email", "like", "%Otwell%") },
-			}, nil, nil, BooleanAnd)
+			}, nil, nil, core.BooleanAnd)
 		}, `select * from "users" where not (("last_name" like ?) or ("email" like ?))`}, []any{"%Otwell%", "%Otwell%"}},
 	})
 }
@@ -546,16 +546,16 @@ func TestWhereLikePostgres(t *testing.T) {
 func TestWhereLikeClausePostgres(t *testing.T) {
 	runWheresGapDialectCases(t, []wheresGapDialectCase{
 		{dialectCase{"where like default", NewPostgresGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereLike("id", "1", false, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereLike("id", "1", false, core.BooleanAnd, false)
 		}, `select * from "users" where "id"::text ilike ?`}, []any{"1"}},
 		{dialectCase{"where like case sensitive", NewPostgresGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereLike("id", "1", true, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereLike("id", "1", true, core.BooleanAnd, false)
 		}, `select * from "users" where "id"::text like ?`}, []any{"1"}},
 		{dialectCase{"where not like default", NewPostgresGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereNotLike("id", "1", false, BooleanAnd)
+			return b.Select("*").From("users", "").WhereNotLike("id", "1", false, core.BooleanAnd)
 		}, `select * from "users" where "id"::text not ilike ?`}, []any{"1"}},
 		{dialectCase{"where not like case sensitive", NewPostgresGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereNotLike("id", "1", true, BooleanAnd)
+			return b.Select("*").From("users", "").WhereNotLike("id", "1", true, core.BooleanAnd)
 		}, `select * from "users" where "id"::text not like ?`}, []any{"1"}},
 	})
 }
@@ -565,22 +565,22 @@ func TestWhereLikeClausePostgres(t *testing.T) {
 func TestWhereLikeClauseMysql(t *testing.T) {
 	runWheresGapDialectCases(t, []wheresGapDialectCase{
 		{dialectCase{"where like default", NewMySqlGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereLike("id", "1", false, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereLike("id", "1", false, core.BooleanAnd, false)
 		}, "select * from `users` where `id` like ?"}, []any{"1"}},
 		{dialectCase{"where like explicit insensitive", NewMySqlGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereLike("id", "1", false, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereLike("id", "1", false, core.BooleanAnd, false)
 		}, "select * from `users` where `id` like ?"}, []any{"1"}},
 		{dialectCase{"where like case sensitive", NewMySqlGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereLike("id", "1", true, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereLike("id", "1", true, core.BooleanAnd, false)
 		}, "select * from `users` where `id` like binary ?"}, []any{"1"}},
 		{dialectCase{"where not like default", NewMySqlGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereNotLike("id", "1", false, BooleanAnd)
+			return b.Select("*").From("users", "").WhereNotLike("id", "1", false, core.BooleanAnd)
 		}, "select * from `users` where `id` not like ?"}, []any{"1"}},
 		{dialectCase{"where not like insensitive", NewMySqlGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereNotLike("id", "1", false, BooleanAnd)
+			return b.Select("*").From("users", "").WhereNotLike("id", "1", false, core.BooleanAnd)
 		}, "select * from `users` where `id` not like ?"}, []any{"1"}},
 		{dialectCase{"where not like case sensitive", NewMySqlGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereNotLike("id", "1", true, BooleanAnd)
+			return b.Select("*").From("users", "").WhereNotLike("id", "1", true, core.BooleanAnd)
 		}, "select * from `users` where `id` not like binary ?"}, []any{"1"}},
 	})
 }
@@ -591,29 +591,29 @@ func TestWhereLikeClauseMysql(t *testing.T) {
 func TestWhereLikeClauseSqlite(t *testing.T) {
 	runWheresGapDialectCases(t, []wheresGapDialectCase{
 		{dialectCase{"where like", NewSqliteGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereLike("id", "1", false, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereLike("id", "1", false, core.BooleanAnd, false)
 		}, `select * from "users" where "id" like ?`}, []any{"1"}},
 		{dialectCase{"where like case sensitive", NewSqliteGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereLike("id", "1", true, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereLike("id", "1", true, core.BooleanAnd, false)
 		}, `select * from "users" where "id" glob ?`}, []any{"1"}},
 		{dialectCase{"where like glob escaping", NewSqliteGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereLike("description", "Hell* _orld?%", true, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereLike("description", "Hell* _orld?%", true, core.BooleanAnd, false)
 		}, `select * from "users" where "description" glob ?`}, []any{"Hell[*] ?orld[?]*"}},
 		{dialectCase{"where not like", NewSqliteGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereNotLike("id", "1", false, BooleanAnd)
+			return b.Select("*").From("users", "").WhereNotLike("id", "1", false, core.BooleanAnd)
 		}, `select * from "users" where "id" not like ?`}, []any{"1"}},
 		{dialectCase{"where not like glob escaping", NewSqliteGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereNotLike("description", "Hell* _orld?%", true, BooleanAnd)
+			return b.Select("*").From("users", "").WhereNotLike("description", "Hell* _orld?%", true, core.BooleanAnd)
 		}, `select * from "users" where "description" not glob ?`}, []any{"Hell[*] ?orld[?]*"}},
 		{dialectCase{"where like and not like glob", NewSqliteGrammar(""), func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").
-				WhereLike("name", "John%", true, BooleanAnd, false).
-				WhereNotLike("name", "%Doe%", true, BooleanAnd)
+				WhereLike("name", "John%", true, core.BooleanAnd, false).
+				WhereNotLike("name", "%Doe%", true, core.BooleanAnd)
 		}, `select * from "users" where "name" glob ? and "name" not glob ?`}, []any{"John*", "*Doe*"}},
 		{dialectCase{"where like then or like", NewSqliteGrammar(""), func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").
-				WhereLike("name", "John%", false, BooleanAnd, false).
-				WhereLike("name", "Jane%", true, BooleanOr, false)
+				WhereLike("name", "John%", false, core.BooleanAnd, false).
+				WhereLike("name", "Jane%", true, core.BooleanOr, false)
 		}, `select * from "users" where "name" like ? or "name" glob ?`}, []any{"John%", "Jane*"}},
 	})
 }
@@ -624,15 +624,15 @@ func TestWhereLikeClauseSqlite(t *testing.T) {
 func TestWhereLikeClauseSqlServer(t *testing.T) {
 	runWheresGapDialectCases(t, []wheresGapDialectCase{
 		{dialectCase{"where like", NewSqlServerGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereLike("id", "1", false, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereLike("id", "1", false, core.BooleanAnd, false)
 		}, "select * from [users] where [id] like ?"}, []any{"1"}},
 		{dialectCase{"where like or where like", NewSqlServerGrammar(""), func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").
-				WhereLike("id", "1", false, BooleanAnd, false).
-				WhereLike("id", "2", false, BooleanOr, false)
+				WhereLike("id", "1", false, core.BooleanAnd, false).
+				WhereLike("id", "2", false, core.BooleanOr, false)
 		}, "select * from [users] where [id] like ? or [id] like ?"}, []any{"1", "2"}},
 		{dialectCase{"where not like", NewSqlServerGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereNotLike("id", "1", false, BooleanAnd)
+			return b.Select("*").From("users", "").WhereNotLike("id", "1", false, core.BooleanAnd)
 		}, "select * from [users] where [id] not like ?"}, []any{"1"}},
 	})
 }

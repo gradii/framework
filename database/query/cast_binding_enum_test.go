@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -82,7 +83,7 @@ func TestEnumBindingsThroughTheEntryPoints(t *testing.T) {
 	t.Run("where and whereIn", func(t *testing.T) {
 		sql, bindings := newTestBuilder().From("users", "").
 			Where("status", integerStatusDone).
-			WhereIn("kind", []any{stringStatusDraft, nonBackedStatusPending}, BooleanAnd, false).
+			WhereIn("kind", []any{stringStatusDraft, nonBackedStatusPending}, core.BooleanAnd, false).
 			ToSelectSQL()
 
 		assert.Equal(t, `select * from "users" where "status" = ? and "kind" in (?, ?)`, sql)
@@ -91,7 +92,7 @@ func TestEnumBindingsThroughTheEntryPoints(t *testing.T) {
 
 	t.Run("whereBetween", func(t *testing.T) {
 		sql, bindings := newTestBuilder().From("users", "").
-			WhereBetween("status", []any{integerStatusDraft, integerStatusDone}, BooleanAnd, false).
+			WhereBetween("status", []any{integerStatusDraft, integerStatusDone}, core.BooleanAnd, false).
 			ToSelectSQL()
 
 		assert.Equal(t, `select * from "users" where "status" between ? and ?`, sql)

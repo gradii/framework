@@ -8,6 +8,7 @@ import (
 	contractsdriver "github.com/goravel/framework/contracts/database/driver"
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
 	querybuilder "github.com/goravel/framework/database/query"
+	"github.com/goravel/framework/database/query/core"
 	"github.com/goravel/framework/errors"
 )
 
@@ -104,7 +105,7 @@ func (r *Query) compileAggregate(function string, columns []any) (string, []any,
 	// list and, with it, the select bindings a subselect contributed, so the bindings handed to the
 	// executor match the placeholders left in the SQL. SetAggregate + ToSelectSQL compiled the same SQL
 	// but leaked those bindings.
-	sql, bindings := builder.ToAggregateSQL(querybuilder.Aggregate{Function: function, Columns: columns})
+	sql, bindings := builder.ToAggregateSQL(core.Aggregate{Function: function, Columns: columns})
 	if err := builder.Error(); err != nil {
 		return "", nil, err
 	}
@@ -377,7 +378,7 @@ func (r *Query) applySoftDelete(builder *querybuilder.Builder) error {
 		operator = "IS NOT NULL"
 	}
 
-	builder.WhereRaw(r.ident(table, column)+" "+operator, nil, querybuilder.BooleanAnd)
+	builder.WhereRaw(r.ident(table, column)+" "+operator, nil, core.BooleanAnd)
 
 	return nil
 }
@@ -412,9 +413,9 @@ func (r *Query) applyTable(builder *querybuilder.Builder) error {
 // operators the conditions mark with a type.
 func (r *Query) applyWhere(builder *querybuilder.Builder) *querybuilder.Builder {
 	for _, item := range r.conditions.where {
-		boolean := querybuilder.BooleanAnd
+		boolean := core.BooleanAnd
 		if item.Or {
-			boolean = querybuilder.BooleanOr
+			boolean = core.BooleanOr
 		}
 
 		r.applySingleWhere(builder, item, boolean)
@@ -438,7 +439,7 @@ func (r *Query) applySingleWhere(builder *querybuilder.Builder, item contractsdr
 		// is hard-wired to "and", so an OrWhereJsonLength used to compile to "and" and its clause
 		// could only match when the other side also matched. The builder's own orWhereJsonLength is
 		// the OR counterpart, so pick it when the condition carries the "or" connector.
-		if boolean == querybuilder.BooleanOr {
+		if boolean == core.BooleanOr {
 			builder.OrWhereJsonLength(fmt.Sprint(item.Query), item.Args...)
 		} else {
 			builder.WhereJsonLength(fmt.Sprint(item.Query), item.Args...)
@@ -489,11 +490,11 @@ func (r *Query) applySingleWhere(builder *querybuilder.Builder, item contractsdr
 // facade's addSimpleWhere.
 func applySimpleWhere(builder *querybuilder.Builder, query any, args []any, boolean string) {
 	switch boolean {
-	case querybuilder.BooleanOr:
+	case core.BooleanOr:
 		builder.OrWhere(query, args...)
-	case querybuilder.BooleanAndNot:
+	case core.BooleanAndNot:
 		builder.WhereNot(query, args...)
-	case querybuilder.BooleanOrNot:
+	case core.BooleanOrNot:
 		builder.OrWhereNot(query, args...)
 	default:
 		builder.Where(query, args...)

@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -24,16 +25,16 @@ import (
 func TestWhereJsonContainsKeyMySql(t *testing.T) {
 	runDialectCases(t, []dialectCase{
 		{"table qualified key", NewMySqlGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonContainsKey("users.options->languages", BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereJsonContainsKey("users.options->languages", core.BooleanAnd, false)
 		}, "select * from `users` where ifnull(json_contains_path(`users`.`options`, 'one', '$.\"languages\"'), 0)"},
 		{"nested key", NewMySqlGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonContainsKey("options->language->primary", BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereJsonContainsKey("options->language->primary", core.BooleanAnd, false)
 		}, "select * from `users` where ifnull(json_contains_path(`options`, 'one', '$.\"language\".\"primary\"'), 0)"},
 		{"or where key", NewMySqlGrammar(""), func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", "=", 1).OrWhereJsonContainsKey("options->languages")
 		}, "select * from `users` where `id` = ? or ifnull(json_contains_path(`options`, 'one', '$.\"languages\"'), 0)"},
 		{"indexed path", NewMySqlGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonContainsKey("options->languages[0][1]", BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereJsonContainsKey("options->languages[0][1]", core.BooleanAnd, false)
 		}, "select * from `users` where ifnull(json_contains_path(`options`, 'one', '$.\"languages\"[0][1]'), 0)"},
 	})
 
@@ -45,19 +46,19 @@ func TestWhereJsonContainsKeyMySql(t *testing.T) {
 func TestWhereJsonContainsKeyPostgres(t *testing.T) {
 	runDialectCases(t, []dialectCase{
 		{"table qualified key", NewPostgresGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonContainsKey("users.options->languages", BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereJsonContainsKey("users.options->languages", core.BooleanAnd, false)
 		}, `select * from "users" where coalesce(("users"."options")::jsonb ?? 'languages', false)`},
 		{"nested key", NewPostgresGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonContainsKey("options->language->primary", BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereJsonContainsKey("options->language->primary", core.BooleanAnd, false)
 		}, `select * from "users" where coalesce(("options"->'language')::jsonb ?? 'primary', false)`},
 		{"or where key", NewPostgresGrammar(""), func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", "=", 1).OrWhereJsonContainsKey("options->languages")
 		}, `select * from "users" where "id" = ? or coalesce(("options")::jsonb ?? 'languages', false)`},
 		{"indexed path", NewPostgresGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonContainsKey("options->languages[0][1]", BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereJsonContainsKey("options->languages[0][1]", core.BooleanAnd, false)
 		}, `select * from "users" where case when jsonb_typeof(("options"->'languages'->0)::jsonb) = 'array' then jsonb_array_length(("options"->'languages'->0)::jsonb) >= 2 else false end`},
 		{"negative index", NewPostgresGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonContainsKey("options->languages[-1]", BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereJsonContainsKey("options->languages[-1]", core.BooleanAnd, false)
 		}, `select * from "users" where case when jsonb_typeof(("options"->'languages')::jsonb) = 'array' then jsonb_array_length(("options"->'languages')::jsonb) >= 1 else false end`},
 	})
 
@@ -69,16 +70,16 @@ func TestWhereJsonContainsKeyPostgres(t *testing.T) {
 func TestWhereJsonContainsKeySqlite(t *testing.T) {
 	runDialectCases(t, []dialectCase{
 		{"table qualified key", NewSqliteGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonContainsKey("users.options->languages", BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereJsonContainsKey("users.options->languages", core.BooleanAnd, false)
 		}, `select * from "users" where json_type("users"."options", '$."languages"') is not null`},
 		{"nested key", NewSqliteGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonContainsKey("options->language->primary", BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereJsonContainsKey("options->language->primary", core.BooleanAnd, false)
 		}, `select * from "users" where json_type("options", '$."language"."primary"') is not null`},
 		{"or where key", NewSqliteGrammar(""), func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", "=", 1).OrWhereJsonContainsKey("options->languages")
 		}, `select * from "users" where "id" = ? or json_type("options", '$."languages"') is not null`},
 		{"indexed path", NewSqliteGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonContainsKey("options->languages[0][1]", BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereJsonContainsKey("options->languages[0][1]", core.BooleanAnd, false)
 		}, `select * from "users" where json_type("options", '$."languages"[0][1]') is not null`},
 	})
 
@@ -90,16 +91,16 @@ func TestWhereJsonContainsKeySqlite(t *testing.T) {
 func TestWhereJsonContainsKeySqlServer(t *testing.T) {
 	runDialectCases(t, []dialectCase{
 		{"table qualified key", NewSqlServerGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonContainsKey("users.options->languages", BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereJsonContainsKey("users.options->languages", core.BooleanAnd, false)
 		}, `select * from [users] where 'languages' in (select [key] from openjson([users].[options]))`},
 		{"nested key", NewSqlServerGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonContainsKey("options->language->primary", BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereJsonContainsKey("options->language->primary", core.BooleanAnd, false)
 		}, `select * from [users] where 'primary' in (select [key] from openjson([options], '$."language"'))`},
 		{"or where key", NewSqlServerGrammar(""), func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", "=", 1).OrWhereJsonContainsKey("options->languages")
 		}, `select * from [users] where [id] = ? or 'languages' in (select [key] from openjson([options]))`},
 		{"indexed path", NewSqlServerGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonContainsKey("options->languages[0][1]", BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereJsonContainsKey("options->languages[0][1]", core.BooleanAnd, false)
 		}, `select * from [users] where 1 in (select [key] from openjson([options], '$."languages"[0]'))`},
 	})
 

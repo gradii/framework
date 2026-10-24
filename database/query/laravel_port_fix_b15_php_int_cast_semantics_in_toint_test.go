@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -34,19 +35,19 @@ func TestWhereIntegerInRaw(t *testing.T) {
 	runLaravelCases(t, []laravelCase{
 		{"integer prefixed strings and enum", func(b *Builder) *Builder {
 			// Corpus: ['1a', 2, Bar::FOO] -> in (1, 2, 5).
-			return b.Select("*").From("users", "").WhereIntegerInRaw("id", []any{"1a", 2, 5}, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereIntegerInRaw("id", []any{"1a", 2, 5}, core.BooleanAnd, false)
 		}, `select * from "users" where "id" in (1, 2, 5)`},
 		{"flattened nested arrays", func(b *Builder) *Builder {
 			// Corpus: [['id' => '1a'], ['id' => 2], ['any' => '3'], ['id' => Bar::FOO]] -> in (1, 2, 3, 5).
 			return b.Select("*").From("users", "").WhereIntegerInRaw("id", []any{
 				[]any{"1a"}, []any{2}, []any{"3"}, []any{5},
-			}, BooleanAnd, false)
+			}, core.BooleanAnd, false)
 		}, `select * from "users" where "id" in (1, 2, 3, 5)`},
 	})
 
 	// The values are inlined, so whereIntegerInRaw contributes no bindings.
 	assert.Equal(t, []any(nil), newTestBuilder().Select("*").From("users", "").
-		WhereIntegerInRaw("id", []any{"1a", 2, 5}, BooleanAnd, false).GetBindings())
+		WhereIntegerInRaw("id", []any{"1a", 2, 5}, core.BooleanAnd, false).GetBindings())
 }
 
 // TestOrWhereIntegerInRaw ports Laravel's testOrWhereIntegerInRaw (corpus L1430-1436).
@@ -54,25 +55,25 @@ func TestOrWhereIntegerInRaw(t *testing.T) {
 	runLaravelCases(t, []laravelCase{
 		{"or", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", "=", 1).
-				WhereIntegerInRaw("id", []any{"1a", 2}, BooleanOr, false)
+				WhereIntegerInRaw("id", []any{"1a", 2}, core.BooleanOr, false)
 		}, `select * from "users" where "id" = ? or "id" in (1, 2)`},
 	})
 
 	// Only the leading basic where binds.
 	assert.Equal(t, []any{1}, newTestBuilder().Select("*").From("users", "").Where("id", "=", 1).
-		WhereIntegerInRaw("id", []any{"1a", 2}, BooleanOr, false).GetBindings())
+		WhereIntegerInRaw("id", []any{"1a", 2}, core.BooleanOr, false).GetBindings())
 }
 
 // TestWhereIntegerNotInRaw ports Laravel's testWhereIntegerNotInRaw (corpus L1438-1444).
 func TestWhereIntegerNotInRaw(t *testing.T) {
 	runLaravelCases(t, []laravelCase{
 		{"not in raw", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereIntegerInRaw("id", []any{"1a", 2}, BooleanAnd, true)
+			return b.Select("*").From("users", "").WhereIntegerInRaw("id", []any{"1a", 2}, core.BooleanAnd, true)
 		}, `select * from "users" where "id" not in (1, 2)`},
 	})
 
 	assert.Equal(t, []any(nil), newTestBuilder().Select("*").From("users", "").
-		WhereIntegerInRaw("id", []any{"1a", 2}, BooleanAnd, true).GetBindings())
+		WhereIntegerInRaw("id", []any{"1a", 2}, core.BooleanAnd, true).GetBindings())
 }
 
 // TestOrWhereIntegerNotInRaw ports Laravel's testOrWhereIntegerNotInRaw (corpus L1446-1452).
@@ -80,12 +81,12 @@ func TestOrWhereIntegerNotInRaw(t *testing.T) {
 	runLaravelCases(t, []laravelCase{
 		{"or not in raw", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", "=", 1).
-				WhereIntegerInRaw("id", []any{"1a", 2}, BooleanOr, true)
+				WhereIntegerInRaw("id", []any{"1a", 2}, core.BooleanOr, true)
 		}, `select * from "users" where "id" = ? or "id" not in (1, 2)`},
 	})
 
 	assert.Equal(t, []any{1}, newTestBuilder().Select("*").From("users", "").Where("id", "=", 1).
-		WhereIntegerInRaw("id", []any{"1a", 2}, BooleanOr, true).GetBindings())
+		WhereIntegerInRaw("id", []any{"1a", 2}, core.BooleanOr, true).GetBindings())
 }
 
 // TestToIntPhpCast pins the PHP (int) cast semantics of the shared toInt helper directly, covering

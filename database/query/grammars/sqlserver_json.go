@@ -1,6 +1,10 @@
 package grammars
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/goravel/framework/database/query/core"
+)
 
 // SQL Server JSON updates extend Laravel's grammar to preserve the framework's JSON write API.
 // JSON_VALUE can read a selector, but an assignment must target the column and use JSON_MODIFY.
@@ -54,7 +58,7 @@ func (g *SqlServerGrammar) compileJsonUpdateGroup(column string, group sqlServer
 	for _, selector := range group {
 		_, path := g.wrap.JsonFieldAndPath(selector.Column)
 		value := g.Parameter(selector.Value)
-		if isArrayValue(selector.Value) {
+		if core.IsArrayValue(selector.Value) {
 			// JSON_QUERY prevents SQL Server from storing the encoded document as a quoted string.
 			value = g.CompileJsonValueCast(value)
 		}

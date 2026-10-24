@@ -14,8 +14,13 @@
 | `Connection.php`, `Concerns/ManagesTransactions.php` | `database/db`, `database/driver` |
 | `Schema/Builder.php`, `Schema/Blueprint.php`, `Schema/Grammars/*Grammar.php` | `database/schema`, existing v1.18 driver grammars |
 
-The fluent builder lives in `database/query`, SQL compilers in `database/query/grammars`, and
-result processors in `database/query/processors`. `NewBuilder(grammar, processor)` mirrors
+The fluent builder lives in `database/query`, shared query types and value utilities in
+`database/query/core`, SQL compilers in `database/query/grammars`, and result processors in
+`database/query/processors`. `core` has no compiler or builder dependency. Builders and grammars
+call helpers such as `core.SortedKeys` directly; compatibility aliases only preserve public APIs.
+Query descriptors and constants are referenced directly as `core.Where`, `core.UpdateValues`,
+`core.BooleanAnd`, etc.; the former `query/types.go` re-export layer has been removed.
+`NewBuilder(grammar, processor)` mirrors
 Laravel's builder wiring: `InsertGetID` compiles and cleans bindings before delegating execution
 to the connection's processor. DB and ORM adapters supply writer access, tracing, and model key
 conversion. The grammar reads a compilation-state interface, so it does not import the builder

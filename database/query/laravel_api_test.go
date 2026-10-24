@@ -1,9 +1,11 @@
 package query
 
 import (
+	"testing"
+
+	"github.com/goravel/framework/database/query/core"
 	"github.com/goravel/framework/errors"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestLaravelAfterQueryKeepsFalseLikeResultsAndCallbacks(t *testing.T) {
@@ -36,7 +38,7 @@ func TestLaravelSelectAliasesAndArrays(t *testing.T) {
 
 func TestLaravelDecrementEachValidationAndExtra(t *testing.T) {
 	builder := NewBuilder(NewMySqlGrammar("")).From("users", "").Where("id", 7)
-	builder.DecrementEach(UpdateValues{{Column: "votes", Value: "1.5"}, {Column: "balance", Value: 2}}, UpdateValue{Column: "balance", Value: 10})
+	builder.DecrementEach(core.UpdateValues{{Column: "votes", Value: "1.5"}, {Column: "balance", Value: 2}}, core.UpdateValue{Column: "balance", Value: 10})
 	sql, bindings := builder.ToUpdateSQL(builder.UpdateValues())
 	assert.Equal(t, "update `users` set `votes` = `votes` - 1.5, `balance` = ? where `id` = ?", sql)
 	assert.Equal(t, []any{10, 7}, bindings)

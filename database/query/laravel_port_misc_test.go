@@ -3,9 +3,9 @@ package query
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
+	"github.com/goravel/framework/database/query/core"
 	"github.com/goravel/framework/errors"
+	"github.com/stretchr/testify/assert"
 )
 
 // This file ports the corpus methods the port plan classifies as PORTABLE with area "misc":
@@ -212,10 +212,10 @@ func TestPipeCallback(t *testing.T) {
 // their order, not their rendering.
 func TestMergeWheresCanMergeWheresAndBindings(t *testing.T) {
 	builder := newTestBuilder()
-	builder.State().Wheres = []Where{{Column: "foo"}}
-	builder.MergeWheres([]Where{{Column: "wheres"}}, []any{"foo", "bar"})
+	builder.State().Wheres = []core.Where{{Column: "foo"}}
+	builder.MergeWheres([]core.Where{{Column: "wheres"}}, []any{"foo", "bar"})
 
-	assert.Equal(t, []Where{{Column: "foo"}, {Column: "wheres"}}, builder.State().Wheres)
+	assert.Equal(t, []core.Where{{Column: "foo"}, {Column: "wheres"}}, builder.State().Wheres)
 	assert.Equal(t, []any{"foo", "bar"}, builder.GetBindings())
 }
 

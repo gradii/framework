@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -10,7 +11,7 @@ import (
 func TestEmptyInSliceConsistency(t *testing.T) {
 	t.Run("WhereIn with empty slice produces 0 = 1", func(t *testing.T) {
 		b := newTestBuilder()
-		b.From("users", "").WhereIn("name", []any{}, BooleanAnd, false)
+		b.From("users", "").WhereIn("name", []any{}, core.BooleanAnd, false)
 
 		sql, bindings := b.ToSQL(), b.GetBindings()
 		t.Logf("SQL: %s", sql)
@@ -23,7 +24,7 @@ func TestEmptyInSliceConsistency(t *testing.T) {
 
 	t.Run("WhereNotIn with empty slice produces 1 = 1", func(t *testing.T) {
 		b := newTestBuilder()
-		b.From("users", "").WhereNotIn("name", []any{}, BooleanAnd)
+		b.From("users", "").WhereNotIn("name", []any{}, core.BooleanAnd)
 
 		sql, bindings := b.ToSQL(), b.GetBindings()
 		t.Logf("SQL: %s", sql)
@@ -36,7 +37,7 @@ func TestEmptyInSliceConsistency(t *testing.T) {
 
 	t.Run("WhereAny with empty IN slice via string operator", func(t *testing.T) {
 		b := newTestBuilder()
-		b.From("users", "").WhereAny([]any{"name", "email"}, "IN", []any{}, BooleanAnd)
+		b.From("users", "").WhereAny([]any{"name", "email"}, "IN", []any{}, core.BooleanAnd)
 
 		sql, bindings := b.ToSQL(), b.GetBindings()
 		t.Logf("SQL: %s", sql)
@@ -53,7 +54,7 @@ func TestEmptyInSliceConsistency(t *testing.T) {
 
 	t.Run("WhereAny with empty IN slice via uppercase IN", func(t *testing.T) {
 		b := newTestBuilder()
-		b.From("users", "").WhereAny([]any{"name", "email"}, "IN", []any{}, BooleanAnd)
+		b.From("users", "").WhereAny([]any{"name", "email"}, "IN", []any{}, core.BooleanAnd)
 
 		sql, bindings := b.ToSQL(), b.GetBindings()
 		t.Logf("SQL: %s", sql)
@@ -67,7 +68,7 @@ func TestEmptyInSliceConsistency(t *testing.T) {
 
 	t.Run("WhereAny with empty NOT IN slice", func(t *testing.T) {
 		b := newTestBuilder()
-		b.From("users", "").WhereAny([]any{"name", "email"}, "NOT IN", []any{}, BooleanAnd)
+		b.From("users", "").WhereAny([]any{"name", "email"}, "NOT IN", []any{}, core.BooleanAnd)
 
 		sql, bindings := b.ToSQL(), b.GetBindings()
 		t.Logf("SQL: %s", sql)

@@ -1,9 +1,9 @@
 package query
 
-import "github.com/goravel/framework/database/query/grammars"
+import "github.com/goravel/framework/database/query/core"
 
 // IndexHint mirrors Illuminate\Database\Query\IndexHint.
-type IndexHint = grammars.IndexHint
+type IndexHint = core.IndexHint
 
 // UseIndex suggests an index. Mirrors Builder::useIndex().
 func (b *Builder) UseIndex(index string) *Builder {

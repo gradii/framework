@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -27,7 +28,7 @@ func TestPostgresGrammar(t *testing.T) {
 		// Postgres whereBasic casts the column to text whenever the operator contains "like",
 		// which includes ilike.
 		assert.Equal(t, `select * from "users" where "name"::text ilike ?`,
-			NewBuilder(g).From("users", "").WhereLike("name", "%x%", false, BooleanAnd, false).ToSQL())
+			NewBuilder(g).From("users", "").WhereLike("name", "%x%", false, core.BooleanAnd, false).ToSQL())
 	})
 
 	t.Run("json selector uses native operators", func(t *testing.T) {
@@ -57,7 +58,7 @@ func TestPostgresGrammar(t *testing.T) {
 	t.Run("upsert on conflict", func(t *testing.T) {
 		b := NewBuilder(g).From("users", "")
 		got := g.CompileUpsert(b, []map[string]any{{"id": 1, "name": "x"}}, []string{"id"},
-			[]UpsertUpdate{{Column: "name"}})
+			[]core.UpsertUpdate{{Column: "name"}})
 		assert.Equal(t, `insert into "users" ("id", "name") values (?, ?) on conflict ("id") do update set "name" = "excluded"."name"`, got)
 	})
 }
@@ -71,7 +72,7 @@ func TestMySqlGrammar(t *testing.T) {
 
 	t.Run("case sensitive like is like binary", func(t *testing.T) {
 		assert.Equal(t, "select * from `users` where `name` like binary ?",
-			NewBuilder(g).From("users", "").WhereLike("name", "%x%", true, BooleanAnd, false).ToSQL())
+			NewBuilder(g).From("users", "").WhereLike("name", "%x%", true, core.BooleanAnd, false).ToSQL())
 	})
 
 	t.Run("lock for update", func(t *testing.T) {
@@ -98,7 +99,7 @@ func TestMySqlGrammar(t *testing.T) {
 	t.Run("upsert on duplicate key", func(t *testing.T) {
 		b := NewBuilder(g).From("users", "")
 		got := g.CompileUpsert(b, []map[string]any{{"id": 1, "name": "x"}}, []string{"id"},
-			[]UpsertUpdate{{Column: "name"}})
+			[]core.UpsertUpdate{{Column: "name"}})
 		assert.Equal(t, "insert into `users` (`id`, `name`) values (?, ?) on duplicate key update `name` = values(`name`)", got)
 	})
 }
@@ -122,7 +123,7 @@ func TestSqliteGrammar(t *testing.T) {
 
 	t.Run("case sensitive like uses glob", func(t *testing.T) {
 		assert.Equal(t, `select * from "users" where "name" glob ?`,
-			NewBuilder(g).From("users", "").WhereLike("name", "%x%", true, BooleanAnd, false).ToSQL())
+			NewBuilder(g).From("users", "").WhereLike("name", "%x%", true, core.BooleanAnd, false).ToSQL())
 	})
 
 	t.Run("insert or ignore", func(t *testing.T) {

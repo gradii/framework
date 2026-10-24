@@ -1,4 +1,4 @@
-package grammars
+package core
 
 // Boolean connectors. Negation is carried in the connector, never in a separate flag, exactly as
 // Laravel does, so "and not" and "or not" are values of the same field.

@@ -1,6 +1,10 @@
 package grammars
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/goravel/framework/database/query/core"
+)
 
 // SetEscaper supplies the connection's literal escaping, as Laravel's Grammar::escape does.
 // SQL previews use the framework's value formatter when no connection escaper was supplied.
@@ -15,7 +19,7 @@ func (g *BaseGrammar) SubstituteBindingsIntoRawSQL(sql string, bindings []any) s
 			_, binary := value.([]byte)
 			escaped[i] = g.escape(value, binary)
 		} else {
-			escaped[i] = RenderLiteral(value)
+			escaped[i] = core.RenderLiteral(value)
 		}
 	}
 

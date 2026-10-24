@@ -1,12 +1,15 @@
 package query
 
-import "github.com/goravel/framework/database/query/grammars"
+import (
+	"github.com/goravel/framework/database/query/core"
+	"github.com/goravel/framework/database/query/grammars"
+)
 
 // These aliases preserve the builder API while dialect implementations live in grammars.
 type Grammar = grammars.Grammar
-type GrammarQuery = grammars.Query
-type GrammarJoin = grammars.Join
-type State = grammars.State
+type GrammarQuery = core.Query
+type GrammarJoin = core.Join
+type State = core.State
 type BaseGrammar = grammars.BaseGrammar
 
 func NewBaseGrammar(prefix string) *BaseGrammar { return grammars.NewBaseGrammar(prefix) }
@@ -34,6 +37,6 @@ func NewSqlServerGrammar(prefix string) *SqlServerGrammar {
 }
 
 var SelectComponents = grammars.SelectComponents
-var BindingTypes = grammars.BindingTypes
+var BindingTypes = core.BindingTypes
 
 func CascadeOnTruncate(value bool) { grammars.CascadeOnTruncate(value) }

@@ -1,4 +1,4 @@
-package grammars
+package core
 
 type IndexHint struct {
 	// Type is hint, force or ignore.

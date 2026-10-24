@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/goravel/framework/errors"
 )
 
@@ -354,10 +355,10 @@ func (p CursorParameters) value(column string) (any, bool) {
 // carries a direction. A raw order (OrderRawType) names no column, so it contributes neither a
 // comparison nor a bound parameter — it still appears in ORDER BY, which is why only the predicate
 // build filters it and the order list itself is never rewritten here.
-func cursorPredicateOrders(orders []Order) []Order {
-	filtered := make([]Order, 0, len(orders))
+func cursorPredicateOrders(orders []core.Order) []core.Order {
+	filtered := make([]core.Order, 0, len(orders))
 	for _, order := range orders {
-		if order.Type == OrderRawType {
+		if order.Type == core.OrderRawType {
 			continue
 		}
 
@@ -376,7 +377,7 @@ func cursorPredicateOrders(orders []Order) []Order {
 // enforceOrderBy: cursor pagination is meaningless without an order, and no implicit order is invented.
 // Every ORDER BY direction must already be final — a previous-page fetch flips each order direction
 // before calling here — so each column's operator is read straight from its own order.
-func (b *Builder) addCursorPredicate(cursor Cursor, orders []Order) error {
+func (b *Builder) addCursorPredicate(cursor Cursor, orders []core.Order) error {
 	orders = cursorPredicateOrders(orders)
 	if len(orders) == 0 {
 		return errors.QueryOrderRequired
@@ -389,7 +390,7 @@ func (b *Builder) addCursorPredicate(cursor Cursor, orders []Order) error {
 // first order column and the deeper ones. A non-union builder passes its own columns for both; a union
 // branch passes its own columns for the first column and the root builder's for the rest (see
 // addCursorConditionsFrom).
-func (b *Builder) addCursorPredicateFrom(cursor Cursor, orders []Order, firstColumns, deeperColumns []any) error {
+func (b *Builder) addCursorPredicateFrom(cursor Cursor, orders []core.Order, firstColumns, deeperColumns []any) error {
 	orders = cursorPredicateOrders(orders)
 	if len(orders) == 0 {
 		return errors.QueryOrderRequired
@@ -417,7 +418,7 @@ func (b *Builder) addCursorPredicateFrom(cursor Cursor, orders []Order, firstCol
 // closure bound to the root, so $this is the root at every level below the first. Passing the root's
 // columns for the deeper levels reproduces that. For a non-union builder both are the builder's own
 // columns.
-func (b *Builder) addCursorConditionsFrom(cursor Cursor, orders []Order, previousColumn string, previousOriginal any, i int, firstColumns, deeperColumns []any) error {
+func (b *Builder) addCursorConditionsFrom(cursor Cursor, orders []core.Order, previousColumn string, previousOriginal any, i int, firstColumns, deeperColumns []any) error {
 	// The equality on the previous column belongs on this builder, ahead of the group for column i.
 	if previousColumn != "" {
 		original := previousOriginal
@@ -433,7 +434,7 @@ func (b *Builder) addCursorConditionsFrom(cursor Cursor, orders []Order, previou
 		b.cursorWhere(original, "=", value)
 	}
 
-	column := getValueString(orders[i].Column)
+	column := core.GetValueString(orders[i].Column)
 	columns := deeperColumns
 	if i == 0 {
 		columns = firstColumns
@@ -459,11 +460,11 @@ func (b *Builder) addCursorConditionsFrom(cursor Cursor, orders []Order, previou
 				nestedErr = next.addCursorConditionsFrom(cursor, orders, column, original, i+1, firstColumns, deeperColumns)
 
 				return next
-			}, BooleanOr)
+			}, core.BooleanOr)
 		}
 
 		return group
-	}, BooleanAnd)
+	}, core.BooleanAnd)
 
 	return nestedErr
 }
@@ -473,8 +474,8 @@ func (b *Builder) addCursorConditionsFrom(cursor Cursor, orders []Order, previou
 // alias") expression — goes through WhereRaw: addWhere treats an Expression column as its own clause
 // type and would drop both the operator and the value. Everything else is a plain wrapped comparison.
 func (b *Builder) cursorWhere(column any, operator string, value any) {
-	if text := getValueString(column); strings.ContainsAny(text, "()") {
-		b.WhereRaw(text+" "+operator+" ?", []any{value}, BooleanAnd)
+	if text := core.GetValueString(column); strings.ContainsAny(text, "()") {
+		b.WhereRaw(text+" "+operator+" ?", []any{value}, core.BooleanAnd)
 
 		return
 	}
@@ -557,7 +558,7 @@ func (b *Builder) CursorPaginate(perPage int, cursor *Cursor) (CursorPaginator, 
 
 // cursorOrders is the order list cursor pagination reads and reverses: the union orders when the
 // builder has unions (Laravel orders unions through unionOrders), otherwise the plain orders.
-func (b *Builder) cursorOrders() []Order {
+func (b *Builder) cursorOrders() []core.Order {
 	if len(b.State().Unions) > 0 {
 		return b.State().UnionOrders
 	}
@@ -567,7 +568,7 @@ func (b *Builder) cursorOrders() []Order {
 
 // setCursorOrders writes a reversed order list back into the slot cursorOrders reads, so the ORDER BY
 // the builder compiles is the reversed one.
-func (b *Builder) setCursorOrders(orders []Order) {
+func (b *Builder) setCursorOrders(orders []core.Order) {
 	if len(b.State().Unions) > 0 {
 		b.State().UnionOrders = orders
 
@@ -580,8 +581,8 @@ func (b *Builder) setCursorOrders(orders []Order) {
 // flipCursorOrders reverses each order's direction in a fresh slice. A raw order carries no direction
 // and is copied unchanged, mirroring Laravel's isset($order['direction']) guard in
 // ensureOrderForCursorPagination.
-func flipCursorOrders(orders []Order) []Order {
-	flipped := make([]Order, len(orders))
+func flipCursorOrders(orders []core.Order) []core.Order {
+	flipped := make([]core.Order, len(orders))
 	for i, order := range orders {
 		switch order.Direction {
 		case "asc":
@@ -598,10 +599,10 @@ func flipCursorOrders(orders []Order) []Order {
 
 // cursorParameterColumns returns the ORDER BY column names the cursor carries, in ORDER BY order,
 // dropping raw orders (they name no column to compare).
-func cursorParameterColumns(orders []Order) []string {
+func cursorParameterColumns(orders []core.Order) []string {
 	columns := make([]string, 0, len(orders))
 	for _, order := range cursorPredicateOrders(orders) {
-		columns = append(columns, getValueString(order.Column))
+		columns = append(columns, core.GetValueString(order.Column))
 	}
 
 	return columns

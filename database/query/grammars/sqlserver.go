@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/goravel/framework/database/query/core"
 )
 
 var tableValuedFunction = regexp.MustCompile(`^(.+?)(\(.*?\))]$`)
@@ -186,7 +188,7 @@ func (g *SqlServerGrammar) CompileUpdateWithJoins(b Query, table string, columns
 
 // CompileUpsert mirrors SqlServerGrammar::compileUpsert(): a merge statement.
 func (g *SqlServerGrammar) CompileUpsert(b Query, values []map[string]any, uniqueBy []string, update []UpsertUpdate) string {
-	columns := SortedKeys(values[0])
+	columns := core.SortedKeys(values[0])
 
 	parameters := make([]string, 0, len(values))
 	for _, record := range values {
@@ -198,11 +200,11 @@ func (g *SqlServerGrammar) CompileUpsert(b Query, values []map[string]any, uniqu
 	}
 
 	sql := "merge " + g.WrapTable(b.State().From) + " using (values " + strings.Join(parameters, ", ") + ") " +
-		g.WrapTable("laravel_source") + " (" + g.Columnize(anySlice(columns)) + ") "
+		g.WrapTable("laravel_source") + " (" + g.Columnize(core.StringsToAny(columns)) + ") "
 
 	on := make([]string, 0, len(uniqueBy))
 	for _, column := range uniqueBy {
-		on = append(on, g.Wrap("laravel_source."+column)+" = "+g.Wrap(AsString(b.State().From)+"."+column))
+		on = append(on, g.Wrap("laravel_source."+column)+" = "+g.Wrap(core.AsString(b.State().From)+"."+column))
 	}
 	sql += "on " + strings.Join(on, " and ") + " "
 
@@ -218,7 +220,7 @@ func (g *SqlServerGrammar) CompileUpsert(b Query, values []map[string]any, uniqu
 		sql += "when matched then update set " + strings.Join(sets, ", ") + " "
 	}
 
-	columnList := g.Columnize(anySlice(columns))
+	columnList := g.Columnize(core.StringsToAny(columns))
 	sql += "when not matched then insert (" + columnList + ") values (" + columnList + ");"
 
 	return sql
@@ -232,7 +234,7 @@ func (g *SqlServerGrammar) PrepareBindingsForUpdate(bindings map[string][]any, v
 		if group, ok := value.Value.(sqlServerJsonUpdate); ok {
 			for _, selector := range group {
 				binding := selector.Value
-				if isArrayValue(binding) {
+				if core.IsArrayValue(binding) {
 					binding = encodeJSON(binding)
 				}
 				out = g.AppendUpdateValueBinding(out, binding)
@@ -275,8 +277,8 @@ func (g *SqlServerGrammar) GetDateFormat() string { return "Y-m-d H:i:s.v" }
 
 // WrapTable mirrors SqlServerGrammar::wrapTable().
 func (g *SqlServerGrammar) WrapTable(table any) string {
-	if IsExpression(table) {
-		return ExpressionValue(table)
+	if core.IsExpression(table) {
+		return core.ExpressionValue(table)
 	}
 
 	return g.WrapTableValuedFunction(g.BaseGrammar.WrapTable(table))

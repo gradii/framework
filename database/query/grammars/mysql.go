@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/goravel/framework/database/query/core"
 )
 
 // MySqlGrammar mirrors Illuminate\Database\Query\Grammars\MySqlGrammar. Only the methods whose SQL
@@ -53,7 +55,7 @@ func (g *MySqlGrammar) WhereLike(b Query, where Where) string {
 
 // WhereNull mirrors MySqlGrammar::whereNull().
 func (g *MySqlGrammar) WhereNull(b Query, where Where) string {
-	column := GetValueString(where.Column)
+	column := core.GetValueString(where.Column)
 	if g.IsJsonSelector(column) {
 		field, path := g.wrap.JsonFieldAndPath(column)
 
@@ -65,7 +67,7 @@ func (g *MySqlGrammar) WhereNull(b Query, where Where) string {
 
 // WhereNotNull mirrors MySqlGrammar::whereNotNull().
 func (g *MySqlGrammar) WhereNotNull(b Query, where Where) string {
-	column := GetValueString(where.Column)
+	column := core.GetValueString(where.Column)
 	if g.IsJsonSelector(column) {
 		field, path := g.wrap.JsonFieldAndPath(column)
 
@@ -152,7 +154,7 @@ func (g *MySqlGrammar) PrepareBindingsForUpdate(bindings map[string][]any, value
 			}
 		}
 
-		if isArrayValue(value.Value) {
+		if core.IsArrayValue(value.Value) {
 			prepared = append(prepared, UpdateValue{Column: value.Column, Value: encodeJSON(value.Value)})
 			continue
 		}
@@ -261,7 +263,7 @@ func (g *MySqlGrammar) CompileLock(b Query, value any) string {
 }
 
 // CompileRandom mirrors MySqlGrammar::compileRandom().
-func (g *MySqlGrammar) CompileRandom(seed any) string { return "RAND(" + AsString(seed) + ")" }
+func (g *MySqlGrammar) CompileRandom(seed any) string { return "RAND(" + core.AsString(seed) + ")" }
 
 // CompileJsonValueCast mirrors MySqlGrammar::compileJsonValueCast().
 func (g *MySqlGrammar) CompileJsonValueCast(value string) string {

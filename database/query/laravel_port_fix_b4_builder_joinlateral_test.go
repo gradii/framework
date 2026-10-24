@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -34,7 +35,7 @@ func TestJoinLateralMySql(t *testing.T) {
 	const want = "select * from `users` inner join lateral (" + sub + ") as `sub` on true"
 
 	callback := func(q *Builder) *Builder {
-		return q.From("contacts", "").WhereColumn("contracts.user_id", "=", "users.id", BooleanAnd)
+		return q.From("contacts", "").WhereColumn("contracts.user_id", "=", "users.id", core.BooleanAnd)
 	}
 
 	t.Run("string subquery", func(t *testing.T) {
@@ -51,7 +52,7 @@ func TestJoinLateralMySql(t *testing.T) {
 
 	t.Run("builder subquery", func(t *testing.T) {
 		subQuery := NewBuilder(NewMySqlGrammar("")).From("contacts", "").
-			WhereColumn("contracts.user_id", "=", "users.id", BooleanAnd)
+			WhereColumn("contracts.user_id", "=", "users.id", core.BooleanAnd)
 
 		builder := NewBuilder(NewMySqlGrammar("")).From("users", "").JoinLateral(subQuery, "sub", "inner")
 
@@ -60,9 +61,9 @@ func TestJoinLateralMySql(t *testing.T) {
 
 	t.Run("two joins keep the binding order", func(t *testing.T) {
 		sub1 := NewBuilder(NewMySqlGrammar("")).From("contacts", "").
-			WhereColumn("contracts.user_id", "=", "users.id", BooleanAnd).Where("name", "foo")
+			WhereColumn("contracts.user_id", "=", "users.id", core.BooleanAnd).Where("name", "foo")
 		sub2 := NewBuilder(NewMySqlGrammar("")).From("contacts", "").
-			WhereColumn("contracts.user_id", "=", "users.id", BooleanAnd).Where("name", "bar")
+			WhereColumn("contracts.user_id", "=", "users.id", core.BooleanAnd).Where("name", "bar")
 
 		builder := NewBuilder(NewMySqlGrammar("")).From("users", "").
 			JoinLateral(sub1, "sub1", "inner").JoinLateral(sub2, "sub2", "inner")
@@ -87,7 +88,7 @@ func TestJoinLateralMySql(t *testing.T) {
 // joins, so the base grammar refuses. Laravel throws RuntimeException; the port records the error.
 func TestJoinLateralSQLite(t *testing.T) {
 	builder := NewBuilder(NewSqliteGrammar("")).From("users", "").JoinLateral(func(q *Builder) *Builder {
-		return q.From("contacts", "").WhereColumn("contracts.user_id", "=", "users.id", BooleanAnd)
+		return q.From("contacts", "").WhereColumn("contracts.user_id", "=", "users.id", core.BooleanAnd)
 	}, "sub", "inner")
 
 	_ = builder.ToSQL()
@@ -99,7 +100,7 @@ func TestJoinLateralSQLite(t *testing.T) {
 // lateral join the same way MySQL does.
 func TestJoinLateralPostgres(t *testing.T) {
 	builder := NewBuilder(NewPostgresGrammar("")).From("users", "").JoinLateral(func(q *Builder) *Builder {
-		return q.From("contacts", "").WhereColumn("contracts.user_id", "=", "users.id", BooleanAnd)
+		return q.From("contacts", "").WhereColumn("contracts.user_id", "=", "users.id", core.BooleanAnd)
 	}, "sub", "inner")
 
 	assert.Equal(t, `select * from "users" inner join lateral (select * from "contacts" where "contracts"."user_id" = "users"."id") as "sub" on true`, builder.ToSQL())
@@ -109,7 +110,7 @@ func TestJoinLateralPostgres(t *testing.T) {
 // renders a lateral join as "cross apply".
 func TestJoinLateralSqlServer(t *testing.T) {
 	builder := NewBuilder(NewSqlServerGrammar("")).From("users", "").JoinLateral(func(q *Builder) *Builder {
-		return q.From("contacts", "").WhereColumn("contracts.user_id", "=", "users.id", BooleanAnd)
+		return q.From("contacts", "").WhereColumn("contracts.user_id", "=", "users.id", core.BooleanAnd)
 	}, "sub", "inner")
 
 	assert.Equal(t, `select * from [users] cross apply (select * from [contacts] where [contracts].[user_id] = [users].[id]) as [sub]`, builder.ToSQL())

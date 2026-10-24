@@ -6,6 +6,7 @@ import (
 
 	"github.com/goravel/framework/contracts/database/db"
 	querybuilder "github.com/goravel/framework/database/query"
+	"github.com/goravel/framework/database/query/core"
 	"github.com/goravel/framework/errors"
 	"github.com/goravel/framework/support/carbon"
 )
@@ -110,12 +111,12 @@ func (r *Query) Upsert(data any, uniqueBy []string, update ...any) (*db.Result, 
 	return r.executeWrite(statement, bindings)
 }
 
-func upsertUpdates(values []map[string]any, update []any) ([]querybuilder.UpsertUpdate, bool, error) {
-	var result []querybuilder.UpsertUpdate
+func upsertUpdates(values []map[string]any, update []any) ([]core.UpsertUpdate, bool, error) {
+	var result []core.UpsertUpdate
 	if len(update) == 0 || update[0] == nil {
 		if len(values) > 0 {
 			for _, key := range sortedMapKeys(values[0]) {
-				result = append(result, querybuilder.UpsertUpdate{Column: key})
+				result = append(result, core.UpsertUpdate{Column: key})
 			}
 		}
 		return result, false, nil
@@ -123,16 +124,16 @@ func upsertUpdates(values []map[string]any, update []any) ([]querybuilder.Upsert
 	switch columns := update[0].(type) {
 	case []string:
 		for _, column := range columns {
-			result = append(result, querybuilder.UpsertUpdate{Column: column})
+			result = append(result, core.UpsertUpdate{Column: column})
 		}
-	case []querybuilder.UpsertUpdate:
+	case []core.UpsertUpdate:
 		result = append(result, columns...)
 	case map[string]any:
 		for _, column := range sortedMapKeys(columns) {
-			result = append(result, querybuilder.UpsertUpdate{Column: column, Value: columns[column], Bound: true})
+			result = append(result, core.UpsertUpdate{Column: column, Value: columns[column], Bound: true})
 		}
 	default:
-		return nil, false, errors.DatabaseUnsupportedType.Args(reflect.TypeOf(update[0]).String(), "[]string, map[string]any, or []query.UpsertUpdate")
+		return nil, false, errors.DatabaseUnsupportedType.Args(reflect.TypeOf(update[0]).String(), "[]string, map[string]any, or []core.UpsertUpdate")
 	}
 	return result, len(result) == 0, nil
 }
@@ -146,11 +147,11 @@ func sortedMapKeys(values map[string]any) []string {
 	return keys
 }
 
-func arithmeticExtra(extra []map[string]any) querybuilder.UpdateValues {
-	var values querybuilder.UpdateValues
+func arithmeticExtra(extra []map[string]any) core.UpdateValues {
+	var values core.UpdateValues
 	if len(extra) > 0 {
 		for _, column := range sortedMapKeys(extra[0]) {
-			values = append(values, querybuilder.UpdateValue{Column: column, Value: extra[0][column]})
+			values = append(values, core.UpdateValue{Column: column, Value: extra[0][column]})
 		}
 	}
 	return values

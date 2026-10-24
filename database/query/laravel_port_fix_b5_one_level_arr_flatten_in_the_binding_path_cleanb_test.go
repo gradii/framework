@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -49,23 +50,23 @@ func TestWhereBetweens(t *testing.T) {
 
 	runFlattenCases(t, []flattenCase{
 		{laravelCase{"flat bounds", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereBetween("id", []any{1, 2}, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereBetween("id", []any{1, 2}, core.BooleanAnd, false)
 		}, between}, []any{1, 2}},
 		{laravelCase{"nested bounds", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereBetween("id", []any{[]any{1, 2, 3}}, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereBetween("id", []any{[]any{1, 2, 3}}, core.BooleanAnd, false)
 		}, between}, []any{1, 2}},
 		{laravelCase{"two nested bounds", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereBetween("id", []any{[]any{1}, []any{2, 3}}, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereBetween("id", []any{[]any{1}, []any{2, 3}}, core.BooleanAnd, false)
 		}, between}, []any{1, 2}},
 		{laravelCase{"where not between", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereBetween("id", []any{1, 2}, BooleanAnd, true)
+			return b.Select("*").From("users", "").WhereBetween("id", []any{1, 2}, core.BooleanAnd, true)
 		}, `select * from "users" where "id" not between ? and ?`}, []any{1, 2}},
 		{laravelCase{"raw bounds are inlined", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereBetween("id", []any{Raw("1"), Raw("2")}, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereBetween("id", []any{Raw("1"), Raw("2")}, core.BooleanAnd, false)
 		}, `select * from "users" where "id" between 1 and 2`}, nil},
 		{laravelCase{"list value behaves like a collection", func(b *Builder) *Builder {
 			// The corpus passes collect([1, 2]); a Go slice is the equivalent value list.
-			return b.Select("*").From("users", "").WhereBetween("id", []any{1, 2}, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereBetween("id", []any{1, 2}, core.BooleanAnd, false)
 		}, between}, []any{1, 2}},
 	})
 }
@@ -99,19 +100,19 @@ func TestOrWhereNotBetween(t *testing.T) {
 
 	runFlattenCases(t, []flattenCase{
 		{laravelCase{"flat bounds", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").Where("id", "=", 1).WhereNotBetween("id", []any{3, 5}, BooleanOr)
+			return b.Select("*").From("users", "").Where("id", "=", 1).WhereNotBetween("id", []any{3, 5}, core.BooleanOr)
 		}, want}, []any{1, 3, 5}},
 		{laravelCase{"nested bounds", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").Where("id", "=", 1).WhereNotBetween("id", []any{[]any{3, 4, 5}}, BooleanOr)
+			return b.Select("*").From("users", "").Where("id", "=", 1).WhereNotBetween("id", []any{[]any{3, 4, 5}}, core.BooleanOr)
 		}, want}, []any{1, 3, 4}},
 		{laravelCase{"single nested pair", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").Where("id", "=", 1).WhereNotBetween("id", []any{[]any{3, 5}}, BooleanOr)
+			return b.Select("*").From("users", "").Where("id", "=", 1).WhereNotBetween("id", []any{[]any{3, 5}}, core.BooleanOr)
 		}, want}, []any{1, 3, 5}},
 		{laravelCase{"two nested bounds", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").Where("id", "=", 1).WhereNotBetween("id", []any{[]any{4}, []any{6, 8}}, BooleanOr)
+			return b.Select("*").From("users", "").Where("id", "=", 1).WhereNotBetween("id", []any{[]any{4}, []any{6, 8}}, core.BooleanOr)
 		}, want}, []any{1, 4, 6}},
 		{laravelCase{"raw bounds are inlined", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").Where("id", "=", 1).WhereNotBetween("id", []any{Raw("3"), Raw("4")}, BooleanOr)
+			return b.Select("*").From("users", "").Where("id", "=", 1).WhereNotBetween("id", []any{Raw("3"), Raw("4")}, core.BooleanOr)
 		}, `select * from "users" where "id" = ? or "id" not between 3 and 4`}, []any{1}},
 	})
 }
@@ -124,13 +125,13 @@ func TestBasicWhereIns(t *testing.T) {
 
 	runFlattenCases(t, []flattenCase{
 		{laravelCase{"flat list", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereIn("id", []any{1, 2, 3}, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereIn("id", []any{1, 2, 3}, core.BooleanAnd, false)
 		}, want}, []any{1, 2, 3}},
 		{laravelCase{"associative list keeps order", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereIn("id", []any{45582, 2, 3}, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereIn("id", []any{45582, 2, 3}, core.BooleanAnd, false)
 		}, want}, []any{45582, 2, 3}},
 		{laravelCase{"nested single-value arrays", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereIn("id", []any{[]any{45582}, []any{2}, []any{3}}, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereIn("id", []any{[]any{45582}, []any{2}, []any{3}}, core.BooleanAnd, false)
 		}, want}, []any{45582, 2, 3}},
 		{laravelCase{"or where in", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", "=", 1).OrWhereIn("id", []any{1, 2, 3})
@@ -144,7 +145,7 @@ func TestBasicWhereIns(t *testing.T) {
 func TestWhereInNestedArraysRejected(t *testing.T) {
 	builder := newTestBuilder().Select("*").From("users", "").WhereIn("id", []any{
 		[]any{1, 1}, []any{2}, []any{3},
-	}, BooleanAnd, false)
+	}, core.BooleanAnd, false)
 
 	_ = builder.ToSQL()
 
@@ -157,10 +158,10 @@ func TestHavingBetweens(t *testing.T) {
 
 	runFlattenCases(t, []flattenCase{
 		{laravelCase{"three bounds take the first two", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").HavingBetween("id", []any{1, 2, 3}, BooleanAnd, false)
+			return b.Select("*").From("users", "").HavingBetween("id", []any{1, 2, 3}, core.BooleanAnd, false)
 		}, want}, []any{1, 2}},
 		{laravelCase{"two nested bounds", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").HavingBetween("id", []any{[]any{1, 2}, []any{3, 4}}, BooleanAnd, false)
+			return b.Select("*").From("users", "").HavingBetween("id", []any{[]any{1, 2}, []any{3, 4}}, core.BooleanAnd, false)
 		}, want}, []any{1, 2}},
 	})
 }
@@ -173,13 +174,13 @@ func TestWhereIntegerInRawFlattenNested(t *testing.T) {
 
 	runFlattenCases(t, []flattenCase{
 		{laravelCase{"flat integers", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereIntegerInRaw("id", []any{1, 2, 3}, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereIntegerInRaw("id", []any{1, 2, 3}, core.BooleanAnd, false)
 		}, want}, nil},
 		{laravelCase{"nested single-value arrays", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereIntegerInRaw("id", []any{[]any{1}, []any{2}, []any{3}}, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereIntegerInRaw("id", []any{[]any{1}, []any{2}, []any{3}}, core.BooleanAnd, false)
 		}, want}, nil},
 		{laravelCase{"deeply nested arrays", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereIntegerInRaw("id", []any{[]any{[]any{1, 2}}, []any{3}}, BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereIntegerInRaw("id", []any{[]any{[]any{1, 2}}, []any{3}}, core.BooleanAnd, false)
 		}, want}, nil},
 	})
 }

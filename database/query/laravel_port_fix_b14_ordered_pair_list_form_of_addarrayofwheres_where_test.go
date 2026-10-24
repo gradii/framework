@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -66,7 +67,7 @@ func TestArrayWhereColumn(t *testing.T) {
 					[]any{"updated_at", ">", "created_at"},
 				}
 
-				return b.Select("*").From("users", "").WhereColumn(conditions, nil, nil, BooleanAnd)
+				return b.Select("*").From("users", "").WhereColumn(conditions, nil, nil, core.BooleanAnd)
 			}, `select * from "users" where ("first_name" = "last_name" and "updated_at" > "created_at")`},
 			nil,
 		},
@@ -205,19 +206,19 @@ func TestWhereWithArrayConditions(t *testing.T) {
 		// whereColumn(col1, col2)
 		{
 			laravelCase{"where column comparison and", func(b *Builder) *Builder {
-				return b.Select("*").From("users", "").WhereColumn(columns, nil, nil, BooleanAnd)
+				return b.Select("*").From("users", "").WhereColumn(columns, nil, nil, core.BooleanAnd)
 			}, `select * from "users" where ("foo" = "_foo" and "bar" = "_bar")`},
 			nil,
 		},
 		{
 			laravelCase{"where column comparison or", func(b *Builder) *Builder {
-				return b.Select("*").From("users", "").WhereColumn(columns, nil, nil, BooleanOr)
+				return b.Select("*").From("users", "").WhereColumn(columns, nil, nil, core.BooleanOr)
 			}, `select * from "users" where ("foo" = "_foo" or "bar" = "_bar")`},
 			nil,
 		},
 		{
 			laravelCase{"where column comparison and explicit", func(b *Builder) *Builder {
-				return b.Select("*").From("users", "").WhereColumn(columns, nil, nil, BooleanAnd)
+				return b.Select("*").From("users", "").WhereColumn(columns, nil, nil, core.BooleanAnd)
 			}, `select * from "users" where ("foo" = "_foo" and "bar" = "_bar")`},
 			nil,
 		},

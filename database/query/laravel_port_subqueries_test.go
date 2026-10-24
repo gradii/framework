@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -27,12 +28,12 @@ func TestSubSelectWhereIns(t *testing.T) {
 		{"where in sub", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").WhereIn("id", func(q *Builder) *Builder {
 				return q.Select("id").From("users", "").Where("age", ">", 25).Limit(3)
-			}, BooleanAnd, false)
+			}, core.BooleanAnd, false)
 		}, `select * from "users" where "id" in (select "id" from "users" where "age" > ? limit 3)`},
 		{"where not in sub", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").WhereNotIn("id", func(q *Builder) *Builder {
 				return q.Select("id").From("users", "").Where("age", ">", 25).Limit(3)
-			}, BooleanAnd)
+			}, core.BooleanAnd)
 		}, `select * from "users" where "id" not in (select "id" from "users" where "age" > ? limit 3)`},
 	})
 
@@ -40,11 +41,11 @@ func TestSubSelectWhereIns(t *testing.T) {
 	assert.Equal(t, []any{25}, newTestBuilder().Select("*").From("users", "").
 		WhereIn("id", func(q *Builder) *Builder {
 			return q.Select("id").From("users", "").Where("age", ">", 25).Limit(3)
-		}, BooleanAnd, false).GetBindings())
+		}, core.BooleanAnd, false).GetBindings())
 	assert.Equal(t, []any{25}, newTestBuilder().Select("*").From("users", "").
 		WhereNotIn("id", func(q *Builder) *Builder {
 			return q.Select("id").From("users", "").Where("age", ">", 25).Limit(3)
-		}, BooleanAnd).GetBindings())
+		}, core.BooleanAnd).GetBindings())
 }
 
 // TestFullSubSelects ports Laravel's testFullSubSelects.

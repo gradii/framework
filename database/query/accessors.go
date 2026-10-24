@@ -1,5 +1,7 @@
 package query
 
+import "github.com/goravel/framework/database/query/core"
+
 // The accessors below exist so database/db can stay a thin adapter over the builder: it needs to
 // inspect and rewrite the select list for count and pluck, and to set an aggregate without going
 // through a fluent call that would also change other state.
@@ -16,7 +18,7 @@ func (b *Builder) SetSelects(columns []any) { b.State().Columns = columns }
 // binding cannot outnumber the placeholders left in the compiled SQL). With a group by the order
 // survives, because it still orders the grouped rows.
 func (b *Builder) SetAggregate(function string, columns []any) {
-	b.State().Aggregate = &Aggregate{Function: function, Columns: columns}
+	b.State().Aggregate = &core.Aggregate{Function: function, Columns: columns}
 
 	if len(b.State().Groups) == 0 {
 		b.State().Orders = nil
@@ -27,7 +29,7 @@ func (b *Builder) SetAggregate(function string, columns []any) {
 }
 
 // Aggregate returns the current aggregate, or nil.
-func (b *Builder) Aggregate() *Aggregate { return b.State().Aggregate }
+func (b *Builder) Aggregate() *core.Aggregate { return b.State().Aggregate }
 
 // DistinctFlag reports whether distinct is set.
 func (b *Builder) DistinctFlag() bool { return b.State().Distinct }
@@ -47,4 +49,4 @@ func (b *Builder) Driver() string { return b.driver }
 // UpdateValues returns the ordered assignments IncrementEach recorded, or nil when it recorded none.
 // The caller compiles them with ToUpdateSQL, mirroring the array Laravel's incrementEach hands to
 // update().
-func (b *Builder) UpdateValues() UpdateValues { return b.updateValues }
+func (b *Builder) UpdateValues() core.UpdateValues { return b.updateValues }

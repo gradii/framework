@@ -1,19 +1,21 @@
 package db
 
 import (
+	"strings"
+
 	"github.com/goravel/framework/contracts/database/db"
 	querybuilder "github.com/goravel/framework/database/query"
+	"github.com/goravel/framework/database/query/core"
 	"github.com/goravel/framework/errors"
-	"strings"
 )
 
 type joinClause struct{ query *Query }
 
 func (j *joinClause) On(first any, args ...string) db.JoinClause {
-	return j.on(first, args, querybuilder.BooleanAnd)
+	return j.on(first, args, core.BooleanAnd)
 }
 func (j *joinClause) OrOn(first any, args ...string) db.JoinClause {
-	return j.on(first, args, querybuilder.BooleanOr)
+	return j.on(first, args, core.BooleanOr)
 }
 func (j *joinClause) on(first any, args []string, boolean string) db.JoinClause {
 	q := j.query

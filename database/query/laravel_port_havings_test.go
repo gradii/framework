@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -91,29 +92,29 @@ func TestNestedHavingBindings(t *testing.T) {
 func TestHavingNull(t *testing.T) {
 	runLaravelCases(t, []laravelCase{
 		{"having null", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").HavingNull("email", BooleanAnd, false)
+			return b.Select("*").From("users", "").HavingNull("email", core.BooleanAnd, false)
 		}, `select * from "users" having "email" is null`},
 		{"having null twice", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").
-				HavingNull("email", BooleanAnd, false).
-				HavingNull("phone", BooleanAnd, false)
+				HavingNull("email", core.BooleanAnd, false).
+				HavingNull("phone", core.BooleanAnd, false)
 		}, `select * from "users" having "email" is null and "phone" is null`},
 		{"or having null twice", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").
-				HavingNull("email", BooleanOr, false).
-				HavingNull("phone", BooleanOr, false)
+				HavingNull("email", core.BooleanOr, false).
+				HavingNull("phone", core.BooleanOr, false)
 		}, `select * from "users" having "email" is null or "phone" is null`},
 		{"having null with group by", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").GroupBy("email").HavingNull("email", BooleanAnd, false)
+			return b.Select("*").From("users", "").GroupBy("email").HavingNull("email", core.BooleanAnd, false)
 		}, `select * from "users" group by "email" having "email" is null`},
 		{"having null on an alias", func(b *Builder) *Builder {
-			return b.Select("email as foo_email").From("users", "").HavingNull("foo_email", BooleanAnd, false)
+			return b.Select("email as foo_email").From("users", "").HavingNull("foo_email", core.BooleanAnd, false)
 		}, `select "email" as "foo_email" from "users" having "foo_email" is null`},
 		{"having null on a raw aggregate", func(b *Builder) *Builder {
 			return b.Select("category", Raw(`count(*) as "total"`)).From("item", "").
 				Where("department", "=", "popular").
 				GroupBy("category").
-				HavingNull("total", BooleanAnd, false)
+				HavingNull("total", core.BooleanAnd, false)
 		}, `select "category", count(*) as "total" from "item" where "department" = ? group by "category" having "total" is null`},
 	})
 }
@@ -124,29 +125,29 @@ func TestHavingNull(t *testing.T) {
 func TestHavingNotNull(t *testing.T) {
 	runLaravelCases(t, []laravelCase{
 		{"having not null", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").HavingNotNull("email", BooleanAnd)
+			return b.Select("*").From("users", "").HavingNotNull("email", core.BooleanAnd)
 		}, `select * from "users" having "email" is not null`},
 		{"having not null twice", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").
-				HavingNotNull("email", BooleanAnd).
-				HavingNotNull("phone", BooleanAnd)
+				HavingNotNull("email", core.BooleanAnd).
+				HavingNotNull("phone", core.BooleanAnd)
 		}, `select * from "users" having "email" is not null and "phone" is not null`},
 		{"or having not null twice", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").
-				HavingNotNull("email", BooleanOr).
-				HavingNotNull("phone", BooleanOr)
+				HavingNotNull("email", core.BooleanOr).
+				HavingNotNull("phone", core.BooleanOr)
 		}, `select * from "users" having "email" is not null or "phone" is not null`},
 		{"having not null with group by", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").GroupBy("email").HavingNotNull("email", BooleanAnd)
+			return b.Select("*").From("users", "").GroupBy("email").HavingNotNull("email", core.BooleanAnd)
 		}, `select * from "users" group by "email" having "email" is not null`},
 		{"having not null on an alias", func(b *Builder) *Builder {
-			return b.Select("email as foo_email").From("users", "").HavingNotNull("foo_email", BooleanAnd)
+			return b.Select("email as foo_email").From("users", "").HavingNotNull("foo_email", core.BooleanAnd)
 		}, `select "email" as "foo_email" from "users" having "foo_email" is not null`},
 		{"having not null on a raw aggregate", func(b *Builder) *Builder {
 			return b.Select("category", Raw(`count(*) as "total"`)).From("item", "").
 				Where("department", "=", "popular").
 				GroupBy("category").
-				HavingNotNull("total", BooleanAnd)
+				HavingNotNull("total", core.BooleanAnd)
 		}, `select "category", count(*) as "total" from "item" where "department" = ? group by "category" having "total" is not null`},
 	})
 }

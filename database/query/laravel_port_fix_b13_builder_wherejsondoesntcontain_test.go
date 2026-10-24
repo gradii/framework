@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -25,7 +26,7 @@ import (
 func TestWhereJsonDoesntContainMySql(t *testing.T) {
 	runDialectCases(t, []dialectCase{
 		{"where", NewMySqlGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonDoesntContain("options->languages", []any{"en"}, BooleanAnd)
+			return b.Select("*").From("users", "").WhereJsonDoesntContain("options->languages", []any{"en"}, core.BooleanAnd)
 		}, "select * from `users` where not json_contains(`options`, ?, '$.\"languages\"')"},
 		{"or where", NewMySqlGrammar(""), func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", "=", 1).OrWhereJsonDoesntContain("options->languages", Raw(`'["en"]'`))
@@ -34,7 +35,7 @@ func TestWhereJsonDoesntContainMySql(t *testing.T) {
 
 	// An array value is bound as JSON, exactly as Laravel's json_encode produces it.
 	assert.Equal(t, []any{"[\"en\"]"}, NewBuilder(NewMySqlGrammar("")).Select("*").From("users", "").
-		WhereJsonDoesntContain("options->languages", []any{"en"}, BooleanAnd).GetBindings())
+		WhereJsonDoesntContain("options->languages", []any{"en"}, core.BooleanAnd).GetBindings())
 	// A Raw value is inlined and contributes no binding of its own.
 	assert.Equal(t, []any{1}, NewBuilder(NewMySqlGrammar("")).Select("*").From("users", "").
 		Where("id", "=", 1).OrWhereJsonDoesntContain("options->languages", Raw(`'["en"]'`)).GetBindings())
@@ -44,7 +45,7 @@ func TestWhereJsonDoesntContainMySql(t *testing.T) {
 func TestWhereJsonDoesntContainPostgres(t *testing.T) {
 	runDialectCases(t, []dialectCase{
 		{"where", NewPostgresGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonDoesntContain("options->languages", []any{"en"}, BooleanAnd)
+			return b.Select("*").From("users", "").WhereJsonDoesntContain("options->languages", []any{"en"}, core.BooleanAnd)
 		}, `select * from "users" where not ("options"->'languages')::jsonb @> ?`},
 		{"or where", NewPostgresGrammar(""), func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", "=", 1).OrWhereJsonDoesntContain("options->languages", Raw(`'["en"]'`))
@@ -52,7 +53,7 @@ func TestWhereJsonDoesntContainPostgres(t *testing.T) {
 	})
 
 	assert.Equal(t, []any{"[\"en\"]"}, NewBuilder(NewPostgresGrammar("")).Select("*").From("users", "").
-		WhereJsonDoesntContain("options->languages", []any{"en"}, BooleanAnd).GetBindings())
+		WhereJsonDoesntContain("options->languages", []any{"en"}, core.BooleanAnd).GetBindings())
 	assert.Equal(t, []any{1}, NewBuilder(NewPostgresGrammar("")).Select("*").From("users", "").
 		Where("id", "=", 1).OrWhereJsonDoesntContain("options->languages", Raw(`'["en"]'`)).GetBindings())
 }
@@ -62,22 +63,22 @@ func TestWhereJsonDoesntContainPostgres(t *testing.T) {
 func TestWhereJsonDoesntContainSqlite(t *testing.T) {
 	runDialectCases(t, []dialectCase{
 		{"where", NewSqliteGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonDoesntContain("options", "en", BooleanAnd)
+			return b.Select("*").From("users", "").WhereJsonDoesntContain("options", "en", core.BooleanAnd)
 		}, `select * from "users" where not exists (select 1 from json_each("options") where "json_each"."value" is ?)`},
 		{"where with a path", NewSqliteGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonDoesntContain("users.options->language", "en", BooleanAnd)
+			return b.Select("*").From("users", "").WhereJsonDoesntContain("users.options->language", "en", core.BooleanAnd)
 		}, `select * from "users" where not exists (select 1 from json_each("users"."options", '$."language"') where "json_each"."value" is ?)`},
 	})
 
 	assert.Equal(t, []any{"en"}, NewBuilder(NewSqliteGrammar("")).Select("*").From("users", "").
-		WhereJsonDoesntContain("options", "en", BooleanAnd).GetBindings())
+		WhereJsonDoesntContain("options", "en", core.BooleanAnd).GetBindings())
 }
 
 // TestWhereJsonDoesntContainSqlServer ports Laravel's testWhereJsonDoesntContainSqlServer.
 func TestWhereJsonDoesntContainSqlServer(t *testing.T) {
 	runDialectCases(t, []dialectCase{
 		{"where", NewSqlServerGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereJsonDoesntContain("options->languages", "en", BooleanAnd)
+			return b.Select("*").From("users", "").WhereJsonDoesntContain("options->languages", "en", core.BooleanAnd)
 		}, `select * from [users] where not ? in (select [value] from openjson([options], '$."languages"'))`},
 		{"or where", NewSqlServerGrammar(""), func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Where("id", "=", 1).OrWhereJsonDoesntContain("options->languages", Raw(`'en'`))
@@ -85,7 +86,7 @@ func TestWhereJsonDoesntContainSqlServer(t *testing.T) {
 	})
 
 	assert.Equal(t, []any{"en"}, NewBuilder(NewSqlServerGrammar("")).Select("*").From("users", "").
-		WhereJsonDoesntContain("options->languages", "en", BooleanAnd).GetBindings())
+		WhereJsonDoesntContain("options->languages", "en", core.BooleanAnd).GetBindings())
 	assert.Equal(t, []any{1}, NewBuilder(NewSqlServerGrammar("")).Select("*").From("users", "").
 		Where("id", "=", 1).OrWhereJsonDoesntContain("options->languages", Raw(`'en'`)).GetBindings())
 }

@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -27,37 +28,37 @@ func TestCompileSelect(t *testing.T) {
 			return b.From("users", "").Where("id", 1).OrWhere("name", "x")
 		}, `select * from "users" where "id" = ? or "name" = ?`},
 		{"where operator", func(b *Builder) *Builder { return b.From("users", "").Where("id", ">", 1) }, `select * from "users" where "id" > ?`},
-		{"where null", func(b *Builder) *Builder { return b.From("users", "").WhereNull("id", BooleanAnd, false) }, `select * from "users" where "id" is null`},
-		{"where not null", func(b *Builder) *Builder { return b.From("users", "").WhereNotNull("id", BooleanAnd) }, `select * from "users" where "id" is not null`},
+		{"where null", func(b *Builder) *Builder { return b.From("users", "").WhereNull("id", core.BooleanAnd, false) }, `select * from "users" where "id" is null`},
+		{"where not null", func(b *Builder) *Builder { return b.From("users", "").WhereNotNull("id", core.BooleanAnd) }, `select * from "users" where "id" is not null`},
 		{"where in", func(b *Builder) *Builder {
-			return b.From("users", "").WhereIn("id", []any{1, 2}, BooleanAnd, false)
+			return b.From("users", "").WhereIn("id", []any{1, 2}, core.BooleanAnd, false)
 		}, `select * from "users" where "id" in (?, ?)`},
 		{"where in empty", func(b *Builder) *Builder {
-			return b.From("users", "").WhereIn("id", []any{}, BooleanAnd, false)
+			return b.From("users", "").WhereIn("id", []any{}, core.BooleanAnd, false)
 		}, `select * from "users" where 0 = 1`},
 		{"where not in empty", func(b *Builder) *Builder {
-			return b.From("users", "").WhereIn("id", []any{}, BooleanAnd, true)
+			return b.From("users", "").WhereIn("id", []any{}, core.BooleanAnd, true)
 		}, `select * from "users" where 1 = 1`},
 		{"where in raw", func(b *Builder) *Builder {
-			return b.From("users", "").WhereIntegerInRaw("id", []any{1, 2}, BooleanAnd, false)
+			return b.From("users", "").WhereIntegerInRaw("id", []any{1, 2}, core.BooleanAnd, false)
 		}, `select * from "users" where "id" in (1, 2)`},
 		{"where between", func(b *Builder) *Builder {
-			return b.From("users", "").WhereBetween("id", []any{1, 2}, BooleanAnd, false)
+			return b.From("users", "").WhereBetween("id", []any{1, 2}, core.BooleanAnd, false)
 		}, `select * from "users" where "id" between ? and ?`},
 		{"where not between", func(b *Builder) *Builder {
-			return b.From("users", "").WhereBetween("id", []any{1, 2}, BooleanAnd, true)
+			return b.From("users", "").WhereBetween("id", []any{1, 2}, core.BooleanAnd, true)
 		}, `select * from "users" where "id" not between ? and ?`},
 		{"where column", func(b *Builder) *Builder {
-			return b.From("users", "").WhereColumn("a", "=", "b", BooleanAnd)
+			return b.From("users", "").WhereColumn("a", "=", "b", core.BooleanAnd)
 		}, `select * from "users" where "a" = "b"`},
 		{"where raw", func(b *Builder) *Builder {
-			return b.From("users", "").WhereRaw("id = ?", []any{1}, BooleanAnd)
+			return b.From("users", "").WhereRaw("id = ?", []any{1}, core.BooleanAnd)
 		}, `select * from "users" where id = ?`},
 		{"where like", func(b *Builder) *Builder {
-			return b.From("users", "").WhereLike("name", "%x%", false, BooleanAnd, false)
+			return b.From("users", "").WhereLike("name", "%x%", false, core.BooleanAnd, false)
 		}, `select * from "users" where "name" like ?`},
 		{"where not like", func(b *Builder) *Builder {
-			return b.From("users", "").WhereNotLike("name", "%x%", false, BooleanAnd)
+			return b.From("users", "").WhereNotLike("name", "%x%", false, core.BooleanAnd)
 		}, `select * from "users" where "name" not like ?`},
 		{"where date", func(b *Builder) *Builder {
 			return b.From("users", "").WhereDate("created_at", "2024-01-01")
@@ -68,12 +69,12 @@ func TestCompileSelect(t *testing.T) {
 		{"where nested", func(b *Builder) *Builder {
 			return b.From("users", "").WhereNested(func(q *Builder) *Builder {
 				return q.Where("id", 1).OrWhere("name", "x")
-			}, BooleanAnd)
+			}, core.BooleanAnd)
 		}, `select * from "users" where ("id" = ? or "name" = ?)`},
 		{"where exists", func(b *Builder) *Builder {
 			return b.From("users", "").WhereExists(func(q *Builder) *Builder {
-				return q.From("posts", "").WhereColumn("posts.user_id", "=", "users.id", BooleanAnd)
-			}, BooleanAnd, false)
+				return q.From("posts", "").WhereColumn("posts.user_id", "=", "users.id", core.BooleanAnd)
+			}, core.BooleanAnd, false)
 		}, `select * from "users" where exists (select * from "posts" where "posts"."user_id" = "users"."id")`},
 		{"join", func(b *Builder) *Builder {
 			return b.From("users", "").Join("posts", "posts.user_id", "=", "users.id", "inner", false)
@@ -89,7 +90,7 @@ func TestCompileSelect(t *testing.T) {
 		}, `select distinct "name" from "users"`},
 		{"aggregate", func(b *Builder) *Builder {
 			b.From("users", "")
-			b.State().Aggregate = &Aggregate{Function: "count", Columns: []any{"*"}}
+			b.State().Aggregate = &core.Aggregate{Function: "count", Columns: []any{"*"}}
 			return b
 		}, `select count(*) as aggregate from "users"`},
 		{"exists query", func(b *Builder) *Builder { return b.From("users", "") }, `select exists(select * from "users") as "exists"`},
@@ -128,7 +129,7 @@ func TestCompileWrite(t *testing.T) {
 	t.Run("update", func(t *testing.T) {
 		b := newTestBuilder().From("users", "").Where("id", 1)
 		assert.Equal(t, `update "users" set "name" = ? where "id" = ?`,
-			b.Grammar().CompileUpdate(b, UpdateValues{{Column: "name", Value: "x"}}))
+			b.Grammar().CompileUpdate(b, core.UpdateValues{{Column: "name", Value: "x"}}))
 	})
 
 	t.Run("delete", func(t *testing.T) {

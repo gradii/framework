@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -62,7 +63,7 @@ func TestOrWhereAny(t *testing.T) {
 			laravelCase{"where any with or connector", func(b *Builder) *Builder {
 				return b.Select("*").From("users", "").
 					Where("first_name", "like", "%Taylor%").
-					WhereAny([]any{"last_name", "email"}, "like", "%Otwell%", BooleanOr)
+					WhereAny([]any{"last_name", "email"}, "like", "%Otwell%", core.BooleanOr)
 			}, `select * from "users" where "first_name" like ? or ("last_name" like ? or "email" like ?)`},
 			[]any{"%Taylor%", "%Otwell%", "%Otwell%"},
 		},

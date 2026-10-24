@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -47,7 +48,7 @@ func TestCompileSeams(t *testing.T) {
 
 	t.Run("aggregate leaves the builder unchanged", func(t *testing.T) {
 		b := newTestBuilder().From("users", "").Where("id", 1)
-		sql, bindings := b.ToAggregateSQL(Aggregate{Function: "count", Columns: []any{"*"}})
+		sql, bindings := b.ToAggregateSQL(core.Aggregate{Function: "count", Columns: []any{"*"}})
 		assert.Equal(t, `select count(*) as aggregate from "users" where "id" = ?`, sql)
 		assert.Equal(t, []any{1}, bindings)
 		assert.Nil(t, b.State().Aggregate)

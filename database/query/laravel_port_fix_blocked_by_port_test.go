@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -23,14 +24,14 @@ import (
 func TestRawHavingsOrHavingRaw(t *testing.T) {
 	runLaravelCases(t, []laravelCase{
 		{"raw having only", func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").HavingRaw("user_foo < user_bar", nil, BooleanAnd)
+			return b.Select("*").From("users", "").HavingRaw("user_foo < user_bar", nil, core.BooleanAnd)
 		}, `select * from "users" having user_foo < user_bar`},
 		{"having then orHavingRaw", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").Having("baz", "=", 1).OrHavingRaw("user_foo < user_bar", nil)
 		}, `select * from "users" having "baz" = ? or user_foo < user_bar`},
 		{"havingBetween then orHavingRaw", func(b *Builder) *Builder {
 			return b.Select("*").From("users", "").
-				HavingBetween("last_login_date", []any{"2018-11-16", "2018-12-16"}, BooleanAnd, false).
+				HavingBetween("last_login_date", []any{"2018-11-16", "2018-12-16"}, core.BooleanAnd, false).
 				OrHavingRaw("user_foo < user_bar", nil)
 		}, `select * from "users" having "last_login_date" between ? and ? or user_foo < user_bar`},
 	})
@@ -40,14 +41,14 @@ func TestRawHavingsOrHavingRaw(t *testing.T) {
 // of havingRaw($sql, $bindings, 'or'), so its bindings land in the having component in call order and
 // a raw fragment with no bindings contributes none.
 func TestRawHavingsOrHavingRawBindings(t *testing.T) {
-	noBindings := newTestBuilder().Select("*").From("users", "").HavingRaw("user_foo < user_bar", nil, BooleanAnd)
+	noBindings := newTestBuilder().Select("*").From("users", "").HavingRaw("user_foo < user_bar", nil, core.BooleanAnd)
 	assert.Empty(t, noBindings.GetBindings())
 
 	afterHaving := newTestBuilder().Select("*").From("users", "").Having("baz", "=", 1).OrHavingRaw("user_foo < user_bar", nil)
 	assert.Equal(t, []any{1}, afterHaving.GetBindings())
 
 	afterBetween := newTestBuilder().Select("*").From("users", "").
-		HavingBetween("last_login_date", []any{"2018-11-16", "2018-12-16"}, BooleanAnd, false).
+		HavingBetween("last_login_date", []any{"2018-11-16", "2018-12-16"}, core.BooleanAnd, false).
 		OrHavingRaw("user_foo < user_bar", nil)
 	assert.Equal(t, []any{"2018-11-16", "2018-12-16"}, afterBetween.GetBindings())
 
@@ -61,7 +62,7 @@ func TestRawHavingsOrHavingRawBindings(t *testing.T) {
 	// orHavingRaw is havingRaw with the or boolean, so the two agree on the descriptor they push.
 	orForm := newTestBuilder().Select("*").From("users", "").Having("baz", "=", 1).OrHavingRaw("user_foo < user_bar", nil)
 	booleanForm := newTestBuilder().Select("*").From("users", "").Having("baz", "=", 1).
-		HavingRaw("user_foo < user_bar", nil, BooleanOr)
+		HavingRaw("user_foo < user_bar", nil, core.BooleanOr)
 	assert.Equal(t, booleanForm.ToSQL(), orForm.ToSQL())
 	assert.Equal(t, booleanForm.GetBindings(), orForm.GetBindings())
 }
@@ -98,11 +99,11 @@ func TestRawHavingsOrHavingRawDialects(t *testing.T) {
 	for _, dialect := range dialects {
 		t.Run(dialect.name, func(t *testing.T) {
 			assert.Equal(t, dialect.only, NewBuilder(dialect.grammar).Select("*").From("users", "").
-				HavingRaw("user_foo < user_bar", nil, BooleanAnd).ToSQL())
+				HavingRaw("user_foo < user_bar", nil, core.BooleanAnd).ToSQL())
 			assert.Equal(t, dialect.after, NewBuilder(dialect.grammar).Select("*").From("users", "").
 				Having("baz", "=", 1).OrHavingRaw("user_foo < user_bar", nil).ToSQL())
 			assert.Equal(t, dialect.between, NewBuilder(dialect.grammar).Select("*").From("users", "").
-				HavingBetween("last_login_date", []any{"2018-11-16", "2018-12-16"}, BooleanAnd, false).
+				HavingBetween("last_login_date", []any{"2018-11-16", "2018-12-16"}, core.BooleanAnd, false).
 				OrHavingRaw("user_foo < user_bar", nil).ToSQL())
 		})
 	}

@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -48,7 +49,7 @@ func TestAggregateFunctions(t *testing.T) {
 	for _, aggregate := range aggregates {
 		t.Run(aggregate.name, func(t *testing.T) {
 			sql, bindings := newTestBuilder().From("users", "").
-				ToAggregateSQL(Aggregate{Function: aggregate.function, Columns: aggregate.columns})
+				ToAggregateSQL(core.Aggregate{Function: aggregate.function, Columns: aggregate.columns})
 
 			assert.Equal(t, aggregate.want, sql)
 			assert.Empty(t, bindings)
@@ -88,10 +89,10 @@ func TestSqlServerExistsBare(t *testing.T) {
 func TestAggregateResetFollowedByGet(t *testing.T) {
 	builder := newTestBuilder().From("users", "").Select("column1", "column2")
 
-	count, _ := builder.ToAggregateSQL(Aggregate{Function: "count", Columns: []any{"*"}})
+	count, _ := builder.ToAggregateSQL(core.Aggregate{Function: "count", Columns: []any{"*"}})
 	assert.Equal(t, `select count(*) as aggregate from "users"`, count)
 
-	sum, _ := builder.ToAggregateSQL(Aggregate{Function: "sum", Columns: []any{"id"}})
+	sum, _ := builder.ToAggregateSQL(core.Aggregate{Function: "sum", Columns: []any{"id"}})
 	assert.Equal(t, `select sum("id") as aggregate from "users"`, sum)
 
 	// ToAggregateSQL compiles a copy, so the aggregate never reaches this builder and the columns
@@ -105,7 +106,7 @@ func TestAggregateResetFollowedByGet(t *testing.T) {
 func TestAggregateResetFollowedBySelectGet(t *testing.T) {
 	builder := newTestBuilder().From("users", "")
 
-	count, _ := builder.ToAggregateSQL(Aggregate{Function: "count", Columns: []any{"column1"}})
+	count, _ := builder.ToAggregateSQL(core.Aggregate{Function: "count", Columns: []any{"column1"}})
 	assert.Equal(t, `select count("column1") as aggregate from "users"`, count)
 
 	builder.Select("column2", "column3")
@@ -119,7 +120,7 @@ func TestAggregateResetFollowedBySelectGet(t *testing.T) {
 func TestAggregateResetFollowedByGetWithColumns(t *testing.T) {
 	builder := newTestBuilder().From("users", "")
 
-	count, _ := builder.ToAggregateSQL(Aggregate{Function: "count", Columns: []any{"column1"}})
+	count, _ := builder.ToAggregateSQL(core.Aggregate{Function: "count", Columns: []any{"column1"}})
 	assert.Equal(t, `select count("column1") as aggregate from "users"`, count)
 
 	builder.Select("column2", "column3")
@@ -135,7 +136,7 @@ func TestAggregateWithSubSelect(t *testing.T) {
 		return query.From("posts", "").Select("foo", "bar").Where("title", "foo")
 	}, "post")
 
-	sql, _ := builder.ToAggregateSQL(Aggregate{Function: "count", Columns: []any{"*"}})
+	sql, _ := builder.ToAggregateSQL(core.Aggregate{Function: "count", Columns: []any{"*"}})
 	assert.Equal(t, `select count(*) as aggregate from "users"`, sql)
 
 	// The corpus asserts the compiled subselect through the grammar rather than the builder, and the
@@ -157,11 +158,11 @@ func TestHavingAggregate(t *testing.T) {
 	builder := NewBuilder(NewMySqlGrammar("")).From("posts", "")
 	builder.SelectSub(func(query *Builder) *Builder {
 		return query.From("videos", "").Select("count(*)").
-			WhereColumn("posts.id", "=", "videos.post_id", BooleanAnd)
+			WhereColumn("posts.id", "=", "videos.post_id", core.BooleanAnd)
 	}, "videos_count")
 	builder.Having("videos_count", ">", 1)
 
-	sql, bindings := builder.ToAggregateSQL(Aggregate{Function: "count", Columns: []any{"*"}})
+	sql, bindings := builder.ToAggregateSQL(core.Aggregate{Function: "count", Columns: []any{"*"}})
 
 	assert.Equal(t, "select count(*) as aggregate from (select (select `count(*)` from `videos` where `posts`.`id` = `videos`.`post_id`) as `videos_count` from `posts` having `videos_count` > ?) as `temp_table`", sql)
 	assert.Equal(t, []any{1}, bindings)
@@ -172,7 +173,7 @@ func TestHavingAggregate(t *testing.T) {
 // carries the area suffix because TestUnionAggregate (laravel_port_test.go) already exists and asserts a
 // different statement.
 func TestUnionAggregateAggregatesGap(t *testing.T) {
-	count := Aggregate{Function: "count", Columns: []any{"*"}}
+	count := core.Aggregate{Function: "count", Columns: []any{"*"}}
 
 	t.Run("mysql", func(t *testing.T) {
 		builder := NewBuilder(NewMySqlGrammar("")).From("posts", "")

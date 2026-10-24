@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -175,7 +176,7 @@ func TestUnionLimitsAndOffsets(t *testing.T) {
 func TestUnionWithJoin(t *testing.T) {
 	b := newTestBuilder().Select("*").From("users", "")
 	b.Union(newTestBuilder().Select("*").From("dogs", "").Join("breeds", func(j *Builder) *Builder {
-		return j.WhereColumn("dogs.breed_id", "=", "breeds.id", BooleanAnd).Where("breeds.is_native", 1)
+		return j.WhereColumn("dogs.breed_id", "=", "breeds.id", core.BooleanAnd).Where("breeds.is_native", 1)
 	}, "", "", "inner", false), false)
 
 	assert.Equal(t, `(select * from "users") union (select * from "dogs" inner join "breeds" on "dogs"."breed_id" = "breeds"."id" and "breeds"."is_native" = ?)`, b.ToSQL())

@@ -3,6 +3,8 @@ package grammars
 import (
 	"fmt"
 	"strings"
+
+	"github.com/goravel/framework/database/query/core"
 )
 
 // CompileWheres mirrors Grammar::compileWheres().
@@ -101,8 +103,8 @@ func (g *BaseGrammar) CompileWhere(b Query, where Where) string {
 
 // WhereRaw mirrors Grammar::whereRaw().
 func (g *BaseGrammar) WhereRaw(b Query, where Where) string {
-	if IsExpression(where.SQL) {
-		return ExpressionValue(where.SQL)
+	if core.IsExpression(where.SQL) {
+		return core.ExpressionValue(where.SQL)
 	}
 
 	return fmt.Sprint(where.SQL)
@@ -160,7 +162,7 @@ func (g *BaseGrammar) WhereNotIn(b Query, where Where) string {
 // WhereInRaw mirrors Grammar::whereInRaw().
 func (g *BaseGrammar) WhereInRaw(b Query, where Where) string {
 	if len(where.Values) > 0 {
-		return g.dialect().Wrap(where.Column) + " in (" + joinAny(where.Values) + ")"
+		return g.dialect().Wrap(where.Column) + " in (" + core.JoinAny(where.Values) + ")"
 	}
 
 	return "0 = 1"
@@ -169,7 +171,7 @@ func (g *BaseGrammar) WhereInRaw(b Query, where Where) string {
 // WhereNotInRaw mirrors Grammar::whereNotInRaw().
 func (g *BaseGrammar) WhereNotInRaw(b Query, where Where) string {
 	if len(where.Values) > 0 {
-		return g.dialect().Wrap(where.Column) + " not in (" + joinAny(where.Values) + ")"
+		return g.dialect().Wrap(where.Column) + " not in (" + core.JoinAny(where.Values) + ")"
 	}
 
 	return "1 = 1"
@@ -192,7 +194,7 @@ func (g *BaseGrammar) WhereBetween(b Query, where Where) string {
 		between = "not between"
 	}
 
-	min, max := firstAndLast(where.Values)
+	min, max := core.FirstAndLast(where.Values)
 
 	return g.dialect().Wrap(where.Column) + " " + between + " " + g.dialect().Parameter(min) + " and " + g.dialect().Parameter(max)
 }
@@ -204,7 +206,7 @@ func (g *BaseGrammar) WhereBetweenColumns(b Query, where Where) string {
 		between = "not between"
 	}
 
-	min, max := firstAndLast(where.Values)
+	min, max := core.FirstAndLast(where.Values)
 
 	return g.dialect().Wrap(where.Column) + " " + between + " " + g.dialect().Wrap(min) + " and " + g.dialect().Wrap(max)
 }
@@ -216,7 +218,7 @@ func (g *BaseGrammar) WhereValueBetween(b Query, where Where) string {
 		between = "not between"
 	}
 
-	min, max := firstAndLast(where.Columns)
+	min, max := core.FirstAndLast(where.Columns)
 
 	return g.dialect().Parameter(where.Value) + " " + between + " " + g.dialect().Wrap(min) + " and " + g.dialect().Wrap(max)
 }
@@ -312,7 +314,7 @@ func (g *BaseGrammar) WhereRowValues(b Query, where Where) string {
 // does not support JSON operations" there, and the port records the same capability error on the
 // builder, exactly as the JSON contains, key and length compilers do.
 func (g *BaseGrammar) WhereJsonBoolean(b Query, where Where) string {
-	column := g.dialect().WrapJsonBooleanSelector(AsString(where.Column))
+	column := g.dialect().WrapJsonBooleanSelector(core.AsString(where.Column))
 	if column == "" {
 		b.SetError(errJsonSelectorNotSupported)
 		return ""
@@ -325,7 +327,7 @@ func (g *BaseGrammar) WhereJsonBoolean(b Query, where Where) string {
 
 // WhereJsonContains mirrors Grammar::whereJsonContains().
 func (g *BaseGrammar) WhereJsonContains(b Query, where Where) string {
-	compiled := g.dialect().CompileJsonContains(AsString(where.Column), g.dialect().Parameter(where.Value))
+	compiled := g.dialect().CompileJsonContains(core.AsString(where.Column), g.dialect().Parameter(where.Value))
 	if compiled == "" {
 		b.SetError(errJsonContainsNotSupported)
 		return ""
@@ -341,7 +343,7 @@ func (g *BaseGrammar) WhereJsonContains(b Query, where Where) string {
 
 // WhereJsonOverlaps mirrors Grammar::whereJsonOverlaps().
 func (g *BaseGrammar) WhereJsonOverlaps(b Query, where Where) string {
-	compiled := g.dialect().CompileJsonOverlaps(AsString(where.Column), g.dialect().Parameter(where.Value))
+	compiled := g.dialect().CompileJsonOverlaps(core.AsString(where.Column), g.dialect().Parameter(where.Value))
 	if compiled == "" {
 		b.SetError(errJsonOverlapsNotSupported)
 		return ""
@@ -357,7 +359,7 @@ func (g *BaseGrammar) WhereJsonOverlaps(b Query, where Where) string {
 
 // WhereJsonContainsKey mirrors Grammar::whereJsonContainsKey().
 func (g *BaseGrammar) WhereJsonContainsKey(b Query, where Where) string {
-	compiled := g.dialect().CompileJsonContainsKey(AsString(where.Column))
+	compiled := g.dialect().CompileJsonContainsKey(core.AsString(where.Column))
 	if compiled == "" {
 		b.SetError(errJsonContainsKeyNotSupported)
 		return ""
@@ -373,7 +375,7 @@ func (g *BaseGrammar) WhereJsonContainsKey(b Query, where Where) string {
 
 // WhereJsonLength mirrors Grammar::whereJsonLength().
 func (g *BaseGrammar) WhereJsonLength(b Query, where Where) string {
-	compiled := g.dialect().CompileJsonLength(AsString(where.Column), where.Operator, g.dialect().Parameter(where.Value))
+	compiled := g.dialect().CompileJsonLength(core.AsString(where.Column), where.Operator, g.dialect().Parameter(where.Value))
 	if compiled == "" {
 		b.SetError(errJsonLengthNotSupported)
 		return ""

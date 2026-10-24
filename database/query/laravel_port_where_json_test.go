@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -23,7 +24,7 @@ import (
 func TestJsonWhereNullMysql(t *testing.T) {
 	runDialectCases(t, []dialectCase{
 		{"json where null", NewMySqlGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereNull("items->id", BooleanAnd, false)
+			return b.Select("*").From("users", "").WhereNull("items->id", core.BooleanAnd, false)
 		}, "select * from `users` where (json_extract(`items`, '$.\"id\"') is null OR json_type(json_extract(`items`, '$.\"id\"')) = 'NULL')"},
 	})
 }
@@ -32,7 +33,7 @@ func TestJsonWhereNullMysql(t *testing.T) {
 func TestJsonWhereNotNullMysql(t *testing.T) {
 	runDialectCases(t, []dialectCase{
 		{"json where not null", NewMySqlGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereNotNull("items->id", BooleanAnd)
+			return b.Select("*").From("users", "").WhereNotNull("items->id", core.BooleanAnd)
 		}, "select * from `users` where (json_extract(`items`, '$.\"id\"') is not null AND json_type(json_extract(`items`, '$.\"id\"')) != 'NULL')"},
 	})
 }
@@ -99,7 +100,7 @@ func TestJsonPathEscaping(t *testing.T) {
 func TestMySqlWrappingJson(t *testing.T) {
 	runDialectCases(t, []dialectCase{
 		{"where raw", NewMySqlGrammar(""), func(b *Builder) *Builder {
-			return b.Select("*").From("users", "").WhereRaw("items->'$.\"price\"' = 1", nil, BooleanAnd)
+			return b.Select("*").From("users", "").WhereRaw("items->'$.\"price\"' = 1", nil, core.BooleanAnd)
 		}, "select * from `users` where items->'$.\"price\"' = 1"},
 		{"select, where and order by a json column", NewMySqlGrammar(""), func(b *Builder) *Builder {
 			return b.Select("items->price").From("users", "").Where("users.items->price", "=", 1).OrderBy("items->price", "asc")
@@ -178,12 +179,12 @@ func TestSqliteWrappingJson(t *testing.T) {
 func TestWhereJsonContainsSqlite(t *testing.T) {
 	grammar := NewSqliteGrammar("")
 
-	builder := NewBuilder(grammar).Select("*").From("users", "").WhereJsonContains("options", "en", BooleanAnd, false)
+	builder := NewBuilder(grammar).Select("*").From("users", "").WhereJsonContains("options", "en", core.BooleanAnd, false)
 
 	assert.Equal(t, `select * from "users" where exists (select 1 from json_each("options") where "json_each"."value" is ?)`, builder.ToSQL())
 	assert.Equal(t, []any{"en"}, builder.GetBindings())
 
-	builder = NewBuilder(grammar).Select("*").From("users", "").WhereJsonContains("users.options->language", "en", BooleanAnd, false)
+	builder = NewBuilder(grammar).Select("*").From("users", "").WhereJsonContains("users.options->language", "en", core.BooleanAnd, false)
 
 	assert.Equal(t, `select * from "users" where exists (select 1 from json_each("users"."options", '$."language"') where "json_each"."value" is ?)`, builder.ToSQL())
 	assert.Equal(t, []any{"en"}, builder.GetBindings())

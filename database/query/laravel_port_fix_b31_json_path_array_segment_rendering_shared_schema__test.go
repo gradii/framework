@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -31,7 +32,7 @@ import (
 // (corpus L4745-4767): a leading bracketed segment renders as '$[1]."2fa"' inside json_set, the boolean
 // value is inlined as false, and the array-indexed key renders as '$."tags"[0][2]'.
 func TestMySqlUpdateWrappingJsonPathArrayIndex(t *testing.T) {
-	values := UpdateValues{
+	values := core.UpdateValues{
 		{Column: "options->[1]->2fa", Value: false},
 		{Column: "meta->tags[0][2]", Value: "large"},
 	}
@@ -51,7 +52,7 @@ func TestMySqlUpdateWrappingJsonPathArrayIndex(t *testing.T) {
 // where keeps its inlined true and contributes no binding, so the binding list stays the two nested
 // documents.
 func TestSQLiteUpdateWrappingJsonPathArrayIndexWithWhereClause(t *testing.T) {
-	values := UpdateValues{
+	values := core.UpdateValues{
 		{Column: "options->[1]->2fa", Value: false},
 		{Column: "meta->tags[0][2]", Value: "large"},
 	}

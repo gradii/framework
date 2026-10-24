@@ -1,4 +1,4 @@
-package grammars
+package core
 
 // Query is the builder view used by SQL compilers. It contains no execution or fluent API.
 type Query interface {

@@ -17,6 +17,8 @@
 ## 已完成
 
 - DB 查询入口、Builder 剩余 API、子查询、JoinClause、写入和 SQL 预览。
+- 公共查询类型、状态、表达式及值处理工具位于 database/query/core；Builder 和 Grammar 直接调用 core 工具，不使用内部 helper 转发文件。
+- query/types.go 已移除，查询描述类型与常量直接引用 core；DB/ORM 适配层及相关测试同步调整。
 - 可变查询语义、回调、Sole/Lazy、基础分页、聚合空值及克隆编译错误传播。
 - 连接会话、事件/日志、pretend、sticky、名称管理、版本和转义、reader 候选与读取恢复。
 - 同连接 savepoint、事务层级、重试、提交/回滚回调、异常清理。

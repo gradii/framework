@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -23,7 +24,7 @@ func TestSqliteWhereJsonContainsList(t *testing.T) {
 
 	t.Run("list expands to one predicate per element", func(t *testing.T) {
 		builder := NewBuilder(grammar).Select("*").From("json_data", "").
-			WhereJsonContains("data->array", []string{"abc", "def"}, BooleanAnd, false)
+			WhereJsonContains("data->array", []string{"abc", "def"}, core.BooleanAnd, false)
 
 		assert.Equal(t, `select * from "json_data" where exists (select 1 from json_each("data", '$."array"') where "json_each"."value" is ?) and exists (select 1 from json_each("data", '$."array"') where "json_each"."value" is ?)`, builder.ToSQL())
 		assert.Equal(t, []any{"abc", "def"}, builder.GetBindings())
@@ -31,7 +32,7 @@ func TestSqliteWhereJsonContainsList(t *testing.T) {
 
 	t.Run("does not contain negates the whole conjunction", func(t *testing.T) {
 		builder := NewBuilder(grammar).Select("*").From("json_data", "").
-			WhereJsonDoesntContain("data->array", []any{"abc", "def"}, BooleanAnd)
+			WhereJsonDoesntContain("data->array", []any{"abc", "def"}, core.BooleanAnd)
 
 		assert.Equal(t, `select * from "json_data" where not (exists (select 1 from json_each("data", '$."array"') where "json_each"."value" is ?) and exists (select 1 from json_each("data", '$."array"') where "json_each"."value" is ?))`, builder.ToSQL())
 		assert.Equal(t, []any{"abc", "def"}, builder.GetBindings())
@@ -39,7 +40,7 @@ func TestSqliteWhereJsonContainsList(t *testing.T) {
 
 	t.Run("scalar keeps the base shape", func(t *testing.T) {
 		builder := NewBuilder(grammar).Select("*").From("users", "").
-			WhereJsonContains("options", "en", BooleanAnd, false)
+			WhereJsonContains("options", "en", core.BooleanAnd, false)
 
 		assert.Equal(t, `select * from "users" where exists (select 1 from json_each("options") where "json_each"."value" is ?)`, builder.ToSQL())
 		assert.Equal(t, []any{"en"}, builder.GetBindings())
@@ -47,7 +48,7 @@ func TestSqliteWhereJsonContainsList(t *testing.T) {
 
 	t.Run("empty list matches nothing", func(t *testing.T) {
 		builder := NewBuilder(grammar).Select("*").From("json_data", "").
-			WhereJsonContains("data->array", []string{}, BooleanAnd, false)
+			WhereJsonContains("data->array", []string{}, core.BooleanAnd, false)
 
 		assert.Equal(t, `select * from "json_data" where 0 = 1`, builder.ToSQL())
 		assert.Empty(t, builder.GetBindings())
@@ -55,7 +56,7 @@ func TestSqliteWhereJsonContainsList(t *testing.T) {
 
 	t.Run("empty list does not contain matches everything", func(t *testing.T) {
 		builder := NewBuilder(grammar).Select("*").From("json_data", "").
-			WhereJsonDoesntContain("data->array", []string{}, BooleanAnd)
+			WhereJsonDoesntContain("data->array", []string{}, core.BooleanAnd)
 
 		assert.Equal(t, `select * from "json_data" where 1 = 1`, builder.ToSQL())
 		assert.Empty(t, builder.GetBindings())

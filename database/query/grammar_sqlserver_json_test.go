@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -36,7 +37,7 @@ func TestSqlServerUpdateJsonColumns(t *testing.T) {
 
 func TestSqlServerUpdateJsonColumnsGroupsBindings(t *testing.T) {
 	builder := NewBuilder(NewSqlServerGrammar("")).From("users", "").Where("id", 9)
-	statement, bindings := builder.ToUpdateSQL(UpdateValues{
+	statement, bindings := builder.ToUpdateSQL(core.UpdateValues{
 		{Column: "data->name", Value: "updated"},
 		{Column: "label", Value: "other"},
 		{Column: "data->nested->items", Value: []string{"a", "b"}},

@@ -3,6 +3,8 @@ package query
 import (
 	"reflect"
 	"strings"
+
+	"github.com/goravel/framework/database/query/core"
 )
 
 // Select sets the selected columns. Mirrors Builder::select().
@@ -51,7 +53,7 @@ func (b *Builder) AddSelect(columns ...any) *Builder {
 		column := entry.value
 		if entry.alias != "" && IsQueryable(column) {
 			if b.State().Columns == nil {
-				b.Select(asString(b.State().From) + ".*")
+				b.Select(core.AsString(b.State().From) + ".*")
 			}
 			b.SelectSub(column, entry.alias)
 			continue
@@ -142,9 +144,9 @@ func (b *Builder) Join(table any, first any, operator any, second any, typ strin
 		callback(join.Builder)
 	} else if first != nil {
 		if where {
-			join.addWhere(first, []any{operator, second}, BooleanAnd)
+			join.addWhere(first, []any{operator, second}, core.BooleanAnd)
 		} else {
-			join.On(first, operator, second, BooleanAnd)
+			join.On(first, operator, second, core.BooleanAnd)
 		}
 	}
 
@@ -253,17 +255,17 @@ func (b *Builder) GroupByRaw(sql string, bindings []any) *Builder {
 
 // Having adds a having clause. Mirrors Builder::having().
 func (b *Builder) Having(column any, args ...any) *Builder {
-	return b.addHaving(column, args, BooleanAnd)
+	return b.addHaving(column, args, core.BooleanAnd)
 }
 
 // OrHaving adds a having clause with "or". Mirrors Builder::orHaving().
 func (b *Builder) OrHaving(column any, args ...any) *Builder {
-	return b.addHaving(column, args, BooleanOr)
+	return b.addHaving(column, args, core.BooleanOr)
 }
 
 func (b *Builder) addHaving(column any, args []any, boolean string) *Builder {
 	if expr, ok := column.(Expression); ok {
-		b.State().Havings = append(b.State().Havings, Having{Type: HavingExpressionType, Column: expr, Boolean: boolean})
+		b.State().Havings = append(b.State().Havings, core.Having{Type: core.HavingExpressionType, Column: expr, Boolean: boolean})
 		return b
 	}
 
@@ -295,12 +297,12 @@ func (b *Builder) addHaving(column any, args []any, boolean string) *Builder {
 
 	// A bitwise operator becomes its own having type, exactly as Builder::having() marks it. The base
 	// grammar renders it as a plain comparison; the two dialects that define it cast or compare it.
-	havingType := HavingBasic
+	havingType := core.HavingBasic
 	if b.IsBitwiseOperator(op) {
-		havingType = HavingBitType
+		havingType = core.HavingBitType
 	}
 
-	b.State().Havings = append(b.State().Havings, Having{Type: havingType, Column: column, Operator: op, Value: value, Boolean: boolean})
+	b.State().Havings = append(b.State().Havings, core.Having{Type: havingType, Column: column, Operator: op, Value: value, Boolean: boolean})
 
 	if !IsExpression(value) {
 		_ = b.AddBinding(FlattenValue(value), "having")
@@ -311,7 +313,7 @@ func (b *Builder) addHaving(column any, args []any, boolean string) *Builder {
 
 // HavingRaw adds a raw having clause. Mirrors Builder::havingRaw().
 func (b *Builder) HavingRaw(sql string, bindings []any, boolean string) *Builder {
-	b.State().Havings = append(b.State().Havings, Having{Type: HavingRawType, SQL: sql, Boolean: boolean})
+	b.State().Havings = append(b.State().Havings, core.Having{Type: core.HavingRawType, SQL: sql, Boolean: boolean})
 	_ = b.AddBinding(bindings, "having")
 
 	return b
@@ -320,7 +322,7 @@ func (b *Builder) HavingRaw(sql string, bindings []any, boolean string) *Builder
 // OrHavingRaw adds a raw having clause joined with "or". Mirrors Builder::orHavingRaw(), which is
 // havingRaw() with the or boolean.
 func (b *Builder) OrHavingRaw(sql string, bindings []any) *Builder {
-	return b.HavingRaw(sql, bindings, BooleanOr)
+	return b.HavingRaw(sql, bindings, core.BooleanOr)
 }
 
 // HavingNested nests having clauses. Mirrors Builder::havingNested().
@@ -334,7 +336,7 @@ func (b *Builder) HavingNested(callback func(*Builder) *Builder, boolean string)
 // AddNestedHavingQuery adds a builder as a nested having. Mirrors Builder::addNestedHavingQuery().
 func (b *Builder) AddNestedHavingQuery(query *Builder, boolean string) *Builder {
 	if len(query.State().Havings) > 0 {
-		b.State().Havings = append(b.State().Havings, Having{Type: HavingNestedType, Query: query, Boolean: boolean})
+		b.State().Havings = append(b.State().Havings, core.Having{Type: core.HavingNestedType, Query: query, Boolean: boolean})
 		_ = b.AddBinding(query.State().Bindings["having"], "having")
 	}
 
@@ -343,7 +345,7 @@ func (b *Builder) AddNestedHavingQuery(query *Builder, boolean string) *Builder 
 
 // HavingBetween adds a having between clause. Mirrors Builder::havingBetween().
 func (b *Builder) HavingBetween(column any, values []any, boolean string, not bool) *Builder {
-	b.State().Havings = append(b.State().Havings, Having{Type: HavingBetweenType, Column: column, Values: values, Boolean: boolean, Not: not})
+	b.State().Havings = append(b.State().Havings, core.Having{Type: core.HavingBetweenType, Column: column, Values: values, Boolean: boolean, Not: not})
 
 	// Laravel resolves the bounds with Arr::flatten() before binding, exactly like whereBetween.
 	bounds := CleanBindings(flatten(values, 0))
@@ -357,13 +359,13 @@ func (b *Builder) HavingBetween(column any, values []any, boolean string, not bo
 
 // HavingNull adds a having null clause. Mirrors Builder::havingNull().
 func (b *Builder) HavingNull(columns any, boolean string, not bool) *Builder {
-	typ := HavingNullType
+	typ := core.HavingNullType
 	if not {
-		typ = HavingNotNullType
+		typ = core.HavingNotNullType
 	}
 
 	for _, column := range wrapValues(columns) {
-		b.State().Havings = append(b.State().Havings, Having{Type: typ, Column: column, Boolean: boolean})
+		b.State().Havings = append(b.State().Havings, core.Having{Type: typ, Column: column, Boolean: boolean})
 	}
 
 	return b
@@ -393,7 +395,7 @@ func (b *Builder) OrderBy(column any, direction string) *Builder {
 		return b
 	}
 
-	order := Order{Column: column, Direction: direction}
+	order := core.Order{Column: column, Direction: direction}
 	if len(b.State().Unions) > 0 {
 		b.State().UnionOrders = append(b.State().UnionOrders, order)
 	} else {
@@ -408,7 +410,7 @@ func (b *Builder) OrderByDesc(column any) *Builder { return b.OrderBy(column, "d
 
 // OrderByRaw adds a raw order clause. Mirrors Builder::orderByRaw().
 func (b *Builder) OrderByRaw(sql string, bindings []any) *Builder {
-	order := Order{Type: OrderRawType, SQL: sql}
+	order := core.Order{Type: core.OrderRawType, SQL: sql}
 	if len(b.State().Unions) > 0 {
 		b.State().UnionOrders = append(b.State().UnionOrders, order)
 		_ = b.AddBinding(bindings, "unionOrder")
@@ -462,8 +464,8 @@ func (b *Builder) Reorder(column any, direction string) *Builder {
 }
 
 // RemoveExistingOrdersFor drops orders on one column. Mirrors Builder::removeExistingOrdersFor().
-func (b *Builder) RemoveExistingOrdersFor(column string) []Order {
-	kept := make([]Order, 0, len(b.State().Orders))
+func (b *Builder) RemoveExistingOrdersFor(column string) []core.Order {
+	kept := make([]core.Order, 0, len(b.State().Orders))
 	for _, order := range b.State().Orders {
 		if existing, ok := order.Column.(string); ok && existing == column {
 			continue
@@ -558,7 +560,7 @@ func (b *Builder) ForPageBeforeId(perPage int, lastID any, column string) *Build
 	b.State().Orders = b.RemoveExistingOrdersFor(column)
 
 	if lastID == nil {
-		b.WhereNotNull(column, BooleanAnd)
+		b.WhereNotNull(column, core.BooleanAnd)
 	} else {
 		b.Where(column, "<", lastID)
 	}
@@ -577,7 +579,7 @@ func (b *Builder) ForPageAfterId(perPage int, lastID any, column string) *Builde
 	b.State().Orders = b.RemoveExistingOrdersFor(column)
 
 	if lastID == nil {
-		b.WhereNotNull(column, BooleanAnd)
+		b.WhereNotNull(column, core.BooleanAnd)
 	} else {
 		b.Where(column, ">", lastID)
 	}
@@ -595,7 +597,7 @@ func (b *Builder) Union(query any, all bool) *Builder {
 		union = existing
 	}
 
-	b.State().Unions = append(b.State().Unions, Union{Query: union, All: all})
+	b.State().Unions = append(b.State().Unions, core.Union{Query: union, All: all})
 
 	if union != nil {
 		_ = b.AddBinding(union.GetBindings(), "union")
@@ -747,16 +749,16 @@ func (b *Builder) InsertOrIgnoreUsing(columns []any, query any) *Builder {
 // with ToUpdateSQL. Laravel hands the array to update(), which executes against its connection; the
 // builder here holds none, so the descriptor is left on the builder. A Go slice stands for PHP's
 // non-associative array, which Laravel rejects because its keys are integer indices, not column names.
-func (b *Builder) IncrementEach(columns any, extra ...UpdateValue) *Builder {
+func (b *Builder) IncrementEach(columns any, extra ...core.UpdateValue) *Builder {
 	entries, ok := b.incrementEntries(columns)
 	if !ok {
 		return b
 	}
 
 	// Rewrite into a fresh slice: an UpdateValues argument shares its backing array with the caller.
-	rewritten := make(UpdateValues, len(entries))
+	rewritten := make(core.UpdateValues, len(entries))
 	for i := range entries {
-		rewritten[i] = UpdateValue{
+		rewritten[i] = core.UpdateValue{
 			Column: entries[i].Column,
 			Value:  Raw(b.grammar.Wrap(entries[i].Column) + " + " + amountString(entries[i].Value)),
 		}
@@ -771,12 +773,12 @@ func (b *Builder) IncrementEach(columns any, extra ...UpdateValue) *Builder {
 // validates. A false ok means a failure was recorded on the builder and the caller must stop. A
 // map[string]any and an UpdateValues are associative; any other list is the non-associative array
 // Laravel rejects.
-func (b *Builder) incrementEntries(columns any) (UpdateValues, bool) {
+func (b *Builder) incrementEntries(columns any) (core.UpdateValues, bool) {
 	switch value := columns.(type) {
-	case UpdateValues:
+	case core.UpdateValues:
 		return b.validateIncrementEntries(value)
-	case []UpdateValue:
-		return b.validateIncrementEntries(UpdateValues(value))
+	case []core.UpdateValue:
+		return b.validateIncrementEntries(core.UpdateValues(value))
 	default:
 		if entries, ok := mapEntries(value); ok {
 			return b.validateIncrementEntries(entries)
@@ -802,13 +804,13 @@ func (b *Builder) incrementEntries(columns any) (UpdateValues, bool) {
 			return nil, false
 		}
 
-		return UpdateValues{}, true
+		return core.UpdateValues{}, true
 	}
 }
 
 // validateIncrementEntries rejects a non-numeric amount before a non-string column, exactly as
 // Builder::incrementEach() orders the two guards, and is otherwise an identity.
-func (b *Builder) validateIncrementEntries(entries UpdateValues) (UpdateValues, bool) {
+func (b *Builder) validateIncrementEntries(entries core.UpdateValues) (core.UpdateValues, bool) {
 	for i := range entries {
 		if !isNumericValue(entries[i].Value) {
 			b.setError(errIncrementAmountNonNumeric.Args(entries[i].Column))

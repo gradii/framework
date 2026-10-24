@@ -3,11 +3,11 @@ package query
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
+	"github.com/goravel/framework/database/query/core"
 	"github.com/goravel/framework/database/query/processors"
 	"github.com/goravel/framework/errors"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type insertIDProcessorSpy struct {
@@ -31,7 +31,7 @@ func TestInsertGetIDCompilesBeforeProcessing(t *testing.T) {
 		builder.From("original", "").BeforeQuery(func(b *Builder) *Builder {
 			return b.From("users", "")
 		})
-		id, err := builder.InsertGetID(nil, InsertValues{{Column: "name", Value: "alice"}}, "user_id")
+		id, err := builder.InsertGetID(nil, core.InsertValues{{Column: "name", Value: "alice"}}, "user_id")
 		require.NoError(t, err)
 		assert.Equal(t, int64(73), id)
 		assert.Equal(t, "insert into `users` (`name`) values (?)", processor.statement)
@@ -44,7 +44,7 @@ func TestInsertGetIDCompilesBeforeProcessing(t *testing.T) {
 func TestInsertGetIDRejectsBuilderErrorsBeforeProcessing(t *testing.T) {
 	processor := &insertIDProcessorSpy{}
 	builder := NewBuilder(NewMySqlGrammar(""), processor).From("users", "")
-	builder.WhereIn("id", nil, BooleanAnd, false)
+	builder.WhereIn("id", nil, core.BooleanAnd, false)
 	_, err := builder.InsertGetID(nil, []map[string]any{{"name": "alice"}}, "")
 	assert.ErrorIs(t, err, errors.QueryNilValueListNotAllowed)
 	assert.Zero(t, processor.calls)
@@ -70,7 +70,7 @@ func TestNewProcessorSelectsTheConnectionDialect(t *testing.T) {
 
 func TestSqlServerInsertIDClauseDoesNotParseSQLText(t *testing.T) {
 	builder := NewBuilder(NewSqlServerGrammar("")).From("table values archive", "")
-	statement, bindings := builder.ToInsertGetIdSQL(InsertValues{
+	statement, bindings := builder.ToInsertGetIdSQL(core.InsertValues{
 		{Column: "name", Value: Raw("' returning output inserted. '")},
 		{Column: "value", Value: 7},
 	}, "user_id")

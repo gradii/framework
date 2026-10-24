@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -40,7 +41,7 @@ import (
 // list — exactly the array order Laravel keeps in Builder::update().
 func TestOrderedUpdateValuesKeepInsertionOrder(t *testing.T) {
 	sql, bindings := newTestBuilder().From("users", "").Where("id", 1).
-		ToUpdateSQL(UpdateValues{
+		ToUpdateSQL(core.UpdateValues{
 			{Column: "name", Value: "n"},
 			{Column: "email", Value: "e"},
 		})
@@ -62,7 +63,7 @@ func TestUpdateValuesMapFallbackKeepsSorting(t *testing.T) {
 // TestOrderedUpdateValuesAcrossDialects exercises the ordered binding path on every dialect that
 // overrides prepareBindingsForUpdate, none of which may reorder the set bindings.
 func TestOrderedUpdateValuesAcrossDialects(t *testing.T) {
-	values := UpdateValues{
+	values := core.UpdateValues{
 		{Column: "name", Value: "n"},
 		{Column: "email", Value: "e"},
 	}
@@ -88,7 +89,7 @@ func TestOrderedUpdateValuesAcrossDialects(t *testing.T) {
 // the SET list stays in the array's order — options, meta, group_id, created_at — rather than being
 // sorted, and the array-valued json selector keeps its cast(? as json) rendering.
 func TestMySqlUpdateWrappingJsonArray(t *testing.T) {
-	values := UpdateValues{
+	values := core.UpdateValues{
 		{Column: "options", Value: map[string]any{"2fa": false, "presets": []any{"laravel", "vue"}}},
 		{Column: "meta->tags", Value: []any{"white", "large"}},
 		{Column: "group_id", Value: Raw("45")},
@@ -103,7 +104,7 @@ func TestMySqlUpdateWrappingJsonArray(t *testing.T) {
 // TestPostgresUpdateWrappingJsonArray ports Laravel's testPostgresUpdateWrappingJsonArray (corpus
 // L4814-4831): the SET list stays in the array's order.
 func TestPostgresUpdateWrappingJsonArray(t *testing.T) {
-	values := UpdateValues{
+	values := core.UpdateValues{
 		{Column: "options", Value: map[string]any{"2fa": false, "presets": []any{"laravel", "vue"}}},
 		{Column: "meta->tags", Value: []any{"white", "large"}},
 		{Column: "group_id", Value: Raw("45")},
@@ -118,7 +119,7 @@ func TestPostgresUpdateWrappingJsonArray(t *testing.T) {
 // TestPostgresUpdateWrappingJsonPathArrayIndex ports Laravel's testPostgresUpdateWrappingJsonPathArrayIndex
 // (corpus L4832-4846): both jsonb_set paths already match; the ordering fixes the SET list.
 func TestPostgresUpdateWrappingJsonPathArrayIndex(t *testing.T) {
-	values := UpdateValues{
+	values := core.UpdateValues{
 		{Column: "options->[1]->2fa", Value: false},
 		{Column: "meta->tags[0][2]", Value: "large"},
 	}
@@ -131,7 +132,7 @@ func TestPostgresUpdateWrappingJsonPathArrayIndex(t *testing.T) {
 // TestSQLiteUpdateWrappingJsonArray ports Laravel's testSQLiteUpdateWrappingJsonArray (corpus L4847-4863):
 // the SET list stays in the array's order.
 func TestSQLiteUpdateWrappingJsonArray(t *testing.T) {
-	values := UpdateValues{
+	values := core.UpdateValues{
 		{Column: "options", Value: map[string]any{"2fa": false, "presets": []any{"laravel", "vue"}}},
 		{Column: "group_id", Value: Raw("45")},
 		{Column: "created_at", Value: time.Date(2019, 8, 6, 0, 0, 0, 0, time.UTC)},

@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/goravel/framework/errors"
 	"github.com/stretchr/testify/assert"
 )
@@ -47,7 +48,7 @@ func TestBasicSelect(t *testing.T) {
 		}, `select count(*) as total from "users"`},
 		{"select sub", func(b *Builder) *Builder {
 			// The aggregate is a raw selection: naming it as a column would quote it.
-			sub := NewBuilder(NewBaseGrammar("")).From("orders", "").SelectRaw("count(*)", nil).WhereRaw("orders.user_id = users.id", nil, BooleanAnd)
+			sub := NewBuilder(NewBaseGrammar("")).From("orders", "").SelectRaw("count(*)", nil).WhereRaw("orders.user_id = users.id", nil, core.BooleanAnd)
 
 			return b.From("users", "").Select("*").SelectSub(sub, "orders_count")
 		}, `select *, (select count(*) from "orders" where orders.user_id = users.id) as "orders_count" from "users"`},
@@ -71,47 +72,47 @@ func TestWheres(t *testing.T) {
 			return b.From("users", "").Where("id", 1).OrWhere("name", "x")
 		}, `select * from "users" where "id" = ? or "name" = ?`},
 		{"where null", func(b *Builder) *Builder {
-			return b.From("users", "").WhereNull("id", BooleanAnd, false)
+			return b.From("users", "").WhereNull("id", core.BooleanAnd, false)
 		}, `select * from "users" where "id" is null`},
 		{"or where null", func(b *Builder) *Builder {
-			return b.From("users", "").WhereNull("id", BooleanAnd, false).OrWhereNull("name")
+			return b.From("users", "").WhereNull("id", core.BooleanAnd, false).OrWhereNull("name")
 		}, `select * from "users" where "id" is null or "name" is null`},
 		{"where not null", func(b *Builder) *Builder {
-			return b.From("users", "").WhereNotNull("id", BooleanAnd)
+			return b.From("users", "").WhereNotNull("id", core.BooleanAnd)
 		}, `select * from "users" where "id" is not null`},
 		{"where in", func(b *Builder) *Builder {
-			return b.From("users", "").WhereIn("id", []any{1, 2, 3}, BooleanAnd, false)
+			return b.From("users", "").WhereIn("id", []any{1, 2, 3}, core.BooleanAnd, false)
 		}, `select * from "users" where "id" in (?, ?, ?)`},
 		{"where not in", func(b *Builder) *Builder {
-			return b.From("users", "").WhereIn("id", []any{1, 2}, BooleanAnd, true)
+			return b.From("users", "").WhereIn("id", []any{1, 2}, core.BooleanAnd, true)
 		}, `select * from "users" where "id" not in (?, ?)`},
 		{"where between", func(b *Builder) *Builder {
-			return b.From("users", "").WhereBetween("id", []any{1, 10}, BooleanAnd, false)
+			return b.From("users", "").WhereBetween("id", []any{1, 10}, core.BooleanAnd, false)
 		}, `select * from "users" where "id" between ? and ?`},
 		{"where not between", func(b *Builder) *Builder {
-			return b.From("users", "").WhereNotBetween("id", []any{1, 10}, BooleanAnd)
+			return b.From("users", "").WhereNotBetween("id", []any{1, 10}, core.BooleanAnd)
 		}, `select * from "users" where "id" not between ? and ?`},
 		{"where column", func(b *Builder) *Builder {
-			return b.From("users", "").WhereColumn("updated_at", ">", "created_at", BooleanAnd)
+			return b.From("users", "").WhereColumn("updated_at", ">", "created_at", core.BooleanAnd)
 		}, `select * from "users" where "updated_at" > "created_at"`},
 		{"where raw", func(b *Builder) *Builder {
-			return b.From("users", "").WhereRaw("id = ?", []any{1}, BooleanAnd)
+			return b.From("users", "").WhereRaw("id = ?", []any{1}, core.BooleanAnd)
 		}, `select * from "users" where id = ?`},
 		{"where nested", func(b *Builder) *Builder {
 			return b.From("users", "").Where("id", 1).WhereNested(func(nested *Builder) *Builder {
 				return nested.Where("name", "x").OrWhere("name", "y")
-			}, BooleanAnd)
+			}, core.BooleanAnd)
 		}, `select * from "users" where "id" = ? and ("name" = ? or "name" = ?)`},
 		{"where bitwise and", func(b *Builder) *Builder {
 			// Laravel's whereBitwise has no builder entry point here, though the grammar compiles the
 			// descriptor; the case queues what the entry point would, so the compilation is still covered.
 			builder := b.From("users", "")
-			builder.State().Wheres = append(builder.State().Wheres, Where{
-				Type:     WhereBitwise,
+			builder.State().Wheres = append(builder.State().Wheres, core.Where{
+				Type:     core.WhereBitwise,
 				Column:   "flags",
 				Operator: "&",
 				Value:    4,
-				Boolean:  BooleanAnd,
+				Boolean:  core.BooleanAnd,
 			})
 			builder.AddBinding(CleanBindings([]any{4}), "where")
 
@@ -161,7 +162,7 @@ func TestGroupsAndHavings(t *testing.T) {
 			return b.From("users", "").GroupBy("name").Having("count", ">", 1).OrHaving("count", "<", 10)
 		}, `select * from "users" group by "name" having "count" > ? or "count" < ?`},
 		{"having raw", func(b *Builder) *Builder {
-			return b.From("users", "").GroupBy("name").HavingRaw("count(*) > ?", []any{1}, BooleanAnd)
+			return b.From("users", "").GroupBy("name").HavingRaw("count(*) > ?", []any{1}, core.BooleanAnd)
 		}, `select * from "users" group by "name" having count(*) > ?`},
 	})
 }
@@ -181,7 +182,7 @@ func TestJoins(t *testing.T) {
 		{"join with extra where", func(b *Builder) *Builder {
 			// The callback receives the join's own builder, whose conditions compile as on clauses.
 			return b.From("users", "").Join("contacts", func(join *Builder) *Builder {
-				return join.WhereColumn("contacts.user_id", "=", "users.id", BooleanAnd).Where("contacts.active", 1)
+				return join.WhereColumn("contacts.user_id", "=", "users.id", core.BooleanAnd).Where("contacts.active", 1)
 			}, "", "", "inner", false)
 		}, `select * from "users" inner join "contacts" on "contacts"."user_id" = "users"."id" and "contacts"."active" = ?`},
 		{"join sub", func(b *Builder) *Builder {
@@ -293,13 +294,13 @@ func TestInsertsAndUpdates(t *testing.T) {
 // TestAggregatesAndExists ports the aggregate and exists shapes.
 func TestAggregatesAndExists(t *testing.T) {
 	t.Run("count", func(t *testing.T) {
-		sql, _ := newTestBuilder().From("users", "").ToAggregateSQL(Aggregate{Function: "count", Columns: []any{"*"}})
+		sql, _ := newTestBuilder().From("users", "").ToAggregateSQL(core.Aggregate{Function: "count", Columns: []any{"*"}})
 
 		assert.Equal(t, `select count(*) as aggregate from "users"`, sql)
 	})
 
 	t.Run("count of a column", func(t *testing.T) {
-		sql, _ := newTestBuilder().From("users", "").ToAggregateSQL(Aggregate{Function: "count", Columns: []any{"name"}})
+		sql, _ := newTestBuilder().From("users", "").ToAggregateSQL(core.Aggregate{Function: "count", Columns: []any{"name"}})
 
 		assert.Equal(t, `select count("name") as aggregate from "users"`, sql)
 	})
@@ -307,13 +308,13 @@ func TestAggregatesAndExists(t *testing.T) {
 	t.Run("distinct count", func(t *testing.T) {
 		builder := newTestBuilder().From("users", "").Distinct("name")
 
-		sql, _ := builder.ToAggregateSQL(Aggregate{Function: "count", Columns: []any{"name"}})
+		sql, _ := builder.ToAggregateSQL(core.Aggregate{Function: "count", Columns: []any{"name"}})
 
 		assert.Equal(t, `select count(distinct "name") as aggregate from "users"`, sql)
 	})
 
 	t.Run("sum", func(t *testing.T) {
-		sql, _ := newTestBuilder().From("users", "").Where("active", 1).ToAggregateSQL(Aggregate{Function: "sum", Columns: []any{"amount"}})
+		sql, _ := newTestBuilder().From("users", "").Where("active", 1).ToAggregateSQL(core.Aggregate{Function: "sum", Columns: []any{"amount"}})
 
 		assert.Equal(t, `select sum("amount") as aggregate from "users" where "active" = ?`, sql)
 	})
@@ -348,37 +349,37 @@ func TestPaginationFamily(t *testing.T) {
 func TestWhereFamilyVariants(t *testing.T) {
 	runLaravelCases(t, []laravelCase{
 		{"where integer in raw", func(b *Builder) *Builder {
-			return b.From("users", "").WhereIntegerInRaw("id", []any{1, 2}, BooleanAnd, false)
+			return b.From("users", "").WhereIntegerInRaw("id", []any{1, 2}, core.BooleanAnd, false)
 		}, `select * from "users" where "id" in (1, 2)`},
 		{"where not integer in raw", func(b *Builder) *Builder {
-			return b.From("users", "").WhereIntegerInRaw("id", []any{1}, BooleanAnd, true)
+			return b.From("users", "").WhereIntegerInRaw("id", []any{1}, core.BooleanAnd, true)
 		}, `select * from "users" where "id" not in (1)`},
 		{"where row values", func(b *Builder) *Builder {
 			return b.From("users", "").WhereRowValues([]any{"a", "b"}, "=", []any{1, 2})
 		}, `select * from "users" where ("a", "b") = (?, ?)`},
 		{"where between columns", func(b *Builder) *Builder {
-			return b.From("users", "").WhereBetweenColumns("a", []any{"b", "c"}, BooleanAnd, false)
+			return b.From("users", "").WhereBetweenColumns("a", []any{"b", "c"}, core.BooleanAnd, false)
 		}, `select * from "users" where "a" between "b" and "c"`},
 		{"where not between columns", func(b *Builder) *Builder {
-			return b.From("users", "").WhereBetweenColumns("a", []any{"b", "c"}, BooleanAnd, true)
+			return b.From("users", "").WhereBetweenColumns("a", []any{"b", "c"}, core.BooleanAnd, true)
 		}, `select * from "users" where "a" not between "b" and "c"`},
 		{"where value between", func(b *Builder) *Builder {
-			return b.From("users", "").WhereValueBetween(1, []any{"a", "b"}, BooleanAnd, false)
+			return b.From("users", "").WhereValueBetween(1, []any{"a", "b"}, core.BooleanAnd, false)
 		}, `select * from "users" where ? between "a" and "b"`},
 		{"where exists", func(b *Builder) *Builder {
 			return b.From("users", "").WhereExists(func(sub *Builder) *Builder {
-				return sub.From("orders", "").SelectRaw("1", nil).WhereRaw("orders.user_id = users.id", nil, BooleanAnd)
-			}, BooleanAnd, false)
+				return sub.From("orders", "").SelectRaw("1", nil).WhereRaw("orders.user_id = users.id", nil, core.BooleanAnd)
+			}, core.BooleanAnd, false)
 		}, `select * from "users" where exists (select 1 from "orders" where orders.user_id = users.id)`},
 		{"where not exists", func(b *Builder) *Builder {
 			return b.From("users", "").WhereNotExists(func(sub *Builder) *Builder {
-				return sub.From("orders", "").SelectRaw("1", nil).WhereRaw("orders.user_id = users.id", nil, BooleanAnd)
-			}, BooleanAnd)
+				return sub.From("orders", "").SelectRaw("1", nil).WhereRaw("orders.user_id = users.id", nil, core.BooleanAnd)
+			}, core.BooleanAnd)
 		}, `select * from "users" where not exists (select 1 from "orders" where orders.user_id = users.id)`},
 		{"where sub", func(b *Builder) *Builder {
 			return b.From("users", "").WhereSub("id", "=", func(sub *Builder) *Builder {
 				return sub.From("orders", "").Select("max(user_id)")
-			}, BooleanAnd)
+			}, core.BooleanAnd)
 		}, `select * from "users" where "id" = (select "max(user_id)" from "orders")`},
 	})
 }
@@ -387,13 +388,13 @@ func TestWhereFamilyVariants(t *testing.T) {
 func TestWhereDialectForms(t *testing.T) {
 	runDialectCases(t, []dialectCase{
 		{"base like", newTestBuilder().grammar, func(b *Builder) *Builder {
-			return b.From("users", "").WhereLike("name", "%x%", false, BooleanAnd, false)
+			return b.From("users", "").WhereLike("name", "%x%", false, core.BooleanAnd, false)
 		}, `select * from "users" where "name" like ?`},
 		{"base not like", newTestBuilder().grammar, func(b *Builder) *Builder {
-			return b.From("users", "").WhereNotLike("name", "%x%", false, BooleanAnd)
+			return b.From("users", "").WhereNotLike("name", "%x%", false, core.BooleanAnd)
 		}, `select * from "users" where "name" not like ?`},
 		{"mysql json null looks inside the document", NewMySqlGrammar(""), func(b *Builder) *Builder {
-			return b.From("users", "").WhereNull("data->a", BooleanAnd, false)
+			return b.From("users", "").WhereNull("data->a", core.BooleanAnd, false)
 		}, "select * from `users` where (json_extract(`data`, '$.\"a\"') is null OR json_type(json_extract(`data`, '$.\"a\"')) = 'NULL')"},
 		{"sqlserver date casts the column", NewSqlServerGrammar(""), func(b *Builder) *Builder {
 			return b.From("users", "").WhereDate("created_at", "2024-01-01")
@@ -480,21 +481,21 @@ func TestRandomOrder(t *testing.T) {
 func TestHavingFamily(t *testing.T) {
 	runLaravelCases(t, []laravelCase{
 		{"having between", func(b *Builder) *Builder {
-			return b.From("users", "").GroupBy("name").HavingBetween("count", []any{1, 10}, BooleanAnd, false)
+			return b.From("users", "").GroupBy("name").HavingBetween("count", []any{1, 10}, core.BooleanAnd, false)
 		}, `select * from "users" group by "name" having "count" between ? and ?`},
 		{"having not between", func(b *Builder) *Builder {
-			return b.From("users", "").GroupBy("name").HavingBetween("count", []any{1, 10}, BooleanAnd, true)
+			return b.From("users", "").GroupBy("name").HavingBetween("count", []any{1, 10}, core.BooleanAnd, true)
 		}, `select * from "users" group by "name" having "count" not between ? and ?`},
 		{"having null", func(b *Builder) *Builder {
-			return b.From("users", "").GroupBy("name").HavingNull("count", BooleanAnd, false)
+			return b.From("users", "").GroupBy("name").HavingNull("count", core.BooleanAnd, false)
 		}, `select * from "users" group by "name" having "count" is null`},
 		{"having not null", func(b *Builder) *Builder {
-			return b.From("users", "").GroupBy("name").HavingNotNull("count", BooleanAnd)
+			return b.From("users", "").GroupBy("name").HavingNotNull("count", core.BooleanAnd)
 		}, `select * from "users" group by "name" having "count" is not null`},
 		{"having nested", func(b *Builder) *Builder {
 			return b.From("users", "").GroupBy("name").HavingNested(func(nested *Builder) *Builder {
 				return nested.Having("a", ">", 1).OrHaving("b", "<", 2)
-			}, BooleanAnd)
+			}, core.BooleanAnd)
 		}, `select * from "users" group by "name" having ("a" > ? or "b" < ?)`},
 	})
 }
@@ -542,26 +543,26 @@ func TestSubquerySources(t *testing.T) {
 func TestJsonWheres(t *testing.T) {
 	runDialectCases(t, []dialectCase{
 		{"mysql contains", NewMySqlGrammar(""), func(b *Builder) *Builder {
-			return b.From("users", "").WhereJsonContains("data", "x", BooleanAnd, false)
+			return b.From("users", "").WhereJsonContains("data", "x", core.BooleanAnd, false)
 		}, "select * from `users` where json_contains(`data`, ?)"},
 		// MySQL takes the path as a third argument to json_contains; Laravel wraps the selector and
 		// passes the path inside the extraction instead. The two ask different questions, so this is a
 		// semantic difference rather than a spelling one, and it is pinned as it stands.
 		{"mysql contains with a path", NewMySqlGrammar(""), func(b *Builder) *Builder {
-			return b.From("users", "").WhereJsonContains("data->a", "x", BooleanAnd, false)
+			return b.From("users", "").WhereJsonContains("data->a", "x", core.BooleanAnd, false)
 		}, "select * from `users` where json_contains(`data`, ?, '$.\"a\"')"},
 		{"mysql contains key", NewMySqlGrammar(""), func(b *Builder) *Builder {
-			return b.From("users", "").WhereJsonContainsKey("data->a", BooleanAnd, false)
+			return b.From("users", "").WhereJsonContainsKey("data->a", core.BooleanAnd, false)
 		}, "select * from `users` where ifnull(json_contains_path(`data`, 'one', '$.\"a\"'), 0)"},
 		{"postgres contains", NewPostgresGrammar(""), func(b *Builder) *Builder {
-			return b.From("users", "").WhereJsonContains("data", "x", BooleanAnd, false)
+			return b.From("users", "").WhereJsonContains("data", "x", core.BooleanAnd, false)
 		}, `select * from "users" where ("data")::jsonb @> ?`},
 		{"sqlite contains", NewSqliteGrammar(""), func(b *Builder) *Builder {
-			return b.From("users", "").WhereJsonContains("data", "x", BooleanAnd, false)
+			return b.From("users", "").WhereJsonContains("data", "x", core.BooleanAnd, false)
 			// The dotted name is quoted segment by segment, which reads the same to the database.
 		}, `select * from "users" where exists (select 1 from json_each("data") where "json_each"."value" is ?)`},
 		{"sqlite contains key", NewSqliteGrammar(""), func(b *Builder) *Builder {
-			return b.From("users", "").WhereJsonContainsKey("data->a", BooleanAnd, false)
+			return b.From("users", "").WhereJsonContainsKey("data->a", core.BooleanAnd, false)
 		}, `select * from "users" where json_type("data", '$."a"') is not null`},
 	})
 }
@@ -570,37 +571,37 @@ func TestJsonWheres(t *testing.T) {
 func TestFullText(t *testing.T) {
 	t.Run("mysql", func(t *testing.T) {
 		assert.Equal(t, "select * from `users` where match (`title`) against (? in natural language mode)",
-			NewBuilder(NewMySqlGrammar("")).From("users", "").WhereFullText([]any{"title"}, "x", nil, BooleanAnd).ToSQL())
+			NewBuilder(NewMySqlGrammar("")).From("users", "").WhereFullText([]any{"title"}, "x", nil, core.BooleanAnd).ToSQL())
 
 		assert.Equal(t, "select * from `users` where match (`title`) against (? in boolean mode)",
-			NewBuilder(NewMySqlGrammar("")).From("users", "").WhereFullText([]any{"title"}, "x", []string{"mode:boolean"}, BooleanAnd).ToSQL())
+			NewBuilder(NewMySqlGrammar("")).From("users", "").WhereFullText([]any{"title"}, "x", []string{"mode:boolean"}, core.BooleanAnd).ToSQL())
 
 		assert.Equal(t, "select * from `users` where match (`title`) against (? in natural language mode with query expansion)",
-			NewBuilder(NewMySqlGrammar("")).From("users", "").WhereFullText([]any{"title"}, "x", []string{"expanded"}, BooleanAnd).ToSQL())
+			NewBuilder(NewMySqlGrammar("")).From("users", "").WhereFullText([]any{"title"}, "x", []string{"expanded"}, core.BooleanAnd).ToSQL())
 	})
 
 	t.Run("postgres", func(t *testing.T) {
 		assert.Equal(t, `select * from "users" where (to_tsvector('english', "title")) @@ plainto_tsquery('english', ?)`,
-			NewBuilder(NewPostgresGrammar("")).From("users", "").WhereFullText([]any{"title"}, "x", nil, BooleanAnd).ToSQL())
+			NewBuilder(NewPostgresGrammar("")).From("users", "").WhereFullText([]any{"title"}, "x", nil, core.BooleanAnd).ToSQL())
 
 		assert.Equal(t, `select * from "users" where (to_tsvector('english', "title")) @@ phraseto_tsquery('english', ?)`,
-			NewBuilder(NewPostgresGrammar("")).From("users", "").WhereFullText([]any{"title"}, "x", []string{"mode:phrase"}, BooleanAnd).ToSQL())
+			NewBuilder(NewPostgresGrammar("")).From("users", "").WhereFullText([]any{"title"}, "x", []string{"mode:phrase"}, core.BooleanAnd).ToSQL())
 
 		assert.Equal(t, `select * from "users" where (to_tsvector('english', "title")) @@ websearch_to_tsquery('english', ?)`,
-			NewBuilder(NewPostgresGrammar("")).From("users", "").WhereFullText([]any{"title"}, "x", []string{"mode:websearch"}, BooleanAnd).ToSQL())
+			NewBuilder(NewPostgresGrammar("")).From("users", "").WhereFullText([]any{"title"}, "x", []string{"mode:websearch"}, core.BooleanAnd).ToSQL())
 
 		assert.Equal(t, `select * from "users" where (to_tsvector('english', "title")) @@ to_tsquery('english', ?)`,
-			NewBuilder(NewPostgresGrammar("")).From("users", "").WhereFullText([]any{"title"}, "x", []string{"mode:raw"}, BooleanAnd).ToSQL())
+			NewBuilder(NewPostgresGrammar("")).From("users", "").WhereFullText([]any{"title"}, "x", []string{"mode:raw"}, core.BooleanAnd).ToSQL())
 
 		assert.Equal(t, `select * from "users" where (to_tsvector('simple', "title")) @@ plainto_tsquery('simple', ?)`,
-			NewBuilder(NewPostgresGrammar("")).From("users", "").WhereFullText([]any{"title"}, "x", []string{"language:simple"}, BooleanAnd).ToSQL())
+			NewBuilder(NewPostgresGrammar("")).From("users", "").WhereFullText([]any{"title"}, "x", []string{"language:simple"}, core.BooleanAnd).ToSQL())
 	})
 }
 
 // TestUpsertPerDialect ports Laravel's upsert expectations for the dialects whose spelling differs.
 func TestUpsertPerDialect(t *testing.T) {
 	values := []map[string]any{{"id": 1, "name": "x"}}
-	update := []UpsertUpdate{{Column: "name"}}
+	update := []core.UpsertUpdate{{Column: "name"}}
 
 	t.Run("sqlite", func(t *testing.T) {
 		sql, _ := NewBuilder(NewSqliteGrammar("")).From("users", "").ToUpsertSQL(values, []string{"id"}, update)
@@ -626,15 +627,15 @@ func TestUpsertPerDialect(t *testing.T) {
 func TestWhereAllAnyNone(t *testing.T) {
 	runLaravelCases(t, []laravelCase{
 		{"where all", func(b *Builder) *Builder {
-			return b.From("users", "").WhereAll([]any{"a", "b"}, "=", 1, BooleanAnd)
+			return b.From("users", "").WhereAll([]any{"a", "b"}, "=", 1, core.BooleanAnd)
 		}, `select * from "users" where ("a" = ? and "b" = ?)`},
 		{"where any", func(b *Builder) *Builder {
-			return b.From("users", "").WhereAny([]any{"a", "b"}, "=", 1, BooleanAnd)
+			return b.From("users", "").WhereAny([]any{"a", "b"}, "=", 1, core.BooleanAnd)
 		}, `select * from "users" where ("a" = ? or "b" = ?)`},
 		// The connector the group was queued with is stripped as leading boilerplate, so what remains
 		// is the negated group itself.
 		{"where none", func(b *Builder) *Builder {
-			return b.From("users", "").WhereNone([]any{"a", "b"}, "=", 1, BooleanAnd)
+			return b.From("users", "").WhereNone([]any{"a", "b"}, "=", 1, core.BooleanAnd)
 		}, `select * from "users" where not ("a" = ? or "b" = ?)`},
 	})
 }
@@ -684,7 +685,7 @@ func TestBaseInsertOrIgnoreIsRefused(t *testing.T) {
 // TestSqlServerUpsert ports Laravel's SQL Server expectation, which merges instead of conflicting.
 func TestSqlServerUpsert(t *testing.T) {
 	sql, _ := NewBuilder(NewSqlServerGrammar("")).From("users", "").
-		ToUpsertSQL([]map[string]any{{"id": 1, "name": "x"}}, []string{"id"}, []UpsertUpdate{{Column: "name"}})
+		ToUpsertSQL([]map[string]any{{"id": 1, "name": "x"}}, []string{"id"}, []core.UpsertUpdate{{Column: "name"}})
 
 	assert.Equal(t, "merge [users] using (values (?, ?)) [laravel_source] ([id], [name]) "+
 		"on [laravel_source].[id] = [users].[id] "+
@@ -955,7 +956,7 @@ func TestWholeStatementComponentOrder(t *testing.T) {
 				Join("contacts", "contacts.user_id", "=", "users.id", "inner", false).
 				Where("users.active", 1).
 				GroupBy("users.id").
-				HavingRaw("count(*) > ?", []any{1}, BooleanAnd).
+				HavingRaw("count(*) > ?", []any{1}, core.BooleanAnd).
 				OrderBy("users.id", "desc").
 				Limit(10).
 				Offset(5).
@@ -990,7 +991,7 @@ func TestUnionAggregate(t *testing.T) {
 			return q.From("archived_users", "").Select("name")
 		})
 
-		sql, _ := builder.ToAggregateSQL(Aggregate{Function: "count", Columns: []any{"*"}})
+		sql, _ := builder.ToAggregateSQL(core.Aggregate{Function: "count", Columns: []any{"*"}})
 
 		assert.Contains(t, sql, "select count(*) as aggregate from (")
 		assert.Contains(t, sql, `) as "temp_table"`)
@@ -1067,7 +1068,7 @@ func TestIndexHints(t *testing.T) {
 // proposed row.
 func TestUpsertWithBoundValue(t *testing.T) {
 	values := []map[string]any{{"id": 1, "name": "x"}}
-	update := []UpsertUpdate{{Column: "name", Value: "y", Bound: true}}
+	update := []core.UpsertUpdate{{Column: "name", Value: "y", Bound: true}}
 
 	t.Run("sqlite", func(t *testing.T) {
 		sql, bindings := NewBuilder(NewSqliteGrammar("")).From("users", "").ToUpsertSQL(values, []string{"id"}, update)
@@ -1123,19 +1124,19 @@ func TestJoinVariants(t *testing.T) {
 	runLaravelCases(t, []laravelCase{
 		{"two on conditions", func(b *Builder) *Builder {
 			return b.From("users", "").Join("contacts", func(join *Builder) *Builder {
-				return join.WhereColumn("contacts.user_id", "=", "users.id", BooleanAnd).
-					WhereColumn("contacts.active", "=", "users.active", BooleanAnd)
+				return join.WhereColumn("contacts.user_id", "=", "users.id", core.BooleanAnd).
+					WhereColumn("contacts.active", "=", "users.active", core.BooleanAnd)
 			}, "", "", "inner", false)
 		}, `select * from "users" inner join "contacts" on "contacts"."user_id" = "users"."id" and "contacts"."active" = "users"."active"`},
 		{"or between on conditions", func(b *Builder) *Builder {
 			return b.From("users", "").Join("contacts", func(join *Builder) *Builder {
-				return join.WhereColumn("contacts.user_id", "=", "users.id", BooleanAnd).
-					WhereColumn("contacts.owner_id", "=", "users.id", BooleanOr)
+				return join.WhereColumn("contacts.user_id", "=", "users.id", core.BooleanAnd).
+					WhereColumn("contacts.owner_id", "=", "users.id", core.BooleanOr)
 			}, "", "", "inner", false)
 		}, `select * from "users" inner join "contacts" on "contacts"."user_id" = "users"."id" or "contacts"."owner_id" = "users"."id"`},
 		{"nested join", func(b *Builder) *Builder {
 			return b.From("users", "").Join("contacts", func(join *Builder) *Builder {
-				return join.WhereColumn("contacts.user_id", "=", "users.id", BooleanAnd).
+				return join.WhereColumn("contacts.user_id", "=", "users.id", core.BooleanAnd).
 					Join("addresses", "addresses.contact_id", "=", "contacts.id", "inner", false)
 			}, "", "", "inner", false)
 		}, `select * from "users" inner join ("contacts" inner join "addresses" on "addresses"."contact_id" = "contacts"."id") on "contacts"."user_id" = "users"."id"`},
@@ -1214,7 +1215,7 @@ func TestDeleteWithJoinPerDialect(t *testing.T) {
 // TestFullTextBaseIsRefused ports that the generic grammar reports the missing fulltext capability. As
 // with JSON length, the fragment it leaves behind is malformed, which is recorded rather than asserted.
 func TestFullTextBaseIsRefused(t *testing.T) {
-	builder := newTestBuilder().From("users", "").WhereFullText([]any{"title"}, "x", nil, BooleanAnd)
+	builder := newTestBuilder().From("users", "").WhereFullText([]any{"title"}, "x", nil, core.BooleanAnd)
 
 	_ = builder.ToSQL()
 
@@ -1265,9 +1266,9 @@ func TestFromAlias(t *testing.T) {
 func TestBitwiseHavingPerDialect(t *testing.T) {
 	// The descriptor's stored string is Laravel's: Builder::having() writes 'Bitwise' (Builder.php:2507)
 	// and both dialects compare against that literal.
-	assert.Equal(t, "Bitwise", string(HavingBitType))
+	assert.Equal(t, "Bitwise", string(core.HavingBitType))
 
-	having := Having{Type: HavingBitType, Column: "flags", Operator: "&", Value: 4, Boolean: BooleanAnd}
+	having := core.Having{Type: core.HavingBitType, Column: "flags", Operator: "&", Value: 4, Boolean: core.BooleanAnd}
 
 	t.Run("postgres casts to bool", func(t *testing.T) {
 		builder := NewBuilder(NewPostgresGrammar("")).From("users", "").GroupBy("name")
@@ -1294,7 +1295,7 @@ func TestPostgresUpdateFrom(t *testing.T) {
 		Where("contacts.active", 1)
 
 	assert.Equal(t, `update "users" set "active" = ? from "contacts" where "contacts"."active" = ? and "contacts"."user_id" = "users"."id"`,
-		grammar.CompileUpdateFrom(builder, UpdateValues{{Column: "active", Value: 1}}))
+		grammar.CompileUpdateFrom(builder, core.UpdateValues{{Column: "active", Value: 1}}))
 }
 
 // TestTruncateAndExistsAcrossDialects ports the shapes the remaining dialects inherit from the generic
@@ -1334,7 +1335,7 @@ func TestBitwiseWhereInheritedDialects(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			builder := NewBuilder(test.grammar).From("users", "")
-			builder.State().Wheres = append(builder.State().Wheres, Where{Type: WhereBitwise, Column: "flags", Operator: "&", Value: 4, Boolean: BooleanAnd})
+			builder.State().Wheres = append(builder.State().Wheres, core.Where{Type: core.WhereBitwise, Column: "flags", Operator: "&", Value: 4, Boolean: core.BooleanAnd})
 			builder.AddBinding(CleanBindings([]any{4}), "where")
 
 			assert.Equal(t, test.want, builder.ToSQL())
@@ -1354,7 +1355,7 @@ func TestSqlServerOffsetWithoutOrder(t *testing.T) {
 func TestJsonOverlapsPerDialect(t *testing.T) {
 	runDialectCases(t, []dialectCase{
 		{"mysql", NewMySqlGrammar(""), func(b *Builder) *Builder {
-			return b.From("users", "").WhereJsonOverlaps("data", "x", BooleanAnd, false)
+			return b.From("users", "").WhereJsonOverlaps("data", "x", core.BooleanAnd, false)
 		}, "select * from `users` where json_overlaps(`data`, ?)"},
 	})
 }
@@ -1362,7 +1363,7 @@ func TestJsonOverlapsPerDialect(t *testing.T) {
 // TestJsonOverlapsSqliteIsRefused pins that a dialect without the capability reports it, leaving the
 // same malformed fragment a missing capability always leaves.
 func TestJsonOverlapsSqliteIsRefused(t *testing.T) {
-	builder := NewBuilder(NewSqliteGrammar("")).From("users", "").WhereJsonOverlaps("data", "x", BooleanAnd, false)
+	builder := NewBuilder(NewSqliteGrammar("")).From("users", "").WhereJsonOverlaps("data", "x", core.BooleanAnd, false)
 
 	_ = builder.ToSQL()
 
@@ -1372,10 +1373,10 @@ func TestJsonOverlapsSqliteIsRefused(t *testing.T) {
 // TestHavingExpression ports the raw-expression having.
 func TestHavingExpression(t *testing.T) {
 	builder := newTestBuilder().From("users", "").GroupBy("name")
-	builder.State().Havings = append(builder.State().Havings, Having{
-		Type:    HavingExpressionType,
+	builder.State().Havings = append(builder.State().Havings, core.Having{
+		Type:    core.HavingExpressionType,
 		Column:  Expression{Value: "count(*) > 1"},
-		Boolean: BooleanAnd,
+		Boolean: core.BooleanAnd,
 	})
 
 	assert.Equal(t, `select * from "users" group by "name" having count(*) > 1`, builder.ToSQL())
@@ -1385,10 +1386,10 @@ func TestHavingExpression(t *testing.T) {
 func TestSqlServerJsonWheres(t *testing.T) {
 	runDialectCases(t, []dialectCase{
 		{"contains", NewSqlServerGrammar(""), func(b *Builder) *Builder {
-			return b.From("users", "").WhereJsonContains("data", "x", BooleanAnd, false)
+			return b.From("users", "").WhereJsonContains("data", "x", core.BooleanAnd, false)
 		}, "select * from [users] where ? in (select [value] from openjson([data]))"},
 		{"contains with a path", NewSqlServerGrammar(""), func(b *Builder) *Builder {
-			return b.From("users", "").WhereJsonContains("data->a", "x", BooleanAnd, false)
+			return b.From("users", "").WhereJsonContains("data->a", "x", core.BooleanAnd, false)
 		}, "select * from [users] where ? in (select [value] from openjson([data], '$.\"a\"'))"},
 		{"length", NewSqlServerGrammar(""), func(b *Builder) *Builder {
 			return b.From("users", "").WhereJsonLength("data", ">", 1)
@@ -1401,10 +1402,10 @@ func TestSqlServerJsonWheres(t *testing.T) {
 func TestSqlServerJsonContainsKey(t *testing.T) {
 	runDialectCases(t, []dialectCase{
 		{"named key", NewSqlServerGrammar(""), func(b *Builder) *Builder {
-			return b.From("users", "").WhereJsonContainsKey("data->a", BooleanAnd, false)
+			return b.From("users", "").WhereJsonContainsKey("data->a", core.BooleanAnd, false)
 		}, "select * from [users] where 'a' in (select [key] from openjson([data]))"},
 		{"array index", NewSqlServerGrammar(""), func(b *Builder) *Builder {
-			return b.From("users", "").WhereJsonContainsKey("data->[0]", BooleanAnd, false)
+			return b.From("users", "").WhereJsonContainsKey("data->[0]", core.BooleanAnd, false)
 		}, "select * from [users] where 0 in (select [key] from openjson([data], '$.\"\"'))"},
 	})
 }
