@@ -143,7 +143,7 @@ func (s *DatabaseTestSuite) TestPop() {
 				mockTx := mocksdb.NewTx(s.T())
 				mockQuery := mocksdb.NewQuery(s.T())
 
-				s.mockDB.EXPECT().Transaction(mock.Anything).Run(func(txFunc func(tx contractsdb.Tx) error) {
+				s.mockDB.EXPECT().Transaction(mock.Anything).Run(func(txFunc func(tx contractsdb.Tx) error, _ ...int) {
 					s.NoError(txFunc(mockTx))
 				}).Return(nil).Once()
 

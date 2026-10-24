@@ -24,6 +24,9 @@ func mockDatabaseConfig(mockConfig *mocksconfig.Config, config database.Config) 
 
 func mockDatabaseConfigWithoutWriteAndRead(mockConfig *mocksconfig.Config, config database.Config) {
 	connection := config.Connection
+	mockConfig.EXPECT().Get("database.connections." + connection + ".search_path").Return(nil).Maybe()
+	mockConfig.EXPECT().GetBool("database.connections."+connection+".sticky", false).Return(false).Maybe()
+	mockConfig.EXPECT().GetBool("database.connections."+connection+".use_upsert_alias", false).Return(false).Maybe()
 
 	mockConfig.EXPECT().GetBool("app.debug").Return(true)
 	mockConfig.EXPECT().GetInt("database.slow_threshold", 200).Return(200)

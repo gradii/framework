@@ -904,153 +904,153 @@ func (s *SchemaSuite) TestColumnTypes_Mysql() {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
 			s.Empty(column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.True(column.Nullable)
-			s.Equal("timestamp", column.Type)
-			s.Equal("timestamp", column.TypeName)
+			s.Equal(mysqlMetadataExpected("timestamp", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("timestamp", "TypeName"), column.TypeName)
 		}
 		if column.Name == "big_integer" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
 			s.Equal("This is a big_integer column", column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.False(column.Nullable)
-			s.Equal("bigint", column.Type)
-			s.Equal("bigint", column.TypeName)
+			s.Equal(mysqlMetadataExpected("bigint", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("bigint", "TypeName"), column.TypeName)
 		}
 		if column.Name == "boolean_default" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
 			s.Equal("This is a boolean column with default value", column.Comment)
-			s.Equal("1", column.Default)
+			s.Equal(mysqlMetadataExpected("1", "Default"), column.Default)
 			s.False(column.Nullable)
-			s.Equal("tinyint(1)", column.Type)
-			s.Equal("tinyint", column.TypeName)
+			s.Equal(mysqlMetadataExpected("tinyint(1)", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("tinyint", "TypeName"), column.TypeName)
 		}
 		if column.Name == "char" {
 			s.False(column.Autoincrement)
-			s.Equal("utf8mb4_0900_ai_ci", column.Collation)
+			s.Equal(mysqlMetadataExpected("utf8mb4_0900_ai_ci", "Collation"), column.Collation)
 			s.Equal("This is a char column", column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.False(column.Nullable)
-			s.Equal("char(255)", column.Type)
-			s.Equal("char", column.TypeName)
+			s.Equal(mysqlMetadataExpected("char(255)", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("char", "TypeName"), column.TypeName)
 		}
 		if column.Name == "created_at" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
 			s.Empty(column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.True(column.Nullable)
-			s.Equal("timestamp(2)", column.Type)
-			s.Equal("timestamp", column.TypeName)
+			s.Equal(mysqlMetadataExpected("timestamp(2)", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("timestamp", "TypeName"), column.TypeName)
 		}
 		if column.Name == "custom_type" {
 			s.False(column.Autoincrement)
 			s.Equal("This is a custom type column", column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.False(column.Nullable)
-			s.Equal("geometry", column.Type)
-			s.Equal("geometry", column.TypeName)
+			s.Equal(mysqlMetadataExpected("geometry", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("geometry", "TypeName"), column.TypeName)
 		}
 		if column.Name == "date" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
 			s.Equal("This is a date column", column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.False(column.Nullable)
-			s.Equal("date", column.Type)
-			s.Equal("date", column.TypeName)
+			s.Equal(mysqlMetadataExpected("date", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("date", "TypeName"), column.TypeName)
 		}
 		if column.Name == "date_time" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
 			s.Equal("This is a date time column", column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.False(column.Nullable)
-			s.Equal("datetime(3)", column.Type)
-			s.Equal("datetime", column.TypeName)
+			s.Equal(mysqlMetadataExpected("datetime(3)", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("datetime", "TypeName"), column.TypeName)
 		}
 		if column.Name == "date_time_tz" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
 			s.Equal("This is a date time with time zone column", column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.False(column.Nullable)
-			s.Equal("datetime(3)", column.Type)
-			s.Equal("datetime", column.TypeName)
+			s.Equal(mysqlMetadataExpected("datetime(3)", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("datetime", "TypeName"), column.TypeName)
 		}
 		if column.Name == "decimal" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
 			s.Equal("This is a decimal column", column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.False(column.Nullable)
-			s.Equal("decimal(4,1)", column.Type)
-			s.Equal("decimal", column.TypeName)
+			s.Equal(mysqlMetadataExpected("decimal(4,1)", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("decimal", "TypeName"), column.TypeName)
 		}
 		if column.Name == "deleted_at" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
 			s.Empty(column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.True(column.Nullable)
-			s.Equal("timestamp", column.Type)
-			s.Equal("timestamp", column.TypeName)
+			s.Equal(mysqlMetadataExpected("timestamp", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("timestamp", "TypeName"), column.TypeName)
 		}
 		if column.Name == "double" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
 			s.Equal("This is a double column", column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.False(column.Nullable)
-			s.Equal("double", column.Type)
-			s.Equal("double", column.TypeName)
+			s.Equal(mysqlMetadataExpected("double", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("double", "TypeName"), column.TypeName)
 		}
 		if column.Name == "enum" {
 			s.False(column.Autoincrement)
-			s.Equal("utf8mb4_0900_ai_ci", column.Collation)
+			s.Equal(mysqlMetadataExpected("utf8mb4_0900_ai_ci", "Collation"), column.Collation)
 			s.Equal("This is a enum column", column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.False(column.Nullable)
-			s.Equal("enum('a','b','c')", column.Type)
-			s.Equal("enum", column.TypeName)
+			s.Equal(mysqlMetadataExpected("enum('a','b','c')", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("enum", "TypeName"), column.TypeName)
 		}
 		if column.Name == "enum_int" {
 			s.False(column.Autoincrement)
-			s.Equal("utf8mb4_0900_ai_ci", column.Collation)
+			s.Equal(mysqlMetadataExpected("utf8mb4_0900_ai_ci", "Collation"), column.Collation)
 			s.Equal("This is a enum column", column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.False(column.Nullable)
-			s.Equal("enum('1','2','3')", column.Type)
-			s.Equal("enum", column.TypeName)
+			s.Equal(mysqlMetadataExpected("enum('1','2','3')", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("enum", "TypeName"), column.TypeName)
 		}
 		if column.Name == "float" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
 			s.Equal("This is a float column", column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.False(column.Nullable)
-			s.Equal("float", column.Type)
-			s.Equal("float", column.TypeName)
+			s.Equal(mysqlMetadataExpected("float", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("float", "TypeName"), column.TypeName)
 		}
 		if column.Name == "id" {
 			s.True(column.Autoincrement)
 			s.Empty(column.Collation)
 			s.Equal("This is a id column", column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.False(column.Nullable)
-			s.Equal("bigint unsigned", column.Type)
-			s.Equal("bigint", column.TypeName)
+			s.Equal(mysqlMetadataExpected("bigint unsigned", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("bigint", "TypeName"), column.TypeName)
 		}
 		if column.Name == "integer" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
 			s.Equal("This is a integer column", column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.False(column.Nullable)
-			s.Equal("int", column.Type)
-			s.Equal("int", column.TypeName)
+			s.Equal(mysqlMetadataExpected("int", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("int", "TypeName"), column.TypeName)
 		}
 		if column.Name == "integer_default" {
 			s.False(column.Autoincrement)
@@ -1058,161 +1058,161 @@ func (s *SchemaSuite) TestColumnTypes_Mysql() {
 			s.Equal("This is a integer_default column", column.Comment)
 			s.Equal(1, cast.ToInt(column.Default))
 			s.False(column.Nullable)
-			s.Equal("int", column.Type)
-			s.Equal("int", column.TypeName)
+			s.Equal(mysqlMetadataExpected("int", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("int", "TypeName"), column.TypeName)
 		}
 		if column.Name == "json" {
 			s.False(column.Autoincrement)
-			s.Empty(column.Collation)
+			s.Equal(mysqlMetadataExpected("", "JsonCollation"), column.Collation)
 			s.Equal("This is a json column", column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.False(column.Nullable)
-			s.Equal("json", column.Type)
-			s.Equal("json", column.TypeName)
+			s.Equal(mysqlMetadataExpected("json", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("json", "TypeName"), column.TypeName)
 		}
 		if column.Name == "jsonb" {
 			s.False(column.Autoincrement)
-			s.Empty(column.Collation)
+			s.Equal(mysqlMetadataExpected("", "JsonCollation"), column.Collation)
 			s.Equal("This is a jsonb column", column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.False(column.Nullable)
-			s.Equal("json", column.Type)
-			s.Equal("json", column.TypeName)
+			s.Equal(mysqlMetadataExpected("json", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("json", "TypeName"), column.TypeName)
 		}
 		if column.Name == "long_text" {
 			s.False(column.Autoincrement)
-			s.Equal("utf8mb4_0900_ai_ci", column.Collation)
+			s.Equal(mysqlMetadataExpected("utf8mb4_0900_ai_ci", "Collation"), column.Collation)
 			s.Equal("This is a long_text column", column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.False(column.Nullable)
-			s.Equal("longtext", column.Type)
-			s.Equal("longtext", column.TypeName)
+			s.Equal(mysqlMetadataExpected("longtext", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("longtext", "TypeName"), column.TypeName)
 		}
 		if column.Name == "medium_text" {
 			s.False(column.Autoincrement)
-			s.Equal("utf8mb4_0900_ai_ci", column.Collation)
+			s.Equal(mysqlMetadataExpected("utf8mb4_0900_ai_ci", "Collation"), column.Collation)
 			s.Equal("This is a medium_text column", column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.False(column.Nullable)
-			s.Equal("mediumtext", column.Type)
-			s.Equal("mediumtext", column.TypeName)
+			s.Equal(mysqlMetadataExpected("mediumtext", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("mediumtext", "TypeName"), column.TypeName)
 		}
 		if column.Name == "string" {
 			s.False(column.Autoincrement)
-			s.Equal("utf8mb4_0900_ai_ci", column.Collation)
+			s.Equal(mysqlMetadataExpected("utf8mb4_0900_ai_ci", "Collation"), column.Collation)
 			s.Equal("This is a string column", column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.False(column.Nullable)
-			s.Equal("varchar(255)", column.Type)
-			s.Equal("varchar", column.TypeName)
+			s.Equal(mysqlMetadataExpected("varchar(255)", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("varchar", "TypeName"), column.TypeName)
 		}
 		if column.Name == "string_default" {
 			s.False(column.Autoincrement)
-			s.Equal("utf8mb4_0900_ai_ci", column.Collation)
+			s.Equal(mysqlMetadataExpected("utf8mb4_0900_ai_ci", "Collation"), column.Collation)
 			s.Equal("This is a string_default column", column.Comment)
-			s.Equal("goravel", column.Default)
+			s.Equal(mysqlMetadataExpected("goravel", "Default"), column.Default)
 			s.False(column.Nullable)
-			s.Equal("varchar(255)", column.Type)
-			s.Equal("varchar", column.TypeName)
+			s.Equal(mysqlMetadataExpected("varchar(255)", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("varchar", "TypeName"), column.TypeName)
 		}
 		if column.Name == "text" {
 			s.False(column.Autoincrement)
-			s.Equal("utf8mb4_0900_ai_ci", column.Collation)
+			s.Equal(mysqlMetadataExpected("utf8mb4_0900_ai_ci", "Collation"), column.Collation)
 			s.Equal("This is a text column", column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.False(column.Nullable)
-			s.Equal("text", column.Type)
-			s.Equal("text", column.TypeName)
+			s.Equal(mysqlMetadataExpected("text", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("text", "TypeName"), column.TypeName)
 		}
 		if column.Name == "time" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
 			s.Equal("This is a time column", column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.False(column.Nullable)
-			s.Equal("time(2)", column.Type)
-			s.Equal("time", column.TypeName)
+			s.Equal(mysqlMetadataExpected("time(2)", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("time", "TypeName"), column.TypeName)
 		}
 		if column.Name == "time_tz" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
 			s.Equal("This is a time with time zone column", column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.False(column.Nullable)
-			s.Equal("time(2)", column.Type)
-			s.Equal("time", column.TypeName)
+			s.Equal(mysqlMetadataExpected("time(2)", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("time", "TypeName"), column.TypeName)
 		}
 		if column.Name == "timestamp" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
 			s.Equal("This is a timestamp without time zone column", column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.False(column.Nullable)
-			s.Equal("timestamp(2)", column.Type)
-			s.Equal("timestamp", column.TypeName)
+			s.Equal(mysqlMetadataExpected("timestamp(2)", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("timestamp", "TypeName"), column.TypeName)
 		}
 		if column.Name == "timestamp_tz" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
 			s.Equal("This is a timestamp with time zone column", column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.False(column.Nullable)
-			s.Equal("timestamp(2)", column.Type)
-			s.Equal("timestamp", column.TypeName)
+			s.Equal(mysqlMetadataExpected("timestamp(2)", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("timestamp", "TypeName"), column.TypeName)
 		}
 		if column.Name == "timestamp_use_current" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
 			s.Equal("This is a timestamp_use_current column", column.Comment)
-			s.Equal("CURRENT_TIMESTAMP", column.Default)
+			s.Equal(mysqlMetadataExpected("CURRENT_TIMESTAMP", "Default"), column.Default)
 			s.False(column.Nullable)
-			s.Equal("timestamp", column.Type)
-			s.Equal("timestamp", column.TypeName)
+			s.Equal(mysqlMetadataExpected("timestamp", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("timestamp", "TypeName"), column.TypeName)
 		}
 		if column.Name == "timestamp_use_current_on_update" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
 			s.Equal("This is a timestamp_use_current_on_update column", column.Comment)
-			s.Equal("CURRENT_TIMESTAMP", column.Default)
+			s.Equal(mysqlMetadataExpected("CURRENT_TIMESTAMP", "Default"), column.Default)
 			s.False(column.Nullable)
-			s.Equal("timestamp", column.Type)
-			s.Equal("timestamp", column.TypeName)
+			s.Equal(mysqlMetadataExpected("timestamp", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("timestamp", "TypeName"), column.TypeName)
 		}
 		if column.Name == "tiny_text" {
 			s.False(column.Autoincrement)
-			s.Equal("utf8mb4_0900_ai_ci", column.Collation)
+			s.Equal(mysqlMetadataExpected("utf8mb4_0900_ai_ci", "Collation"), column.Collation)
 			s.Equal("This is a tiny_text column", column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.False(column.Nullable)
-			s.Equal("tinytext", column.Type)
-			s.Equal("tinytext", column.TypeName)
+			s.Equal(mysqlMetadataExpected("tinytext", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("tinytext", "TypeName"), column.TypeName)
 		}
 		if column.Name == "updated_at" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
 			s.Empty(column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.True(column.Nullable)
-			s.Equal("timestamp(2)", column.Type)
-			s.Equal("timestamp", column.TypeName)
+			s.Equal(mysqlMetadataExpected("timestamp(2)", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("timestamp", "TypeName"), column.TypeName)
 		}
 		if column.Name == "unsigned_integer" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
 			s.Equal("This is a unsigned_integer column", column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.False(column.Nullable)
-			s.Equal("int unsigned", column.Type)
-			s.Equal("int", column.TypeName)
+			s.Equal(mysqlMetadataExpected("int unsigned", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("int", "TypeName"), column.TypeName)
 		}
 		if column.Name == "unsigned_big_integer" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
 			s.Equal("This is a unsigned_big_integer column", column.Comment)
-			s.Empty(column.Default)
+			s.Equal(mysqlMetadataExpected("", "Default", column.Nullable), column.Default)
 			s.False(column.Nullable)
-			s.Equal("bigint unsigned", column.Type)
-			s.Equal("bigint", column.TypeName)
+			s.Equal(mysqlMetadataExpected("bigint unsigned", "Type"), column.Type)
+			s.Equal(mysqlMetadataExpected("bigint", "TypeName"), column.TypeName)
 		}
 	}
 }
@@ -1731,11 +1731,11 @@ func (s *SchemaSuite) TestForeign() {
 				if s.prefix+table1 == foreignKey.ForeignTable {
 					s.ElementsMatch([]string{"foreign1_id"}, foreignKey.Columns)
 					s.ElementsMatch([]string{"id"}, foreignKey.ForeignColumns)
-					s.Equal("no action", foreignKey.OnDelete)
-					s.Equal("no action", foreignKey.OnUpdate)
+					s.Equal(defaultForeignRule(driver), foreignKey.OnDelete)
+					s.Equal(defaultForeignRule(driver), foreignKey.OnUpdate)
 					if driver == sqlite.Name {
 						s.Empty(foreignKey.Name)
-						s.Empty(foreignKey.ForeignSchema)
+						s.Equal("main", foreignKey.ForeignSchema)
 					} else {
 						s.Equal("goravel_foreign3_foreign1_id_foreign", foreignKey.Name)
 						s.NotEmpty(foreignKey.ForeignSchema)
@@ -1747,7 +1747,7 @@ func (s *SchemaSuite) TestForeign() {
 					s.Equal("cascade", foreignKey.OnUpdate)
 					if driver == sqlite.Name {
 						s.Empty(foreignKey.Name)
-						s.Empty(foreignKey.ForeignSchema)
+						s.Equal("main", foreignKey.ForeignSchema)
 					} else {
 						s.Equal("foreign3_foreign2_id_foreign", foreignKey.Name)
 						s.NotEmpty(foreignKey.ForeignSchema)
@@ -1759,18 +1759,18 @@ func (s *SchemaSuite) TestForeign() {
 
 			err = schema.Table(table3, func(table contractsschema.Blueprint) {
 				table.DropForeign("foreign1_id")
-				table.DropForeignByName("foreign3_foreign2_id_foreign")
+				if driver == sqlite.Name {
+					table.DropForeign("foreign2_id")
+				} else {
+					table.DropForeignByName("foreign3_foreign2_id_foreign")
+				}
 			})
 
 			s.NoError(err)
 
 			foreignKeys, err = schema.GetForeignKeys(table3)
 			s.NoError(err)
-			if driver == sqlite.Name {
-				s.Len(foreignKeys, 2)
-			} else {
-				s.Len(foreignKeys, 0)
-			}
+			s.Empty(foreignKeys)
 		})
 	}
 }
@@ -2123,7 +2123,7 @@ func (s *SchemaSuite) TestID_Mysql() {
 					table.ID("id").Comment("This is a id column")
 				})
 			},
-			expectType:     "bigint unsigned",
+			expectType:     mysqlMetadataExpected("bigint unsigned", "Type"),
 			expectTypeName: "bigint",
 		},
 		{
@@ -2133,7 +2133,7 @@ func (s *SchemaSuite) TestID_Mysql() {
 					table.MediumIncrements("id").Comment("This is a id column")
 				})
 			},
-			expectType:     "mediumint unsigned",
+			expectType:     mysqlMetadataExpected("mediumint unsigned", "Type"),
 			expectTypeName: "mediumint",
 		},
 		{
@@ -2143,7 +2143,7 @@ func (s *SchemaSuite) TestID_Mysql() {
 					table.IntegerIncrements("id").Comment("This is a id column")
 				})
 			},
-			expectType:     "int unsigned",
+			expectType:     mysqlMetadataExpected("int unsigned", "Type"),
 			expectTypeName: "int",
 		},
 		{
@@ -2153,7 +2153,7 @@ func (s *SchemaSuite) TestID_Mysql() {
 					table.SmallIncrements("id").Comment("This is a id column")
 				})
 			},
-			expectType:     "smallint unsigned",
+			expectType:     mysqlMetadataExpected("smallint unsigned", "Type"),
 			expectTypeName: "smallint",
 		},
 		{
@@ -2163,7 +2163,7 @@ func (s *SchemaSuite) TestID_Mysql() {
 					table.TinyIncrements("id").Comment("This is a id column")
 				})
 			},
-			expectType:     "tinyint unsigned",
+			expectType:     mysqlMetadataExpected("tinyint unsigned", "Type"),
 			expectTypeName: "tinyint",
 		},
 	}
@@ -2436,13 +2436,15 @@ func (s *SchemaSuite) TestTableMethods() {
 			s.True(schema.HasTable(tableThree))
 			s.True(schema.HasTable(tableFour))
 
-			tables, err := schema.GetTables()
+			currentSchemas, err := schema.GetCurrentSchemaListing()
+			s.Require().NoError(err)
+			tables, err := schema.GetTables(currentSchemas...)
 
 			s.NoError(err)
 			s.Len(tables, 4)
 			s.ElementsMatch([]string{
 				s.prefix + tableOne, s.prefix + tableTwo, s.prefix + tableThree, s.prefix + tableFour,
-			}, schema.GetTableListing())
+			}, schema.GetTableListing(currentSchemas, false))
 
 			s.NoError(schema.Rename(tableOne, tableFive))
 			s.False(schema.HasTable(tableOne))
@@ -2562,7 +2564,7 @@ func (s *SchemaSuite) TestViewMethods() {
 				table.String("name")
 			}))
 			s.NoError(schema.Sql("create view goravel_view as select * from goravel_views;"))
-			s.True(schema.HasView("goravel_view"))
+			s.True(schema.HasView("view"))
 
 			views, err := schema.GetViews()
 			s.NoError(err)
@@ -2570,14 +2572,10 @@ func (s *SchemaSuite) TestViewMethods() {
 			s.Equal("goravel_view", views[0].Name)
 			s.NotEmpty(views[0].Definition)
 
-			if driver == postgres.Name || driver == sqlserver.Name {
-				s.NotEmpty(views[0].Schema)
-			} else {
-				s.Empty(views[0].Schema)
-			}
+			s.NotEmpty(views[0].Schema)
 
 			s.NoError(schema.DropAllViews())
-			s.False(schema.HasView("goravel_view"))
+			s.False(schema.HasView("view"))
 		})
 	}
 }

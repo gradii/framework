@@ -29,7 +29,8 @@ func (p *SqlServerProcessor) ProcessColumns(results []Row, sql ...string) []Row 
 		case "decimal", "numeric":
 			typ = fmt.Sprintf("%s(%d,%d)", typ, columnInt(result["precision"]), columnInt(result["places"]))
 		case "float", "datetime2", "datetimeoffset", "time":
-			typ = fmt.Sprintf("%s(%d)", typ, columnInt(result["places"]))
+			// Laravel exposes catalog precision here, including for temporal types.
+			typ = fmt.Sprintf("%s(%d)", typ, columnInt(result["precision"]))
 		}
 		var generation any
 		if columnBool(result["expression"]) {

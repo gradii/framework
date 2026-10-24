@@ -1,11 +1,30 @@
 package schema
 
 import (
+	"github.com/goravel/framework/contracts/database/db"
 	"github.com/goravel/framework/contracts/database/driver"
 	"github.com/goravel/framework/contracts/database/orm"
 )
 
 type Schema interface {
+	DB() db.Tx
+	WithWriteConnection(callback func(Schema) error) error
+	CreateDatabase(name string) error
+	DropDatabaseIfExists(name string) error
+	DisableForeignKeyConstraints() error
+	EnableForeignKeyConstraints() error
+	WithoutForeignKeyConstraints(callback func(Schema) error) error
+	WhenTableHasColumn(table, column string, callback func(Blueprint)) error
+	WhenTableDoesntHaveColumn(table, column string, callback func(Blueprint)) error
+	WhenTableHasIndex(table string, index any, callback func(Blueprint), indexType ...string) error
+	WhenTableDoesntHaveIndex(table string, index any, callback func(Blueprint), indexType ...string) error
+	DefaultStringLength(length int) error
+	DefaultTimePrecision(precision int) error
+	GetSchemas() ([]driver.Schema, error)
+	GetColumnsMetadata(table string) ([]driver.ColumnMetadata, error)
+	GetColumnType(table, column string, fullDefinition ...bool) (string, error)
+	GetCurrentSchemaName() (string, error)
+	GetCurrentSchemaListing() ([]string, error)
 	// Connection Get the connection for the schema.
 	Connection(name string) Schema
 	// Create a new table on the schema.
@@ -39,13 +58,13 @@ type Schema interface {
 	// GetModel Get the model from the registered models by name.
 	GetModel(name string) any
 	// GetTableListing Get the table listing for the database.
-	GetTableListing() []string
+	GetTableListing(options ...any) []string
 	// GetTables Get the tables that belong to the database.
-	GetTables() ([]driver.Table, error)
+	GetTables(schemas ...string) ([]driver.Table, error)
 	// GetTypes Get the types that belong to the database.
-	GetTypes() ([]driver.Type, error)
+	GetTypes(schemas ...string) ([]driver.Type, error)
 	// GetViews Get the views that belong to the database.
-	GetViews() ([]driver.View, error)
+	GetViews(schemas ...string) ([]driver.View, error)
 	// GoTypes returns the mapping of schema types to Go types.
 	GoTypes() []GoType
 	// HasColumn Determine if the given table has a given column.
@@ -53,7 +72,7 @@ type Schema interface {
 	// HasColumns Determine if the given table has given columns.
 	HasColumns(table string, columns []string) bool
 	// HasIndex Determine if the given table has a given index.
-	HasIndex(table, index string) bool
+	HasIndex(table string, index any, indexType ...string) bool
 	// HasTable Determine if the given table exists.
 	HasTable(name string) bool
 	// HasType Determine if the given type exists.
@@ -73,7 +92,7 @@ type Schema interface {
 	// SetConnection Set the connection of the schema.
 	SetConnection(name string)
 	// Sql Execute a sql directly.
-	Sql(sql string) error
+	Sql(sql string, bindings ...any) error
 	// Table Modify a table on the schema.
 	Table(table string, callback func(table Blueprint)) error
 }

@@ -209,6 +209,102 @@ func (_c *ColumnDefinition_Change_Call) RunAndReturn(run func() driver.ColumnDef
 	return _c
 }
 
+// Charset provides a mock function with given fields: charset
+func (_m *ColumnDefinition) Charset(charset string) driver.ColumnDefinition {
+	ret := _m.Called(charset)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Charset")
+	}
+
+	var r0 driver.ColumnDefinition
+	if rf, ok := ret.Get(0).(func(string) driver.ColumnDefinition); ok {
+		r0 = rf(charset)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(driver.ColumnDefinition)
+		}
+	}
+
+	return r0
+}
+
+// ColumnDefinition_Charset_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Charset'
+type ColumnDefinition_Charset_Call struct {
+	*mock.Call
+}
+
+// Charset is a helper method to define mock.On call
+//   - charset string
+func (_e *ColumnDefinition_Expecter) Charset(charset interface{}) *ColumnDefinition_Charset_Call {
+	return &ColumnDefinition_Charset_Call{Call: _e.mock.On("Charset", charset)}
+}
+
+func (_c *ColumnDefinition_Charset_Call) Run(run func(charset string)) *ColumnDefinition_Charset_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *ColumnDefinition_Charset_Call) Return(_a0 driver.ColumnDefinition) *ColumnDefinition_Charset_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *ColumnDefinition_Charset_Call) RunAndReturn(run func(string) driver.ColumnDefinition) *ColumnDefinition_Charset_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Collation provides a mock function with given fields: collation
+func (_m *ColumnDefinition) Collation(collation string) driver.ColumnDefinition {
+	ret := _m.Called(collation)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Collation")
+	}
+
+	var r0 driver.ColumnDefinition
+	if rf, ok := ret.Get(0).(func(string) driver.ColumnDefinition); ok {
+		r0 = rf(collation)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(driver.ColumnDefinition)
+		}
+	}
+
+	return r0
+}
+
+// ColumnDefinition_Collation_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Collation'
+type ColumnDefinition_Collation_Call struct {
+	*mock.Call
+}
+
+// Collation is a helper method to define mock.On call
+//   - collation string
+func (_e *ColumnDefinition_Expecter) Collation(collation interface{}) *ColumnDefinition_Collation_Call {
+	return &ColumnDefinition_Collation_Call{Call: _e.mock.On("Collation", collation)}
+}
+
+func (_c *ColumnDefinition_Collation_Call) Run(run func(collation string)) *ColumnDefinition_Collation_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *ColumnDefinition_Collation_Call) Return(_a0 driver.ColumnDefinition) *ColumnDefinition_Collation_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *ColumnDefinition_Collation_Call) RunAndReturn(run func(string) driver.ColumnDefinition) *ColumnDefinition_Collation_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Comment provides a mock function with given fields: comment
 func (_m *ColumnDefinition) Comment(comment string) driver.ColumnDefinition {
 	ret := _m.Called(comment)
@@ -348,6 +444,101 @@ func (_c *ColumnDefinition_First_Call) Return(_a0 driver.ColumnDefinition) *Colu
 }
 
 func (_c *ColumnDefinition_First_Call) RunAndReturn(run func() driver.ColumnDefinition) *ColumnDefinition_First_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Fixed provides a mock function with no fields
+func (_m *ColumnDefinition) Fixed() driver.ColumnDefinition {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for Fixed")
+	}
+
+	var r0 driver.ColumnDefinition
+	if rf, ok := ret.Get(0).(func() driver.ColumnDefinition); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(driver.ColumnDefinition)
+		}
+	}
+
+	return r0
+}
+
+// ColumnDefinition_Fixed_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Fixed'
+type ColumnDefinition_Fixed_Call struct {
+	*mock.Call
+}
+
+// Fixed is a helper method to define mock.On call
+func (_e *ColumnDefinition_Expecter) Fixed() *ColumnDefinition_Fixed_Call {
+	return &ColumnDefinition_Fixed_Call{Call: _e.mock.On("Fixed")}
+}
+
+func (_c *ColumnDefinition_Fixed_Call) Run(run func()) *ColumnDefinition_Fixed_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *ColumnDefinition_Fixed_Call) Return(_a0 driver.ColumnDefinition) *ColumnDefinition_Fixed_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *ColumnDefinition_Fixed_Call) RunAndReturn(run func() driver.ColumnDefinition) *ColumnDefinition_Fixed_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// From provides a mock function with given fields: value
+func (_m *ColumnDefinition) From(value uint64) driver.ColumnDefinition {
+	ret := _m.Called(value)
+
+	if len(ret) == 0 {
+		panic("no return value specified for From")
+	}
+
+	var r0 driver.ColumnDefinition
+	if rf, ok := ret.Get(0).(func(uint64) driver.ColumnDefinition); ok {
+		r0 = rf(value)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(driver.ColumnDefinition)
+		}
+	}
+
+	return r0
+}
+
+// ColumnDefinition_From_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'From'
+type ColumnDefinition_From_Call struct {
+	*mock.Call
+}
+
+// From is a helper method to define mock.On call
+//   - value uint64
+func (_e *ColumnDefinition_Expecter) From(value interface{}) *ColumnDefinition_From_Call {
+	return &ColumnDefinition_From_Call{Call: _e.mock.On("From", value)}
+}
+
+func (_c *ColumnDefinition_From_Call) Run(run func(value uint64)) *ColumnDefinition_From_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(uint64))
+	})
+	return _c
+}
+
+func (_c *ColumnDefinition_From_Call) Return(_a0 driver.ColumnDefinition) *ColumnDefinition_From_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *ColumnDefinition_From_Call) RunAndReturn(run func(uint64) driver.ColumnDefinition) *ColumnDefinition_From_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1184,6 +1375,100 @@ func (_c *ColumnDefinition_GetUseCurrentOnUpdate_Call) RunAndReturn(run func() b
 	return _c
 }
 
+// Instant provides a mock function with no fields
+func (_m *ColumnDefinition) Instant() driver.ColumnDefinition {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for Instant")
+	}
+
+	var r0 driver.ColumnDefinition
+	if rf, ok := ret.Get(0).(func() driver.ColumnDefinition); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(driver.ColumnDefinition)
+		}
+	}
+
+	return r0
+}
+
+// ColumnDefinition_Instant_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Instant'
+type ColumnDefinition_Instant_Call struct {
+	*mock.Call
+}
+
+// Instant is a helper method to define mock.On call
+func (_e *ColumnDefinition_Expecter) Instant() *ColumnDefinition_Instant_Call {
+	return &ColumnDefinition_Instant_Call{Call: _e.mock.On("Instant")}
+}
+
+func (_c *ColumnDefinition_Instant_Call) Run(run func()) *ColumnDefinition_Instant_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *ColumnDefinition_Instant_Call) Return(_a0 driver.ColumnDefinition) *ColumnDefinition_Instant_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *ColumnDefinition_Instant_Call) RunAndReturn(run func() driver.ColumnDefinition) *ColumnDefinition_Instant_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Invisible provides a mock function with no fields
+func (_m *ColumnDefinition) Invisible() driver.ColumnDefinition {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for Invisible")
+	}
+
+	var r0 driver.ColumnDefinition
+	if rf, ok := ret.Get(0).(func() driver.ColumnDefinition); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(driver.ColumnDefinition)
+		}
+	}
+
+	return r0
+}
+
+// ColumnDefinition_Invisible_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Invisible'
+type ColumnDefinition_Invisible_Call struct {
+	*mock.Call
+}
+
+// Invisible is a helper method to define mock.On call
+func (_e *ColumnDefinition_Expecter) Invisible() *ColumnDefinition_Invisible_Call {
+	return &ColumnDefinition_Invisible_Call{Call: _e.mock.On("Invisible")}
+}
+
+func (_c *ColumnDefinition_Invisible_Call) Run(run func()) *ColumnDefinition_Invisible_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *ColumnDefinition_Invisible_Call) Return(_a0 driver.ColumnDefinition) *ColumnDefinition_Invisible_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *ColumnDefinition_Invisible_Call) RunAndReturn(run func() driver.ColumnDefinition) *ColumnDefinition_Invisible_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // IsAlways provides a mock function with no fields
 func (_m *ColumnDefinition) IsAlways() bool {
 	ret := _m.Called()
@@ -1409,17 +1694,23 @@ func (_c *ColumnDefinition_IsSetGeneratedAs_Call) RunAndReturn(run func() bool) 
 	return _c
 }
 
-// Nullable provides a mock function with no fields
-func (_m *ColumnDefinition) Nullable() driver.ColumnDefinition {
-	ret := _m.Called()
+// Nullable provides a mock function with given fields: nullable
+func (_m *ColumnDefinition) Nullable(nullable ...bool) driver.ColumnDefinition {
+	_va := make([]interface{}, len(nullable))
+	for _i := range nullable {
+		_va[_i] = nullable[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Nullable")
 	}
 
 	var r0 driver.ColumnDefinition
-	if rf, ok := ret.Get(0).(func() driver.ColumnDefinition); ok {
-		r0 = rf()
+	if rf, ok := ret.Get(0).(func(...bool) driver.ColumnDefinition); ok {
+		r0 = rf(nullable...)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(driver.ColumnDefinition)
@@ -1435,13 +1726,21 @@ type ColumnDefinition_Nullable_Call struct {
 }
 
 // Nullable is a helper method to define mock.On call
-func (_e *ColumnDefinition_Expecter) Nullable() *ColumnDefinition_Nullable_Call {
-	return &ColumnDefinition_Nullable_Call{Call: _e.mock.On("Nullable")}
+//   - nullable ...bool
+func (_e *ColumnDefinition_Expecter) Nullable(nullable ...interface{}) *ColumnDefinition_Nullable_Call {
+	return &ColumnDefinition_Nullable_Call{Call: _e.mock.On("Nullable",
+		append([]interface{}{}, nullable...)...)}
 }
 
-func (_c *ColumnDefinition_Nullable_Call) Run(run func()) *ColumnDefinition_Nullable_Call {
+func (_c *ColumnDefinition_Nullable_Call) Run(run func(nullable ...bool)) *ColumnDefinition_Nullable_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run()
+		variadicArgs := make([]bool, len(args)-0)
+		for i, a := range args[0:] {
+			if a != nil {
+				variadicArgs[i] = a.(bool)
+			}
+		}
+		run(variadicArgs...)
 	})
 	return _c
 }
@@ -1451,7 +1750,7 @@ func (_c *ColumnDefinition_Nullable_Call) Return(_a0 driver.ColumnDefinition) *C
 	return _c
 }
 
-func (_c *ColumnDefinition_Nullable_Call) RunAndReturn(run func() driver.ColumnDefinition) *ColumnDefinition_Nullable_Call {
+func (_c *ColumnDefinition_Nullable_Call) RunAndReturn(run func(...bool) driver.ColumnDefinition) *ColumnDefinition_Nullable_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1504,6 +1803,53 @@ func (_c *ColumnDefinition_OnUpdate_Call) RunAndReturn(run func(interface{}) dri
 	return _c
 }
 
+// Persisted provides a mock function with no fields
+func (_m *ColumnDefinition) Persisted() driver.ColumnDefinition {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for Persisted")
+	}
+
+	var r0 driver.ColumnDefinition
+	if rf, ok := ret.Get(0).(func() driver.ColumnDefinition); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(driver.ColumnDefinition)
+		}
+	}
+
+	return r0
+}
+
+// ColumnDefinition_Persisted_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Persisted'
+type ColumnDefinition_Persisted_Call struct {
+	*mock.Call
+}
+
+// Persisted is a helper method to define mock.On call
+func (_e *ColumnDefinition_Expecter) Persisted() *ColumnDefinition_Persisted_Call {
+	return &ColumnDefinition_Persisted_Call{Call: _e.mock.On("Persisted")}
+}
+
+func (_c *ColumnDefinition_Persisted_Call) Run(run func()) *ColumnDefinition_Persisted_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *ColumnDefinition_Persisted_Call) Return(_a0 driver.ColumnDefinition) *ColumnDefinition_Persisted_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *ColumnDefinition_Persisted_Call) RunAndReturn(run func() driver.ColumnDefinition) *ColumnDefinition_Persisted_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Places provides a mock function with given fields: places
 func (_m *ColumnDefinition) Places(places int) driver.ColumnDefinition {
 	ret := _m.Called(places)
@@ -1548,6 +1894,150 @@ func (_c *ColumnDefinition_Places_Call) Return(_a0 driver.ColumnDefinition) *Col
 }
 
 func (_c *ColumnDefinition_Places_Call) RunAndReturn(run func(int) driver.ColumnDefinition) *ColumnDefinition_Places_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Srid provides a mock function with given fields: value
+func (_m *ColumnDefinition) Srid(value int) driver.ColumnDefinition {
+	ret := _m.Called(value)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Srid")
+	}
+
+	var r0 driver.ColumnDefinition
+	if rf, ok := ret.Get(0).(func(int) driver.ColumnDefinition); ok {
+		r0 = rf(value)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(driver.ColumnDefinition)
+		}
+	}
+
+	return r0
+}
+
+// ColumnDefinition_Srid_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Srid'
+type ColumnDefinition_Srid_Call struct {
+	*mock.Call
+}
+
+// Srid is a helper method to define mock.On call
+//   - value int
+func (_e *ColumnDefinition_Expecter) Srid(value interface{}) *ColumnDefinition_Srid_Call {
+	return &ColumnDefinition_Srid_Call{Call: _e.mock.On("Srid", value)}
+}
+
+func (_c *ColumnDefinition_Srid_Call) Run(run func(value int)) *ColumnDefinition_Srid_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(int))
+	})
+	return _c
+}
+
+func (_c *ColumnDefinition_Srid_Call) Return(_a0 driver.ColumnDefinition) *ColumnDefinition_Srid_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *ColumnDefinition_Srid_Call) RunAndReturn(run func(int) driver.ColumnDefinition) *ColumnDefinition_Srid_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// StartingValue provides a mock function with given fields: value
+func (_m *ColumnDefinition) StartingValue(value uint64) driver.ColumnDefinition {
+	ret := _m.Called(value)
+
+	if len(ret) == 0 {
+		panic("no return value specified for StartingValue")
+	}
+
+	var r0 driver.ColumnDefinition
+	if rf, ok := ret.Get(0).(func(uint64) driver.ColumnDefinition); ok {
+		r0 = rf(value)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(driver.ColumnDefinition)
+		}
+	}
+
+	return r0
+}
+
+// ColumnDefinition_StartingValue_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'StartingValue'
+type ColumnDefinition_StartingValue_Call struct {
+	*mock.Call
+}
+
+// StartingValue is a helper method to define mock.On call
+//   - value uint64
+func (_e *ColumnDefinition_Expecter) StartingValue(value interface{}) *ColumnDefinition_StartingValue_Call {
+	return &ColumnDefinition_StartingValue_Call{Call: _e.mock.On("StartingValue", value)}
+}
+
+func (_c *ColumnDefinition_StartingValue_Call) Run(run func(value uint64)) *ColumnDefinition_StartingValue_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(uint64))
+	})
+	return _c
+}
+
+func (_c *ColumnDefinition_StartingValue_Call) Return(_a0 driver.ColumnDefinition) *ColumnDefinition_StartingValue_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *ColumnDefinition_StartingValue_Call) RunAndReturn(run func(uint64) driver.ColumnDefinition) *ColumnDefinition_StartingValue_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// StoredAs provides a mock function with given fields: expression
+func (_m *ColumnDefinition) StoredAs(expression interface{}) driver.ColumnDefinition {
+	ret := _m.Called(expression)
+
+	if len(ret) == 0 {
+		panic("no return value specified for StoredAs")
+	}
+
+	var r0 driver.ColumnDefinition
+	if rf, ok := ret.Get(0).(func(interface{}) driver.ColumnDefinition); ok {
+		r0 = rf(expression)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(driver.ColumnDefinition)
+		}
+	}
+
+	return r0
+}
+
+// ColumnDefinition_StoredAs_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'StoredAs'
+type ColumnDefinition_StoredAs_Call struct {
+	*mock.Call
+}
+
+// StoredAs is a helper method to define mock.On call
+//   - expression interface{}
+func (_e *ColumnDefinition_Expecter) StoredAs(expression interface{}) *ColumnDefinition_StoredAs_Call {
+	return &ColumnDefinition_StoredAs_Call{Call: _e.mock.On("StoredAs", expression)}
+}
+
+func (_c *ColumnDefinition_StoredAs_Call) Run(run func(expression interface{})) *ColumnDefinition_StoredAs_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(interface{}))
+	})
+	return _c
+}
+
+func (_c *ColumnDefinition_StoredAs_Call) Return(_a0 driver.ColumnDefinition) *ColumnDefinition_StoredAs_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *ColumnDefinition_StoredAs_Call) RunAndReturn(run func(interface{}) driver.ColumnDefinition) *ColumnDefinition_StoredAs_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1737,6 +2227,54 @@ func (_c *ColumnDefinition_UseCurrentOnUpdate_Call) Return(_a0 driver.ColumnDefi
 }
 
 func (_c *ColumnDefinition_UseCurrentOnUpdate_Call) RunAndReturn(run func() driver.ColumnDefinition) *ColumnDefinition_UseCurrentOnUpdate_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// VirtualAs provides a mock function with given fields: expression
+func (_m *ColumnDefinition) VirtualAs(expression interface{}) driver.ColumnDefinition {
+	ret := _m.Called(expression)
+
+	if len(ret) == 0 {
+		panic("no return value specified for VirtualAs")
+	}
+
+	var r0 driver.ColumnDefinition
+	if rf, ok := ret.Get(0).(func(interface{}) driver.ColumnDefinition); ok {
+		r0 = rf(expression)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(driver.ColumnDefinition)
+		}
+	}
+
+	return r0
+}
+
+// ColumnDefinition_VirtualAs_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'VirtualAs'
+type ColumnDefinition_VirtualAs_Call struct {
+	*mock.Call
+}
+
+// VirtualAs is a helper method to define mock.On call
+//   - expression interface{}
+func (_e *ColumnDefinition_Expecter) VirtualAs(expression interface{}) *ColumnDefinition_VirtualAs_Call {
+	return &ColumnDefinition_VirtualAs_Call{Call: _e.mock.On("VirtualAs", expression)}
+}
+
+func (_c *ColumnDefinition_VirtualAs_Call) Run(run func(expression interface{})) *ColumnDefinition_VirtualAs_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(interface{}))
+	})
+	return _c
+}
+
+func (_c *ColumnDefinition_VirtualAs_Call) Return(_a0 driver.ColumnDefinition) *ColumnDefinition_VirtualAs_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *ColumnDefinition_VirtualAs_Call) RunAndReturn(run func(interface{}) driver.ColumnDefinition) *ColumnDefinition_VirtualAs_Call {
 	_c.Call.Return(run)
 	return _c
 }

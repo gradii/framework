@@ -33,11 +33,13 @@ func TestSelectResetsColumnsAndBindings(t *testing.T) {
 	query := NewQuery(context.Background(), nil, nil, querybuilder.NewPostgresGrammar(""), "", nil, "users", nil)
 	query.builder.SelectRaw("? as old", []any{1}).Where("id", 9)
 
+	snapshot := query.Clone().(*Query)
 	selected := query.Select("name").(*Query)
+	assert.Same(t, query, selected)
 	assert.Equal(t, `select "name" from "users" where "id" = ?`, selected.builder.ToSQL())
 	assert.Equal(t, []any{9}, selected.builder.GetBindings())
-	assert.Equal(t, `select ? as old from "users" where "id" = ?`, query.builder.ToSQL())
-	assert.Equal(t, []any{1, 9}, query.builder.GetBindings())
+	assert.Equal(t, `select ? as old from "users" where "id" = ?`, snapshot.builder.ToSQL())
+	assert.Equal(t, []any{1, 9}, snapshot.builder.GetBindings())
 }
 
 // MockResult is a database/sql.Result whose behaviour the tests script.
@@ -152,10 +154,10 @@ func (s *QueryTestSuite) TestWhereAnyGroupConnector() {
 				return NewQuery(s.ctx, nil, nil, test.grammar, test.driver, nil, "users", nil)
 			}
 
-			s.Equal(test.where, newQuery().Where("name", "John").WhereAny([]string{"email", "phone"}, "=", "x").ToSql().First())
-			s.Equal(test.all, newQuery().Where("name", "John").WhereAll([]string{"email", "phone"}, "=", "x").ToSql().First())
-			s.Equal(test.none, newQuery().Where("name", "John").WhereNone([]string{"email", "phone"}, "=", "x").ToSql().First())
-			s.Equal(test.adjacent, newQuery().WhereAny([]string{"weight"}, ">=", 200).WhereAny([]string{"height"}, "<=", 150).ToSql().First())
+			s.Equal(test.where, newQuery().Where("name", "John").WhereAny([]string{"email", "phone"}, "=", "x").ToSql().Get())
+			s.Equal(test.all, newQuery().Where("name", "John").WhereAll([]string{"email", "phone"}, "=", "x").ToSql().Get())
+			s.Equal(test.none, newQuery().Where("name", "John").WhereNone([]string{"email", "phone"}, "=", "x").ToSql().Get())
+			s.Equal(test.adjacent, newQuery().WhereAny([]string{"weight"}, ">=", 200).WhereAny([]string{"height"}, "<=", 150).ToSql().Get())
 		})
 	}
 }
@@ -241,36 +243,36 @@ func (s *QueryTestSuite) TestCompiledSQL() {
 
 			switch test.name {
 			case "count", "count one column", "count renamed column", "count distinct column", "count several columns":
-				got = test.build(s.query).ToSql().Count()
+				got = test.build(s.query.Clone()).ToSql().Count()
 			case "value":
 				// db.ToSql has no Value method, so the select is assembled the same way Value does.
-				got = test.build(s.query).Select("name").Limit(1).ToSql().First()
+				got = test.build(s.query.Clone()).Select("name").Limit(1).ToSql().Get()
 			case "pluck":
 				var names []string
-				got = test.build(s.query).ToSql().Pluck("name", &names)
+				got = test.build(s.query.Clone()).ToSql().Pluck("name", &names)
 			case "sum":
 				// db.ToSql has no Sum method either; the aggregate is set as Sum does.
-				sumQuery := test.build(s.query).(*Query)
+				sumQuery := test.build(s.query.Clone()).(*Query)
 				sumQuery.builder.SetAggregate("sum", []any{"age"})
-				got = sumQuery.ToSql().First()
+				got = sumQuery.ToSql().Get()
 			case "delete":
-				got = test.build(s.query).ToSql().Delete()
+				got = test.build(s.query.Clone()).ToSql().Delete()
 			case "update":
-				got = test.build(s.query).ToSql().Update(map[string]any{"name": "John"})
+				got = test.build(s.query.Clone()).ToSql().Update(map[string]any{"name": "John"})
 			case "increment":
-				inc := test.build(s.query).(*Query)
+				inc := test.build(s.query.Clone()).(*Query)
 				got = inc.ToSql().Update(map[string]any{
 					"age": querybuilder.Raw(inc.grammar.Wrap("age") + " + 1"),
 				})
 			case "decrement":
-				dec := test.build(s.query).(*Query)
+				dec := test.build(s.query.Clone()).(*Query)
 				got = dec.ToSql().Update(map[string]any{
 					"age": querybuilder.Raw(dec.grammar.Wrap("age") + " - 1"),
 				})
 			case "insert":
-				got = test.build(s.query).ToSql().Insert(map[string]any{"name": "John"})
+				got = test.build(s.query.Clone()).ToSql().Insert(map[string]any{"name": "John"})
 			default:
-				got = test.build(s.query).ToSql().First()
+				got = test.build(s.query.Clone()).ToSql().Get()
 			}
 
 			assert.Equal(s.T(), test.want, got)
@@ -281,15 +283,15 @@ func (s *QueryTestSuite) TestCompiledSQL() {
 func (s *QueryTestSuite) TestWhereExistsSQL() {
 	sub := NewQuery(s.ctx, s.mockReadBuilder, s.mockWriteBuilder, s.grammar, querybuilder.DialectMySQL, s.mockLogger, "agents", nil).Where("age", 25)
 
-	got := s.query.Where("name", "John").WhereExists(func() db.Query { return sub }).ToSql().First()
+	got := s.query.Clone().Where("name", "John").WhereExists(func() db.Query { return sub }).ToSql().Get()
 
 	assert.Equal(s.T(), "select * from `users` where `name` = ? and exists (select * from `agents` where `age` = ?)", got)
 }
 
 func (s *QueryTestSuite) TestNestedWhereSQL() {
-	got := s.query.Where("name", "John").Where(func(q db.Query) db.Query {
+	got := s.query.Clone().Where("name", "John").Where(func(q db.Query) db.Query {
 		return q.WhereIn("age", []any{25, 30}).Where("name", "Tom")
-	}).ToSql().First()
+	}).ToSql().Get()
 
 	assert.Equal(s.T(), "select * from `users` where `name` = ? and (`age` in (?, ?) and `name` = ?)", got)
 }
@@ -303,38 +305,38 @@ func (s *QueryTestSuite) TestGet() {
 	s.mockReadBuilder.EXPECT().Explain("select * from `users` where `name` = ?", "John").Return("select * from `users` where `name` = \"John\"").Once()
 	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select * from `users` where `name` = \"John\"", int64(0), nil).Return().Once()
 
-	s.NoError(s.query.Where("name", "John").Get(&users))
+	s.NoError(s.query.Clone().Where("name", "John").Get(&users))
 }
 
 func (s *QueryTestSuite) TestFirst() {
 	var user TestUser
 
-	s.mockReadBuilder.EXPECT().GetContext(s.ctx, &user, "select * from `users` where `name` = ?", "John").Return(nil).Once()
-	s.mockReadBuilder.EXPECT().Explain("select * from `users` where `name` = ?", "John").Return("select * from `users` where `name` = \"John\"").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select * from `users` where `name` = \"John\"", int64(1), nil).Return().Once()
+	s.mockReadBuilder.EXPECT().GetContext(s.ctx, &user, "select * from `users` where `name` = ? limit 1", "John").Return(nil).Once()
+	s.mockReadBuilder.EXPECT().Explain("select * from `users` where `name` = ? limit 1", "John").Return("select * from `users` where `name` = \"John\" limit 1").Once()
+	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select * from `users` where `name` = \"John\" limit 1", int64(1), nil).Return().Once()
 
-	s.NoError(s.query.Where("name", "John").First(&user))
+	s.NoError(s.query.Clone().Where("name", "John").First(&user))
 }
 
 func (s *QueryTestSuite) TestFirstReportsNoRowsAsEmpty() {
 	var user TestUser
 
-	s.mockReadBuilder.EXPECT().GetContext(s.ctx, &user, "select * from `users` where `name` = ?", "John").Return(databasesql.ErrNoRows).Once()
-	s.mockReadBuilder.EXPECT().Explain("select * from `users` where `name` = ?", "John").Return("select * from `users` where `name` = \"John\"").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select * from `users` where `name` = \"John\"", int64(0), nil).Return().Once()
+	s.mockReadBuilder.EXPECT().GetContext(s.ctx, &user, "select * from `users` where `name` = ? limit 1", "John").Return(databasesql.ErrNoRows).Once()
+	s.mockReadBuilder.EXPECT().Explain("select * from `users` where `name` = ? limit 1", "John").Return("select * from `users` where `name` = \"John\" limit 1").Once()
+	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select * from `users` where `name` = \"John\" limit 1", int64(0), nil).Return().Once()
 
-	s.NoError(s.query.Where("name", "John").First(&user))
+	s.NoError(s.query.Clone().Where("name", "John").First(&user))
 }
 
 func (s *QueryTestSuite) TestFirstOr() {
 	var user TestUser
 
-	s.mockReadBuilder.EXPECT().GetContext(s.ctx, &user, "select * from `users` where `name` = ?", "John").Return(databasesql.ErrNoRows).Once()
-	s.mockReadBuilder.EXPECT().Explain("select * from `users` where `name` = ?", "John").Return("select * from `users` where `name` = \"John\"").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select * from `users` where `name` = \"John\"", int64(0), nil).Return().Once()
+	s.mockReadBuilder.EXPECT().GetContext(s.ctx, &user, "select * from `users` where `name` = ? limit 1", "John").Return(databasesql.ErrNoRows).Once()
+	s.mockReadBuilder.EXPECT().Explain("select * from `users` where `name` = ? limit 1", "John").Return("select * from `users` where `name` = \"John\" limit 1").Once()
+	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select * from `users` where `name` = \"John\" limit 1", int64(0), nil).Return().Once()
 
 	called := false
-	err := s.query.Where("name", "John").FirstOr(&user, func() error {
+	err := s.query.Clone().Where("name", "John").FirstOr(&user, func() error {
 		called = true
 		return nil
 	})
@@ -346,11 +348,11 @@ func (s *QueryTestSuite) TestFirstOr() {
 func (s *QueryTestSuite) TestFindShorthand() {
 	var user TestUser
 
-	s.mockReadBuilder.EXPECT().GetContext(s.ctx, &user, "select * from `users` where `id` = ?", 1).Return(nil).Once()
-	s.mockReadBuilder.EXPECT().Explain("select * from `users` where `id` = ?", 1).Return("select * from `users` where `id` = 1").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select * from `users` where `id` = 1", int64(1), nil).Return().Once()
+	s.mockReadBuilder.EXPECT().GetContext(s.ctx, &user, "select * from `users` where `id` = ? limit 1", 1).Return(nil).Once()
+	s.mockReadBuilder.EXPECT().Explain("select * from `users` where `id` = ? limit 1", 1).Return("select * from `users` where `id` = 1 limit 1").Once()
+	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select * from `users` where `id` = 1 limit 1", int64(1), nil).Return().Once()
 
-	s.NoError(s.query.Find(&user, 1))
+	s.NoError(s.query.Clone().Find(&user, 1))
 }
 
 func (s *QueryTestSuite) TestFindWithSlice() {
@@ -360,13 +362,13 @@ func (s *QueryTestSuite) TestFindWithSlice() {
 	s.mockReadBuilder.EXPECT().Explain("select * from `users` where `id` in (?, ?)", 1, 2).Return("select * from `users` where `id` in (1, 2)").Once()
 	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select * from `users` where `id` in (1, 2)", int64(0), nil).Return().Once()
 
-	s.NoError(s.query.Find(&users, []int{1, 2}))
+	s.NoError(s.query.Clone().Find(&users, []int{1, 2}))
 }
 
 func (s *QueryTestSuite) TestFindRejectsTooManyConditions() {
 	var users []TestUser
 
-	s.Equal(errors.DatabaseInvalidArgumentNumber.Args(3, "1 or 2"), s.query.Find(&users, 1, 2, 3))
+	s.Equal(errors.DatabaseInvalidArgumentNumber.Args(3, "1 or 2"), s.query.Clone().Find(&users, 1, 2, 3))
 }
 
 func (s *QueryTestSuite) TestCountAndExists() {
@@ -378,24 +380,20 @@ func (s *QueryTestSuite) TestCountAndExists() {
 	s.mockReadBuilder.EXPECT().Explain("select count(*) as aggregate from `users` where `name` = ?", "John").Return("select count(*) as aggregate from `users` where `name` = \"John\"").Once()
 	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select count(*) as aggregate from `users` where `name` = \"John\"", int64(-1), nil).Return().Once()
 
-	got, err := s.query.Where("name", "John").Count()
+	got, err := s.query.Clone().Where("name", "John").Count()
 	s.NoError(err)
 	s.Equal(int64(1), got)
 
-	s.mockReadBuilder.EXPECT().GetContext(s.ctx, &count, "select count(*) as aggregate from `users` where `name` = ?", "John").Run(func(_ context.Context, dest any, _ string, _ ...any) {
-		*(dest.(*int64)) = 0
-	}).Return(nil).Once()
-	s.mockReadBuilder.EXPECT().Explain("select count(*) as aggregate from `users` where `name` = ?", "John").Return("select count(*) as aggregate from `users` where `name` = \"John\"").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select count(*) as aggregate from `users` where `name` = \"John\"", int64(-1), nil).Return().Once()
+	s.expectExists(false, " where `name` = ?", "John")
 
-	exists, err := s.query.Where("name", "John").Exists()
+	exists, err := s.query.Clone().Where("name", "John").Exists()
 	s.NoError(err)
 	s.False(exists)
 }
 
 func (s *QueryTestSuite) TestCountDistinctWithoutColumnsCountsAllRows() {
 	s.expectCount(3)
-	count, err := s.query.Distinct().Count()
+	count, err := s.query.Clone().Distinct().Count()
 
 	s.NoError(err)
 	s.Equal(int64(3), count)
@@ -409,16 +407,16 @@ func (s *QueryTestSuite) TestInsert() {
 	s.mockWriteBuilder.EXPECT().Explain("insert into `users` (`name`) values (?)", "John").Return("insert into `users` (`name`) values (\"John\")").Once()
 	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "insert into `users` (`name`) values (\"John\")", int64(1), nil).Return().Once()
 
-	got, err := s.query.Insert(map[string]any{"name": "John"})
+	got, err := s.query.Clone().Insert(map[string]any{"name": "John"})
 	s.NoError(err)
 	s.Equal(int64(1), got.RowsAffected)
 }
 
 func (s *QueryTestSuite) TestInsertEmpty() {
-	got, err := s.query.Insert(nil)
+	got, err := s.query.Clone().Insert(nil)
 
-	s.Equal(errors.DatabaseDataIsEmpty, err)
-	s.Nil(got)
+	s.NoError(err)
+	s.Equal(int64(0), got.RowsAffected)
 }
 
 func (s *QueryTestSuite) TestInsertGetID() {
@@ -429,7 +427,7 @@ func (s *QueryTestSuite) TestInsertGetID() {
 	s.mockWriteBuilder.EXPECT().Explain("insert into `users` (`age`, `name`) values (?, ?)", 25, "John").Return("insert into `users` (`age`, `name`) values (25, \"John\")").Once()
 	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "insert into `users` (`age`, `name`) values (25, \"John\")", int64(1), nil).Return().Once()
 
-	id, err := s.query.InsertGetID(map[string]any{"name": "John", "age": 25})
+	id, err := s.query.Clone().InsertGetID(map[string]any{"name": "John", "age": 25})
 	s.NoError(err)
 	s.Equal(int64(1), id)
 }
@@ -458,7 +456,7 @@ func (s *QueryTestSuite) TestInsertGetIDIgnoresSQLKeywordsInValues() {
 	s.mockWriteBuilder.EXPECT().Explain(statement).Return(statement).Once()
 	s.mockLogger.EXPECT().Trace(s.ctx, s.now, statement, int64(1), nil).Return().Once()
 
-	id, err := s.query.InsertGetID(map[string]any{"name": querybuilder.Raw("' returning output inserted. '")})
+	id, err := s.query.Clone().InsertGetID(map[string]any{"name": querybuilder.Raw("' returning output inserted. '")})
 	s.Require().NoError(err)
 	s.Equal(int64(17), id)
 }
@@ -471,7 +469,7 @@ func (s *QueryTestSuite) TestUpdate() {
 	s.mockWriteBuilder.EXPECT().Explain("update `users` set `name` = ? where `id` = ?", "John", 1).Return("update `users` set `name` = \"John\" where `id` = 1").Once()
 	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "update `users` set `name` = \"John\" where `id` = 1", int64(1), nil).Return().Once()
 
-	got, err := s.query.Where("id", 1).Update("name", "John")
+	got, err := s.query.Clone().Where("id", 1).Update("name", "John")
 	s.NoError(err)
 	s.Equal(int64(1), got.RowsAffected)
 }
@@ -484,7 +482,7 @@ func (s *QueryTestSuite) TestDelete() {
 	s.mockWriteBuilder.EXPECT().Explain("delete from `users` where `name` = ?", "John").Return("delete from `users` where `name` = \"John\"").Once()
 	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "delete from `users` where `name` = \"John\"", int64(1), nil).Return().Once()
 
-	got, err := s.query.Where("name", "John").Delete()
+	got, err := s.query.Clone().Where("name", "John").Delete()
 	s.NoError(err)
 	s.Equal(int64(1), got.RowsAffected)
 }
@@ -497,44 +495,32 @@ func (s *QueryTestSuite) TestIncrementAndDecrement() {
 	s.mockWriteBuilder.EXPECT().Explain("update `users` set `age` = `age` + 1 where `name` = ?", "John").Return("update `users` set `age` = `age` + 1 where `name` = \"John\"").Once()
 	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "update `users` set `age` = `age` + 1 where `name` = \"John\"", int64(1), nil).Return().Once()
 
-	s.NoError(s.query.Where("name", "John").Increment("age"))
+	s.NoError(s.query.Clone().Where("name", "John").Increment("age"))
 
 	s.mockWriteBuilder.EXPECT().ExecContext(s.ctx, "update `users` set `age` = `age` - 1 where `name` = ?", "John").Return(result, nil).Once()
 	s.mockWriteBuilder.EXPECT().Explain("update `users` set `age` = `age` - 1 where `name` = ?", "John").Return("update `users` set `age` = `age` - 1 where `name` = \"John\"").Once()
 	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "update `users` set `age` = `age` - 1 where `name` = \"John\"", int64(1), nil).Return().Once()
 
-	s.NoError(s.query.Where("name", "John").Decrement("age"))
+	s.NoError(s.query.Clone().Where("name", "John").Decrement("age"))
 }
 
 func (s *QueryTestSuite) TestUpdateOrInsertUpdatesExistingRow() {
-	var count int64
-
-	s.mockReadBuilder.EXPECT().GetContext(s.ctx, &count, "select count(*) as aggregate from `users` where `id` = ?", 1).Run(func(_ context.Context, dest any, _ string, _ ...any) {
-		*(dest.(*int64)) = 1
-	}).Return(nil).Once()
-	s.mockReadBuilder.EXPECT().Explain("select count(*) as aggregate from `users` where `id` = ?", 1).Return("select count(*) as aggregate from `users` where `id` = 1").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select count(*) as aggregate from `users` where `id` = 1", int64(-1), nil).Return().Once()
+	s.expectExists(true, " where `id` = ?", 1)
 
 	result := &MockResult{}
 	result.On("RowsAffected").Return(int64(1), nil)
 
-	s.mockWriteBuilder.EXPECT().ExecContext(s.ctx, "update `users` set `phone` = ? where `id` = ?", "123", 1).Return(result, nil).Once()
-	s.mockWriteBuilder.EXPECT().Explain("update `users` set `phone` = ? where `id` = ?", "123", 1).Return("update `users` set `phone` = \"123\" where `id` = 1").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "update `users` set `phone` = \"123\" where `id` = 1", int64(1), nil).Return().Once()
+	s.mockWriteBuilder.EXPECT().ExecContext(s.ctx, "update `users` set `phone` = ? where `id` = ? limit 1", "123", 1).Return(result, nil).Once()
+	s.mockWriteBuilder.EXPECT().Explain("update `users` set `phone` = ? where `id` = ? limit 1", "123", 1).Return("update `users` set `phone` = \"123\" where `id` = 1 limit 1").Once()
+	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "update `users` set `phone` = \"123\" where `id` = 1 limit 1", int64(1), nil).Return().Once()
 
-	got, err := s.query.UpdateOrInsert(map[string]any{"id": 1}, map[string]any{"phone": "123"})
+	got, err := s.query.Clone().UpdateOrInsert(map[string]any{"id": 1}, map[string]any{"phone": "123"})
 	s.NoError(err)
 	s.Equal(int64(1), got.RowsAffected)
 }
 
 func (s *QueryTestSuite) TestUpdateOrInsertInsertsMissingRow() {
-	var count int64
-
-	s.mockReadBuilder.EXPECT().GetContext(s.ctx, &count, "select count(*) as aggregate from `users` where `id` = ?", 1).Run(func(_ context.Context, dest any, _ string, _ ...any) {
-		*(dest.(*int64)) = 0
-	}).Return(nil).Once()
-	s.mockReadBuilder.EXPECT().Explain("select count(*) as aggregate from `users` where `id` = ?", 1).Return("select count(*) as aggregate from `users` where `id` = 1").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select count(*) as aggregate from `users` where `id` = 1", int64(-1), nil).Return().Once()
+	s.expectExists(false, " where `id` = ?", 1)
 
 	result := &MockResult{}
 	result.On("RowsAffected").Return(int64(1), nil)
@@ -543,7 +529,7 @@ func (s *QueryTestSuite) TestUpdateOrInsertInsertsMissingRow() {
 	s.mockWriteBuilder.EXPECT().Explain("insert into `users` (`id`, `phone`) values (?, ?)", 1, "123").Return("insert into `users` (`id`, `phone`) values (1, \"123\")").Once()
 	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "insert into `users` (`id`, `phone`) values (1, \"123\")", int64(1), nil).Return().Once()
 
-	got, err := s.query.UpdateOrInsert(map[string]any{"id": 1}, map[string]any{"phone": "123"})
+	got, err := s.query.Clone().UpdateOrInsert(map[string]any{"id": 1}, map[string]any{"phone": "123"})
 	s.NoError(err)
 	s.Equal(int64(1), got.RowsAffected)
 }
@@ -553,15 +539,9 @@ func (s *QueryTestSuite) TestUpdateOrInsertInsertsMissingRow() {
 // supplied, UpdateOrInsert must not run an update at all, yet still report success. The missing
 // write-builder expectation is the assertion - any update or insert call would fail the mock.
 func (s *QueryTestSuite) TestUpdateOrInsertEmptyValuesSkipsUpdate() {
-	var count int64
+	s.expectExists(true, " where `email` = ?", "foo")
 
-	s.mockReadBuilder.EXPECT().GetContext(s.ctx, &count, "select count(*) as aggregate from `users` where `email` = ?", "foo").Run(func(_ context.Context, dest any, _ string, _ ...any) {
-		*(dest.(*int64)) = 1
-	}).Return(nil).Once()
-	s.mockReadBuilder.EXPECT().Explain("select count(*) as aggregate from `users` where `email` = ?", "foo").Return("select count(*) as aggregate from `users` where `email` = \"foo\"").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select count(*) as aggregate from `users` where `email` = \"foo\"", int64(-1), nil).Return().Once()
-
-	got, err := s.query.UpdateOrInsert(map[string]any{"email": "foo"}, nil)
+	got, err := s.query.Clone().UpdateOrInsert(map[string]any{"email": "foo"}, nil)
 	s.NoError(err)
 	s.Equal(int64(0), got.RowsAffected)
 }
@@ -580,7 +560,7 @@ func (s *QueryTestSuite) TestPaginate() {
 	s.mockReadBuilder.EXPECT().Explain("select * from `users` where `name` = ? limit 10 offset 0", "John").Return("select * from `users` where `name` = \"John\" limit 10 offset 0").Once()
 	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select * from `users` where `name` = \"John\" limit 10 offset 0", int64(0), nil).Return().Once()
 
-	s.NoError(s.query.Where("name", "John").Paginate(1, 10, &users, &total))
+	s.NoError(s.query.Clone().Where("name", "John").Paginate(1, 10, &users, &total))
 	s.Equal(int64(2), total)
 }
 
@@ -601,27 +581,27 @@ func (s *QueryTestSuite) TestPaginateNilTotalSkipsFetchOnZeroCount() {
 	s.mockReadBuilder.EXPECT().Explain("select count(*) as aggregate from `users` where `name` = ?", "John").Return("select count(*) as aggregate from `users` where `name` = \"John\"").Once()
 	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select count(*) as aggregate from `users` where `name` = \"John\"", int64(-1), nil).Return().Once()
 
-	s.NoError(s.query.Where("name", "John").Paginate(1, 10, &users, nil))
+	s.NoError(s.query.Clone().Where("name", "John").Paginate(1, 10, &users, nil))
 	s.Empty(users)
 }
 
 func (s *QueryTestSuite) TestWhen() {
 	applied := false
 
-	got := s.query.When(true, func(q db.Query) db.Query {
+	got := s.query.Clone().When(true, func(q db.Query) db.Query {
 		applied = true
 		return q.Where("name", "John")
 	})
 	s.True(applied)
-	s.Equal("select * from `users` where `name` = ?", got.ToSql().First())
+	s.Equal("select * from `users` where `name` = ?", got.ToSql().Get())
 
-	got = s.query.When(false, func(q db.Query) db.Query {
+	got = s.query.Clone().When(false, func(q db.Query) db.Query {
 		s.Fail("the true callback must not run")
 		return q
 	}, func(q db.Query) db.Query {
 		return q.Where("name", "Jane")
 	})
-	s.Equal("select * from `users` where `name` = ?", got.ToSql().First())
+	s.Equal("select * from `users` where `name` = ?", got.ToSql().Get())
 }
 
 func (s *QueryTestSuite) TestMissingTableIsRejected() {
@@ -631,9 +611,7 @@ func (s *QueryTestSuite) TestMissingTableIsRejected() {
 }
 
 func (s *QueryTestSuite) TestToRawSql() {
-	s.mockReadBuilder.EXPECT().Explain("select * from `users` where `name` = ?", "John").Return("select * from `users` where `name` = \"John\"").Once()
-
-	s.Equal("select * from `users` where `name` = \"John\"", s.query.Where("name", "John").ToRawSql().First())
+	s.Equal("select * from `users` where `name` = 'John'", s.query.Clone().Where("name", "John").ToRawSql().Get())
 }
 
 // TestCursorPaginate asserts the facade emits the keyset statement for a first page and projects the
@@ -654,7 +632,7 @@ func (s *QueryTestSuite) TestCursorPaginate() {
 	s.mockReadBuilder.EXPECT().Explain(mock.Anything).Return("select * from `users` order by `id` asc limit 16").Once()
 	s.mockLogger.EXPECT().Trace(s.ctx, s.now, mock.Anything, int64(0), nil).Return().Once()
 
-	page, err := s.query.OrderBy("id").CursorPaginate(15, "", &items)
+	page, err := s.query.Clone().OrderBy("id").CursorPaginate(15, "", &items)
 	s.Require().NoError(err)
 
 	s.Equal("select * from `users` order by `id` asc limit 16", gotSQL)
@@ -682,7 +660,7 @@ func (s *QueryTestSuite) TestCursorPaginateWithCursor() {
 	s.mockReadBuilder.EXPECT().Explain(mock.Anything, mock.Anything).Return("").Once()
 	s.mockLogger.EXPECT().Trace(s.ctx, s.now, mock.Anything, int64(0), nil).Return().Once()
 
-	page, err := s.query.OrderBy("id").CursorPaginate(15, encoded, &items)
+	page, err := s.query.Clone().OrderBy("id").CursorPaginate(15, encoded, &items)
 	s.Require().NoError(err)
 
 	s.Equal("select * from `users` where (`id` > ?) order by `id` asc limit 16", gotSQL)
@@ -695,7 +673,7 @@ func (s *QueryTestSuite) TestCursorPaginateWithCursor() {
 func (s *QueryTestSuite) TestCursorPaginateRejectsAMalformedCursor() {
 	var items []map[string]any
 
-	_, err := s.query.OrderBy("id").CursorPaginate(15, "not-a-cursor", &items)
+	_, err := s.query.Clone().OrderBy("id").CursorPaginate(15, "not-a-cursor", &items)
 	s.ErrorIs(err, errors.QueryCursorInvalid)
 }
 
@@ -704,7 +682,7 @@ func (s *QueryTestSuite) TestCursorPaginateRejectsAMalformedCursor() {
 func (s *QueryTestSuite) TestCursorPaginateRequiresAnOrder() {
 	var items []map[string]any
 
-	_, err := s.query.CursorPaginate(15, "", &items)
+	_, err := s.query.Clone().CursorPaginate(15, "", &items)
 	s.ErrorIs(err, errors.QueryOrderRequired)
 }
 
@@ -722,7 +700,7 @@ func (s *QueryTestSuite) TestImplode() {
 	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select `foo` from `users` where `id` = 1", int64(2), nil).Return().Once()
 
 	var withoutGlue string
-	s.NoError(s.query.Where("id", 1).Implode("foo", "", &withoutGlue))
+	s.NoError(s.query.Clone().Where("id", 1).Implode("foo", "", &withoutGlue))
 	s.Equal("barbaz", withoutGlue)
 
 	// Test with glue.
@@ -734,7 +712,7 @@ func (s *QueryTestSuite) TestImplode() {
 	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select `foo` from `users` where `id` = 1", int64(2), nil).Return().Once()
 
 	var withGlue string
-	s.NoError(s.query.Where("id", 1).Implode("foo", ",", &withGlue))
+	s.NoError(s.query.Clone().Where("id", 1).Implode("foo", ",", &withGlue))
 	s.Equal("bar,baz", withGlue)
 }
 
@@ -757,7 +735,7 @@ func (s *QueryTestSuite) TestRawValue() {
 	s.mockLogger.EXPECT().Trace(s.ctx, s.now, explain, int64(1), nil).Return().Once()
 
 	var value string
-	s.NoError(s.query.Where("id", 1).RawValue("UPPER(\"foo\")", &value))
+	s.NoError(s.query.Clone().Where("id", 1).RawValue("UPPER(\"foo\")", &value))
 	s.Equal("BAR", value)
 }
 
@@ -766,19 +744,19 @@ func (s *QueryTestSuite) TestRawValue() {
 // named testExistsOr exercises doesntExistOr and vice versa, so the two Go methods below are named for
 // the behaviour they actually assert. existsOr returns true when the query matches a row and otherwise
 // returns the callback's value; doesntExistOr mirrors it (true when nothing matches, else the
-// callback's value). The callback never runs on the true branch. The SQL exercised is the count
-// aggregate Count() issues, pinned here through the mocked builder (MySQL grammar).
+// callback's value). The callback never runs on the true branch. The SQL exercised is the
+// grammar-compiled EXISTS query, pinned here through the mocked builder (MySQL grammar).
 func (s *QueryTestSuite) TestExistsOr() {
 	// No rows match, so the callback's value is returned.
-	s.expectCount(0)
-	value, err := s.query.ExistsOr(func() any { return 123 })
+	s.expectExists(false, "")
+	value, err := s.query.Clone().ExistsOr(func() any { return 123 })
 	s.NoError(err)
 	s.Equal(123, value)
 
 	// A row matches, so true is returned and the callback is not run.
-	s.expectCount(1)
+	s.expectExists(true, "")
 	ran := false
-	value, err = s.query.ExistsOr(func() any {
+	value, err = s.query.Clone().ExistsOr(func() any {
 		ran = true
 
 		return 123
@@ -790,15 +768,15 @@ func (s *QueryTestSuite) TestExistsOr() {
 
 func (s *QueryTestSuite) TestDoesntExistOr() {
 	// A row matches, so the callback's value is returned.
-	s.expectCount(1)
-	value, err := s.query.DoesntExistOr(func() any { return 123 })
+	s.expectExists(true, "")
+	value, err := s.query.Clone().DoesntExistOr(func() any { return 123 })
 	s.NoError(err)
 	s.Equal(123, value)
 
 	// No rows match, so true is returned and the callback is not run.
-	s.expectCount(0)
+	s.expectExists(false, "")
 	ran := false
-	value, err = s.query.DoesntExistOr(func() any {
+	value, err = s.query.Clone().DoesntExistOr(func() any {
 		ran = true
 
 		return 123
@@ -808,7 +786,7 @@ func (s *QueryTestSuite) TestDoesntExistOr() {
 	s.False(ran)
 }
 
-// expectCount scripts the count aggregate statement that Exists/DoesntExist issue for the "users"
+// expectCount scripts the count aggregate statement for the "users"
 // table with no additional clauses.
 func (s *QueryTestSuite) expectCount(count int64) {
 	const sql = "select count(*) as aggregate from `users`"
@@ -821,7 +799,7 @@ func (s *QueryTestSuite) expectCount(count int64) {
 	s.mockLogger.EXPECT().Trace(s.ctx, s.now, sql, int64(-1), nil).Return().Once()
 }
 
-// chunkStubConnector serves canned result sets without a database server so the Cursor-driven Chunk
+// chunkStubConnector serves canned result sets without a database server so the Get-driven Chunk
 // loop can be exercised end to end through the real Builder. Every statement the query issues is
 // answered with the next page; once the pages run out the connection reports an empty result, which
 // is exactly the trailing fetch the loop must treat as its terminator. The shared counters record how
@@ -909,7 +887,7 @@ func (s *QueryTestSuite) newChunkQuery(pages [][][]driver.Value) (db.Query, *int
 	s.mockLogger.EXPECT().Trace(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return().Maybe()
 
-	return NewQuery(s.ctx, builder, builder, s.grammar, querybuilder.DialectMySQL, s.mockLogger, "users", nil), served, queries
+	return NewQuery(s.ctx, builder, builder, s.grammar, querybuilder.DialectMySQL, s.mockLogger, "users", nil).OrderBy("id").(*Query), served, queries
 }
 
 // TestChunkStopsOnTheEmptyChunk pins the empty-chunk terminator over an exact-multiple dataset:
@@ -931,9 +909,9 @@ func (s *QueryTestSuite) TestChunkStopsOnTheEmptyChunk() {
 
 	s.Equal([]int{2, 2}, sizes)
 	s.Equal([]string{
-		"select * from `users` limit 2 offset 0",
-		"select * from `users` limit 2 offset 2",
-		"select * from `users` limit 2 offset 4",
+		"select * from `users` order by `id` asc limit 2 offset 0",
+		"select * from `users` order by `id` asc limit 2 offset 2",
+		"select * from `users` order by `id` asc limit 2 offset 4",
 	}, *queries)
 }
 
@@ -991,4 +969,13 @@ func (s *QueryTestSuite) TestChunkStopsCleanlyOnChunkStopped() {
 	s.NoError(err)
 	s.Equal(1, calls)
 	s.Equal(1, *served)
+}
+
+func (s *QueryTestSuite) expectExists(exists bool, where string, values ...any) {
+	statement := "select exists(select * from `users`" + where + ") as `exists`"
+	s.mockReadBuilder.EXPECT().GetContext(s.ctx, mock.Anything, statement, values...).Run(func(_ context.Context, dest any, _ string, _ ...any) {
+		*dest.(*bool) = exists
+	}).Return(nil).Once()
+	s.mockReadBuilder.EXPECT().Explain(statement, values...).Return(statement).Once()
+	s.mockLogger.EXPECT().Trace(s.ctx, s.now, statement, int64(-1), nil).Return().Once()
 }

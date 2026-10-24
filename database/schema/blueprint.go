@@ -37,11 +37,15 @@ const (
 )
 
 type Blueprint struct {
-	schema   schema.Schema
-	prefix   string
-	table    string
-	columns  []*ColumnDefinition
-	commands []*driver.Command
+	engine    string
+	charset   string
+	collation string
+	temporary bool
+	schema    schema.Schema
+	prefix    string
+	table     string
+	columns   []*ColumnDefinition
+	commands  []*driver.Command
 }
 
 func NewBlueprint(schema schema.Schema, prefix, table string) *Blueprint {
@@ -80,7 +84,7 @@ func (r *Blueprint) Build(query orm.Query, grammar driver.Grammar) error {
 }
 
 func (r *Blueprint) Char(column string, length ...int) driver.ColumnDefinition {
-	defaultLength := DefaultStringLength
+	defaultLength := currentStringLength()
 	if len(length) > 0 {
 		defaultLength = length[0]
 	}
@@ -459,7 +463,7 @@ func (r *Blueprint) SoftDeletesTz(column ...string) driver.ColumnDefinition {
 }
 
 func (r *Blueprint) String(column string, length ...int) driver.ColumnDefinition {
-	defaultLength := DefaultStringLength
+	defaultLength := currentStringLength()
 	if len(length) > 0 {
 		defaultLength = length[0]
 	}
@@ -533,12 +537,25 @@ func (r *Blueprint) TinyText(column string) driver.ColumnDefinition {
 }
 
 func (r *Blueprint) ToSql(grammar driver.Grammar) ([]string, error) {
+	if owner, ok := r.schema.(*Schema); ok && owner.metadataDialect() == "sqlite" && r.sqliteRebuild() {
+		return owner.compileSQLiteRebuild(r, grammar)
+	}
 	r.addImpliedCommands(grammar)
 
 	var statements []string
 	for _, command := range r.commands {
 		if command.ShouldBeSkipped {
 			continue
+		}
+		if owner, ok := r.schema.(*Schema); ok {
+			compiled, handled, err := owner.compileDDLCommand(r, grammar, command)
+			if err != nil {
+				return statements, err
+			}
+			if handled {
+				statements = append(statements, compiled...)
+				continue
+			}
 		}
 
 		switch command.Name {
@@ -611,6 +628,9 @@ func (r *Blueprint) ToSql(grammar driver.Grammar) ([]string, error) {
 		}
 	}
 
+	if owner, ok := r.schema.(*Schema); ok {
+		statements = append(statements, owner.ddlStartingValues(r)...)
+	}
 	return statements, nil
 }
 

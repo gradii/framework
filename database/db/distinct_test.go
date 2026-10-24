@@ -38,9 +38,9 @@ func TestDistinctPreservesSelection(t *testing.T) {
 			base := query.Select("name").(*Query)
 			base.builder.SelectRaw("? as flag", []any{1}).Where("id", 9)
 			columns := []string{"name"}
-			selected := base.Distinct(columns...).(*Query)
+			selected := base.Clone().Distinct(columns...).(*Query)
 			columns[0] = "id"
-			all := selected.Distinct().(*Query)
+			all := selected.Clone().Distinct().(*Query)
 
 			statement, bindings, err := selected.buildSelect()
 			require.NoError(t, err)

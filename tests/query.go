@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"os"
 	"slices"
 
 	"github.com/goravel/framework/contracts/config"
@@ -318,6 +319,14 @@ func (r *TestQueryBuilder) single(driver, prefix, timezone string, singular bool
 	case mysql.Name:
 		dockerDriver = mysql.NewDocker(mysql.NewConfig(mockConfig, connection), process.New(), testDatabase, testUsername, testPassword)
 		databaseDriver = mysql.NewMysql(mockConfig, utils.NewTestLog(), process.New(), connection)
+		if os.Getenv("GORAVEL_TEST_MARIADB") == "1" {
+			dockerDriver.Image(contractsdocker.Image{
+				Repository: "mariadb", Tag: "11.8",
+				Env: []string{"MYSQL_ROOT_PASSWORD=" + testPassword, "MYSQL_DATABASE=" + testDatabase,
+					"MYSQL_USER=" + testUsername, "MYSQL_PASSWORD=" + testPassword},
+				ExposedPorts: []string{"3306"},
+			})
+		}
 	case sqlserver.Name:
 		dockerDriver = sqlserver.NewDocker(sqlserver.NewConfig(mockConfig, connection), process.New(), testDatabase, testUsername, testPassword)
 		databaseDriver = sqlserver.NewSqlserver(mockConfig, utils.NewTestLog(), process.New(), connection)
@@ -330,12 +339,15 @@ func (r *TestQueryBuilder) single(driver, prefix, timezone string, singular bool
 		dockerDriver.Image(contractsdocker.Image{
 			Repository:   "mcr.microsoft.com/mssql/server",
 			Tag:          testSqlserverImageTag,
-			Env:          []string{"ACCEPT_EULA=Y", "MSSQL_SA_PASSWORD=" + testPassword},
+			Env:          []string{"ACCEPT_EULA=Y", "MSSQL_SA_PASSWORD=" + testPassword, "MSSQL_MEMORY_LIMIT_MB=2048"},
 			ExposedPorts: []string{"1433"},
 		})
 	}
 
 	container := NewContainer(dockerDriver)
+	if driver == mysql.Name && os.Getenv("GORAVEL_TEST_MARIADB") == "1" {
+		container.name = "MariaDB_11.8"
+	}
 	containerInstance, err := container.Build()
 	if err != nil {
 		panic(err)

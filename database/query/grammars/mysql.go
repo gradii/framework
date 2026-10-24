@@ -1,6 +1,7 @@
 package grammars
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 )
@@ -226,6 +227,26 @@ func (g *MySqlGrammar) CompileJoinLateral(join Join, expression string) string {
 	return strings.TrimSpace(join.JoinType() + " join lateral " + expression + " on true")
 }
 
+// The MySQL driver can connect to MariaDB. Detect its lateral-join limitation from
+// the connection version even when the configured driver name is "mysql".
+func (g *MySqlGrammar) CompileJoins(b Query, joins []Join) string {
+	for _, join := range joins {
+		if !join.IsLateral() || b.State().ServerVersion == nil {
+			continue
+		}
+		version, err := b.State().ServerVersion()
+		if err != nil {
+			b.SetError(err)
+			return ""
+		}
+		if strings.Contains(strings.ToLower(version), "mariadb") {
+			b.SetError(errLateralJoinNotSupported)
+			return ""
+		}
+	}
+	return g.BaseGrammar.CompileJoins(b, joins)
+}
+
 // CompileLock mirrors MySqlGrammar::compileLock().
 func (g *MySqlGrammar) CompileLock(b Query, value any) string {
 	if s, ok := value.(string); ok {
@@ -311,9 +332,24 @@ func (g *MySqlGrammar) WrapJsonBooleanSelector(value string) string {
 	return "json_extract(" + field + path + ")"
 }
 
-// UseLegacyGroupLimit mirrors MySqlGrammar::useLegacyGroupLimit(). Without a live connection the
-// modern path is assumed, so this reports false.
-func (g *MySqlGrammar) UseLegacyGroupLimit(b Query) bool { return false }
+// UseLegacyGroupLimit follows the connection's server version, as in Laravel.
+// SQL-only builders without a connection retain the modern compilation path.
+func (g *MySqlGrammar) UseLegacyGroupLimit(b Query) bool {
+	if b.State().ServerVersion == nil {
+		return false
+	}
+	version, err := b.State().ServerVersion()
+	if err != nil {
+		b.SetError(err)
+		return false
+	}
+	if strings.Contains(strings.ToLower(version), "mariadb") {
+		return false
+	}
+	var major, minor, patch int
+	_, _ = fmt.Sscanf(version, "%d.%d.%d", &major, &minor, &patch)
+	return major < 8 || (major == 8 && minor == 0 && patch < 11)
+}
 
 // CompileGroupLimit mirrors MySqlGrammar::compileGroupLimit().
 func (g *MySqlGrammar) CompileGroupLimit(b Query) string {

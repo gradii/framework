@@ -167,27 +167,9 @@ func TestRawInterpolatesOnlyOutsideQuotedLiterals(t *testing.T) {
 		Raw("select * from t where note = '?'").(querybuilder.Expression).Value)
 }
 
-// TestRawQuotedLiteralScopeLimitBacktickAndBackslash records a known scope limit of the interpolator
-// rather than a behaviour to rely on: the quote state machine models only "'" and '"'. It does not
-// model backtick-quoted identifiers, nor a MySQL backslash-escaped quote, so a "?" inside either is
-// treated as a binding.
-//
-//   - "select 'it\'s ?'" (MySQL's backslash escape) closes the literal early at the escaped quote, so
-//     the following "?" is interpolated and the literal is corrupted;
-//   - "select `a?b` = ?" (a backtick identifier) tracks no quote at all, so the "?" inside the
-//     identifier consumes the argument and the real trailing binding is left as a bare "?".
-//
-// The framework's own grammars escape by doubling (” and ""), which the machine handles correctly,
-// so this limit is only reachable from a hand-written fragment on a dialect that uses backslash
-// escapes or backtick identifiers. If the interpolator is ever extended to model them, this test must
-// change with it.
-func TestRawQuotedLiteralScopeLimitBacktickAndBackslash(t *testing.T) {
-	// MySQL backslash-escaped quote: the "?" inside the literal is interpolated with the argument.
-	assert.Equal(t, `select 'it\'s 'x''`,
-		Raw(`select 'it\'s ?'`, "x").(querybuilder.Expression).Value)
-
-	// Backtick-quoted identifier: the "?" inside the identifier takes the argument, and the real
-	// trailing "?" is not bound.
-	assert.Equal(t, "select `a'x'b` = ?",
+func TestRawPreservesBacktickIdentifiersAndBackslashEscapes(t *testing.T) {
+	assert.Equal(t, `select 'it\'s ?', 'x'`,
+		Raw(`select 'it\'s ?', ?`, "x").(querybuilder.Expression).Value)
+	assert.Equal(t, "select `a?b` = 'x'",
 		Raw("select `a?b` = ?", "x").(querybuilder.Expression).Value)
 }

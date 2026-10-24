@@ -1,33 +1,11 @@
 package query
 
-import (
-	"strings"
-
-	"github.com/goravel/framework/database/query/processors"
-)
+import "github.com/goravel/framework/database/query/processors"
 
 type Processor = processors.Processor
 
 // NewProcessor selects the connection's post-processor, mirroring Laravel's getDefaultPostProcessor.
-func NewProcessor(driver string) Processor {
-	normalized := strings.NewReplacer(" ", "", "_", "", "-", "").Replace(strings.ToLower(strings.TrimSpace(driver)))
-	if normalized == "mariadb" {
-		return &processors.MariaDbProcessor{}
-	}
-
-	switch CanonicalDialect(driver) {
-	case DialectMySQL:
-		return &processors.MySqlProcessor{}
-	case DialectPostgres:
-		return &processors.PostgresProcessor{}
-	case DialectSqlite:
-		return &processors.SqliteProcessor{}
-	case DialectSqlServer:
-		return &processors.SqlServerProcessor{}
-	default:
-		return &processors.BaseProcessor{}
-	}
-}
+func NewProcessor(driver string) Processor { return processors.New(driver) }
 
 // Processor returns the post-processor supplied by the connection.
 func (b *Builder) Processor() Processor { return b.processor }

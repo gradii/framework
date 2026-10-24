@@ -97,6 +97,10 @@ func BuildGorm(config config.Config, logger contractslogger.Logger, pool databas
 	// facades (through Connection) and the ORM (through Reader) resolve the same one whichever
 	// entry point built this connection.
 	if _, err := openReader(config, pool, connection); err != nil {
+		if db, dbErr := instance.DB(); dbErr == nil {
+			_ = db.Close()
+		}
+		instrument.Shutdown()
 		return nil, nil, err
 	}
 
@@ -129,8 +133,8 @@ func BuildGorm(config config.Config, logger contractslogger.Logger, pool databas
 		writeDialectors = append(writeDialectors, writer.Dialector)
 	}
 
-	for _, reader := range pool.Readers {
-		readDialectors = append(readDialectors, reader.Dialector)
+	if reader, ok := readPools.Load(connection); ok {
+		readDialectors = append(readDialectors, reader.(cachedReader).dialector)
 	}
 
 	if err := instance.Use(dbresolver.Register(dbresolver.Config{

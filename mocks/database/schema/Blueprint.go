@@ -120,6 +120,69 @@ func (_c *Blueprint_BigInteger_Call) RunAndReturn(run func(string) driver.Column
 	return _c
 }
 
+// Binary provides a mock function with given fields: column, length
+func (_m *Blueprint) Binary(column string, length ...int) driver.ColumnDefinition {
+	_va := make([]interface{}, len(length))
+	for _i := range length {
+		_va[_i] = length[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, column)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Binary")
+	}
+
+	var r0 driver.ColumnDefinition
+	if rf, ok := ret.Get(0).(func(string, ...int) driver.ColumnDefinition); ok {
+		r0 = rf(column, length...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(driver.ColumnDefinition)
+		}
+	}
+
+	return r0
+}
+
+// Blueprint_Binary_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Binary'
+type Blueprint_Binary_Call struct {
+	*mock.Call
+}
+
+// Binary is a helper method to define mock.On call
+//   - column string
+//   - length ...int
+func (_e *Blueprint_Expecter) Binary(column interface{}, length ...interface{}) *Blueprint_Binary_Call {
+	return &Blueprint_Binary_Call{Call: _e.mock.On("Binary",
+		append([]interface{}{column}, length...)...)}
+}
+
+func (_c *Blueprint_Binary_Call) Run(run func(column string, length ...int)) *Blueprint_Binary_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]int, len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(int)
+			}
+		}
+		run(args[0].(string), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *Blueprint_Binary_Call) Return(_a0 driver.ColumnDefinition) *Blueprint_Binary_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Blueprint_Binary_Call) RunAndReturn(run func(string, ...int) driver.ColumnDefinition) *Blueprint_Binary_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Boolean provides a mock function with given fields: column
 func (_m *Blueprint) Boolean(column string) driver.ColumnDefinition {
 	ret := _m.Called(column)
@@ -278,6 +341,72 @@ func (_c *Blueprint_Char_Call) RunAndReturn(run func(string, ...int) driver.Colu
 	return _c
 }
 
+// Charset provides a mock function with given fields: charset
+func (_m *Blueprint) Charset(charset string) {
+	_m.Called(charset)
+}
+
+// Blueprint_Charset_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Charset'
+type Blueprint_Charset_Call struct {
+	*mock.Call
+}
+
+// Charset is a helper method to define mock.On call
+//   - charset string
+func (_e *Blueprint_Expecter) Charset(charset interface{}) *Blueprint_Charset_Call {
+	return &Blueprint_Charset_Call{Call: _e.mock.On("Charset", charset)}
+}
+
+func (_c *Blueprint_Charset_Call) Run(run func(charset string)) *Blueprint_Charset_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *Blueprint_Charset_Call) Return() *Blueprint_Charset_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *Blueprint_Charset_Call) RunAndReturn(run func(string)) *Blueprint_Charset_Call {
+	_c.Run(run)
+	return _c
+}
+
+// Collation provides a mock function with given fields: collation
+func (_m *Blueprint) Collation(collation string) {
+	_m.Called(collation)
+}
+
+// Blueprint_Collation_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Collation'
+type Blueprint_Collation_Call struct {
+	*mock.Call
+}
+
+// Collation is a helper method to define mock.On call
+//   - collation string
+func (_e *Blueprint_Expecter) Collation(collation interface{}) *Blueprint_Collation_Call {
+	return &Blueprint_Collation_Call{Call: _e.mock.On("Collation", collation)}
+}
+
+func (_c *Blueprint_Collation_Call) Run(run func(collation string)) *Blueprint_Collation_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *Blueprint_Collation_Call) Return() *Blueprint_Collation_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *Blueprint_Collation_Call) RunAndReturn(run func(string)) *Blueprint_Collation_Call {
+	_c.Run(run)
+	return _c
+}
+
 // Column provides a mock function with given fields: column, ttype
 func (_m *Blueprint) Column(column string, ttype string) driver.ColumnDefinition {
 	ret := _m.Called(column, ttype)
@@ -357,6 +486,55 @@ func (_c *Blueprint_Comment_Call) Return() *Blueprint_Comment_Call {
 
 func (_c *Blueprint_Comment_Call) RunAndReturn(run func(string)) *Blueprint_Comment_Call {
 	_c.Run(run)
+	return _c
+}
+
+// Computed provides a mock function with given fields: column, expression
+func (_m *Blueprint) Computed(column string, expression interface{}) driver.ColumnDefinition {
+	ret := _m.Called(column, expression)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Computed")
+	}
+
+	var r0 driver.ColumnDefinition
+	if rf, ok := ret.Get(0).(func(string, interface{}) driver.ColumnDefinition); ok {
+		r0 = rf(column, expression)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(driver.ColumnDefinition)
+		}
+	}
+
+	return r0
+}
+
+// Blueprint_Computed_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Computed'
+type Blueprint_Computed_Call struct {
+	*mock.Call
+}
+
+// Computed is a helper method to define mock.On call
+//   - column string
+//   - expression interface{}
+func (_e *Blueprint_Expecter) Computed(column interface{}, expression interface{}) *Blueprint_Computed_Call {
+	return &Blueprint_Computed_Call{Call: _e.mock.On("Computed", column, expression)}
+}
+
+func (_c *Blueprint_Computed_Call) Run(run func(column string, expression interface{})) *Blueprint_Computed_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string), args[1].(interface{}))
+	})
+	return _c
+}
+
+func (_c *Blueprint_Computed_Call) Return(_a0 driver.ColumnDefinition) *Blueprint_Computed_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Blueprint_Computed_Call) RunAndReturn(run func(string, interface{}) driver.ColumnDefinition) *Blueprint_Computed_Call {
+	_c.Call.Return(run)
 	return _c
 }
 
@@ -786,6 +964,39 @@ func (_c *Blueprint_DropColumn_Call) RunAndReturn(run func(...string)) *Blueprin
 	return _c
 }
 
+// DropConstrainedForeignId provides a mock function with given fields: column
+func (_m *Blueprint) DropConstrainedForeignId(column string) {
+	_m.Called(column)
+}
+
+// Blueprint_DropConstrainedForeignId_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DropConstrainedForeignId'
+type Blueprint_DropConstrainedForeignId_Call struct {
+	*mock.Call
+}
+
+// DropConstrainedForeignId is a helper method to define mock.On call
+//   - column string
+func (_e *Blueprint_Expecter) DropConstrainedForeignId(column interface{}) *Blueprint_DropConstrainedForeignId_Call {
+	return &Blueprint_DropConstrainedForeignId_Call{Call: _e.mock.On("DropConstrainedForeignId", column)}
+}
+
+func (_c *Blueprint_DropConstrainedForeignId_Call) Run(run func(column string)) *Blueprint_DropConstrainedForeignId_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *Blueprint_DropConstrainedForeignId_Call) Return() *Blueprint_DropConstrainedForeignId_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *Blueprint_DropConstrainedForeignId_Call) RunAndReturn(run func(string)) *Blueprint_DropConstrainedForeignId_Call {
+	_c.Run(run)
+	return _c
+}
+
 // DropForeign provides a mock function with given fields: column
 func (_m *Blueprint) DropForeign(column ...string) {
 	_va := make([]interface{}, len(column))
@@ -1055,6 +1266,54 @@ func (_c *Blueprint_DropIndexByName_Call) RunAndReturn(run func(string)) *Bluepr
 	return _c
 }
 
+// DropMorphs provides a mock function with given fields: name, indexName
+func (_m *Blueprint) DropMorphs(name string, indexName ...string) {
+	_va := make([]interface{}, len(indexName))
+	for _i := range indexName {
+		_va[_i] = indexName[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, name)
+	_ca = append(_ca, _va...)
+	_m.Called(_ca...)
+}
+
+// Blueprint_DropMorphs_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DropMorphs'
+type Blueprint_DropMorphs_Call struct {
+	*mock.Call
+}
+
+// DropMorphs is a helper method to define mock.On call
+//   - name string
+//   - indexName ...string
+func (_e *Blueprint_Expecter) DropMorphs(name interface{}, indexName ...interface{}) *Blueprint_DropMorphs_Call {
+	return &Blueprint_DropMorphs_Call{Call: _e.mock.On("DropMorphs",
+		append([]interface{}{name}, indexName...)...)}
+}
+
+func (_c *Blueprint_DropMorphs_Call) Run(run func(name string, indexName ...string)) *Blueprint_DropMorphs_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]string, len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(string)
+			}
+		}
+		run(args[0].(string), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *Blueprint_DropMorphs_Call) Return() *Blueprint_DropMorphs_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *Blueprint_DropMorphs_Call) RunAndReturn(run func(string, ...string)) *Blueprint_DropMorphs_Call {
+	_c.Run(run)
+	return _c
+}
+
 // DropPrimary provides a mock function with given fields: column
 func (_m *Blueprint) DropPrimary(column ...string) {
 	_va := make([]interface{}, len(column))
@@ -1097,6 +1356,38 @@ func (_c *Blueprint_DropPrimary_Call) Return() *Blueprint_DropPrimary_Call {
 }
 
 func (_c *Blueprint_DropPrimary_Call) RunAndReturn(run func(...string)) *Blueprint_DropPrimary_Call {
+	_c.Run(run)
+	return _c
+}
+
+// DropRememberToken provides a mock function with no fields
+func (_m *Blueprint) DropRememberToken() {
+	_m.Called()
+}
+
+// Blueprint_DropRememberToken_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DropRememberToken'
+type Blueprint_DropRememberToken_Call struct {
+	*mock.Call
+}
+
+// DropRememberToken is a helper method to define mock.On call
+func (_e *Blueprint_Expecter) DropRememberToken() *Blueprint_DropRememberToken_Call {
+	return &Blueprint_DropRememberToken_Call{Call: _e.mock.On("DropRememberToken")}
+}
+
+func (_c *Blueprint_DropRememberToken_Call) Run(run func()) *Blueprint_DropRememberToken_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *Blueprint_DropRememberToken_Call) Return() *Blueprint_DropRememberToken_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *Blueprint_DropRememberToken_Call) RunAndReturn(run func()) *Blueprint_DropRememberToken_Call {
 	_c.Run(run)
 	return _c
 }
@@ -1189,6 +1480,52 @@ func (_c *Blueprint_DropSoftDeletesTz_Call) Return() *Blueprint_DropSoftDeletesT
 }
 
 func (_c *Blueprint_DropSoftDeletesTz_Call) RunAndReturn(run func(...string)) *Blueprint_DropSoftDeletesTz_Call {
+	_c.Run(run)
+	return _c
+}
+
+// DropSpatialIndex provides a mock function with given fields: columns
+func (_m *Blueprint) DropSpatialIndex(columns ...string) {
+	_va := make([]interface{}, len(columns))
+	for _i := range columns {
+		_va[_i] = columns[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, _va...)
+	_m.Called(_ca...)
+}
+
+// Blueprint_DropSpatialIndex_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DropSpatialIndex'
+type Blueprint_DropSpatialIndex_Call struct {
+	*mock.Call
+}
+
+// DropSpatialIndex is a helper method to define mock.On call
+//   - columns ...string
+func (_e *Blueprint_Expecter) DropSpatialIndex(columns ...interface{}) *Blueprint_DropSpatialIndex_Call {
+	return &Blueprint_DropSpatialIndex_Call{Call: _e.mock.On("DropSpatialIndex",
+		append([]interface{}{}, columns...)...)}
+}
+
+func (_c *Blueprint_DropSpatialIndex_Call) Run(run func(columns ...string)) *Blueprint_DropSpatialIndex_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]string, len(args)-0)
+		for i, a := range args[0:] {
+			if a != nil {
+				variadicArgs[i] = a.(string)
+			}
+		}
+		run(variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *Blueprint_DropSpatialIndex_Call) Return() *Blueprint_DropSpatialIndex_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *Blueprint_DropSpatialIndex_Call) RunAndReturn(run func(...string)) *Blueprint_DropSpatialIndex_Call {
 	_c.Run(run)
 	return _c
 }
@@ -1332,6 +1669,39 @@ func (_c *Blueprint_DropUniqueByName_Call) Return() *Blueprint_DropUniqueByName_
 }
 
 func (_c *Blueprint_DropUniqueByName_Call) RunAndReturn(run func(string)) *Blueprint_DropUniqueByName_Call {
+	_c.Run(run)
+	return _c
+}
+
+// Engine provides a mock function with given fields: engine
+func (_m *Blueprint) Engine(engine string) {
+	_m.Called(engine)
+}
+
+// Blueprint_Engine_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Engine'
+type Blueprint_Engine_Call struct {
+	*mock.Call
+}
+
+// Engine is a helper method to define mock.On call
+//   - engine string
+func (_e *Blueprint_Expecter) Engine(engine interface{}) *Blueprint_Engine_Call {
+	return &Blueprint_Engine_Call{Call: _e.mock.On("Engine", engine)}
+}
+
+func (_c *Blueprint_Engine_Call) Run(run func(engine string)) *Blueprint_Engine_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *Blueprint_Engine_Call) Return() *Blueprint_Engine_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *Blueprint_Engine_Call) RunAndReturn(run func(string)) *Blueprint_Engine_Call {
 	_c.Run(run)
 	return _c
 }
@@ -1729,6 +2099,124 @@ func (_c *Blueprint_FullText_Call) RunAndReturn(run func(...string) schema.Index
 	return _c
 }
 
+// Geography provides a mock function with given fields: column, options
+func (_m *Blueprint) Geography(column string, options ...interface{}) driver.ColumnDefinition {
+	var _ca []interface{}
+	_ca = append(_ca, column)
+	_ca = append(_ca, options...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Geography")
+	}
+
+	var r0 driver.ColumnDefinition
+	if rf, ok := ret.Get(0).(func(string, ...interface{}) driver.ColumnDefinition); ok {
+		r0 = rf(column, options...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(driver.ColumnDefinition)
+		}
+	}
+
+	return r0
+}
+
+// Blueprint_Geography_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Geography'
+type Blueprint_Geography_Call struct {
+	*mock.Call
+}
+
+// Geography is a helper method to define mock.On call
+//   - column string
+//   - options ...interface{}
+func (_e *Blueprint_Expecter) Geography(column interface{}, options ...interface{}) *Blueprint_Geography_Call {
+	return &Blueprint_Geography_Call{Call: _e.mock.On("Geography",
+		append([]interface{}{column}, options...)...)}
+}
+
+func (_c *Blueprint_Geography_Call) Run(run func(column string, options ...interface{})) *Blueprint_Geography_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]interface{}, len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(interface{})
+			}
+		}
+		run(args[0].(string), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *Blueprint_Geography_Call) Return(_a0 driver.ColumnDefinition) *Blueprint_Geography_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Blueprint_Geography_Call) RunAndReturn(run func(string, ...interface{}) driver.ColumnDefinition) *Blueprint_Geography_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Geometry provides a mock function with given fields: column, options
+func (_m *Blueprint) Geometry(column string, options ...interface{}) driver.ColumnDefinition {
+	var _ca []interface{}
+	_ca = append(_ca, column)
+	_ca = append(_ca, options...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Geometry")
+	}
+
+	var r0 driver.ColumnDefinition
+	if rf, ok := ret.Get(0).(func(string, ...interface{}) driver.ColumnDefinition); ok {
+		r0 = rf(column, options...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(driver.ColumnDefinition)
+		}
+	}
+
+	return r0
+}
+
+// Blueprint_Geometry_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Geometry'
+type Blueprint_Geometry_Call struct {
+	*mock.Call
+}
+
+// Geometry is a helper method to define mock.On call
+//   - column string
+//   - options ...interface{}
+func (_e *Blueprint_Expecter) Geometry(column interface{}, options ...interface{}) *Blueprint_Geometry_Call {
+	return &Blueprint_Geometry_Call{Call: _e.mock.On("Geometry",
+		append([]interface{}{column}, options...)...)}
+}
+
+func (_c *Blueprint_Geometry_Call) Run(run func(column string, options ...interface{})) *Blueprint_Geometry_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]interface{}, len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(interface{})
+			}
+		}
+		run(args[0].(string), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *Blueprint_Geometry_Call) Return(_a0 driver.ColumnDefinition) *Blueprint_Geometry_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Blueprint_Geometry_Call) RunAndReturn(run func(string, ...interface{}) driver.ColumnDefinition) *Blueprint_Geometry_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetAddedColumns provides a mock function with no fields
 func (_m *Blueprint) GetAddedColumns() []driver.ColumnDefinition {
 	ret := _m.Called()
@@ -2084,6 +2572,38 @@ func (_c *Blueprint_Index_Call) RunAndReturn(run func(...string) schema.IndexDef
 	return _c
 }
 
+// InnoDb provides a mock function with no fields
+func (_m *Blueprint) InnoDb() {
+	_m.Called()
+}
+
+// Blueprint_InnoDb_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'InnoDb'
+type Blueprint_InnoDb_Call struct {
+	*mock.Call
+}
+
+// InnoDb is a helper method to define mock.On call
+func (_e *Blueprint_Expecter) InnoDb() *Blueprint_InnoDb_Call {
+	return &Blueprint_InnoDb_Call{Call: _e.mock.On("InnoDb")}
+}
+
+func (_c *Blueprint_InnoDb_Call) Run(run func()) *Blueprint_InnoDb_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *Blueprint_InnoDb_Call) Return() *Blueprint_InnoDb_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *Blueprint_InnoDb_Call) RunAndReturn(run func()) *Blueprint_InnoDb_Call {
+	_c.Run(run)
+	return _c
+}
+
 // Integer provides a mock function with given fields: column
 func (_m *Blueprint) Integer(column string) driver.ColumnDefinition {
 	ret := _m.Called(column)
@@ -2176,6 +2696,54 @@ func (_c *Blueprint_IntegerIncrements_Call) Return(_a0 driver.ColumnDefinition) 
 }
 
 func (_c *Blueprint_IntegerIncrements_Call) RunAndReturn(run func(string) driver.ColumnDefinition) *Blueprint_IntegerIncrements_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// IpAddress provides a mock function with given fields: column
+func (_m *Blueprint) IpAddress(column string) driver.ColumnDefinition {
+	ret := _m.Called(column)
+
+	if len(ret) == 0 {
+		panic("no return value specified for IpAddress")
+	}
+
+	var r0 driver.ColumnDefinition
+	if rf, ok := ret.Get(0).(func(string) driver.ColumnDefinition); ok {
+		r0 = rf(column)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(driver.ColumnDefinition)
+		}
+	}
+
+	return r0
+}
+
+// Blueprint_IpAddress_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'IpAddress'
+type Blueprint_IpAddress_Call struct {
+	*mock.Call
+}
+
+// IpAddress is a helper method to define mock.On call
+//   - column string
+func (_e *Blueprint_Expecter) IpAddress(column interface{}) *Blueprint_IpAddress_Call {
+	return &Blueprint_IpAddress_Call{Call: _e.mock.On("IpAddress", column)}
+}
+
+func (_c *Blueprint_IpAddress_Call) Run(run func(column string)) *Blueprint_IpAddress_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *Blueprint_IpAddress_Call) Return(_a0 driver.ColumnDefinition) *Blueprint_IpAddress_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Blueprint_IpAddress_Call) RunAndReturn(run func(string) driver.ColumnDefinition) *Blueprint_IpAddress_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -2320,6 +2888,54 @@ func (_c *Blueprint_LongText_Call) Return(_a0 driver.ColumnDefinition) *Blueprin
 }
 
 func (_c *Blueprint_LongText_Call) RunAndReturn(run func(string) driver.ColumnDefinition) *Blueprint_LongText_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// MacAddress provides a mock function with given fields: column
+func (_m *Blueprint) MacAddress(column string) driver.ColumnDefinition {
+	ret := _m.Called(column)
+
+	if len(ret) == 0 {
+		panic("no return value specified for MacAddress")
+	}
+
+	var r0 driver.ColumnDefinition
+	if rf, ok := ret.Get(0).(func(string) driver.ColumnDefinition); ok {
+		r0 = rf(column)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(driver.ColumnDefinition)
+		}
+	}
+
+	return r0
+}
+
+// Blueprint_MacAddress_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'MacAddress'
+type Blueprint_MacAddress_Call struct {
+	*mock.Call
+}
+
+// MacAddress is a helper method to define mock.On call
+//   - column string
+func (_e *Blueprint_Expecter) MacAddress(column interface{}) *Blueprint_MacAddress_Call {
+	return &Blueprint_MacAddress_Call{Call: _e.mock.On("MacAddress", column)}
+}
+
+func (_c *Blueprint_MacAddress_Call) Run(run func(column string)) *Blueprint_MacAddress_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *Blueprint_MacAddress_Call) Return(_a0 driver.ColumnDefinition) *Blueprint_MacAddress_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Blueprint_MacAddress_Call) RunAndReturn(run func(string) driver.ColumnDefinition) *Blueprint_MacAddress_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -2564,6 +3180,242 @@ func (_c *Blueprint_NullableMorphs_Call) RunAndReturn(run func(string, ...string
 	return _c
 }
 
+// NullableNumericMorphs provides a mock function with given fields: name, indexName
+func (_m *Blueprint) NullableNumericMorphs(name string, indexName ...string) {
+	_va := make([]interface{}, len(indexName))
+	for _i := range indexName {
+		_va[_i] = indexName[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, name)
+	_ca = append(_ca, _va...)
+	_m.Called(_ca...)
+}
+
+// Blueprint_NullableNumericMorphs_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'NullableNumericMorphs'
+type Blueprint_NullableNumericMorphs_Call struct {
+	*mock.Call
+}
+
+// NullableNumericMorphs is a helper method to define mock.On call
+//   - name string
+//   - indexName ...string
+func (_e *Blueprint_Expecter) NullableNumericMorphs(name interface{}, indexName ...interface{}) *Blueprint_NullableNumericMorphs_Call {
+	return &Blueprint_NullableNumericMorphs_Call{Call: _e.mock.On("NullableNumericMorphs",
+		append([]interface{}{name}, indexName...)...)}
+}
+
+func (_c *Blueprint_NullableNumericMorphs_Call) Run(run func(name string, indexName ...string)) *Blueprint_NullableNumericMorphs_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]string, len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(string)
+			}
+		}
+		run(args[0].(string), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *Blueprint_NullableNumericMorphs_Call) Return() *Blueprint_NullableNumericMorphs_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *Blueprint_NullableNumericMorphs_Call) RunAndReturn(run func(string, ...string)) *Blueprint_NullableNumericMorphs_Call {
+	_c.Run(run)
+	return _c
+}
+
+// NullableTimestamps provides a mock function with given fields: precision
+func (_m *Blueprint) NullableTimestamps(precision ...int) {
+	_va := make([]interface{}, len(precision))
+	for _i := range precision {
+		_va[_i] = precision[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, _va...)
+	_m.Called(_ca...)
+}
+
+// Blueprint_NullableTimestamps_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'NullableTimestamps'
+type Blueprint_NullableTimestamps_Call struct {
+	*mock.Call
+}
+
+// NullableTimestamps is a helper method to define mock.On call
+//   - precision ...int
+func (_e *Blueprint_Expecter) NullableTimestamps(precision ...interface{}) *Blueprint_NullableTimestamps_Call {
+	return &Blueprint_NullableTimestamps_Call{Call: _e.mock.On("NullableTimestamps",
+		append([]interface{}{}, precision...)...)}
+}
+
+func (_c *Blueprint_NullableTimestamps_Call) Run(run func(precision ...int)) *Blueprint_NullableTimestamps_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]int, len(args)-0)
+		for i, a := range args[0:] {
+			if a != nil {
+				variadicArgs[i] = a.(int)
+			}
+		}
+		run(variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *Blueprint_NullableTimestamps_Call) Return() *Blueprint_NullableTimestamps_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *Blueprint_NullableTimestamps_Call) RunAndReturn(run func(...int)) *Blueprint_NullableTimestamps_Call {
+	_c.Run(run)
+	return _c
+}
+
+// NullableTimestampsTz provides a mock function with given fields: precision
+func (_m *Blueprint) NullableTimestampsTz(precision ...int) {
+	_va := make([]interface{}, len(precision))
+	for _i := range precision {
+		_va[_i] = precision[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, _va...)
+	_m.Called(_ca...)
+}
+
+// Blueprint_NullableTimestampsTz_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'NullableTimestampsTz'
+type Blueprint_NullableTimestampsTz_Call struct {
+	*mock.Call
+}
+
+// NullableTimestampsTz is a helper method to define mock.On call
+//   - precision ...int
+func (_e *Blueprint_Expecter) NullableTimestampsTz(precision ...interface{}) *Blueprint_NullableTimestampsTz_Call {
+	return &Blueprint_NullableTimestampsTz_Call{Call: _e.mock.On("NullableTimestampsTz",
+		append([]interface{}{}, precision...)...)}
+}
+
+func (_c *Blueprint_NullableTimestampsTz_Call) Run(run func(precision ...int)) *Blueprint_NullableTimestampsTz_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]int, len(args)-0)
+		for i, a := range args[0:] {
+			if a != nil {
+				variadicArgs[i] = a.(int)
+			}
+		}
+		run(variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *Blueprint_NullableTimestampsTz_Call) Return() *Blueprint_NullableTimestampsTz_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *Blueprint_NullableTimestampsTz_Call) RunAndReturn(run func(...int)) *Blueprint_NullableTimestampsTz_Call {
+	_c.Run(run)
+	return _c
+}
+
+// NullableUlidMorphs provides a mock function with given fields: name, indexName
+func (_m *Blueprint) NullableUlidMorphs(name string, indexName ...string) {
+	_va := make([]interface{}, len(indexName))
+	for _i := range indexName {
+		_va[_i] = indexName[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, name)
+	_ca = append(_ca, _va...)
+	_m.Called(_ca...)
+}
+
+// Blueprint_NullableUlidMorphs_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'NullableUlidMorphs'
+type Blueprint_NullableUlidMorphs_Call struct {
+	*mock.Call
+}
+
+// NullableUlidMorphs is a helper method to define mock.On call
+//   - name string
+//   - indexName ...string
+func (_e *Blueprint_Expecter) NullableUlidMorphs(name interface{}, indexName ...interface{}) *Blueprint_NullableUlidMorphs_Call {
+	return &Blueprint_NullableUlidMorphs_Call{Call: _e.mock.On("NullableUlidMorphs",
+		append([]interface{}{name}, indexName...)...)}
+}
+
+func (_c *Blueprint_NullableUlidMorphs_Call) Run(run func(name string, indexName ...string)) *Blueprint_NullableUlidMorphs_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]string, len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(string)
+			}
+		}
+		run(args[0].(string), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *Blueprint_NullableUlidMorphs_Call) Return() *Blueprint_NullableUlidMorphs_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *Blueprint_NullableUlidMorphs_Call) RunAndReturn(run func(string, ...string)) *Blueprint_NullableUlidMorphs_Call {
+	_c.Run(run)
+	return _c
+}
+
+// NullableUuidMorphs provides a mock function with given fields: name, indexName
+func (_m *Blueprint) NullableUuidMorphs(name string, indexName ...string) {
+	_va := make([]interface{}, len(indexName))
+	for _i := range indexName {
+		_va[_i] = indexName[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, name)
+	_ca = append(_ca, _va...)
+	_m.Called(_ca...)
+}
+
+// Blueprint_NullableUuidMorphs_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'NullableUuidMorphs'
+type Blueprint_NullableUuidMorphs_Call struct {
+	*mock.Call
+}
+
+// NullableUuidMorphs is a helper method to define mock.On call
+//   - name string
+//   - indexName ...string
+func (_e *Blueprint_Expecter) NullableUuidMorphs(name interface{}, indexName ...interface{}) *Blueprint_NullableUuidMorphs_Call {
+	return &Blueprint_NullableUuidMorphs_Call{Call: _e.mock.On("NullableUuidMorphs",
+		append([]interface{}{name}, indexName...)...)}
+}
+
+func (_c *Blueprint_NullableUuidMorphs_Call) Run(run func(name string, indexName ...string)) *Blueprint_NullableUuidMorphs_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]string, len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(string)
+			}
+		}
+		run(args[0].(string), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *Blueprint_NullableUuidMorphs_Call) Return() *Blueprint_NullableUuidMorphs_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *Blueprint_NullableUuidMorphs_Call) RunAndReturn(run func(string, ...string)) *Blueprint_NullableUuidMorphs_Call {
+	_c.Run(run)
+	return _c
+}
+
 // NumericMorphs provides a mock function with given fields: name, indexName
 func (_m *Blueprint) NumericMorphs(name string, indexName ...string) {
 	_va := make([]interface{}, len(indexName))
@@ -2655,6 +3507,151 @@ func (_c *Blueprint_Primary_Call) Return() *Blueprint_Primary_Call {
 
 func (_c *Blueprint_Primary_Call) RunAndReturn(run func(...string)) *Blueprint_Primary_Call {
 	_c.Run(run)
+	return _c
+}
+
+// RawColumn provides a mock function with given fields: column, definition
+func (_m *Blueprint) RawColumn(column string, definition string) driver.ColumnDefinition {
+	ret := _m.Called(column, definition)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RawColumn")
+	}
+
+	var r0 driver.ColumnDefinition
+	if rf, ok := ret.Get(0).(func(string, string) driver.ColumnDefinition); ok {
+		r0 = rf(column, definition)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(driver.ColumnDefinition)
+		}
+	}
+
+	return r0
+}
+
+// Blueprint_RawColumn_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RawColumn'
+type Blueprint_RawColumn_Call struct {
+	*mock.Call
+}
+
+// RawColumn is a helper method to define mock.On call
+//   - column string
+//   - definition string
+func (_e *Blueprint_Expecter) RawColumn(column interface{}, definition interface{}) *Blueprint_RawColumn_Call {
+	return &Blueprint_RawColumn_Call{Call: _e.mock.On("RawColumn", column, definition)}
+}
+
+func (_c *Blueprint_RawColumn_Call) Run(run func(column string, definition string)) *Blueprint_RawColumn_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string), args[1].(string))
+	})
+	return _c
+}
+
+func (_c *Blueprint_RawColumn_Call) Return(_a0 driver.ColumnDefinition) *Blueprint_RawColumn_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Blueprint_RawColumn_Call) RunAndReturn(run func(string, string) driver.ColumnDefinition) *Blueprint_RawColumn_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// RawIndex provides a mock function with given fields: expression, name
+func (_m *Blueprint) RawIndex(expression string, name string) schema.IndexDefinition {
+	ret := _m.Called(expression, name)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RawIndex")
+	}
+
+	var r0 schema.IndexDefinition
+	if rf, ok := ret.Get(0).(func(string, string) schema.IndexDefinition); ok {
+		r0 = rf(expression, name)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(schema.IndexDefinition)
+		}
+	}
+
+	return r0
+}
+
+// Blueprint_RawIndex_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RawIndex'
+type Blueprint_RawIndex_Call struct {
+	*mock.Call
+}
+
+// RawIndex is a helper method to define mock.On call
+//   - expression string
+//   - name string
+func (_e *Blueprint_Expecter) RawIndex(expression interface{}, name interface{}) *Blueprint_RawIndex_Call {
+	return &Blueprint_RawIndex_Call{Call: _e.mock.On("RawIndex", expression, name)}
+}
+
+func (_c *Blueprint_RawIndex_Call) Run(run func(expression string, name string)) *Blueprint_RawIndex_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string), args[1].(string))
+	})
+	return _c
+}
+
+func (_c *Blueprint_RawIndex_Call) Return(_a0 schema.IndexDefinition) *Blueprint_RawIndex_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Blueprint_RawIndex_Call) RunAndReturn(run func(string, string) schema.IndexDefinition) *Blueprint_RawIndex_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// RememberToken provides a mock function with no fields
+func (_m *Blueprint) RememberToken() driver.ColumnDefinition {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for RememberToken")
+	}
+
+	var r0 driver.ColumnDefinition
+	if rf, ok := ret.Get(0).(func() driver.ColumnDefinition); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(driver.ColumnDefinition)
+		}
+	}
+
+	return r0
+}
+
+// Blueprint_RememberToken_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RememberToken'
+type Blueprint_RememberToken_Call struct {
+	*mock.Call
+}
+
+// RememberToken is a helper method to define mock.On call
+func (_e *Blueprint_Expecter) RememberToken() *Blueprint_RememberToken_Call {
+	return &Blueprint_RememberToken_Call{Call: _e.mock.On("RememberToken")}
+}
+
+func (_c *Blueprint_RememberToken_Call) Run(run func()) *Blueprint_RememberToken_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *Blueprint_RememberToken_Call) Return(_a0 driver.ColumnDefinition) *Blueprint_RememberToken_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Blueprint_RememberToken_Call) RunAndReturn(run func() driver.ColumnDefinition) *Blueprint_RememberToken_Call {
+	_c.Call.Return(run)
 	return _c
 }
 
@@ -2756,6 +3753,55 @@ func (_c *Blueprint_RenameIndex_Call) Return() *Blueprint_RenameIndex_Call {
 
 func (_c *Blueprint_RenameIndex_Call) RunAndReturn(run func(string, string)) *Blueprint_RenameIndex_Call {
 	_c.Run(run)
+	return _c
+}
+
+// Set provides a mock function with given fields: column, allowed
+func (_m *Blueprint) Set(column string, allowed []interface{}) driver.ColumnDefinition {
+	ret := _m.Called(column, allowed)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Set")
+	}
+
+	var r0 driver.ColumnDefinition
+	if rf, ok := ret.Get(0).(func(string, []interface{}) driver.ColumnDefinition); ok {
+		r0 = rf(column, allowed)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(driver.ColumnDefinition)
+		}
+	}
+
+	return r0
+}
+
+// Blueprint_Set_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Set'
+type Blueprint_Set_Call struct {
+	*mock.Call
+}
+
+// Set is a helper method to define mock.On call
+//   - column string
+//   - allowed []interface{}
+func (_e *Blueprint_Expecter) Set(column interface{}, allowed interface{}) *Blueprint_Set_Call {
+	return &Blueprint_Set_Call{Call: _e.mock.On("Set", column, allowed)}
+}
+
+func (_c *Blueprint_Set_Call) Run(run func(column string, allowed []interface{})) *Blueprint_Set_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string), args[1].([]interface{}))
+	})
+	return _c
+}
+
+func (_c *Blueprint_Set_Call) Return(_a0 driver.ColumnDefinition) *Blueprint_Set_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Blueprint_Set_Call) RunAndReturn(run func(string, []interface{}) driver.ColumnDefinition) *Blueprint_Set_Call {
+	_c.Call.Return(run)
 	return _c
 }
 
@@ -2949,6 +3995,52 @@ func (_c *Blueprint_SoftDeletes_Call) RunAndReturn(run func(...string) driver.Co
 	return _c
 }
 
+// SoftDeletesDatetime provides a mock function with given fields: column
+func (_m *Blueprint) SoftDeletesDatetime(column ...string) {
+	_va := make([]interface{}, len(column))
+	for _i := range column {
+		_va[_i] = column[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, _va...)
+	_m.Called(_ca...)
+}
+
+// Blueprint_SoftDeletesDatetime_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SoftDeletesDatetime'
+type Blueprint_SoftDeletesDatetime_Call struct {
+	*mock.Call
+}
+
+// SoftDeletesDatetime is a helper method to define mock.On call
+//   - column ...string
+func (_e *Blueprint_Expecter) SoftDeletesDatetime(column ...interface{}) *Blueprint_SoftDeletesDatetime_Call {
+	return &Blueprint_SoftDeletesDatetime_Call{Call: _e.mock.On("SoftDeletesDatetime",
+		append([]interface{}{}, column...)...)}
+}
+
+func (_c *Blueprint_SoftDeletesDatetime_Call) Run(run func(column ...string)) *Blueprint_SoftDeletesDatetime_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]string, len(args)-0)
+		for i, a := range args[0:] {
+			if a != nil {
+				variadicArgs[i] = a.(string)
+			}
+		}
+		run(variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *Blueprint_SoftDeletesDatetime_Call) Return() *Blueprint_SoftDeletesDatetime_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *Blueprint_SoftDeletesDatetime_Call) RunAndReturn(run func(...string)) *Blueprint_SoftDeletesDatetime_Call {
+	_c.Run(run)
+	return _c
+}
+
 // SoftDeletesTz provides a mock function with given fields: column
 func (_m *Blueprint) SoftDeletesTz(column ...string) driver.ColumnDefinition {
 	_va := make([]interface{}, len(column))
@@ -3006,6 +4098,67 @@ func (_c *Blueprint_SoftDeletesTz_Call) Return(_a0 driver.ColumnDefinition) *Blu
 }
 
 func (_c *Blueprint_SoftDeletesTz_Call) RunAndReturn(run func(...string) driver.ColumnDefinition) *Blueprint_SoftDeletesTz_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SpatialIndex provides a mock function with given fields: columns
+func (_m *Blueprint) SpatialIndex(columns ...string) schema.IndexDefinition {
+	_va := make([]interface{}, len(columns))
+	for _i := range columns {
+		_va[_i] = columns[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SpatialIndex")
+	}
+
+	var r0 schema.IndexDefinition
+	if rf, ok := ret.Get(0).(func(...string) schema.IndexDefinition); ok {
+		r0 = rf(columns...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(schema.IndexDefinition)
+		}
+	}
+
+	return r0
+}
+
+// Blueprint_SpatialIndex_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SpatialIndex'
+type Blueprint_SpatialIndex_Call struct {
+	*mock.Call
+}
+
+// SpatialIndex is a helper method to define mock.On call
+//   - columns ...string
+func (_e *Blueprint_Expecter) SpatialIndex(columns ...interface{}) *Blueprint_SpatialIndex_Call {
+	return &Blueprint_SpatialIndex_Call{Call: _e.mock.On("SpatialIndex",
+		append([]interface{}{}, columns...)...)}
+}
+
+func (_c *Blueprint_SpatialIndex_Call) Run(run func(columns ...string)) *Blueprint_SpatialIndex_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]string, len(args)-0)
+		for i, a := range args[0:] {
+			if a != nil {
+				variadicArgs[i] = a.(string)
+			}
+		}
+		run(variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *Blueprint_SpatialIndex_Call) Return(_a0 schema.IndexDefinition) *Blueprint_SpatialIndex_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Blueprint_SpatialIndex_Call) RunAndReturn(run func(...string) schema.IndexDefinition) *Blueprint_SpatialIndex_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -3070,6 +4223,38 @@ func (_c *Blueprint_String_Call) Return(_a0 driver.ColumnDefinition) *Blueprint_
 
 func (_c *Blueprint_String_Call) RunAndReturn(run func(string, ...int) driver.ColumnDefinition) *Blueprint_String_Call {
 	_c.Call.Return(run)
+	return _c
+}
+
+// Temporary provides a mock function with no fields
+func (_m *Blueprint) Temporary() {
+	_m.Called()
+}
+
+// Blueprint_Temporary_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Temporary'
+type Blueprint_Temporary_Call struct {
+	*mock.Call
+}
+
+// Temporary is a helper method to define mock.On call
+func (_e *Blueprint_Expecter) Temporary() *Blueprint_Temporary_Call {
+	return &Blueprint_Temporary_Call{Call: _e.mock.On("Temporary")}
+}
+
+func (_c *Blueprint_Temporary_Call) Run(run func()) *Blueprint_Temporary_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *Blueprint_Temporary_Call) Return() *Blueprint_Temporary_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *Blueprint_Temporary_Call) RunAndReturn(run func()) *Blueprint_Temporary_Call {
+	_c.Run(run)
 	return _c
 }
 
@@ -4172,6 +5357,117 @@ func (_c *Blueprint_UuidMorphs_Call) Return() *Blueprint_UuidMorphs_Call {
 
 func (_c *Blueprint_UuidMorphs_Call) RunAndReturn(run func(string, ...string)) *Blueprint_UuidMorphs_Call {
 	_c.Run(run)
+	return _c
+}
+
+// Vector provides a mock function with given fields: column, dimensions
+func (_m *Blueprint) Vector(column string, dimensions ...int) driver.ColumnDefinition {
+	_va := make([]interface{}, len(dimensions))
+	for _i := range dimensions {
+		_va[_i] = dimensions[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, column)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Vector")
+	}
+
+	var r0 driver.ColumnDefinition
+	if rf, ok := ret.Get(0).(func(string, ...int) driver.ColumnDefinition); ok {
+		r0 = rf(column, dimensions...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(driver.ColumnDefinition)
+		}
+	}
+
+	return r0
+}
+
+// Blueprint_Vector_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Vector'
+type Blueprint_Vector_Call struct {
+	*mock.Call
+}
+
+// Vector is a helper method to define mock.On call
+//   - column string
+//   - dimensions ...int
+func (_e *Blueprint_Expecter) Vector(column interface{}, dimensions ...interface{}) *Blueprint_Vector_Call {
+	return &Blueprint_Vector_Call{Call: _e.mock.On("Vector",
+		append([]interface{}{column}, dimensions...)...)}
+}
+
+func (_c *Blueprint_Vector_Call) Run(run func(column string, dimensions ...int)) *Blueprint_Vector_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]int, len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(int)
+			}
+		}
+		run(args[0].(string), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *Blueprint_Vector_Call) Return(_a0 driver.ColumnDefinition) *Blueprint_Vector_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Blueprint_Vector_Call) RunAndReturn(run func(string, ...int) driver.ColumnDefinition) *Blueprint_Vector_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Year provides a mock function with given fields: column
+func (_m *Blueprint) Year(column string) driver.ColumnDefinition {
+	ret := _m.Called(column)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Year")
+	}
+
+	var r0 driver.ColumnDefinition
+	if rf, ok := ret.Get(0).(func(string) driver.ColumnDefinition); ok {
+		r0 = rf(column)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(driver.ColumnDefinition)
+		}
+	}
+
+	return r0
+}
+
+// Blueprint_Year_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Year'
+type Blueprint_Year_Call struct {
+	*mock.Call
+}
+
+// Year is a helper method to define mock.On call
+//   - column string
+func (_e *Blueprint_Expecter) Year(column interface{}) *Blueprint_Year_Call {
+	return &Blueprint_Year_Call{Call: _e.mock.On("Year", column)}
+}
+
+func (_c *Blueprint_Year_Call) Run(run func(column string)) *Blueprint_Year_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *Blueprint_Year_Call) Return(_a0 driver.ColumnDefinition) *Blueprint_Year_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Blueprint_Year_Call) RunAndReturn(run func(string) driver.ColumnDefinition) *Blueprint_Year_Call {
+	_c.Call.Return(run)
 	return _c
 }
 

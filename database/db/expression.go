@@ -3,7 +3,9 @@ package db
 import (
 	"strconv"
 	"strings"
+	"time"
 
+	dbdriver "github.com/goravel/framework/database/driver"
 	querybuilder "github.com/goravel/framework/database/query"
 	"github.com/goravel/framework/database/query/grammars"
 )
@@ -30,6 +32,34 @@ func Raw(expr string, args ...any) any {
 	}
 
 	return querybuilder.Raw(interpolate(expr, args))
+}
+
+// explainWithDriver uses the same scalar escaping as DB.Escape, then substitutes the
+// placeholders already prepared for database/sql. Expressions prevent a second quoting pass.
+func explainWithDriver(statement string, bindings []any, driver string) (string, error) {
+	escaped := make([]any, len(bindings))
+	for i, value := range bindings {
+		switch scalar := value.(type) {
+		case bool:
+			value = 0
+			if scalar {
+				value = 1
+			}
+		case time.Time:
+			format := "2006-01-02 15:04:05"
+			if querybuilder.CanonicalDialect(driver) == querybuilder.DialectSqlServer {
+				format += ".000"
+			}
+			value = scalar.Format(format)
+		}
+		_, binary := value.([]byte)
+		literal, err := dbdriver.Escape(driver, value, binary)
+		if err != nil {
+			return "", err
+		}
+		escaped[i] = querybuilder.Raw(literal)
+	}
+	return interpolate(statement, escaped), nil
 }
 
 // interpolate replaces each placeholder with a literal rendering of the argument.
@@ -67,18 +97,28 @@ func interpolate(expr string, args []any) string {
 
 		if quote != 0 {
 			out.WriteByte(char)
+			if i+1 < len(expr) && (char == '\\' || char == quote && expr[i+1] == quote) {
+				i++
+				out.WriteByte(expr[i])
+				continue
+			}
 			if char == quote {
 				quote = 0
 			}
 			continue
 		}
 
-		if char == '\'' || char == '"' {
+		if char == '\'' || char == '"' || char == '`' {
 			quote = char
 			out.WriteByte(char)
 			continue
 		}
 
+		if char == '?' && i+1 < len(expr) && expr[i+1] == '?' {
+			out.WriteString("??")
+			i++
+			continue
+		}
 		if char == '?' && index < len(args) {
 			out.WriteString(renderLiteral(args[index]))
 			index++
@@ -103,13 +143,17 @@ func numberedPlaceholderPrefix(expr string) string {
 		char := expr[i]
 
 		if quote != 0 {
+			if i+1 < len(expr) && (char == '\\' || char == quote && expr[i+1] == quote) {
+				i++
+				continue
+			}
 			if char == quote {
 				quote = 0
 			}
 			continue
 		}
 
-		if char == '\'' || char == '"' {
+		if char == '\'' || char == '"' || char == '`' {
 			quote = char
 			continue
 		}
@@ -145,13 +189,18 @@ func interpolateNumbered(expr string, args []any, prefix string) string {
 
 		if quote != 0 {
 			out.WriteByte(char)
+			if i+1 < len(expr) && (char == '\\' || char == quote && expr[i+1] == quote) {
+				i++
+				out.WriteByte(expr[i])
+				continue
+			}
 			if char == quote {
 				quote = 0
 			}
 			continue
 		}
 
-		if char == '\'' || char == '"' {
+		if char == '\'' || char == '"' || char == '`' {
 			quote = char
 			out.WriteByte(char)
 			continue

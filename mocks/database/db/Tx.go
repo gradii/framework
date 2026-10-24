@@ -3,6 +3,8 @@
 package db
 
 import (
+	context "context"
+
 	db "github.com/goravel/framework/contracts/database/db"
 	mock "github.com/stretchr/testify/mock"
 )
@@ -18,6 +20,303 @@ type Tx_Expecter struct {
 
 func (_m *Tx) EXPECT() *Tx_Expecter {
 	return &Tx_Expecter{mock: &_m.Mock}
+}
+
+// AffectingStatement provides a mock function with given fields: sql, args
+func (_m *Tx) AffectingStatement(sql string, args ...interface{}) (*db.Result, error) {
+	var _ca []interface{}
+	_ca = append(_ca, sql)
+	_ca = append(_ca, args...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for AffectingStatement")
+	}
+
+	var r0 *db.Result
+	var r1 error
+	if rf, ok := ret.Get(0).(func(string, ...interface{}) (*db.Result, error)); ok {
+		return rf(sql, args...)
+	}
+	if rf, ok := ret.Get(0).(func(string, ...interface{}) *db.Result); ok {
+		r0 = rf(sql, args...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*db.Result)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(string, ...interface{}) error); ok {
+		r1 = rf(sql, args...)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// Tx_AffectingStatement_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'AffectingStatement'
+type Tx_AffectingStatement_Call struct {
+	*mock.Call
+}
+
+// AffectingStatement is a helper method to define mock.On call
+//   - sql string
+//   - args ...interface{}
+func (_e *Tx_Expecter) AffectingStatement(sql interface{}, args ...interface{}) *Tx_AffectingStatement_Call {
+	return &Tx_AffectingStatement_Call{Call: _e.mock.On("AffectingStatement",
+		append([]interface{}{sql}, args...)...)}
+}
+
+func (_c *Tx_AffectingStatement_Call) Run(run func(sql string, args ...interface{})) *Tx_AffectingStatement_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]interface{}, len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(interface{})
+			}
+		}
+		run(args[0].(string), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *Tx_AffectingStatement_Call) Return(_a0 *db.Result, _a1 error) *Tx_AffectingStatement_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Tx_AffectingStatement_Call) RunAndReturn(run func(string, ...interface{}) (*db.Result, error)) *Tx_AffectingStatement_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// AfterCommit provides a mock function with given fields: callback
+func (_m *Tx) AfterCommit(callback func() error) error {
+	ret := _m.Called(callback)
+
+	if len(ret) == 0 {
+		panic("no return value specified for AfterCommit")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(func() error) error); ok {
+		r0 = rf(callback)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Tx_AfterCommit_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'AfterCommit'
+type Tx_AfterCommit_Call struct {
+	*mock.Call
+}
+
+// AfterCommit is a helper method to define mock.On call
+//   - callback func() error
+func (_e *Tx_Expecter) AfterCommit(callback interface{}) *Tx_AfterCommit_Call {
+	return &Tx_AfterCommit_Call{Call: _e.mock.On("AfterCommit", callback)}
+}
+
+func (_c *Tx_AfterCommit_Call) Run(run func(callback func() error)) *Tx_AfterCommit_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(func() error))
+	})
+	return _c
+}
+
+func (_c *Tx_AfterCommit_Call) Return(_a0 error) *Tx_AfterCommit_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Tx_AfterCommit_Call) RunAndReturn(run func(func() error) error) *Tx_AfterCommit_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// AfterRollBack provides a mock function with given fields: callback
+func (_m *Tx) AfterRollBack(callback func() error) error {
+	ret := _m.Called(callback)
+
+	if len(ret) == 0 {
+		panic("no return value specified for AfterRollBack")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(func() error) error); ok {
+		r0 = rf(callback)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Tx_AfterRollBack_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'AfterRollBack'
+type Tx_AfterRollBack_Call struct {
+	*mock.Call
+}
+
+// AfterRollBack is a helper method to define mock.On call
+//   - callback func() error
+func (_e *Tx_Expecter) AfterRollBack(callback interface{}) *Tx_AfterRollBack_Call {
+	return &Tx_AfterRollBack_Call{Call: _e.mock.On("AfterRollBack", callback)}
+}
+
+func (_c *Tx_AfterRollBack_Call) Run(run func(callback func() error)) *Tx_AfterRollBack_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(func() error))
+	})
+	return _c
+}
+
+func (_c *Tx_AfterRollBack_Call) Return(_a0 error) *Tx_AfterRollBack_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Tx_AfterRollBack_Call) RunAndReturn(run func(func() error) error) *Tx_AfterRollBack_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// AfterRollback provides a mock function with given fields: callback
+func (_m *Tx) AfterRollback(callback func() error) error {
+	ret := _m.Called(callback)
+
+	if len(ret) == 0 {
+		panic("no return value specified for AfterRollback")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(func() error) error); ok {
+		r0 = rf(callback)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Tx_AfterRollback_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'AfterRollback'
+type Tx_AfterRollback_Call struct {
+	*mock.Call
+}
+
+// AfterRollback is a helper method to define mock.On call
+//   - callback func() error
+func (_e *Tx_Expecter) AfterRollback(callback interface{}) *Tx_AfterRollback_Call {
+	return &Tx_AfterRollback_Call{Call: _e.mock.On("AfterRollback", callback)}
+}
+
+func (_c *Tx_AfterRollback_Call) Run(run func(callback func() error)) *Tx_AfterRollback_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(func() error))
+	})
+	return _c
+}
+
+func (_c *Tx_AfterRollback_Call) Return(_a0 error) *Tx_AfterRollback_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Tx_AfterRollback_Call) RunAndReturn(run func(func() error) error) *Tx_AfterRollback_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// BeforeStartingTransaction provides a mock function with given fields: callback
+func (_m *Tx) BeforeStartingTransaction(callback func(db.Tx) error) {
+	_m.Called(callback)
+}
+
+// Tx_BeforeStartingTransaction_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BeforeStartingTransaction'
+type Tx_BeforeStartingTransaction_Call struct {
+	*mock.Call
+}
+
+// BeforeStartingTransaction is a helper method to define mock.On call
+//   - callback func(db.Tx) error
+func (_e *Tx_Expecter) BeforeStartingTransaction(callback interface{}) *Tx_BeforeStartingTransaction_Call {
+	return &Tx_BeforeStartingTransaction_Call{Call: _e.mock.On("BeforeStartingTransaction", callback)}
+}
+
+func (_c *Tx_BeforeStartingTransaction_Call) Run(run func(callback func(db.Tx) error)) *Tx_BeforeStartingTransaction_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(func(db.Tx) error))
+	})
+	return _c
+}
+
+func (_c *Tx_BeforeStartingTransaction_Call) Return() *Tx_BeforeStartingTransaction_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *Tx_BeforeStartingTransaction_Call) RunAndReturn(run func(func(db.Tx) error)) *Tx_BeforeStartingTransaction_Call {
+	_c.Run(run)
+	return _c
+}
+
+// BeginTransaction provides a mock function with no fields
+func (_m *Tx) BeginTransaction() (db.Tx, error) {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for BeginTransaction")
+	}
+
+	var r0 db.Tx
+	var r1 error
+	if rf, ok := ret.Get(0).(func() (db.Tx, error)); ok {
+		return rf()
+	}
+	if rf, ok := ret.Get(0).(func() db.Tx); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(db.Tx)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// Tx_BeginTransaction_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BeginTransaction'
+type Tx_BeginTransaction_Call struct {
+	*mock.Call
+}
+
+// BeginTransaction is a helper method to define mock.On call
+func (_e *Tx_Expecter) BeginTransaction() *Tx_BeginTransaction_Call {
+	return &Tx_BeginTransaction_Call{Call: _e.mock.On("BeginTransaction")}
+}
+
+func (_c *Tx_BeginTransaction_Call) Run(run func()) *Tx_BeginTransaction_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *Tx_BeginTransaction_Call) Return(_a0 db.Tx, _a1 error) *Tx_BeginTransaction_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Tx_BeginTransaction_Call) RunAndReturn(run func() (db.Tx, error)) *Tx_BeginTransaction_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // Commit provides a mock function with no fields
@@ -203,6 +502,53 @@ func (_c *Tx_Insert_Call) RunAndReturn(run func(string, ...interface{}) (*db.Res
 	return _c
 }
 
+// Query provides a mock function with no fields
+func (_m *Tx) Query() db.Query {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for Query")
+	}
+
+	var r0 db.Query
+	if rf, ok := ret.Get(0).(func() db.Query); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(db.Query)
+		}
+	}
+
+	return r0
+}
+
+// Tx_Query_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Query'
+type Tx_Query_Call struct {
+	*mock.Call
+}
+
+// Query is a helper method to define mock.On call
+func (_e *Tx_Expecter) Query() *Tx_Query_Call {
+	return &Tx_Query_Call{Call: _e.mock.On("Query")}
+}
+
+func (_c *Tx_Query_Call) Run(run func()) *Tx_Query_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *Tx_Query_Call) Return(_a0 db.Query) *Tx_Query_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Tx_Query_Call) RunAndReturn(run func() db.Query) *Tx_Query_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Rollback provides a mock function with no fields
 func (_m *Tx) Rollback() error {
 	ret := _m.Called()
@@ -244,6 +590,121 @@ func (_c *Tx_Rollback_Call) Return(_a0 error) *Tx_Rollback_Call {
 }
 
 func (_c *Tx_Rollback_Call) RunAndReturn(run func() error) *Tx_Rollback_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// RollbackTo provides a mock function with given fields: level
+func (_m *Tx) RollbackTo(level int) error {
+	ret := _m.Called(level)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RollbackTo")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(int) error); ok {
+		r0 = rf(level)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Tx_RollbackTo_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RollbackTo'
+type Tx_RollbackTo_Call struct {
+	*mock.Call
+}
+
+// RollbackTo is a helper method to define mock.On call
+//   - level int
+func (_e *Tx_Expecter) RollbackTo(level interface{}) *Tx_RollbackTo_Call {
+	return &Tx_RollbackTo_Call{Call: _e.mock.On("RollbackTo", level)}
+}
+
+func (_c *Tx_RollbackTo_Call) Run(run func(level int)) *Tx_RollbackTo_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(int))
+	})
+	return _c
+}
+
+func (_c *Tx_RollbackTo_Call) Return(_a0 error) *Tx_RollbackTo_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Tx_RollbackTo_Call) RunAndReturn(run func(int) error) *Tx_RollbackTo_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Scalar provides a mock function with given fields: sql, args
+func (_m *Tx) Scalar(sql string, args ...interface{}) (interface{}, error) {
+	var _ca []interface{}
+	_ca = append(_ca, sql)
+	_ca = append(_ca, args...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Scalar")
+	}
+
+	var r0 interface{}
+	var r1 error
+	if rf, ok := ret.Get(0).(func(string, ...interface{}) (interface{}, error)); ok {
+		return rf(sql, args...)
+	}
+	if rf, ok := ret.Get(0).(func(string, ...interface{}) interface{}); ok {
+		r0 = rf(sql, args...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(interface{})
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(string, ...interface{}) error); ok {
+		r1 = rf(sql, args...)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// Tx_Scalar_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Scalar'
+type Tx_Scalar_Call struct {
+	*mock.Call
+}
+
+// Scalar is a helper method to define mock.On call
+//   - sql string
+//   - args ...interface{}
+func (_e *Tx_Expecter) Scalar(sql interface{}, args ...interface{}) *Tx_Scalar_Call {
+	return &Tx_Scalar_Call{Call: _e.mock.On("Scalar",
+		append([]interface{}{sql}, args...)...)}
+}
+
+func (_c *Tx_Scalar_Call) Run(run func(sql string, args ...interface{})) *Tx_Scalar_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]interface{}, len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(interface{})
+			}
+		}
+		run(args[0].(string), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *Tx_Scalar_Call) Return(_a0 interface{}, _a1 error) *Tx_Scalar_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Tx_Scalar_Call) RunAndReturn(run func(string, ...interface{}) (interface{}, error)) *Tx_Scalar_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -306,6 +767,191 @@ func (_c *Tx_Select_Call) RunAndReturn(run func(interface{}, string, ...interfac
 	return _c
 }
 
+// SelectFromWriteConnection provides a mock function with given fields: dest, sql, args
+func (_m *Tx) SelectFromWriteConnection(dest interface{}, sql string, args ...interface{}) error {
+	var _ca []interface{}
+	_ca = append(_ca, dest, sql)
+	_ca = append(_ca, args...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SelectFromWriteConnection")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(interface{}, string, ...interface{}) error); ok {
+		r0 = rf(dest, sql, args...)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Tx_SelectFromWriteConnection_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SelectFromWriteConnection'
+type Tx_SelectFromWriteConnection_Call struct {
+	*mock.Call
+}
+
+// SelectFromWriteConnection is a helper method to define mock.On call
+//   - dest interface{}
+//   - sql string
+//   - args ...interface{}
+func (_e *Tx_Expecter) SelectFromWriteConnection(dest interface{}, sql interface{}, args ...interface{}) *Tx_SelectFromWriteConnection_Call {
+	return &Tx_SelectFromWriteConnection_Call{Call: _e.mock.On("SelectFromWriteConnection",
+		append([]interface{}{dest, sql}, args...)...)}
+}
+
+func (_c *Tx_SelectFromWriteConnection_Call) Run(run func(dest interface{}, sql string, args ...interface{})) *Tx_SelectFromWriteConnection_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]interface{}, len(args)-2)
+		for i, a := range args[2:] {
+			if a != nil {
+				variadicArgs[i] = a.(interface{})
+			}
+		}
+		run(args[0].(interface{}), args[1].(string), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *Tx_SelectFromWriteConnection_Call) Return(_a0 error) *Tx_SelectFromWriteConnection_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Tx_SelectFromWriteConnection_Call) RunAndReturn(run func(interface{}, string, ...interface{}) error) *Tx_SelectFromWriteConnection_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SelectOne provides a mock function with given fields: dest, sql, args
+func (_m *Tx) SelectOne(dest interface{}, sql string, args ...interface{}) error {
+	var _ca []interface{}
+	_ca = append(_ca, dest, sql)
+	_ca = append(_ca, args...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SelectOne")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(interface{}, string, ...interface{}) error); ok {
+		r0 = rf(dest, sql, args...)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Tx_SelectOne_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SelectOne'
+type Tx_SelectOne_Call struct {
+	*mock.Call
+}
+
+// SelectOne is a helper method to define mock.On call
+//   - dest interface{}
+//   - sql string
+//   - args ...interface{}
+func (_e *Tx_Expecter) SelectOne(dest interface{}, sql interface{}, args ...interface{}) *Tx_SelectOne_Call {
+	return &Tx_SelectOne_Call{Call: _e.mock.On("SelectOne",
+		append([]interface{}{dest, sql}, args...)...)}
+}
+
+func (_c *Tx_SelectOne_Call) Run(run func(dest interface{}, sql string, args ...interface{})) *Tx_SelectOne_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]interface{}, len(args)-2)
+		for i, a := range args[2:] {
+			if a != nil {
+				variadicArgs[i] = a.(interface{})
+			}
+		}
+		run(args[0].(interface{}), args[1].(string), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *Tx_SelectOne_Call) Return(_a0 error) *Tx_SelectOne_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Tx_SelectOne_Call) RunAndReturn(run func(interface{}, string, ...interface{}) error) *Tx_SelectOne_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SelectResultSets provides a mock function with given fields: sql, args
+func (_m *Tx) SelectResultSets(sql string, args ...interface{}) ([][]map[string]interface{}, error) {
+	var _ca []interface{}
+	_ca = append(_ca, sql)
+	_ca = append(_ca, args...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SelectResultSets")
+	}
+
+	var r0 [][]map[string]interface{}
+	var r1 error
+	if rf, ok := ret.Get(0).(func(string, ...interface{}) ([][]map[string]interface{}, error)); ok {
+		return rf(sql, args...)
+	}
+	if rf, ok := ret.Get(0).(func(string, ...interface{}) [][]map[string]interface{}); ok {
+		r0 = rf(sql, args...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([][]map[string]interface{})
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(string, ...interface{}) error); ok {
+		r1 = rf(sql, args...)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// Tx_SelectResultSets_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SelectResultSets'
+type Tx_SelectResultSets_Call struct {
+	*mock.Call
+}
+
+// SelectResultSets is a helper method to define mock.On call
+//   - sql string
+//   - args ...interface{}
+func (_e *Tx_Expecter) SelectResultSets(sql interface{}, args ...interface{}) *Tx_SelectResultSets_Call {
+	return &Tx_SelectResultSets_Call{Call: _e.mock.On("SelectResultSets",
+		append([]interface{}{sql}, args...)...)}
+}
+
+func (_c *Tx_SelectResultSets_Call) Run(run func(sql string, args ...interface{})) *Tx_SelectResultSets_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]interface{}, len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(interface{})
+			}
+		}
+		run(args[0].(string), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *Tx_SelectResultSets_Call) Return(_a0 [][]map[string]interface{}, _a1 error) *Tx_SelectResultSets_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Tx_SelectResultSets_Call) RunAndReturn(run func(string, ...interface{}) ([][]map[string]interface{}, error)) *Tx_SelectResultSets_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Statement provides a mock function with given fields: sql, args
 func (_m *Tx) Statement(sql string, args ...interface{}) error {
 	var _ca []interface{}
@@ -363,6 +1009,64 @@ func (_c *Tx_Statement_Call) RunAndReturn(run func(string, ...interface{}) error
 	return _c
 }
 
+// StatementContext provides a mock function with given fields: ctx, sql, args
+func (_m *Tx) StatementContext(ctx context.Context, sql string, args ...interface{}) error {
+	var _ca []interface{}
+	_ca = append(_ca, ctx, sql)
+	_ca = append(_ca, args...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for StatementContext")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, ...interface{}) error); ok {
+		r0 = rf(ctx, sql, args...)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Tx_StatementContext_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'StatementContext'
+type Tx_StatementContext_Call struct {
+	*mock.Call
+}
+
+// StatementContext is a helper method to define mock.On call
+//   - ctx context.Context
+//   - sql string
+//   - args ...interface{}
+func (_e *Tx_Expecter) StatementContext(ctx interface{}, sql interface{}, args ...interface{}) *Tx_StatementContext_Call {
+	return &Tx_StatementContext_Call{Call: _e.mock.On("StatementContext",
+		append([]interface{}{ctx, sql}, args...)...)}
+}
+
+func (_c *Tx_StatementContext_Call) Run(run func(ctx context.Context, sql string, args ...interface{})) *Tx_StatementContext_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]interface{}, len(args)-2)
+		for i, a := range args[2:] {
+			if a != nil {
+				variadicArgs[i] = a.(interface{})
+			}
+		}
+		run(args[0].(context.Context), args[1].(string), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *Tx_StatementContext_Call) Return(_a0 error) *Tx_StatementContext_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Tx_StatementContext_Call) RunAndReturn(run func(context.Context, string, ...interface{}) error) *Tx_StatementContext_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Table provides a mock function with given fields: name
 func (_m *Tx) Table(name string) db.Query {
 	ret := _m.Called(name)
@@ -407,6 +1111,158 @@ func (_c *Tx_Table_Call) Return(_a0 db.Query) *Tx_Table_Call {
 }
 
 func (_c *Tx_Table_Call) RunAndReturn(run func(string) db.Query) *Tx_Table_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Transaction provides a mock function with given fields: callback, attempts
+func (_m *Tx) Transaction(callback func(db.Tx) error, attempts ...int) error {
+	_va := make([]interface{}, len(attempts))
+	for _i := range attempts {
+		_va[_i] = attempts[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, callback)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Transaction")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(func(db.Tx) error, ...int) error); ok {
+		r0 = rf(callback, attempts...)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Tx_Transaction_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Transaction'
+type Tx_Transaction_Call struct {
+	*mock.Call
+}
+
+// Transaction is a helper method to define mock.On call
+//   - callback func(db.Tx) error
+//   - attempts ...int
+func (_e *Tx_Expecter) Transaction(callback interface{}, attempts ...interface{}) *Tx_Transaction_Call {
+	return &Tx_Transaction_Call{Call: _e.mock.On("Transaction",
+		append([]interface{}{callback}, attempts...)...)}
+}
+
+func (_c *Tx_Transaction_Call) Run(run func(callback func(db.Tx) error, attempts ...int)) *Tx_Transaction_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]int, len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(int)
+			}
+		}
+		run(args[0].(func(db.Tx) error), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *Tx_Transaction_Call) Return(_a0 error) *Tx_Transaction_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Tx_Transaction_Call) RunAndReturn(run func(func(db.Tx) error, ...int) error) *Tx_Transaction_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// TransactionLevel provides a mock function with no fields
+func (_m *Tx) TransactionLevel() int {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for TransactionLevel")
+	}
+
+	var r0 int
+	if rf, ok := ret.Get(0).(func() int); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+
+	return r0
+}
+
+// Tx_TransactionLevel_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'TransactionLevel'
+type Tx_TransactionLevel_Call struct {
+	*mock.Call
+}
+
+// TransactionLevel is a helper method to define mock.On call
+func (_e *Tx_Expecter) TransactionLevel() *Tx_TransactionLevel_Call {
+	return &Tx_TransactionLevel_Call{Call: _e.mock.On("TransactionLevel")}
+}
+
+func (_c *Tx_TransactionLevel_Call) Run(run func()) *Tx_TransactionLevel_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *Tx_TransactionLevel_Call) Return(_a0 int) *Tx_TransactionLevel_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Tx_TransactionLevel_Call) RunAndReturn(run func() int) *Tx_TransactionLevel_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Unprepared provides a mock function with given fields: sql
+func (_m *Tx) Unprepared(sql string) error {
+	ret := _m.Called(sql)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Unprepared")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(string) error); ok {
+		r0 = rf(sql)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Tx_Unprepared_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Unprepared'
+type Tx_Unprepared_Call struct {
+	*mock.Call
+}
+
+// Unprepared is a helper method to define mock.On call
+//   - sql string
+func (_e *Tx_Expecter) Unprepared(sql interface{}) *Tx_Unprepared_Call {
+	return &Tx_Unprepared_Call{Call: _e.mock.On("Unprepared", sql)}
+}
+
+func (_c *Tx_Unprepared_Call) Run(run func(sql string)) *Tx_Unprepared_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *Tx_Unprepared_Call) Return(_a0 error) *Tx_Unprepared_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Tx_Unprepared_Call) RunAndReturn(run func(string) error) *Tx_Unprepared_Call {
 	_c.Call.Return(run)
 	return _c
 }

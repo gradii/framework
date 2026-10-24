@@ -878,9 +878,7 @@ func (b *Builder) whereColumnArgs(column any, args []any, boolean string) *Build
 // WhereNested starts a nested where. Mirrors Builder::whereNested().
 func (b *Builder) WhereNested(callback func(*Builder) *Builder, boolean string) *Builder {
 	query := b.ForNestedWhere()
-	if result := callback(query); result != nil {
-		query = result
-	}
+	callback(query)
 
 	return b.AddNestedWhereQuery(query, boolean)
 }
@@ -968,9 +966,7 @@ func (b *Builder) WhereSub(column any, operator any, callback any, boolean strin
 func (b *Builder) createSub(query any) (string, []any) {
 	if cb, ok := query.(func(*Builder) *Builder); ok {
 		sub := b.ForSubQuery()
-		if result := cb(sub); result != nil {
-			sub = result
-		}
+		cb(sub)
 		query = sub
 	}
 

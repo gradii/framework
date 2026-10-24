@@ -42,6 +42,34 @@ const (
 )
 
 type Blueprint interface {
+	Engine(engine string)
+	InnoDb()
+	Charset(charset string)
+	Collation(collation string)
+	Temporary()
+	Binary(column string, length ...int) driver.ColumnDefinition
+	Year(column string) driver.ColumnDefinition
+	IpAddress(column string) driver.ColumnDefinition
+	MacAddress(column string) driver.ColumnDefinition
+	Set(column string, allowed []any) driver.ColumnDefinition
+	Geometry(column string, options ...any) driver.ColumnDefinition
+	Geography(column string, options ...any) driver.ColumnDefinition
+	Vector(column string, dimensions ...int) driver.ColumnDefinition
+	Computed(column string, expression any) driver.ColumnDefinition
+	RawColumn(column, definition string) driver.ColumnDefinition
+	SpatialIndex(columns ...string) IndexDefinition
+	DropSpatialIndex(columns ...string)
+	RawIndex(expression, name string) IndexDefinition
+	NullableTimestamps(precision ...int)
+	NullableTimestampsTz(precision ...int)
+	SoftDeletesDatetime(column ...string)
+	NullableNumericMorphs(name string, indexName ...string)
+	NullableUuidMorphs(name string, indexName ...string)
+	NullableUlidMorphs(name string, indexName ...string)
+	RememberToken() driver.ColumnDefinition
+	DropRememberToken()
+	DropMorphs(name string, indexName ...string)
+	DropConstrainedForeignId(column string)
 	// BigIncrements Create a new auto-incrementing big integer (8-byte) column on the table.
 	BigIncrements(column string) driver.ColumnDefinition
 	// BigInteger Create a new big integer (8-byte) column on the table.

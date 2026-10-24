@@ -3,6 +3,7 @@ package schema
 import (
 	"fmt"
 	"reflect"
+	"strings"
 	"unicode"
 
 	"github.com/spf13/cast"
@@ -12,14 +13,20 @@ import (
 
 type Expression string
 
+func (e Expression) SQL() string { return string(e) }
+
 func ColumnDefaultValue(def any) string {
 	switch value := def.(type) {
 	case bool:
 		return "'" + cast.ToString(cast.ToInt(value)) + "'"
 	case Expression:
 		return string(value)
+	case interface{ SQL() string }:
+		return value.SQL()
+	case interface{ GetValue() string }:
+		return value.GetValue()
 	default:
-		return "'" + cast.ToString(def) + "'"
+		return "'" + strings.ReplaceAll(cast.ToString(def), "'", "''") + "'"
 	}
 }
 

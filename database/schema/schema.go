@@ -9,10 +9,12 @@ import (
 	"github.com/spf13/cast"
 
 	"github.com/goravel/framework/contracts/config"
+	contractsdb "github.com/goravel/framework/contracts/database/db"
 	"github.com/goravel/framework/contracts/database/driver"
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
 	contractsschema "github.com/goravel/framework/contracts/database/schema"
 	"github.com/goravel/framework/contracts/log"
+	"github.com/goravel/framework/database/query/processors"
 	"github.com/goravel/framework/errors"
 	"github.com/goravel/framework/support/color"
 )
@@ -20,6 +22,15 @@ import (
 var _ contractsschema.Schema = (*Schema)(nil)
 
 type Schema struct {
+	executor         contractsdb.Tx
+	constraints      *schemaConstraintScope
+	charset          string
+	db               contractsdb.DB
+	driverName       string
+	databaseName     string
+	username         string
+	queryProcessor   processors.Processor
+	metadataCache    *schemaMetadataCache
 	config           config.Config
 	driver           driver.Driver
 	grammar          driver.Grammar
@@ -34,9 +45,16 @@ type Schema struct {
 	modelsByFullName map[string]any
 }
 
-func NewSchema(config config.Config, log log.Log, orm contractsorm.Orm, driver driver.Driver, migrations []contractsschema.Migration) (*Schema, error) {
+func NewSchema(config config.Config, log log.Log, orm contractsorm.Orm, driver driver.Driver, migrations []contractsschema.Migration, connections ...contractsdb.DB) (*Schema, error) {
+	var connection contractsdb.DB
+	if len(connections) > 0 {
+		connection = connections[0]
+	}
 	if driver == nil {
 		return &Schema{
+			constraints:      &schemaConstraintScope{},
+			db:               connection,
+			metadataCache:    &schemaMetadataCache{},
 			config:           config,
 			driver:           driver,
 			log:              log,
@@ -58,7 +76,14 @@ func NewSchema(config config.Config, log log.Log, orm contractsorm.Orm, driver d
 	grammar := driver.Grammar()
 	processor := driver.Processor()
 
-	return &Schema{
+	result := &Schema{
+		constraints:      &schemaConstraintScope{},
+		charset:          writers[0].Charset,
+		db:               connection,
+		driverName:       writers[0].Driver,
+		databaseName:     writers[0].Database,
+		username:         writers[0].Username,
+		metadataCache:    &schemaMetadataCache{},
 		config:           config,
 		driver:           driver,
 		grammar:          grammar,
@@ -71,7 +96,12 @@ func NewSchema(config config.Config, log log.Log, orm contractsorm.Orm, driver d
 		goTypes:          defaultGoTypes(),
 		models:           make([]any, 0),
 		modelsByFullName: make(map[string]any),
-	}, nil
+	}
+	switch result.metadataDialect() {
+	case "mysql", "postgres", "sqlite", "sqlserver":
+		result.queryProcessor = processors.New(result.driverName)
+	}
+	return result, nil
 }
 
 func (r *Schema) Connection(name string) contractsschema.Schema {
@@ -108,7 +138,11 @@ func (r *Schema) Drop(table string) error {
 }
 
 func (r *Schema) DropAllTables() error {
-	tables, err := r.GetTables()
+	schemas, err := r.GetCurrentSchemaListing()
+	if err != nil {
+		return err
+	}
+	tables, err := r.GetTables(schemas...)
 	if err != nil {
 		return err
 	}
@@ -130,7 +164,11 @@ func (r *Schema) DropAllTables() error {
 }
 
 func (r *Schema) DropAllTypes() error {
-	types, err := r.GetTypes()
+	schemas, err := r.GetCurrentSchemaListing()
+	if err != nil {
+		return err
+	}
+	types, err := r.GetTypes(schemas...)
 	if err != nil {
 		return err
 	}
@@ -147,7 +185,11 @@ func (r *Schema) DropAllTypes() error {
 }
 
 func (r *Schema) DropAllViews() error {
-	views, err := r.GetViews()
+	schemas, err := r.GetCurrentSchemaListing()
+	if err != nil {
+		return err
+	}
+	views, err := r.GetViews(schemas...)
 	if err != nil {
 		return err
 	}
@@ -234,7 +276,7 @@ type rawDBColumn struct {
 	Primary       bool
 }
 
-func (r *Schema) GetColumns(table string) ([]driver.Column, error) {
+func (r *Schema) legacyGetColumns(table string) ([]driver.Column, error) {
 	var rawColumns []rawDBColumn
 	sql, err := r.grammar.CompileColumns(r.schema, table)
 	if err != nil {
@@ -268,10 +310,13 @@ func (r *Schema) GetColumns(table string) ([]driver.Column, error) {
 }
 
 func (r *Schema) GetConnection() string {
+	if r.db != nil {
+		return r.db.Name()
+	}
 	return r.orm.Name()
 }
 
-func (r *Schema) GetForeignKeys(table string) ([]driver.ForeignKey, error) {
+func (r *Schema) legacyGetForeignKeys(table string) ([]driver.ForeignKey, error) {
 	table = r.prefix + table
 
 	var dbForeignKeys []driver.DBForeignKey
@@ -297,7 +342,7 @@ func (r *Schema) GetIndexListing(table string) []string {
 	return names
 }
 
-func (r *Schema) GetIndexes(table string) ([]driver.Index, error) {
+func (r *Schema) legacyGetIndexes(table string) ([]driver.Index, error) {
 	var dbIndexes []driver.DBIndex
 	sql, err := r.grammar.CompileIndexes(r.schema, table)
 	if err != nil {
@@ -323,22 +368,7 @@ func (r *Schema) GetModel(name string) any {
 	return r.modelsByFullName[name]
 }
 
-func (r *Schema) GetTableListing() []string {
-	tables, err := r.GetTables()
-	if err != nil {
-		r.log.Errorf("failed to get tables: %v", err)
-		return nil
-	}
-
-	var names []string
-	for _, table := range tables {
-		names = append(names, table.Name)
-	}
-
-	return names
-}
-
-func (r *Schema) GetTables() ([]driver.Table, error) {
+func (r *Schema) legacyGetTables() ([]driver.Table, error) {
 	var tables []driver.Table
 	if err := r.orm.Query().Raw(r.grammar.CompileTables(r.orm.DatabaseName())).Scan(&tables); err != nil {
 		return nil, err
@@ -347,7 +377,7 @@ func (r *Schema) GetTables() ([]driver.Table, error) {
 	return tables, nil
 }
 
-func (r *Schema) GetTypes() ([]driver.Type, error) {
+func (r *Schema) legacyGetTypes() ([]driver.Type, error) {
 	var types []driver.Type
 	if err := r.orm.Query().Raw(r.grammar.CompileTypes()).Scan(&types); err != nil {
 		return nil, err
@@ -356,7 +386,7 @@ func (r *Schema) GetTypes() ([]driver.Type, error) {
 	return r.processor.ProcessTypes(types), nil
 }
 
-func (r *Schema) GetViews() ([]driver.View, error) {
+func (r *Schema) legacyGetViews() ([]driver.View, error) {
 	var views []driver.View
 	if err := r.orm.Query().Raw(r.grammar.CompileViews(r.orm.DatabaseName())).Scan(&views); err != nil {
 		return nil, err
@@ -370,13 +400,18 @@ func (r *Schema) GoTypes() []contractsschema.GoType {
 }
 
 func (r *Schema) HasColumn(table, column string) bool {
-	return slices.Contains(r.GetColumnListing(table), column)
+	for _, name := range r.GetColumnListing(table) {
+		if strings.EqualFold(name, column) {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *Schema) HasColumns(table string, columns []string) bool {
 	columnListing := r.GetColumnListing(table)
 	for _, column := range columns {
-		if !slices.Contains(columnListing, column) {
+		if !slices.ContainsFunc(columnListing, func(name string) bool { return strings.EqualFold(name, column) }) {
 			return false
 		}
 	}
@@ -384,13 +419,7 @@ func (r *Schema) HasColumns(table string, columns []string) bool {
 	return true
 }
 
-func (r *Schema) HasIndex(table, index string) bool {
-	indexListing := r.GetIndexListing(table)
-
-	return slices.Contains(indexListing, index)
-}
-
-func (r *Schema) HasTable(name string) bool {
+func (r *Schema) legacyHasTable(name string) bool {
 	var schema string
 	if strings.Contains(name, ".") {
 		lastDotIndex := strings.LastIndex(name, ".")
@@ -426,22 +455,6 @@ func (r *Schema) HasType(name string) bool {
 
 	for _, t := range types {
 		if t.Name == name {
-			return true
-		}
-	}
-
-	return false
-}
-
-func (r *Schema) HasView(name string) bool {
-	views, err := r.GetViews()
-	if err != nil {
-		r.log.Errorf(errors.SchemaFailedToGetTables.Args(r.orm.Name(), err).Error())
-		return false
-	}
-
-	for _, view := range views {
-		if view.Name == name {
 			return true
 		}
 	}
@@ -506,6 +519,12 @@ func (r *Schema) SetConnection(name string) {
 	r.prefix = schema.prefix
 	r.processor = schema.processor
 	r.schema = schema.schema
+	r.db = schema.db
+	r.driverName = schema.driverName
+	r.databaseName = schema.databaseName
+	r.username = schema.username
+	r.queryProcessor = schema.queryProcessor
+	r.metadataCache = schema.metadataCache
 }
 
 func (r *Schema) newConnection(name string) (*Schema, error) {
@@ -518,6 +537,9 @@ func (r *Schema) newConnection(name string) (*Schema, error) {
 	schema, err := NewSchema(r.config, r.log, r.orm.Connection(connection), connectionDriver, r.migrations)
 	if err != nil {
 		return nil, err
+	}
+	if r.db != nil {
+		schema.db = r.db.Connection(connection)
 	}
 
 	schema.goTypes = slices.Clone(r.goTypes)
@@ -547,8 +569,11 @@ func (r *Schema) driverForConnection(name string) (driver.Driver, error) {
 	return driverCallback()
 }
 
-func (r *Schema) Sql(sql string) error {
-	_, err := r.orm.Query().Exec(sql)
+func (r *Schema) Sql(sql string, bindings ...any) error {
+	if connection := r.executionConnection(); connection != nil {
+		return connection.Statement(sql, bindings...)
+	}
+	_, err := r.orm.Query().Exec(sql, bindings...)
 
 	return err
 }
@@ -565,6 +590,9 @@ func (r *Schema) Table(table string, callback func(table contractsschema.Bluepri
 }
 
 func (r *Schema) build(blueprint contractsschema.Blueprint) error {
+	if native, ok := blueprint.(*Blueprint); ok && r.executionConnection() != nil {
+		return r.buildNative(native)
+	}
 	if r.orm.Query().InTransaction() {
 		return blueprint.Build(r.orm.Query(), r.grammar)
 	}

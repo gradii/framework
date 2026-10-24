@@ -209,24 +209,27 @@ type Command struct {
 }
 
 type Table struct {
-	Collation string
-	Comment   string
-	Engine    string
-	Name      string
-	Schema    string
-	Size      int
+	SchemaQualifiedName string
+	Collation           string
+	Comment             string
+	Engine              string
+	Name                string
+	Schema              string
+	Size                int
 }
 
 type Type struct {
-	Category string
-	Name     string
-	Schema   string
-	Type     string
-	Implicit bool
+	SchemaQualifiedName string
+	Category            string
+	Name                string
+	Schema              string
+	Type                string
+	Implicit            bool
 }
 
 type View struct {
-	Name       string
-	Schema     string
-	Definition string
+	SchemaQualifiedName string
+	Name                string
+	Schema              string
+	Definition          string
 }

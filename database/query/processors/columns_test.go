@@ -43,7 +43,8 @@ func TestSqlServerColumnMetadata(t *testing.T) {
 	columns := (&SqlServerProcessor{}).ProcessColumns([]Row{
 		{"name": "text", "type_name": "nvarchar", "length": -1, "nullable": 1, "comment": ""},
 		{"name": "amount", "type_name": "decimal", "precision": 8, "places": 2, "nullable": 0},
-		{"name": "total", "type_name": "float", "places": 53, "expression": "price * quantity", "persisted": 1},
+		{"name": "total", "type_name": "float", "precision": 53, "places": 0, "expression": "price * quantity", "persisted": 1},
+		{"name": "created_at", "type_name": "datetime2", "precision": 23, "places": 3},
 	})
 	assert.Equal(t, "nvarchar(max)", columns[0]["type"])
 	assert.Equal(t, true, columns[0]["nullable"])
@@ -51,4 +52,5 @@ func TestSqlServerColumnMetadata(t *testing.T) {
 	assert.Equal(t, "decimal(8,2)", columns[1]["type"])
 	assert.Equal(t, "float(53)", columns[2]["type"])
 	assert.Equal(t, Row{"type": "stored", "expression": "price * quantity"}, columns[2]["generation"])
+	assert.Equal(t, "datetime2(23)", columns[3]["type"])
 }

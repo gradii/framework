@@ -22,6 +22,8 @@ type Join interface {
 
 // State holds the clauses compiled by a grammar, matching Laravel's public builder properties.
 type State struct {
+	UseWritePdo      bool
+	ServerVersion    func() (string, error)
 	UseUpsertAlias   bool
 	Bindings         map[string][]any
 	Aggregate        *Aggregate

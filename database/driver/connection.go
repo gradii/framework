@@ -1,8 +1,10 @@
 package driver
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
+	"math/rand/v2"
 	"sync"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/goravel/framework/contracts/database"
 	contractslogger "github.com/goravel/framework/contracts/database/logger"
 	contractstelemetry "github.com/goravel/framework/contracts/telemetry"
+	"github.com/goravel/framework/errors"
 	"github.com/goravel/framework/support/color"
 	instrumentationdatabase "github.com/goravel/framework/telemetry/instrumentation/database"
 )
@@ -26,24 +29,31 @@ import (
 // run through the ORM session.
 //
 // A replica whose entry carries neither a database nor a dsn has no dialector and cannot be opened;
-// it is skipped, with a warning, so an unusable first entry neither fails the connection nor masks a
-// valid replica behind it: reads run on the first replica that can serve them, or on the writer when
-// none can. Only the first usable replica serves compiled reads, and because GORM's dbresolver opens
-// that same dialector again for its own statements, the first usable replica holds two pools at once
+// it is skipped, with a warning. Candidate order is randomized and failed connections are skipped;
+// the writer is used only when no usable reader was configured. If all configured readers fail to
+// connect, their errors are returned. GORM's dbresolver opens the selected dialector again for its
+// own statements, so the selected replica holds two pools at once
 // and can reach twice database.pool.max_open_conns while the ORM is still executing.
 type Connection struct {
-	name       string
-	driver     string
-	writer     *sql.DB
-	reader     *sql.DB
-	instance   *gormio.DB
-	instrument *instrumentationdatabase.Instrument
+	versionMu     sync.Mutex
+	serverVersion string
+	name          string
+	driver        string
+	writer        *sql.DB
+	reader        *sql.DB
+	instance      *gormio.DB
+	instrument    *instrumentationdatabase.Instrument
 }
 
 // readPools caches a connection's reader pool by connection name. The ORM holds a GORM session
 // rather than a Connection, so this package-level lookup is what lets its compiled reads reach the
 // same reader the facades execute on.
 var readPools sync.Map
+
+type cachedReader struct {
+	pool      *sql.DB
+	dialector gormio.Dialector
+}
 
 // Open returns the connection for a configured pool, building and caching it on first use.
 //
@@ -119,7 +129,7 @@ func (r *Connection) Instrument() *instrumentationdatabase.Instrument {
 }
 
 // openReader opens, on first use, the pool the framework's compiled reads run on for a connection:
-// the first replica its driver pool carries that can serve reads. A pool without replicas has no
+// a reachable replica selected from a shuffled candidate list. A pool without replicas has no
 // reader, and nil is returned so callers fall back to the writer.
 //
 // A replica entry the driver could not turn into a dialector — one carrying neither a database nor a
@@ -135,52 +145,43 @@ func openReader(config config.Config, pool database.Pool, connection string) (*s
 	}
 
 	if cached, ok := readPools.Load(connection); ok {
-		return cached.(*sql.DB), nil
+		return cached.(cachedReader).pool, nil
 	}
 
-	readerDialector := firstUsableDialector(connection, pool.Readers)
-	if readerDialector == nil {
-		return nil, nil
-	}
-
-	// Opening the reader's dialector is how a driver module turns its configuration into a pool;
-	// the GORM session it yields is discarded, only its base pool is kept.
-	instance, err := gormio.Open(readerDialector, &gormio.Config{DisableAutomaticPing: true})
-	if err != nil {
-		return nil, err
-	}
-
-	sqlDB, err := instance.DB()
-	if err != nil {
-		return nil, err
-	}
-
-	// The reader carries the same limits as the writer.
-	sqlDB.SetMaxIdleConns(config.GetInt("database.pool.max_idle_conns", 10))
-	sqlDB.SetMaxOpenConns(config.GetInt("database.pool.max_open_conns", 100))
-	sqlDB.SetConnMaxIdleTime(config.GetDuration("database.pool.conn_max_idletime", 3600) * time.Second)
-	sqlDB.SetConnMaxLifetime(config.GetDuration("database.pool.conn_max_lifetime", 3600) * time.Second)
-
-	readPools.Store(connection, sqlDB)
-
-	return sqlDB, nil
-}
-
-// firstUsableDialector returns the dialector of the first replica entry a driver could open, warning
-// about each entry it skips. An entry whose Dialector is nil — one carrying neither a database nor a
-// dsn — cannot serve reads, so it is skipped rather than treated as "no replica": that would hide the
-// misconfiguration and let an unusable first entry mask a valid replica configured behind it. It
-// returns nil when no entry can serve reads, leaving the caller to fall back to the writer.
-func firstUsableDialector(connection string, readers []database.Config) gormio.Dialector {
-	for index, reader := range readers {
-		if reader.Dialector != nil {
-			return reader.Dialector
+	var failures []error
+	// Laravel shuffles candidate hosts and tries the next after a connection failure.
+	for _, index := range rand.Perm(len(pool.Readers)) {
+		dialector := pool.Readers[index].Dialector
+		if dialector == nil {
+			color.Warningln(fmt.Sprintf("database: read connection %s entry %d cannot serve reads because its driver produced no dialector; skipping it", connection, index))
+			continue
 		}
-
-		color.Warningln(fmt.Sprintf("database: read connection %s entry %d cannot serve reads because its driver produced no dialector; skipping it", connection, index))
+		instance, err := gormio.Open(dialector, &gormio.Config{DisableAutomaticPing: true})
+		if err != nil {
+			failures = append(failures, err)
+			continue
+		}
+		sqlDB, err := instance.DB()
+		if err != nil {
+			failures = append(failures, err)
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		err = sqlDB.PingContext(ctx)
+		cancel()
+		if err != nil {
+			_ = sqlDB.Close()
+			failures = append(failures, err)
+			continue
+		}
+		sqlDB.SetMaxIdleConns(config.GetInt("database.pool.max_idle_conns", 10))
+		sqlDB.SetMaxOpenConns(config.GetInt("database.pool.max_open_conns", 100))
+		sqlDB.SetConnMaxIdleTime(config.GetDuration("database.pool.conn_max_idletime", 3600) * time.Second)
+		sqlDB.SetConnMaxLifetime(config.GetDuration("database.pool.conn_max_lifetime", 3600) * time.Second)
+		readPools.Store(connection, cachedReader{pool: sqlDB, dialector: dialector})
+		return sqlDB, nil
 	}
-
-	return nil
+	return nil, errors.Join(failures...)
 }
 
 // Reader returns the reader pool cached for a connection name, or nil when the connection has no
@@ -189,7 +190,7 @@ func firstUsableDialector(connection string, readers []database.Config) gormio.D
 // back to the writer on nil.
 func Reader(connection string) *sql.DB {
 	if cached, ok := readPools.Load(connection); ok {
-		return cached.(*sql.DB)
+		return cached.(cachedReader).pool
 	}
 
 	return nil
@@ -210,8 +211,8 @@ func closeReaders() {
 	readPools.Range(func(key, value any) bool {
 		readPools.Delete(key)
 
-		if pool, ok := value.(*sql.DB); ok {
-			_ = pool.Close()
+		if reader, ok := value.(cachedReader); ok {
+			_ = reader.pool.Close()
 		}
 
 		return true

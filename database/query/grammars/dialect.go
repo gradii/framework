@@ -131,13 +131,18 @@ func ReplacePlaceholders(sql string, driver string) string {
 			// Inside a quoted literal every byte is text, including a "?"; copying it verbatim
 			// keeps the literal intact and the placeholder count unchanged.
 			out.WriteByte(char)
+			if i+1 < len(sql) && (char == '\\' || char == quote && sql[i+1] == quote) {
+				i++
+				out.WriteByte(sql[i])
+				continue
+			}
 			if char == quote {
 				quote = 0
 			}
 			continue
 		}
 
-		if char == '\'' || char == '"' {
+		if char == '\'' || char == '"' || char == '`' {
 			quote = char
 			out.WriteByte(char)
 			continue

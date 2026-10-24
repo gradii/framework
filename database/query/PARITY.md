@@ -1,22 +1,18 @@
 # Laravel Query Builder parity checklist
 
-**Purpose.** This file is the coverage proof for porting `Illuminate\Database`'s query builder into
-this package. Every item is either implemented or recorded as a deliberate Go deviation. Review
-this file first when judging the fidelity of the port.
+**Purpose.** This file records the compiler contracts and public database integration for the
+[approved port scope](../LARAVEL_PORT_PLAN.md). Execution and platform evidence are recorded in
+[the database test mapping](../LARAVEL_DB_TESTS.md); compiler coverage alone is not proof of runtime parity.
 
 **Source of truth** (Laravel checkout at `/Users/dog/OpenSource/framework`):
 
-| File | Size |
+| Upstream component | Go implementation |
 |---|---|
-| `src/Illuminate/Database/Query/Builder.php` | 240 functions |
-| `src/Illuminate/Database/Query/JoinClause.php` | extends Builder |
-| `src/Illuminate/Database/Grammar.php` | 20 functions (base) |
-| `src/Illuminate/Database/Query/Grammars/Grammar.php` | 98 functions |
-| `src/Illuminate/Database/Query/Grammars/MySqlGrammar.php` | 29 functions |
-| `src/Illuminate/Database/Query/Grammars/PostgresGrammar.php` | 40 functions |
-| `src/Illuminate/Database/Query/Grammars/SQLiteGrammar.php` | 30 functions |
-| `src/Illuminate/Database/Query/Grammars/SqlServerGrammar.php` | 35 functions |
-| `src/Illuminate/Database/Query/Processors/Processor.php` | 9 functions |
+| `Query/Builder.php`, `Query/JoinClause.php` | `database/query`, public adapter `database/db` |
+| `Grammar.php`, `Query/Grammars/*Grammar.php` | `database/query/grammars` |
+| `Query/Processors/*Processor.php` | `database/query/processors` |
+| `Connection.php`, `Concerns/ManagesTransactions.php` | `database/db`, `database/driver` |
+| `Schema/Builder.php`, `Schema/Blueprint.php`, `Schema/Grammars/*Grammar.php` | `database/schema`, existing v1.18 driver grammars |
 
 The fluent builder lives in `database/query`, SQL compilers in `database/query/grammars`, and
 result processors in `database/query/processors`. `NewBuilder(grammar, processor)` mirrors
@@ -149,7 +145,7 @@ Write-side shapes:
 
 Each dialect extends the base and overrides only these.
 
-**MySqlGrammar (29)**
+**MySqlGrammar**
 whereLike, whereNull, whereNotNull, whereFullText, compileIndexHint, compileGroupLimit,
 useLegacyGroupLimit, compileLegacyGroupLimit, compileInsertOrIgnore, compileInsertOrIgnoreUsing,
 compileJsonContains, compileJsonOverlaps, compileJsonContainsKey, compileJsonLength,
@@ -157,7 +153,7 @@ compileJsonValueCast, compileRandom, compileLock, compileInsert, compileUpdateCo
 compileJoinLateral, compileJsonUpdateColumn, compileUpdateWithoutJoins, prepareBindingsForUpdate,
 compileDeleteWithoutJoins, compileThreadCount, wrapValue, wrapJsonSelector, wrapJsonBooleanSelector
 
-**PostgresGrammar (40)**
+**PostgresGrammar**
 whereBasic, whereBitwise, whereLike, whereDate, whereTime, dateBasedWhere, whereFullText,
 validFullTextLanguages, compileColumns, to, compileJsonContains, compileJsonContainsKey,
 compileJsonLength, compileHaving, compileHavingBitwise, compileLock, compileInsertOrIgnore,
@@ -168,16 +164,12 @@ prepareBindingsForUpdate, compileDelete, compileDeleteWithJoinsOrLimit, compileT
 compileThreadCount, wrapJsonSelector, wrapJsonBooleanSelector, wrapJsonBooleanValue,
 wrapJsonPathAttributes, parseJsonPathArrayKeys, substituteBindingsIntoRawSql, getOperators
 
-> **Deliberate non-support: the custom-operator registry.** Laravel's `Grammar::getOperators()` merges a
-> caller-registered list into the dialect's own operators, and `PostgresGrammar::customOperators()` is the
-> static setter for it. This port keeps no such registry: `PostgresGrammar.GetOperators` returns the dialect
-> list and nothing more, and the corresponding corpus methods
-> (`DatabasePostgresQueryGrammarTest::testCustomOperators`) are therefore recorded as a documented
-> non-support rather than an unported gap. A caller that needs a custom operator should express it as a raw
-> clause. Adding the registry is a deliberate future decision, not a missing port.
+PostgreSQL custom operators are supported. `CustomOperators` registers process-wide operators,
+`GetOperators` includes them, and raw SQL substitution preserves escaped question-mark operators.
+Registration and lookup are protected for concurrent use. The upstream `testCustomOperators`
+case and Go concurrency regressions are in `grammars/laravel_port_test.go`.
 
-
-**SQLiteGrammar (30)**
+**SQLiteGrammar**
 compileLock, wrapUnion, whereBasic, whereLike, prepareWhereLikeBinding, whereDate, whereDay,
 whereMonth, whereYear, whereTime, dateBasedWhere, compileIndexHint, compileJsonLength,
 compileJsonContains, prepareBindingForJsonContains, compileJsonContainsKey, compileGroupLimit,
@@ -185,7 +177,7 @@ compileUpdate, compileInsertOrIgnore, compileInsertOrIgnoreUsing, compileUpdateC
 groupJsonColumnsForUpdate, compileJsonPatch, compileUpdateWithJoinsOrLimit, prepareBindingsForUpdate,
 compileDelete, compileDeleteWithJoinsOrLimit, compileTruncate, wrapJsonSelector
 
-**SqlServerGrammar (35)**
+**SqlServerGrammar**
 compileSelect, compileColumns, compileFrom, compileIndexHint, whereBitwise, whereDate, whereTime,
 compileJsonContains, prepareBindingForJsonContains, compileJsonContainsKey, compileJsonLength,
 compileJsonValueCast, compileHaving, compileHavingBitwise, compileDeleteWithoutJoins, compileRandom,
@@ -198,142 +190,89 @@ Dialect selection in this port is driven by `database.Config.Driver` (values `my
 `sqlite`, `sqlserver`). The four external driver modules keep implementing the DDL grammar and are
 not modified.
 
-## 7. Builder surface
+## 7. Public Builder and DB surface
 
-Grouped checklist. Convention: `- [x]` means the named entry point exists on `Builder` with the
-Laravel signature adapted as recorded in section 8; `- [ ]` means it is not ported yet. A row is
-split into several rows when only part of a group has landed, so a partially ported group never
-reads as done. The execution half of the builder (`get`, `first`, `chunk`, `insert`, `update`,
-`delete`, ...) lives in `database/db` as the thin adapter over this builder and is ticked only when
-the method is on `Builder` itself.
+The public contract is `contracts/database/db/db.go`. Read and write execution belongs to
+`database/db`; it does not need duplicate execution methods on the SQL-only `query.Builder`.
+The following groups have public entry points, compiler wiring and behavior tests:
 
-**Construction and state**
-- [x] `select` `selectSub` `selectRaw` `addSelect` `distinct`
-- [x] `from` `fromSub` `fromRaw`
-- [x] `useIndex` `forceIndex` `ignoreIndex`
-- [x] `newQuery` `clone` `cloneWithout` `cloneWithoutBindings`
-- [ ] `getColumns` `getLimit` `getOffset` `getRawBindings`
-- [x] `getBindings` `setBindings` (`limit`/`offset` are read through `LimitValue`/`OffsetValue`
-      and the raw binding map through `RawBindings`; the PHP getter names themselves are not ported)
-- [ ] `getConnection` `getProcessor` `getGrammar` `useWritePdo` `raw`
-- [x] `rawValue`
-
-**Joins**
-- [x] `join` `joinWhere` `joinSub` `joinLateral` `leftJoinLateral`
-- [x] `crossJoin` `crossJoinSub`
-- [x] `leftJoin` `leftJoinSub`
-- [ ] `leftJoinWhere`
-- [x] `rightJoin` `rightJoinSub`
-- [ ] `rightJoinWhere`
-- [x] JoinClause `on` `orOn`
-
-**Where**
-- [x] `where` `orWhere` `whereNot` `orWhereNot` `prepareValueAndOperator` `mergeWheres`
-- [x] `whereColumn` `orWhereColumn` `whereRaw` `orWhereRaw`
-- [x] `whereLike` `whereNotLike`
-- [ ] `orWhereLike` `orWhereNotLike`
-- [x] `whereIn` `orWhereIn` `whereNotIn` `orWhereNotIn`
-- [x] `whereIntegerInRaw`
-- [ ] `orWhereIntegerInRaw` `whereIntegerNotInRaw` `orWhereIntegerNotInRaw`
-- [x] `whereNull` `orWhereNull` `whereNotNull` `orWhereNotNull`
-- [x] `whereBetween` `whereBetweenColumns` `orWhereBetween`
-- [ ] `orWhereBetweenColumns`
-- [x] `whereNotBetween`
-- [ ] `whereNotBetweenColumns` `orWhereNotBetween` `orWhereNotBetweenColumns`
-- [x] `whereValueBetween`
-- [ ] `orWhereValueBetween` `whereValueNotBetween` `orWhereValueNotBetween`
-- [x] `whereDate` `whereTime` `orWhereTime` `whereDay` `orWhereDay` `whereMonth` `orWhereMonth`
-      `whereYear` `orWhereYear`
-- [ ] `orWhereDate`
-- [x] `whereNested` `forNestedWhere` `addNestedWhereQuery`
-- [x] `whereExists` `orWhereExists` `whereNotExists` `addWhereExistsQuery`
-- [ ] `orWhereNotExists`
-- [x] `whereRowValues`
-- [x] `orWhereRowValues`
-- [x] `whereJsonContains` `whereJsonDoesntContain` `whereJsonOverlaps` `whereJsonContainsKey`
-      `whereJsonDoesntContainKey` `whereJsonLength` and the `or` variants of the contains,
-      contains-key and length forms
-- [ ] `whereJsonDoesntOverlap` `orWhereJsonOverlaps` `orWhereJsonDoesntOverlap`
-- [x] `whereFullText`
-- [ ] `orWhereFullText`
-- [x] `whereAll` `whereAny` `whereNone` and `or` variants, `dynamicWhere`
-
-**Grouping, having, order, limit, union, lock**
-- [x] `groupBy` `groupByRaw` `having` `orHaving` `havingNested` `addNestedHavingQuery`
-- [x] `havingNull` `havingNotNull` `havingBetween` `havingRaw` `orHavingRaw`
-- [x] `orderBy` `orderByDesc` `latest` `oldest` `inRandomOrder` `orderByRaw`
-- [x] `reorder` `skip` `offset` `take` `limit` `groupLimit`
-- [ ] `reorderDesc`
-- [x] `forPage` `forPageBeforeId` `forPageAfterId`
-- [x] `union` `unionAll` `lock` `lockForUpdate` `sharedLock`
-
-**Reads and aggregates**
-- [x] `toSql` (`toRawSql` is not ported: placeholders stay `?` and identifiers are rendered per
-      dialect, so there is no interpolated form to return)
-- [ ] `find` `findOr` `value` `soleValue` `get`
-- [x] `aggregate`
-- [ ] `numericAggregate`
-- [x] `getCountForPagination` `cursorPaginate`
-- [ ] `paginate` `simplePaginate`
-- [x] `beforeQuery` `applyBeforeQueryCallbacks`
-- [ ] `afterQuery` `applyAfterQueryCallbacks`
-
-**Writes (compile half)**
-- [x] `insertUsing` `insertOrIgnoreUsing`
-- [ ] `insert` `insertOrIgnore` `insertGetId`
-- [ ] `update` `updateFrom` `updateOrInsert` `upsert`
-- [ ] `increment` `incrementEach` `decrement` `decrementEach` `delete` `truncate`
-
-`incrementEach` validates and prepares its entries; the SQL is compiled by `ToUpdateSQL`.
-`toInsertSql`, `toUpdateSql`, `toDeleteSql`, `toUpsertSql`, `toTruncateSql`, `toInsertGetIdSql`,
-`toInsertOrIgnoreSql`, `toExistsSql` and `toAggregateSql` are the compile entry points and are all
-ported (`ToInsertSQL`, `ToUpdateSQL`, `ToDeleteSQL`, `ToUpsertSQL`, `ToTruncateSQL`,
-`ToInsertGetIdSQL`, `ToInsertOrIgnoreSQL`, `ToExistsSQL`, `ToAggregateSQL`).
-
-**Traits mixed into the builder (`Concerns/BuildsQueries`)**
-- [ ] `chunk` `chunkMap` `each` `chunkById` `chunkByIdDesc` `eachById`
-- [ ] `lazy` `lazyById` `lazyByIdDesc` `first` `firstOrFail` `sole`
-- [x] `tap` `pipe`
-
-## 8. Deliberate Go deviations
-
-These are intentional and must be documented in code, not treated as gaps.
-
-| Laravel | Go in this port | Reason |
+| Group | Public API / behavior | Implementation and tests |
 |---|---|---|
-| `Closure` callbacks | `func(Query) Query` | Go has no closure-to-builder idiom; matches existing Goravel style |
-| `paginate` returns a `LengthAwarePaginator` | returns a paginator value; no `total *int64` out-param | Go has no out-params; the current signature is `Paginate(page, limit int, dest any, total *int64) error` |
-| `cursor()` returns a `LazyCollection` | returns a channel or iterator | matches existing `Cursor() chan db.Row` |
-| Relations declared as methods (`hasMany(...)`) | declared in `Relations() map[string]Relation` with `gorm:"-"` fields | gorm struct tags remain the mapping mechanism by choice |
-| Model attribute pipeline (casts, accessors, mutators, appends, hidden/visible, `toArray`/`toJson`) | out of scope | scope decision; the existing model layer stays |
-| `Collection` type | out of scope | scope decision |
-| Laravel-style `Relation` objects | existing descriptor system stays | scope decision |
-| SQL Server JSON path updates have no dedicated compiler | `JSON_MODIFY` assignments, with `JSON_QUERY` for arrays and objects and nested calls for multiple paths | preserve the framework's JSON update API and avoid duplicate assignments to one column |
-| SQL Server insert IDs are read by the PDO processor | `SqlServerGrammar` emits `OUTPUT inserted.<key>` and `SqlServerProcessor` reads the returned row | go-mssqldb does not support `LastInsertId`; returning the key in the insert keeps it on the same connection |
-| `$component` presence via `isset` | explicit nil or presence flag | Go fields always exist |
-| `forPage($page, $perPage = 15)` | `ForPage(page int, perPage ...int)` | Go has no default arguments, so the default is a variadic. A surplus argument is ignored: `ForPage(2, 15, 20)` is `ForPage(2, 15)`. The builder has no error return, and a fluent call is the wrong place to panic on an arity slip |
-| `forPageBeforeId($perPage = 15, ...)` / `forPageAfterId($perPage = 15, ...)` | `ForPageBeforeId(perPage int, lastID any, column string)` | A leading default cannot be variadic in Go, so the caller passes the framework default explicitly; a passed zero is never replaced |
+| Mutable fluent queries | Where/Select/From/Join/Order/Limit mutate and return the same object; independent branches use explicit `Clone` | `db/query.go`, `query_clauses.go`, `query_mutability_test.go` |
+| Subqueries and joins | SelectSub, FromSub, AddSelect, WhereIn, WhereExists, JoinSub, lateral and cross joins, JoinClause | `query_clauses.go`, `join_clause.go`, `query_laravel_api_test.go`, `query_preview_test.go` |
+| Predicates | OR/negated variants; case-sensitive LIKE; integer IN; column/value ranges; dates; row values; JSON overlaps; full text | `query.go`, `query_clauses.go`; existing upstream query corpus |
+| Query state | Union/UnionAll, grouping/having, raw components, index hints, GroupLimit, ReorderDesc, random seed, page/keyset positioning, bindings/getters | `query_clauses.go`, `query/laravel_api.go` |
+| Reads | First/Find, Sole/SoleValue, Value/RawValue, Pluck/Implode, Exists, aggregates and Explain | `query.go`, `query_results.go`, `aggregate.go` |
+| Traversal | Chunk/ChunkById/ChunkByIdDesc, ChunkMap, EachById, Lazy/LazyById/LazyByIdDesc | `query.go`, `query_results.go`; lazy iteration stops without fetching another chunk |
+| Writes | Insert, InsertGetID with optional key, InsertOrIgnore, InsertUsing, InsertOrIgnoreUsing, UpdateFrom, UpdateOrInsert callbacks, Upsert, IncrementEach/DecrementEach, Truncate | `query_writes.go`, `query.go`, `tests/db_laravel_builder_test.go` |
+| SQL previews | Existing previews plus all new write methods; connection escaping, binary values, prepared booleans/dates and native placeholders | `to_sql.go`, `to_sql_writes.go`, `query_preview_test.go` |
+| Query lifecycle | BeforeQuery is consumed at the upstream execution point; AfterQuery can transform results | `query_clauses.go`, `query_results.go`, `query_laravel_api_test.go` |
+| Basic pagination | Paginate, SimplePaginate and existing CursorPaginate | `query.go`, `query_results.go`; no URL or presentation state |
 
-## 9. Verification notes
+Nested, subquery and BeforeQuery callbacks use the supplied builder and ignore replacement
+return values, matching Laravel. When/Unless/Pipe retain their own return semantics.
+Aggregate and pagination-count compilation propagate errors from their internal clones.
+SUM of an empty set is zero; nullable AVG/MIN/MAX can be read through `sql.Null*` destinations.
 
-- **Runs without a database:** `go test ./database/db/... ./database/gorm/...` passes today. Both
-  packages assert SQL through mocks and a stub gorm dialector. `database/gorm/relation_test.go`
-  defines `stubDialector` (a no-op dialector plus `RegisterDefaultCallbacks`) which is the pattern to
-  reuse for grammar tests.
-- **Needs Docker:** the `tests/` module boots real databases. `tests/query.go` calls
-  `sqlite.NewDocker(...)` and friends, so the exact-string assertions in `tests/to_sql_test.go`
-  cannot run until a Docker daemon is available.
-- **Golden strings to preserve or change deliberately**, for example from `tests/to_sql_test.go`:
-  `SELECT count(*) FROM "users" WHERE "id" = $1 AND "users"."deleted_at" IS NULL`.
-- **Coverage proof:** every row above is ticked against the Laravel file named in the header table.
-- **Known redundant assertion:** the three perPage-0 rows of the corpus `testForPage` are pinned in
-  both `TestForPage` (`laravel_port_gap_pagination_gap_test.go`) and
-  `TestLaravelPortFixForPageZeroPerPage` (`laravel_port_fix_fix_forpage_zero_perpage_test.go`). The
-  second file adds the regression context for the removed zero substitution; the duplication is
-  deliberate, not a weakened assertion.
+`UpdateFrom` is PostgreSQL-specific. SQL Server refuses case-sensitive LIKE and insert-ignore;
+MariaDB refuses lateral joins, including when reached through the MySQL driver. These failures
+surface through the compiler before the requested statement executes.
 
-## 10. Processor and query grammar test suites
+## 8. Connections, processors, Schema and DDL
 
-All 16 methods from the upstream processor and query grammar test classes are
-ported in their respective directories. See [LARAVEL_TESTS.md](LARAVEL_TESTS.md)
-for the source mapping, fixtures, and PHP-to-Go comparison rules.
+| Layer | Connected behavior |
+|---|---|
+| Connection | Named handles, purge/reconnect, writer metadata reads, sticky and explicit writer routing, query hooks/logs, duration thresholds, Pretend, server versions and escaping |
+| Pool selection | Reader candidates are shuffled and tried until a connection opens; unusable empty reader entries retain the writer fallback. A configured set of unreachable readers returns its connection error |
+| Recovery | `database/sql` manages physical connections. An ordinary read can retry once after connection loss, before returning rows; writes, pinned connections and transactions are not transparently replayed |
+| Transactions | Nested savepoints on one connection; transaction levels; rollback to a level; retryable conflicts; ordered commit/rollback callbacks; no retry after a successful commit |
+| Processor | Select, InsertGetID and normalized schemas/tables/views/types/columns/indexes/foreign keys; nullable metadata and generated expressions are preserved |
+| Schema | Runtime metadata uses the new processor and writer; qualified table listings by default, explicit short-name mode, schema selectors and case-aware existence checks |
+| DDL | Conditional schema operations, database creation/drop, table/column options, generated/computed columns, dialect types and indexes, temporary tables, constraint scopes and SQLite rebuilds |
+| Cleanup | Pinned scopes close leases and roll back unfinished transactions; constraint restoration runs with a cleanup context even when the request is cancelled |
+
+SQLite rebuilds copy data and preserve applicable indexes, foreign keys, checks and triggers.
+Missing source columns fail explicitly. Identifiers are tokenized as UTF-8; quoted text and
+comments are not renamed as columns. Dropping foreign keys by name is rejected as in Laravel;
+use their local column list.
+
+The external MySQL/PostgreSQL/SQLite/SQL Server drivers remain at v1.18.0. The core adapts their
+existing DDL compilers and supplies the added metadata/DDL paths; no unshipped driver release is
+required. The ORM receives only the shared connection compatibility changes in this scope.
+
+## 9. Go adaptations and scope boundaries
+
+| Laravel | Go adaptation |
+|---|---|
+| Optional parameters and overloads | Variadics or `any` at documented polymorphic entry points; old ordinary calls remain valid |
+| Query results / Collection | Explicit `dest` arguments, slices/maps, channels and error-aware `RowIterator` |
+| `paginate` | `Paginate(page, limit, dest, total *int64)`; defaults 1/15, supplied nonzero total skips COUNT, zero total skips the data query |
+| `simplePaginate` | `SimplePaginate(page, limit, dest) (hasMore, error)`; limit+1 probe without COUNT, probe row removed |
+| Cursor pagination | Existing data/cursor/has-more value, without total or HTTP metadata |
+| Pagination display features | Excluded: URLs, paths, links, query parameters, fragments, rendering, HTTP lookup and the Paginator class hierarchy |
+| SQL-only compiler | `To*SQL` returns SQL and bindings; facade previews use native database/sql placeholders; Truncate previews return a statement list |
+| PDO connection handles | `database/sql` pools and explicit leases; reconnect returns the refreshed DB handle; existing transactions retain their leased connection |
+| PDO InsertGetId | MySQL/SQLite use LastInsertId; PostgreSQL reads RETURNING; SQL Server reads OUTPUT inserted on the writer |
+| SQL Server JSON updates | Existing JSON_MODIFY support is retained for framework compatibility |
+| Introspection / debugging | Builder grammar/processor accessors, DB connection methods, ToSql/ToRawSql and query logs replace PHP runtime/debug helpers |
+| Dynamic PHP extensions, Eloquent / model features | Outside this database port; no ORM feature work |
+
+A mutable Builder is not safe for simultaneous mutation. Use `Clone()` for independent query
+branches, and obtain request-local connection state with `WithContext`.
+
+## 10. Verification and upstream mapping
+
+See [LARAVEL_TESTS.md](LARAVEL_TESTS.md) for the 16 processor/query-grammar upstream methods and
+[../LARAVEL_DB_TESTS.md](../LARAVEL_DB_TESTS.md) for DB, connection, transaction, Schema and DDL
+mappings. Those 16 methods are a bounded corpus, not the entire database abstraction's coverage.
+
+The root module tests do not require live databases. The separate `tests/` module exercises
+real drivers. SQL Server requires an actual amd64 run; an ARM run that skips it is insufficient.
+MariaDB can replace the test MySQL instance with `GORAVEL_TEST_MARIADB=1`.
+
+```sh
+env -u NO_COLOR go test ./... -timeout 90s
+env -u NO_COLOR go test -race ./database/db ./database/driver ./database/schema ./database/query/...
+cd tests
+env -u NO_COLOR go test -v -count=1 -timeout 25m ./...
+```

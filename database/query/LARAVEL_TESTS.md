@@ -1,7 +1,7 @@
 # Laravel processor and query grammar tests
 
 Reference: `~/OpenSource/framework`, Laravel `12.x` at `0fc645c673`.
-All 16 test methods in the five `Database*ProcessorTest.php` files and six
+This bounded corpus contains all 16 test methods in the five `Database*ProcessorTest.php` files and six
 `Database*QueryGrammarTest.php` files are covered below.
 
 | Upstream file in `tests/Database/` | Methods | Go coverage |
@@ -38,3 +38,15 @@ Run the ports with:
 go test ./database/query/grammars ./database/query/processors
 go test -race ./database/query/grammars ./database/query/processors
 ```
+
+## Public database execution coverage
+
+The 16 methods above cover only the processor/query-grammar classes. They do not measure the
+complete Query Builder, connection, transaction or Schema port. The expanded source-to-runtime
+mapping is in [../LARAVEL_DB_TESTS.md](../LARAVEL_DB_TESTS.md).
+
+Public regressions cover mutable fluent clauses and explicit clone isolation, callback ownership,
+IN/EXISTS subqueries, LIKE options, InsertGetID keys, advanced writes and previews, nullable
+aggregates, lightweight pagination without URLs, sticky/pretend/hooks, nested transactions and
+savepoints, normalized metadata, generated columns, temporary connections and SQLite rebuilding.
+The corresponding real-driver suites live in the separate `tests/` module.

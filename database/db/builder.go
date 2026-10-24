@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 
 	"github.com/jmoiron/sqlx"
@@ -76,6 +77,10 @@ type TxBuilder struct {
 
 // NewTxBuilder opens a transaction on the given pool.
 func NewTxBuilder(pool *sql.DB, driver string) (*TxBuilder, error) {
+	return NewTxBuilderWithContext(context.Background(), pool, driver)
+}
+
+func NewTxBuilderWithContext(ctx context.Context, pool *sql.DB, driver string) (*TxBuilder, error) {
 	if pool == nil {
 		return nil, errors.DatabaseConnectionIsNil
 	}
@@ -83,7 +88,7 @@ func NewTxBuilder(pool *sql.DB, driver string) (*TxBuilder, error) {
 	dbx := sqlx.NewDb(pool, sqlxDriverName(driver))
 	dbx.MapperFunc(NameMapper)
 
-	tx, err := dbx.Beginx()
+	tx, err := dbx.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}

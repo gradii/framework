@@ -196,9 +196,15 @@ func (b *Builder) ToAggregateSQL(aggregate Aggregate) (string, []any) {
 		clone.State().Bindings["order"] = []any{}
 	}
 
-	clone.ApplyBeforeQueryCallbacks()
+	return b.compileClonedSelect(clone)
+}
 
-	return clone.grammar.CompileSelect(clone), clone.GetBindings()
+func (b *Builder) compileClonedSelect(clone *Builder) (string, []any) {
+	statement, bindings := clone.ToSelectSQL()
+	if err := clone.Error(); err != nil {
+		b.setError(err)
+	}
+	return statement, bindings
 }
 
 // GetCountForPagination compiles the count statement a paginator runs to learn how many rows a page
@@ -232,10 +238,14 @@ func (b *Builder) GetCountForPagination(columns ...any) (string, []any) {
 
 		query := b.NewQuery()
 		query.From(Expression{Value: "(" + clone.ToSQL() + ") as " + b.grammar.Wrap("aggregate_table")}, "")
+		if err := clone.Error(); err != nil {
+			b.setError(err)
+			return "", nil
+		}
 		query.MergeBindings(clone)
 		query.SetAggregate("count", b.withoutSelectAliases(columns))
 
-		return query.ToSQL(), query.GetBindings()
+		return b.compileClonedSelect(query)
 	}
 
 	var without, withoutBindings []string
@@ -250,7 +260,7 @@ func (b *Builder) GetCountForPagination(columns ...any) (string, []any) {
 	clone := b.CloneWithout(without...).CloneWithoutBindings(withoutBindings...)
 	clone.SetAggregate("count", b.withoutSelectAliases(columns))
 
-	return clone.ToSQL(), clone.GetBindings()
+	return b.compileClonedSelect(clone)
 }
 
 // withoutSelectAliases strips a trailing " as <alias>" from each string column so a count can wrap

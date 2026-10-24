@@ -26,6 +26,7 @@ type queriesCache struct {
 }
 
 type DB struct {
+	state *connectionState
 	contractsdb.Tx
 	config            config.Config
 	ctx               context.Context
@@ -43,8 +44,17 @@ func NewDB(ctx context.Context, config config.Config, driver contractsdriver.Dri
 		instrument = connection.Instrument()
 	}
 
+	tx := NewTx(ctx, driver, logger, connection, nil, &[]TxLog{}, instrument)
+	if config != nil && connection != nil {
+		tx.state.sticky = config.GetBool("database.connections."+connection.Name()+".sticky", false)
+		tx.state.useUpsertAlias = config.GetBool("database.connections."+connection.Name()+".use_upsert_alias", false)
+	}
+	if connection != nil {
+		tx.state.serverVersion = connection.ServerVersion
+	}
 	return &DB{
-		Tx:                NewTx(ctx, driver, logger, connection, nil, &[]TxLog{}, instrument),
+		Tx:                tx,
+		state:             tx.state,
 		ctx:               ctx,
 		config:            config,
 		driver:            driver,
@@ -78,6 +88,21 @@ func BuildDB(ctx context.Context, config config.Config, log log.Log, connection 
 }
 
 func (r *DB) BeginTransaction() (contractsdb.Tx, error) {
+	if err := r.ctx.Err(); err != nil {
+		return nil, err
+	}
+	if r.Tx != nil {
+		if concrete, ok := r.Tx.(*Tx); ok {
+			if err := concrete.beforeStartingTransaction(); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if r.state.pretend() {
+		tx := NewTx(r.ctx, r.driver, r.logger, nil, &pretendTxBuilder{}, &[]TxLog{}, nil)
+		tx.state = r.state
+		return tx, nil
+	}
 	if r.connection == nil {
 		return nil, errors.DatabaseConnectionIsNil
 	}
@@ -90,13 +115,19 @@ func (r *DB) BeginTransaction() (contractsdb.Tx, error) {
 		return nil, errors.DatabaseConnectionIsNil
 	}
 
+	// A version-dependent query must not borrow a second connection after BEGIN
+	// has pinned the only writer in a pool configured with max_open_conns = 1.
+	_, _ = r.ServerVersion()
+
 	driverName := r.driver.Pool().Writers[0].Driver
-	txBuilder, err := NewTxBuilder(r.connection.Writer(), driverName)
+	txBuilder, err := NewTxBuilderWithContext(r.ctx, r.connection.Writer(), driverName)
 	if err != nil {
 		return nil, err
 	}
 
-	return NewTx(r.ctx, r.driver, r.logger, nil, txBuilder, &[]TxLog{}, r.instrument), nil
+	tx := NewTx(r.ctx, r.driver, r.logger, nil, txBuilder, &[]TxLog{}, r.instrument)
+	tx.state = r.state
+	return tx, nil
 }
 
 func (r *DB) Connection(name string) contractsdb.DB {
@@ -125,34 +156,15 @@ func (r *DB) Connection(name string) contractsdb.DB {
 
 	r.queries.m[name] = db
 	db.queries = r.queries
+	if r.state != nil {
+		db.state.hooks = r.state.hooks
+	}
 
 	return db
 }
 
-func (r *DB) Transaction(callback func(tx contractsdb.Tx) error) (err error) {
-	tx, err := r.BeginTransaction()
-	if err != nil {
-		return err
-	}
-
-	defer func() {
-		if re := recover(); re != nil {
-			err = fmt.Errorf("panic: %v", re)
-			if rollbackErr := tx.Rollback(); rollbackErr != nil {
-				err = errors.Join(err, rollbackErr)
-			}
-		}
-	}()
-
-	if err = callback(tx); err != nil {
-		if err := tx.Rollback(); err != nil {
-			return err
-		}
-
-		return err
-	}
-
-	return tx.Commit()
+func (r *DB) Transaction(callback func(contractsdb.Tx) error, attempts ...int) error {
+	return runTransaction(r.BeginTransaction, callback, attempts)
 }
 
 func (r *DB) WithContext(ctx context.Context) contractsdb.DB {
@@ -161,10 +173,18 @@ func (r *DB) WithContext(ctx context.Context) contractsdb.DB {
 		r.logger.Panicf(r.ctx, err.Error())
 		return nil
 	}
+	if r.state != nil {
+		db.state = r.state.newContext()
+		db.Tx.(*Tx).state = db.state
+	}
 	return db
 }
 
 type Tx struct {
+	pinned       *leasedConnectionState
+	transactions *transactionManager
+	record       *transactionRecord
+	state        *connectionState
 	ctx          context.Context
 	grammar      contractsdriver.Grammar
 	queryGrammar querybuilder.Grammar
@@ -203,7 +223,8 @@ func NewTx(
 		}
 	}
 
-	return &Tx{
+	tx := &Tx{
+		state:        newConnectionState(poolWriter.Connection, poolWriter.Driver),
 		ctx:          ctx,
 		driverName:   poolWriter.Driver,
 		queryGrammar: queryGrammar,
@@ -214,11 +235,28 @@ func NewTx(
 		txBuilder:    txBuilder,
 		txLogs:       txLogs,
 	}
+	if txBuilder != nil {
+		tx.transactions, tx.record = newTransactionManager(txBuilder)
+	}
+	return tx
 }
 
 func (r *Tx) Commit() error {
 	if r.txBuilder == nil {
 		return errors.DatabaseTransactionNotStarted
+	}
+	if r.transactions != nil {
+		committed, callbacks, err := r.transactions.commit(r.record)
+		if err != nil {
+			return err
+		}
+		if committed && r.txLogs != nil {
+			for _, log := range *r.txLogs {
+				r.logger.Trace(log.ctx, log.begin, log.sql, log.rowsAffected, log.err)
+			}
+			*r.txLogs = nil
+		}
+		return runTransactionCallbacks(callbacks)
 	}
 
 	if err := r.txBuilder.Commit(); err != nil {
@@ -237,18 +275,22 @@ func (r *Tx) Delete(sql string, args ...any) (*contractsdb.Result, error) {
 }
 
 func (r *Tx) Insert(sql string, args ...any) (*contractsdb.Result, error) {
-	return r.exec(sql, args...)
+	return r.execOperation(sql, statementOperation, args...)
 }
 
 func (r *Tx) Rollback() error {
 	if r.txBuilder == nil {
 		return errors.DatabaseTransactionNotStarted
 	}
+	if r.transactions != nil {
+		return r.RollbackTo(r.record.level - 1)
+	}
 
 	return r.txBuilder.Rollback()
 }
 
 func (r *Tx) Select(dest any, sql string, args ...any) error {
+	sql = querybuilder.ReplacePlaceholders(sql, r.driverName)
 	var (
 		builder contractsdb.CommonBuilder
 		realSql string
@@ -256,7 +298,7 @@ func (r *Tx) Select(dest any, sql string, args ...any) error {
 	)
 
 	if r.txBuilder != nil {
-		builder = r.txBuilder
+		builder = r.transactionalBuilder()
 	} else {
 		builder, err = r.readBuilder()
 		if err != nil {
@@ -291,16 +333,23 @@ func (r *Tx) Select(dest any, sql string, args ...any) error {
 }
 
 func (r *Tx) Statement(sql string, args ...any) error {
-	_, err := r.exec(sql, args...)
+	_, err := r.execOperation(sql, statementOperation, args...)
 
 	return err
+}
+
+func (r *Tx) StatementContext(ctx context.Context, statement string, args ...any) error {
+	scoped := *r
+	scoped.ctx = ctx
+	return scoped.Statement(statement, args...)
 }
 
 func (r *Tx) Table(name string) contractsdb.Query {
 	ctx := instrumentationdatabase.ContextWithTable(r.ctx, name)
 
 	if r.txBuilder != nil {
-		return NewQuery(ctx, r.txBuilder, r.txBuilder, r.queryGrammar, r.driverName, r.logger, name, r.txLogs)
+		builder := r.transactionalBuilder()
+		return NewQuery(ctx, builder, builder, r.queryGrammar, r.driverName, r.logger, name, r.txLogs)
 	}
 
 	readBuilder, err := r.readBuilder()
@@ -323,6 +372,11 @@ func (r *Tx) Update(sql string, args ...any) (*contractsdb.Result, error) {
 }
 
 func (r *Tx) exec(sql string, args ...any) (*contractsdb.Result, error) {
+	return r.execOperation(sql, affectingOperation, args...)
+}
+
+func (r *Tx) execOperation(sql string, operation int, args ...any) (*contractsdb.Result, error) {
+	sql = querybuilder.ReplacePlaceholders(sql, r.driverName)
 	var (
 		builder contractsdb.CommonBuilder
 		realSql string
@@ -331,7 +385,7 @@ func (r *Tx) exec(sql string, args ...any) (*contractsdb.Result, error) {
 	)
 
 	if r.txBuilder != nil {
-		builder = r.txBuilder
+		builder = r.transactionalBuilder()
 	} else {
 		builder, err = r.writeBuilder()
 		if err != nil {
@@ -340,7 +394,7 @@ func (r *Tx) exec(sql string, args ...any) (*contractsdb.Result, error) {
 	}
 
 	realSql = builder.Explain(sql, args...)
-	result, err = builder.ExecContext(r.ctx, sql, args...)
+	result, err = builder.ExecContext(operationContext(r.ctx, builder, operation), sql, args...)
 	if err != nil {
 		r.logger.Trace(r.ctx, carbon.Now(), realSql, -1, err)
 		return nil, err
@@ -361,40 +415,45 @@ func (r *Tx) exec(sql string, args ...any) (*contractsdb.Result, error) {
 // connection's reader pool, so a read sees the replica rather than the writer. A connection
 // opened without a database name has no pool to build against, so it is reported as the
 // declared error rather than dereferenced.
-func (r *Tx) readBuilder() (contractsdb.Builder, error) {
-	if r.connection == nil {
-		return nil, errors.DatabaseConnectionIsNil
+func (r *Tx) readBuilder() (contractsdb.CommonBuilder, error) {
+	if r.state.pretend() {
+		return observeBuilder(nil, r.state, true, nil), nil
 	}
-
-	builder, err := NewBuilder(r.connection.Reader(), r.driverName)
+	builder, err := r.rawBuilder(false)
 	if err != nil {
 		return nil, err
 	}
-
-	if r.instrument != nil {
-		return instrumentationdatabase.WrapBuilder(builder, r.instrument), nil
-	}
-
-	return builder, nil
+	return observeBuilder(builder, r.state, r.pinned == nil, func() (contractsdb.CommonBuilder, error) { return r.rawBuilder(true) }), nil
 }
 
-// writeBuilder builds the handle for statements that change rows. Inserts, updates and deletes
-// stay on the writer pool, and so does a read that has to observe one of them, such as an
-// inserted id being read back. A connection opened without a database name has no pool to build
-// against, so it is reported as the declared error rather than dereferenced.
-func (r *Tx) writeBuilder() (contractsdb.Builder, error) {
-	if r.connection == nil {
-		return nil, errors.DatabaseConnectionIsNil
+func (r *Tx) writeBuilder() (contractsdb.CommonBuilder, error) {
+	if r.state.pretend() {
+		return observeBuilder(nil, r.state, false, nil), nil
 	}
-
-	builder, err := NewBuilder(r.connection.Writer(), r.driverName)
+	builder, err := r.rawBuilder(true)
 	if err != nil {
 		return nil, err
 	}
+	return observeBuilder(builder, r.state, false, nil), nil
+}
 
+func (r *Tx) rawBuilder(writer bool) (contractsdb.CommonBuilder, error) {
+	if r.pinned != nil {
+		return &connectionBuilder{Conn: r.pinned.connection, lease: r.pinned}, nil
+	}
+	if r.connection == nil {
+		return nil, errors.DatabaseConnectionIsNil
+	}
+	pool := r.connection.Reader()
+	if writer {
+		pool = r.connection.Writer()
+	}
+	builder, err := NewBuilder(pool, r.driverName)
+	if err != nil {
+		return nil, err
+	}
 	if r.instrument != nil {
 		return instrumentationdatabase.WrapBuilder(builder, r.instrument), nil
 	}
-
 	return builder, nil
 }

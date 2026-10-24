@@ -1,6 +1,17 @@
 package driver
 
 type ColumnDefinition interface {
+	StoredAs(expression any) ColumnDefinition
+	VirtualAs(expression any) ColumnDefinition
+	Persisted() ColumnDefinition
+	Invisible() ColumnDefinition
+	Charset(charset string) ColumnDefinition
+	Collation(collation string) ColumnDefinition
+	StartingValue(value uint64) ColumnDefinition
+	From(value uint64) ColumnDefinition
+	Fixed() ColumnDefinition
+	Srid(value int) ColumnDefinition
+	Instant() ColumnDefinition
 	// After sets the column "after" another column (MySQL only)
 	After(column string) ColumnDefinition
 	// Always defines the precedence of sequence values over input for an identity column (PostgreSQL only)
@@ -68,7 +79,7 @@ type ColumnDefinition interface {
 	// Total set the decimal total
 	Total(total int) ColumnDefinition
 	// Nullable allow NULL values to be inserted into the column
-	Nullable() ColumnDefinition
+	Nullable(nullable ...bool) ColumnDefinition
 	// Unsigned set the column as unsigned (Mysql only)
 	Unsigned() ColumnDefinition
 	// UseCurrent set the column to use the current timestamp
@@ -78,6 +89,7 @@ type ColumnDefinition interface {
 }
 
 type Column struct {
+	Generation    *ColumnGeneration
 	Collation     string
 	Comment       string
 	Default       string

@@ -13,10 +13,11 @@ import (
 // Presence follows Laravel's isset($query->$component): a nil slice or nil pointer means the
 // component is unset, so the grammar skips it.
 type Builder struct {
-	grammar   Grammar
-	processor Processor
-	driver    string
-	state     *State
+	afterQueryCallbacks []func(any) any
+	grammar             Grammar
+	processor           Processor
+	driver              string
+	state               *State
 
 	// err carries the first failure. Fluent methods return the builder, so errors cannot be
 	// returned directly; this mirrors the existing database/db.Query builder.
@@ -370,6 +371,7 @@ func (b *Builder) Clone() *Builder {
 	c.State().Unions = cloneSlice(b.State().Unions)
 	c.State().UnionOrders = cloneSlice(b.State().UnionOrders)
 	c.beforeQueryCallbacks = cloneSlice(b.beforeQueryCallbacks)
+	c.afterQueryCallbacks = cloneSlice(b.afterQueryCallbacks)
 	c.insertUsingColumns = cloneSlice(b.insertUsingColumns)
 	c.insertUsingBindings = cloneSlice(b.insertUsingBindings)
 	c.updateValues = cloneSlice(b.updateValues)

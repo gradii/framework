@@ -128,7 +128,11 @@ func (r *ServiceProvider) Register(app foundation.Application) {
 			return nil, err
 		}
 
-		return databaseschema.NewSchema(config, log, orm, driver, nil)
+		connection := app.MakeDB()
+		if connection != nil && connection.Name() != orm.Name() {
+			connection = connection.Connection(orm.Name())
+		}
+		return databaseschema.NewSchema(config, log, orm, driver, nil, connection)
 	})
 	app.Singleton(contractsbinding.Seeder, func(app foundation.Application) (any, error) {
 		return databaseseeder.NewSeederFacade(), nil

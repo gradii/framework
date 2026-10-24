@@ -46,7 +46,8 @@ func (c *insertConnection) SelectFromWriteConnection(statement string, values []
 	statement = querybuilder.ReplacePlaceholders(statement, c.query.driver)
 	begin := carbon.Now()
 	var id int64
-	if err := c.query.writeBuilder.GetContext(c.query.ctx, &id, statement, values...); err != nil {
+	ctx := operationContext(c.query.ctx, c.query.writeBuilder, returningWriteOperation)
+	if err := c.query.writeBuilder.GetContext(ctx, &id, statement, values...); err != nil {
 		c.query.trace(c.query.writeBuilder, statement, values, begin, -1, err)
 		return nil, err
 	}

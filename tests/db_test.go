@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/goravel/framework/contracts/database"
 	"github.com/goravel/framework/contracts/database/db"
@@ -108,7 +107,7 @@ func (s *DBTestSuite) TestChunk() {
 			})
 
 			var products []Product
-			err := query.DB().Table("products").Chunk(2, func(rows []db.Row) error {
+			err := query.DB().Table("products").OrderBy("id").Chunk(2, func(rows []db.Row) error {
 				for _, row := range rows {
 					var product Product
 					err := row.Scan(&product)
@@ -170,7 +169,7 @@ func (s *DBTestSuite) TestChunkWithCountZero() {
 	for driver, query := range s.queries {
 		s.Run(driver, func() {
 			called := false
-			err := query.DB().Table("chunk_count_zero_missing_table").Chunk(0, func(rows []db.Row) error {
+			err := query.DB().Table("chunk_count_zero_missing_table").OrderBy("id").Chunk(0, func(rows []db.Row) error {
 				called = true
 
 				return nil
@@ -1048,23 +1047,24 @@ func (s *DBTestSuite) TestLockForUpdate() {
 			s.Equal("lock_for_update_product", product.Name)
 			s.True(product.ID > 0)
 
+			completed := make(chan error, 10)
 			for i := 0; i < 10; i++ {
 				go func() {
-					query.DB().Transaction(func(tx db.Tx) error {
+					completed <- query.DB().Transaction(func(tx db.Tx) error {
 						var product1 Product
-						err := tx.Table("products").Where("id", product.ID).LockForUpdate().First(&product1)
-						s.NoError(err)
-						s.True(product1.ID > 0)
+						if err := tx.Table("products").Where("id", product.ID).LockForUpdate().FirstOrFail(&product1); err != nil {
+							return err
+						}
 
-						_, err = tx.Table("products").Where("id", product1.ID).Update("name", product1.Name+"1")
-						s.NoError(err)
-
-						return nil
+						_, err := tx.Table("products").Where("id", product1.ID).Update("name", product1.Name+"1")
+						return err
 					})
 				}()
 			}
 
-			time.Sleep(2 * time.Second)
+			for i := 0; i < 10; i++ {
+				s.NoError(<-completed)
+			}
 
 			err = query.DB().Table("products").Where("id", product.ID).First(&product)
 			s.NoError(err)
@@ -1405,7 +1405,7 @@ func (s *DBTestSuite) TestQueryLog() {
 	s.Require().Equal(2, len(queryLogs))
 	s.Equal(`insert into "products" ("name") values ('query_log_product')`, queryLogs[0].Query)
 	s.True(queryLogs[0].Time > 0)
-	s.Equal(`select * from "products" where "name" = 'query_log_product'`, queryLogs[1].Query)
+	s.Equal(`select * from "products" where "name" = 'query_log_product' limit 1`, queryLogs[1].Query)
 	s.True(queryLogs[1].Time > 0)
 
 	ctx = databasedb.DisableQueryLog(ctx)
@@ -1663,7 +1663,7 @@ func (s *DBTestSuite) TestTransaction() {
 					panic(1)
 				})
 
-				s.Equal(fmt.Errorf("panic: %v", 1), err)
+				s.EqualError(err, "panic: 1")
 
 				var product2 Product
 				err = query.DB().Table("products").Where("name", "transaction product1 updated").First(&product2)

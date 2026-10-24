@@ -25,15 +25,17 @@ import (
 // db.Query contract and executes through CommonBuilder, keeping the tracing and transaction
 // behaviour unchanged.
 type Query struct {
-	ctx          context.Context
-	err          error
-	grammar      querybuilder.Grammar
-	driver       string
-	logger       logger.Logger
-	readBuilder  db.CommonBuilder
-	writeBuilder db.CommonBuilder
-	txLogs       *[]TxLog
-	builder      *querybuilder.Builder
+	originalReadBuilder db.CommonBuilder
+	allowTableless      bool
+	ctx                 context.Context
+	err                 error
+	grammar             querybuilder.Grammar
+	driver              string
+	logger              logger.Logger
+	readBuilder         db.CommonBuilder
+	writeBuilder        db.CommonBuilder
+	txLogs              *[]TxLog
+	builder             *querybuilder.Builder
 }
 
 // NewQuery creates a query bound to a table. grammar selects the dialect and driver is its name,
@@ -41,24 +43,34 @@ type Query struct {
 func NewQuery(ctx context.Context, readBuilder db.CommonBuilder, writeBuilder db.CommonBuilder, grammar querybuilder.Grammar, driver string, logger logger.Logger, table string, txLogs *[]TxLog) *Query {
 	builder := querybuilder.NewBuilder(grammar, querybuilder.NewProcessor(driver))
 	builder.SetDriver(driver)
+	if observed, ok := writeBuilder.(*observedBuilder); ok {
+		observed.state.mu.Lock()
+		builder.SetUseUpsertAlias(observed.state.useUpsertAlias)
+		version := observed.state.serverVersion
+		if version != nil {
+			builder.State().ServerVersion = func() (string, error) { return version(ctx) }
+		}
+		observed.state.mu.Unlock()
+	}
 	if table != "" {
 		builder.From(table, "")
 	}
 
 	return &Query{
-		ctx:          ctx,
-		grammar:      grammar,
-		driver:       driver,
-		logger:       logger,
-		readBuilder:  readBuilder,
-		writeBuilder: writeBuilder,
-		txLogs:       txLogs,
-		builder:      builder,
+		ctx:                 ctx,
+		grammar:             grammar,
+		driver:              driver,
+		logger:              logger,
+		readBuilder:         readBuilder,
+		originalReadBuilder: readBuilder,
+		writeBuilder:        writeBuilder,
+		txLogs:              txLogs,
+		builder:             builder,
 	}
 }
 
-// clone returns a copy sharing the execution fields but with its own builder, preserving the
-// immutable chaining the DB facade has always had.
+// clone is reserved for explicit Clone operations and the isolated paths cloned by Laravel,
+// such as aggregate queries and keyset chunks. Fluent clauses mutate the receiver.
 func (r *Query) clone() *Query {
 	c := *r
 	c.builder = r.builder.Clone()
@@ -70,22 +82,22 @@ func (r *Query) clone() *Query {
 
 // Where adds a where clause. Mirrors db.Query::Where.
 func (r *Query) Where(query any, args ...any) db.Query {
-	return r.clone().applyWhere(query, args, querybuilder.BooleanAnd)
+	return r.applyWhere(query, args, querybuilder.BooleanAnd)
 }
 
 // OrWhere adds an or where clause.
 func (r *Query) OrWhere(query any, args ...any) db.Query {
-	return r.clone().applyWhere(query, args, querybuilder.BooleanOr)
+	return r.applyWhere(query, args, querybuilder.BooleanOr)
 }
 
 // WhereNot adds a negated where clause.
 func (r *Query) WhereNot(query any, args ...any) db.Query {
-	return r.clone().applyWhere(query, args, querybuilder.BooleanAndNot)
+	return r.applyWhere(query, args, querybuilder.BooleanAndNot)
 }
 
 // OrWhereNot adds a negated or where clause.
 func (r *Query) OrWhereNot(query any, args ...any) db.Query {
-	return r.clone().applyWhere(query, args, querybuilder.BooleanOrNot)
+	return r.applyWhere(query, args, querybuilder.BooleanOrNot)
 }
 
 // applyWhere translates the DB facade's where shorthands onto the builder.
@@ -162,10 +174,10 @@ func (r *Query) nested(callback func(db.Query) db.Query, b *querybuilder.Builder
 		builder:      b,
 	}
 
-	if result, ok := callback(child).(*Query); ok {
-		return result.builder
+	callback(child)
+	if child.err != nil {
+		b.SetError(child.err)
 	}
-
 	return b
 }
 
@@ -202,284 +214,250 @@ func isByteSlice(value any) bool {
 
 // WhereRaw adds a raw where clause.
 func (r *Query) WhereRaw(raw string, args []any) db.Query {
-	q := r.clone()
-	q.builder.WhereRaw(raw, args, querybuilder.BooleanAnd)
+	r.builder.WhereRaw(raw, args, querybuilder.BooleanAnd)
 
-	return q
+	return r
 }
 
 // OrWhereRaw adds a raw or where clause.
 func (r *Query) OrWhereRaw(raw string, args []any) db.Query {
-	q := r.clone()
-	q.builder.WhereRaw(raw, args, querybuilder.BooleanOr)
+	r.builder.WhereRaw(raw, args, querybuilder.BooleanOr)
 
-	return q
+	return r
 }
 
 // WhereIn adds an in clause.
-func (r *Query) WhereIn(column string, values []any) db.Query {
-	q := r.clone()
-	q.builder.WhereIn(column, values, querybuilder.BooleanAnd, false)
+func (r *Query) WhereIn(column string, values any) db.Query {
+	r.builder.WhereIn(column, r.subquery(values), querybuilder.BooleanAnd, false)
 
-	return q
+	return r
 }
 
 // OrWhereIn adds an or in clause.
-func (r *Query) OrWhereIn(column string, values []any) db.Query {
-	q := r.clone()
-	q.builder.WhereIn(column, values, querybuilder.BooleanOr, false)
+func (r *Query) OrWhereIn(column string, values any) db.Query {
+	r.builder.WhereIn(column, r.subquery(values), querybuilder.BooleanOr, false)
 
-	return q
+	return r
 }
 
 // WhereNotIn adds a not in clause.
-func (r *Query) WhereNotIn(column string, values []any) db.Query {
-	q := r.clone()
-	q.builder.WhereNotIn(column, values, querybuilder.BooleanAnd)
+func (r *Query) WhereNotIn(column string, values any) db.Query {
+	r.builder.WhereNotIn(column, r.subquery(values), querybuilder.BooleanAnd)
 
-	return q
+	return r
 }
 
 // OrWhereNotIn adds an or not in clause.
-func (r *Query) OrWhereNotIn(column string, values []any) db.Query {
-	q := r.clone()
-	q.builder.WhereNotIn(column, values, querybuilder.BooleanOr)
+func (r *Query) OrWhereNotIn(column string, values any) db.Query {
+	r.builder.WhereNotIn(column, r.subquery(values), querybuilder.BooleanOr)
 
-	return q
+	return r
 }
 
 // WhereBetween adds a between clause.
 func (r *Query) WhereBetween(column string, x, y any) db.Query {
-	q := r.clone()
-	q.builder.WhereBetween(column, []any{x, y}, querybuilder.BooleanAnd, false)
+	r.builder.WhereBetween(column, []any{x, y}, querybuilder.BooleanAnd, false)
 
-	return q
+	return r
 }
 
 // OrWhereBetween adds an or between clause.
 func (r *Query) OrWhereBetween(column string, x, y any) db.Query {
-	q := r.clone()
-	q.builder.WhereBetween(column, []any{x, y}, querybuilder.BooleanOr, false)
+	r.builder.WhereBetween(column, []any{x, y}, querybuilder.BooleanOr, false)
 
-	return q
+	return r
 }
 
 // WhereNotBetween adds a not between clause.
 func (r *Query) WhereNotBetween(column string, x, y any) db.Query {
-	q := r.clone()
-	q.builder.WhereBetween(column, []any{x, y}, querybuilder.BooleanAnd, true)
+	r.builder.WhereBetween(column, []any{x, y}, querybuilder.BooleanAnd, true)
 
-	return q
+	return r
 }
 
 // OrWhereNotBetween adds an or not between clause.
 func (r *Query) OrWhereNotBetween(column string, x, y any) db.Query {
-	q := r.clone()
-	q.builder.WhereBetween(column, []any{x, y}, querybuilder.BooleanOr, true)
+	r.builder.WhereBetween(column, []any{x, y}, querybuilder.BooleanOr, true)
 
-	return q
+	return r
 }
 
 // WhereNull adds an is null clause.
 func (r *Query) WhereNull(column string) db.Query {
-	q := r.clone()
-	q.builder.WhereNull(column, querybuilder.BooleanAnd, false)
+	r.builder.WhereNull(column, querybuilder.BooleanAnd, false)
 
-	return q
+	return r
 }
 
 // OrWhereNull adds an or is null clause.
 func (r *Query) OrWhereNull(column string) db.Query {
-	q := r.clone()
-	q.builder.WhereNull(column, querybuilder.BooleanOr, false)
+	r.builder.WhereNull(column, querybuilder.BooleanOr, false)
 
-	return q
+	return r
 }
 
 // WhereNotNull adds an is not null clause.
 func (r *Query) WhereNotNull(column string) db.Query {
-	q := r.clone()
-	q.builder.WhereNotNull(column, querybuilder.BooleanAnd)
+	r.builder.WhereNotNull(column, querybuilder.BooleanAnd)
 
-	return q
+	return r
 }
 
 // OrWhereNotNull adds an or is not null clause.
 func (r *Query) OrWhereNotNull(column string) db.Query {
-	q := r.clone()
-	q.builder.WhereNotNull(column, querybuilder.BooleanOr)
+	r.builder.WhereNotNull(column, querybuilder.BooleanOr)
 
-	return q
+	return r
 }
 
 // WhereColumn compares two columns. One trailing column means equality, two mean operator then
 // column.
 func (r *Query) WhereColumn(column1 string, column2 ...string) db.Query {
-	q := r.clone()
 	operator, second, err := columnComparison(column2)
 	if err != nil {
-		q.err = err
-		return q
+		r.err = err
+		return r
 	}
-	q.builder.WhereColumn(column1, operator, second, querybuilder.BooleanAnd)
+	r.builder.WhereColumn(column1, operator, second, querybuilder.BooleanAnd)
 
-	return q
+	return r
 }
 
 // OrWhereColumn compares two columns with or.
 func (r *Query) OrWhereColumn(column1 string, column2 ...string) db.Query {
-	q := r.clone()
 	operator, second, err := columnComparison(column2)
 	if err != nil {
-		q.err = err
-		return q
+		r.err = err
+		return r
 	}
-	q.builder.WhereColumn(column1, operator, second, querybuilder.BooleanOr)
+	r.builder.WhereColumn(column1, operator, second, querybuilder.BooleanOr)
 
-	return q
+	return r
 }
 
 // WhereLike adds a like clause.
-func (r *Query) WhereLike(column string, value string) db.Query {
-	q := r.clone()
-	q.builder.WhereLike(column, value, false, querybuilder.BooleanAnd, false)
+func (r *Query) WhereLike(column string, value string, caseSensitive ...bool) db.Query {
+	r.builder.WhereLike(column, value, len(caseSensitive) > 0 && caseSensitive[0], querybuilder.BooleanAnd, false)
 
-	return q
+	return r
 }
 
 // OrWhereLike adds an or like clause.
-func (r *Query) OrWhereLike(column string, value string) db.Query {
-	q := r.clone()
-	q.builder.WhereLike(column, value, false, querybuilder.BooleanOr, false)
+func (r *Query) OrWhereLike(column string, value string, caseSensitive ...bool) db.Query {
+	r.builder.WhereLike(column, value, len(caseSensitive) > 0 && caseSensitive[0], querybuilder.BooleanOr, false)
 
-	return q
+	return r
 }
 
 // WhereNotLike adds a not like clause.
-func (r *Query) WhereNotLike(column string, value string) db.Query {
-	q := r.clone()
-	q.builder.WhereLike(column, value, false, querybuilder.BooleanAnd, true)
+func (r *Query) WhereNotLike(column string, value string, caseSensitive ...bool) db.Query {
+	r.builder.WhereLike(column, value, len(caseSensitive) > 0 && caseSensitive[0], querybuilder.BooleanAnd, true)
 
-	return q
+	return r
 }
 
 // OrWhereNotLike adds an or not like clause.
-func (r *Query) OrWhereNotLike(column string, value string) db.Query {
-	q := r.clone()
-	q.builder.WhereLike(column, value, false, querybuilder.BooleanOr, true)
+func (r *Query) OrWhereNotLike(column string, value string, caseSensitive ...bool) db.Query {
+	r.builder.WhereLike(column, value, len(caseSensitive) > 0 && caseSensitive[0], querybuilder.BooleanOr, true)
 
-	return q
+	return r
 }
 
 // WhereExists adds an exists clause.
-func (r *Query) WhereExists(query func() db.Query) db.Query {
-	q := r.clone()
-	if sub, ok := query().(*Query); ok {
-		q.builder.WhereExists(sub.builder, querybuilder.BooleanAnd, false)
-	}
+func (r *Query) WhereExists(query any) db.Query {
+	r.builder.WhereExists(r.subquery(query), querybuilder.BooleanAnd, false)
 
-	return q
+	return r
 }
 
 // WhereJsonContains adds a JSON contains clause.
 func (r *Query) WhereJsonContains(column string, value any) db.Query {
-	q := r.clone()
-	q.builder.WhereJsonContains(column, value, querybuilder.BooleanAnd, false)
+	r.builder.WhereJsonContains(column, value, querybuilder.BooleanAnd, false)
 
-	return q
+	return r
 }
 
 // OrWhereJsonContains adds an or JSON contains clause.
 func (r *Query) OrWhereJsonContains(column string, value any) db.Query {
-	q := r.clone()
-	q.builder.WhereJsonContains(column, value, querybuilder.BooleanOr, false)
+	r.builder.WhereJsonContains(column, value, querybuilder.BooleanOr, false)
 
-	return q
+	return r
 }
 
 // WhereJsonDoesntContain adds a negated JSON contains clause.
 func (r *Query) WhereJsonDoesntContain(column string, value any) db.Query {
-	q := r.clone()
-	q.builder.WhereJsonContains(column, value, querybuilder.BooleanAnd, true)
+	r.builder.WhereJsonContains(column, value, querybuilder.BooleanAnd, true)
 
-	return q
+	return r
 }
 
 // OrWhereJsonDoesntContain adds a negated or JSON contains clause.
 func (r *Query) OrWhereJsonDoesntContain(column string, value any) db.Query {
-	q := r.clone()
-	q.builder.WhereJsonContains(column, value, querybuilder.BooleanOr, true)
+	r.builder.WhereJsonContains(column, value, querybuilder.BooleanOr, true)
 
-	return q
+	return r
 }
 
 // WhereJsonContainsKey adds a JSON key existence clause.
 func (r *Query) WhereJsonContainsKey(column string) db.Query {
-	q := r.clone()
-	q.builder.WhereJsonContainsKey(column, querybuilder.BooleanAnd, false)
+	r.builder.WhereJsonContainsKey(column, querybuilder.BooleanAnd, false)
 
-	return q
+	return r
 }
 
 // OrWhereJsonContainsKey adds an or JSON key existence clause.
 func (r *Query) OrWhereJsonContainsKey(column string) db.Query {
-	q := r.clone()
-	q.builder.WhereJsonContainsKey(column, querybuilder.BooleanOr, false)
+	r.builder.WhereJsonContainsKey(column, querybuilder.BooleanOr, false)
 
-	return q
+	return r
 }
 
 // WhereJsonDoesntContainKey adds a negated JSON key existence clause.
 func (r *Query) WhereJsonDoesntContainKey(column string) db.Query {
-	q := r.clone()
-	q.builder.WhereJsonContainsKey(column, querybuilder.BooleanAnd, true)
+	r.builder.WhereJsonContainsKey(column, querybuilder.BooleanAnd, true)
 
-	return q
+	return r
 }
 
 // OrWhereJsonDoesntContainKey adds a negated or JSON key existence clause.
 func (r *Query) OrWhereJsonDoesntContainKey(column string) db.Query {
-	q := r.clone()
-	q.builder.WhereJsonContainsKey(column, querybuilder.BooleanOr, true)
+	r.builder.WhereJsonContainsKey(column, querybuilder.BooleanOr, true)
 
-	return q
+	return r
 }
 
 // WhereJsonLength compares a JSON array length. Mirrors Laravel's
 // Builder::whereJsonLength: args is either a single length (equality) or an
 // operator and a length.
 func (r *Query) WhereJsonLength(column string, args ...any) db.Query {
-	q := r.clone()
-	q.builder.WhereJsonLength(column, args...)
+	r.builder.WhereJsonLength(column, args...)
 
-	return q
+	return r
 }
 
 // OrWhereJsonLength compares a JSON array length with or. Mirrors Laravel's
 // Builder::orWhereJsonLength: args is either a single length (equality) or an
 // operator and a length.
 func (r *Query) OrWhereJsonLength(column string, args ...any) db.Query {
-	q := r.clone()
-	q.builder.OrWhereJsonLength(column, args...)
+	r.builder.OrWhereJsonLength(column, args...)
 
-	return q
+	return r
 }
 
 // WhereAll repeats one condition across columns joined by and.
 func (r *Query) WhereAll(columns []string, args ...any) db.Query {
 	operator, value, err := utils.PrepareWhereOperatorAndValue(args...)
-	q := r.clone()
 	if err != nil {
-		q.err = err
-		return q
+		r.err = err
+		return r
 	}
-	if q.expandInGroup(columns, operator, value, querybuilder.BooleanAnd, querybuilder.BooleanAnd) {
-		return q
+	if r.expandInGroup(columns, operator, value, querybuilder.BooleanAnd, querybuilder.BooleanAnd) {
+		return r
 	}
 
-	q.builder.WhereAll(toStrings(columns), operator, value, querybuilder.BooleanAnd)
+	r.builder.WhereAll(toStrings(columns), operator, value, querybuilder.BooleanAnd)
 
-	return q
+	return r
 }
 
 // WhereAny repeats one condition across columns joined by or, and joins that group to the
@@ -487,42 +465,39 @@ func (r *Query) WhereAll(columns []string, args ...any) db.Query {
 // inside the group.
 func (r *Query) WhereAny(columns []string, args ...any) db.Query {
 	operator, value, err := utils.PrepareWhereOperatorAndValue(args...)
-	q := r.clone()
 	if err != nil {
-		q.err = err
-		return q
+		r.err = err
+		return r
 	}
-	if q.expandInGroup(columns, operator, value, querybuilder.BooleanOr, querybuilder.BooleanAnd) {
-		return q
+	if r.expandInGroup(columns, operator, value, querybuilder.BooleanOr, querybuilder.BooleanAnd) {
+		return r
 	}
 
-	q.builder.WhereAny(toStrings(columns), operator, value, querybuilder.BooleanAnd)
+	r.builder.WhereAny(toStrings(columns), operator, value, querybuilder.BooleanAnd)
 
-	return q
+	return r
 }
 
 // WhereNone negates a condition repeated across columns.
 func (r *Query) WhereNone(columns []string, args ...any) db.Query {
 	operator, value, err := utils.PrepareWhereOperatorAndValue(args...)
-	q := r.clone()
 	if err != nil {
-		q.err = err
-		return q
+		r.err = err
+		return r
 	}
-	if q.expandInGroup(columns, operator, value, querybuilder.BooleanOr, querybuilder.BooleanAnd+" not") {
-		return q
+	if r.expandInGroup(columns, operator, value, querybuilder.BooleanOr, querybuilder.BooleanAnd+" not") {
+		return r
 	}
 
-	q.builder.WhereNone(toStrings(columns), operator, value, querybuilder.BooleanAnd)
+	r.builder.WhereNone(toStrings(columns), operator, value, querybuilder.BooleanAnd)
 
-	return q
+	return r
 }
 
 // --- select and clauses ------------------------------------------------------
 
 // Select replaces the selected columns and their bindings, mirroring Laravel's select().
 func (r *Query) Select(columns ...string) db.Query {
-	q := r.clone()
 
 	if len(columns) == 0 {
 		columns = []string{"*"}
@@ -531,30 +506,28 @@ func (r *Query) Select(columns ...string) db.Query {
 	for _, column := range columns {
 		selects = append(selects, column)
 	}
-	q.builder.Select(selects...)
+	r.builder.Select(selects...)
 
-	return q
+	return r
 }
 
 // Distinct preserves the select list and sets the distinct columns, mirroring Laravel's distinct().
 func (r *Query) Distinct(columns ...string) db.Query {
-	q := r.clone()
 
 	distinctColumns := make([]any, len(columns))
 	for i, column := range columns {
 		distinctColumns[i] = column
 	}
-	q.builder.Distinct(distinctColumns...)
+	r.builder.Distinct(distinctColumns...)
 
-	return q
+	return r
 }
 
 // GroupBy appends grouping columns.
 func (r *Query) GroupBy(column ...string) db.Query {
-	q := r.clone()
-	q.builder.GroupBy(toStrings(column)...)
+	r.builder.GroupBy(toStrings(column)...)
 
-	return q
+	return r
 }
 
 // Having adds a having clause.
@@ -563,10 +536,9 @@ func (r *Query) GroupBy(column ...string) db.Query {
 // column name, so it is routed to HavingRaw; anything else keeps the builder's Laravel-faithful
 // Having, which takes a column, an operator and a value (or a raw expression).
 func (r *Query) Having(query any, args ...any) db.Query {
-	q := r.clone()
-	q.applyHaving(query, args)
+	r.applyHaving(query, args)
 
-	return q
+	return r
 }
 
 // applyHaving routes the DB facade's Having shorthands onto the builder. Laravel's Having takes a
@@ -584,32 +556,29 @@ func (r *Query) applyHaving(query any, args []any) {
 }
 
 // OrderBy adds an order clause.
-func (r *Query) OrderBy(column string, directions ...string) db.Query {
+func (r *Query) OrderBy(column any, directions ...string) db.Query {
 	direction := "asc"
 	if len(directions) > 0 {
 		direction = directions[0]
 	}
 
-	q := r.clone()
-	q.builder.OrderBy(column, direction)
+	r.builder.OrderBy(r.subquery(column), direction)
 
-	return q
+	return r
 }
 
 // OrderByDesc adds a descending order clause.
-func (r *Query) OrderByDesc(column string) db.Query {
-	q := r.clone()
-	q.builder.OrderByDesc(column)
+func (r *Query) OrderByDesc(column any) db.Query {
+	r.builder.OrderByDesc(r.subquery(column))
 
-	return q
+	return r
 }
 
 // OrderByRaw adds a raw order clause.
-func (r *Query) OrderByRaw(raw string) db.Query {
-	q := r.clone()
-	q.builder.OrderByRaw(raw, nil)
+func (r *Query) OrderByRaw(raw string, bindings ...any) db.Query {
+	r.builder.OrderByRaw(raw, bindings)
 
-	return q
+	return r
 }
 
 // Latest orders by created_at descending, or by the given column.
@@ -619,52 +588,50 @@ func (r *Query) Latest(column ...string) db.Query {
 		col = column[0]
 	}
 
-	q := r.clone()
-	q.builder.Latest(col)
+	r.builder.Latest(col)
 
-	return q
+	return r
 }
 
 // InRandomOrder orders randomly.
-func (r *Query) InRandomOrder() db.Query {
-	q := r.clone()
-	q.builder.InRandomOrder("")
+func (r *Query) InRandomOrder(seed ...any) db.Query {
+	var value any = ""
+	if len(seed) > 0 {
+		value = seed[0]
+	}
+	r.builder.InRandomOrder(value)
 
-	return q
+	return r
 }
 
 // Limit sets the limit.
 func (r *Query) Limit(limit uint64) db.Query {
-	q := r.clone()
-	q.builder.Limit(int(limit))
+	r.builder.Limit(int(limit))
 
-	return q
+	return r
 }
 
 // Offset sets the offset.
 func (r *Query) Offset(offset uint64) db.Query {
-	q := r.clone()
-	q.builder.Offset(int(offset))
+	r.builder.Offset(int(offset))
 
-	return q
+	return r
 }
 
 // LockForUpdate locks the selected rows for update.
 func (r *Query) LockForUpdate() db.Query {
-	q := r.clone()
-	q.builder.LockForUpdate()
-	q.readBuilder = q.writeBuilder
+	r.builder.LockForUpdate()
+	r.readBuilder = r.writeBuilder
 
-	return q
+	return r
 }
 
 // SharedLock takes a shared lock on the selected rows.
 func (r *Query) SharedLock() db.Query {
-	q := r.clone()
-	q.builder.SharedLock()
-	q.readBuilder = q.writeBuilder
+	r.builder.SharedLock()
+	r.readBuilder = r.writeBuilder
 
-	return q
+	return r
 }
 
 // UseWritePdo forces the query's reads to run on the write connection instead of the reader
@@ -673,46 +640,34 @@ func (r *Query) SharedLock() db.Query {
 // the inverse of its $useReadPdo argument. Here the read routing is the builder a read executes
 // through, so the write builder replaces the read one for this query and its clones.
 func (r *Query) UseWritePdo() db.Query {
-	q := r.clone()
-	q.readBuilder = q.writeBuilder
+	r.builder.State().UseWritePdo = true
+	r.readBuilder = r.writeBuilder
 
-	return q
+	return r
 }
 
 // Join adds an inner join from raw SQL. query is a "<table> on <condition>" fragment, or a whole
 // join clause whose leading keyword ("left join ...") then overrides the default inner type.
 func (r *Query) Join(query string, args ...any) db.Query {
-	q := r.clone()
-	q.builder.JoinRaw(query, args, "inner")
-
-	return q
+	return r.join(query, args, "inner")
 }
 
 // LeftJoin adds a left join from raw SQL. A query that carries its own leading join keyword
 // overrides the default left type.
 func (r *Query) LeftJoin(query string, args ...any) db.Query {
-	q := r.clone()
-	q.builder.JoinRaw(query, args, "left")
-
-	return q
+	return r.join(query, args, "left")
 }
 
 // RightJoin adds a right join from raw SQL. A query that carries its own leading join keyword
 // overrides the default right type.
 func (r *Query) RightJoin(query string, args ...any) db.Query {
-	q := r.clone()
-	q.builder.JoinRaw(query, args, "right")
-
-	return q
+	return r.join(query, args, "right")
 }
 
 // CrossJoin adds a cross join from raw SQL. A query that carries its own leading join keyword
 // overrides the default cross type.
 func (r *Query) CrossJoin(query string, args ...any) db.Query {
-	q := r.clone()
-	q.builder.JoinRaw(query, args, "cross")
-
-	return q
+	return r.join(query, args, "cross")
 }
 
 // When applies a callback when the condition holds.
@@ -734,7 +689,7 @@ func (r *Query) buildSelect() (string, []any, error) {
 	if r.err != nil {
 		return "", nil, r.err
 	}
-	if r.builder.TableSource() == nil {
+	if r.builder.TableSource() == nil && !r.allowTableless {
 		return "", nil, errors.DatabaseTableIsRequired
 	}
 
@@ -754,6 +709,7 @@ func (r *Query) buildSelect() (string, []any, error) {
 	if err := r.builder.Error(); err != nil {
 		return "", nil, err
 	}
+	r.resolveReader()
 
 	return querybuilder.ReplacePlaceholders(sql, r.driver), args, nil
 }
@@ -823,7 +779,7 @@ func (r *Query) buildUpdate(values map[string]any) (string, []any, error) {
 		return "", nil, errors.DatabaseTableIsRequired
 	}
 
-	sql, args := r.builder.ToUpdateSQL(values)
+	sql, args := r.builder.ToUpdateSQL(r.subquery(values))
 	if err := r.builder.Error(); err != nil {
 		return "", nil, err
 	}
@@ -899,53 +855,49 @@ func (r *Query) Count() (int64, error) {
 	return count, nil
 }
 
-// Exists reports whether any row matches.
+// Exists executes the grammar's existence query, preserving limit and offset semantics.
 func (r *Query) Exists() (bool, error) {
-	count, err := r.Count()
-	if err != nil {
+	if r.err != nil {
+		return false, r.err
+	}
+	if r.builder.TableSource() == nil && !r.allowTableless {
+		return false, errors.DatabaseTableIsRequired
+	}
+	statement, bindings := r.builder.ToExistsSQL()
+	if err := r.builder.Error(); err != nil {
 		return false, err
 	}
-
-	return count > 0, nil
-}
-
-// DoesntExist reports whether no row matches.
-func (r *Query) DoesntExist() (bool, error) {
-	count, err := r.Count()
-	if err != nil {
-		return false, err
+	statement = querybuilder.ReplacePlaceholders(statement, r.driver)
+	r.resolveReader()
+	var exists bool
+	begin := carbon.Now()
+	err := r.readBuilder.GetContext(r.ctx, &exists, statement, bindings...)
+	if errors.Is(err, databasesql.ErrNoRows) {
+		err = nil
 	}
-
-	return count == 0, nil
+	r.trace(r.readBuilder, statement, bindings, begin, -1, err)
+	return exists, err
 }
 
-// ExistsOr reports true when a row matches; otherwise it returns the callback's value. Mirrors
-// Builder::existsOr(): the callback runs only on the miss branch.
+func (r *Query) DoesntExist() (bool, error) { exists, err := r.Exists(); return !exists, err }
 func (r *Query) ExistsOr(callback func() any) (any, error) {
-	count, err := r.Count()
+	exists, err := r.Exists()
 	if err != nil {
 		return nil, err
 	}
-
-	if count > 0 {
+	if exists {
 		return true, nil
 	}
-
 	return callback(), nil
 }
-
-// DoesntExistOr reports true when no row matches; otherwise it returns the callback's value. Mirrors
-// Builder::doesntExistOr(): the callback runs only on the hit branch.
 func (r *Query) DoesntExistOr(callback func() any) (any, error) {
-	count, err := r.Count()
+	exists, err := r.Exists()
 	if err != nil {
 		return nil, err
 	}
-
-	if count == 0 {
+	if !exists {
 		return true, nil
 	}
-
 	return callback(), nil
 }
 
@@ -970,76 +922,41 @@ func (r *Query) Get(dest any) error {
 
 	r.trace(r.readBuilder, sql, args, now, rowsAffected, nil)
 
-	return nil
+	return r.applyAfterQuery(dest)
 }
 
-// First retrieves the first matching row into dest.
-func (r *Query) First(dest any) error {
-	sql, args, err := r.buildSelect()
-	if err != nil {
-		return err
-	}
-
-	now := carbon.Now()
-	if err := r.readBuilder.GetContext(r.ctx, dest, sql, args...); err != nil {
-		if errors.Is(err, databasesql.ErrNoRows) {
-			r.trace(r.readBuilder, sql, args, now, 0, nil)
-
-			return nil
-		}
-
-		r.trace(r.readBuilder, sql, args, now, -1, err)
-
-		return err
-	}
-
-	r.trace(r.readBuilder, sql, args, now, 1, nil)
-
-	return nil
-}
-
-// FirstOr retrieves the first matching row, or runs the callback when there is none.
+// First follows Laravel's limit(1)->get()->first() data semantics.
+func (r *Query) First(dest any) error { return r.Limit(1).(*Query).firstResult(dest, nil) }
 func (r *Query) FirstOr(dest any, callback func() error) error {
-	sql, args, err := r.buildSelect()
-	if err != nil {
-		return err
-	}
-
-	now := carbon.Now()
-	if err := r.readBuilder.GetContext(r.ctx, dest, sql, args...); err != nil {
-		if errors.Is(err, databasesql.ErrNoRows) {
-			r.trace(r.readBuilder, sql, args, now, 0, nil)
-
-			return callback()
-		}
-
-		r.trace(r.readBuilder, sql, args, now, -1, err)
-
-		return err
-	}
-
-	r.trace(r.readBuilder, sql, args, now, 1, nil)
-
-	return nil
+	return r.Limit(1).(*Query).firstResult(dest, callback)
 }
-
-// FirstOrFail retrieves the first matching row or returns the driver error.
 func (r *Query) FirstOrFail(dest any) error {
-	sql, args, err := r.buildSelect()
+	return r.Limit(1).(*Query).firstResult(dest, func() error { return databasesql.ErrNoRows })
+}
+func (r *Query) firstResult(dest any, missing func() error) error {
+	if r.builder.HasAfterQueryCallbacks() {
+		return r.firstTransformed(dest, missing)
+	}
+	statement, bindings, err := r.buildSelect()
 	if err != nil {
 		return err
 	}
-
-	now := carbon.Now()
-	if err := r.readBuilder.GetContext(r.ctx, dest, sql, args...); err != nil {
-		r.trace(r.readBuilder, sql, args, now, -1, err)
-
+	begin := carbon.Now()
+	err = r.readBuilder.GetContext(r.ctx, dest, statement, bindings...)
+	if errors.Is(err, databasesql.ErrNoRows) {
+		r.trace(r.readBuilder, statement, bindings, begin, 0, nil)
+		clearDestination(dest)
+		if missing != nil {
+			return missing()
+		}
+		return nil
+	}
+	if err != nil {
+		r.trace(r.readBuilder, statement, bindings, begin, -1, err)
 		return err
 	}
-
-	r.trace(r.readBuilder, sql, args, now, 1, nil)
-
-	return nil
+	r.trace(r.readBuilder, statement, bindings, begin, 1, nil)
+	return r.applyAfterQuery(dest)
 }
 
 // Find retrieves rows matching the given conditions.
@@ -1083,25 +1000,19 @@ func (r *Query) FindOr(dest any, id any, callback func() error) error {
 
 // Value retrieves a single column of the first row.
 func (r *Query) Value(column string, dest any) error {
-	return r.Select(column).Limit(1).First(dest)
+	return r.onceWithColumns([]any{column}, func() error { return r.First(dest) })
 }
 
 // RawValue retrieves a single raw expression value from the first row. It mirrors Laravel's
 // Builder::rawValue: selectRaw($expression)->first(). Unlike Value, the expression is not wrapped as
 // an identifier, so it can carry an arbitrary SQL fragment such as UPPER("foo").
 func (r *Query) RawValue(expression string, dest any) error {
-	q := r.clone()
-	q.builder.SetSelects([]any{querybuilder.Raw(expression)})
-
-	return q.Limit(1).First(dest)
+	return r.SelectRaw(expression).First(dest)
 }
 
 // Pluck retrieves a single column of every row.
 func (r *Query) Pluck(column string, dest any) error {
-	q := r.clone()
-	q.builder.SetSelects([]any{column})
-
-	return q.Get(dest)
+	return r.onceWithColumns([]any{column}, func() error { return r.Get(dest) })
 }
 
 // Implode concatenates the values of a single column into a string separated by glue. It mirrors
@@ -1167,7 +1078,18 @@ func (r *Query) aggregate(function string, column string, dest any) error {
 	q := r.clone()
 	q.builder.SetAggregate(function, []any{column})
 
-	return q.First(dest)
+	var rows []map[string]any
+	if err := q.Get(&rows); err != nil {
+		return err
+	}
+	var value any
+	if len(rows) > 0 {
+		value = rows[0]["aggregate"]
+	}
+	if value == nil && function == "sum" {
+		value = int64(0)
+	}
+	return scanAggregate(value, dest)
 }
 
 // Paginate retrieves one page of rows, writing the total into total when it is not nil. It mirrors
@@ -1182,6 +1104,9 @@ func (r *Query) Paginate(page, limit int, dest any, total *int64) error {
 		limit = 15
 	}
 
+	if page-1 > int(^uint(0)>>1)/limit {
+		return errors.QueryPaginationOverflow
+	}
 	offset := (page - 1) * limit
 
 	// Resolve the total exactly as Laravel's Builder::paginate does: a non-zero total already carried
@@ -1192,7 +1117,7 @@ func (r *Query) Paginate(page, limit int, dest any, total *int64) error {
 		resolvedTotal = *total
 	}
 	if resolvedTotal == 0 {
-		count, err := r.Count()
+		count, err := r.GetCountForPagination()
 		if err != nil {
 			return err
 		}
@@ -1248,20 +1173,19 @@ func (r *Query) CursorPaginate(perPage int, cursor string, dest any) (db.CursorP
 	}
 
 	// The builder entry mutates the builder (it reverses the order in place and overwrites the
-	// limit), so it runs on a clone, preserving the facade's immutable chaining.
-	q := r.clone()
+	// limit), and applies those clauses to this builder like Laravel.
 
-	page, err := q.builder.CursorPaginate(perPage, anchor)
+	page, err := r.builder.CursorPaginate(perPage, anchor)
 	if err != nil {
 		return db.CursorPaginator{}, err
 	}
 
-	sql, args, err := q.buildSelect()
+	sql, args, err := r.buildSelect()
 	if err != nil {
 		return db.CursorPaginator{}, err
 	}
 
-	items, err := q.cursorRows(sql, args, dest)
+	items, err := r.cursorRows(sql, args, dest)
 	if err != nil {
 		return db.CursorPaginator{}, err
 	}
@@ -1405,6 +1329,10 @@ func (r *Query) Cursor() chan db.Row {
 		if rows, err = r.readBuilder.QueryxContext(r.ctx, sql, args...); err != nil {
 			return
 		}
+		if rows == nil {
+			count = 0
+			return
+		}
 		defer errors.Ignore(rows.Close)
 
 		for rows.Next() {
@@ -1425,49 +1353,53 @@ func (r *Query) Cursor() chan db.Row {
 	return ch
 }
 
-// Chunk iterates the results in slices of the given size. A callback returning
-// errors.DatabaseChunkStopped halts the loop cleanly (mirroring Laravel's `return false`, which
-// makes chunk return true), so the next chunk is never fetched; any other error aborts and is
-// returned. A size of zero short-circuits before any query is issued, mirroring Laravel's
-// `if ($limit == 0) break;` guard.
+// Chunk follows BuildsQueries::chunk, including the caller's starting offset and limit.
 func (r *Query) Chunk(size uint64, callback func(rows []db.Row) error) error {
+	if len(r.builder.State().Orders) == 0 && len(r.builder.State().UnionOrders) == 0 {
+		return errors.QueryOrderRequired
+	}
 	if size == 0 {
 		return nil
 	}
-
-	offset := uint64(0)
-
-	for {
-		rows := r.clone().Offset(offset).Limit(size).Cursor()
-
-		var destSlice []db.Row
-		for row := range rows {
-			if err := row.Err(); err != nil {
-				return err
-			}
-			destSlice = append(destSlice, row)
+	max := int(^uint(0) >> 1)
+	if size > uint64(max) {
+		return errors.QueryPaginationOverflow
+	}
+	skip, _ := r.builder.OffsetValue()
+	remaining, limited := r.builder.LimitValue()
+	for offset := skip; ; {
+		limit := int(size)
+		if limited && remaining < limit {
+			limit = remaining
 		}
-
-		if len(destSlice) == 0 {
-			break
+		if limit <= 0 {
+			return nil
 		}
-
-		if err := callback(destSlice); err != nil {
+		r.builder.Offset(offset).Limit(limit)
+		_, rows, err := r.collectChunk()
+		if err != nil {
+			return err
+		}
+		if len(rows) == 0 {
+			return nil
+		}
+		if limited {
+			remaining -= len(rows)
+		}
+		if err := callback(rows); err != nil {
 			if errors.Is(err, errors.DatabaseChunkStopped) {
 				return nil
 			}
-
 			return err
 		}
-
-		if len(destSlice) < int(size) {
-			break
+		if len(rows) != int(size) {
+			return nil
 		}
-
-		offset += size
+		if offset > max-int(size) {
+			return errors.QueryPaginationOverflow
+		}
+		offset += int(size)
 	}
-
-	return nil
 }
 
 // ChunkById chunks the query by comparing ids, mirroring Laravel's BuildsQueries::chunkById. Each
@@ -1571,28 +1503,14 @@ func (r *Query) chunkById(size uint64, callback func(rows []db.Row) error, desce
 // collectChunk runs the built statement as one keyset page, returning the rows as column-keyed maps
 // (for reading the keyset id) alongside the db.Row facade values handed to the callback.
 func (r *Query) collectChunk() ([]map[string]any, []db.Row, error) {
-	var (
-		items []map[string]any
-		rows  []db.Row
-	)
-
-	for row := range r.Cursor() {
-		if err := row.Err(); err != nil {
-			return nil, nil, err
-		}
-
-		rows = append(rows, row)
-
-		concrete, _ := row.(*Row)
-		if concrete == nil {
-			items = append(items, nil)
-
-			continue
-		}
-
-		items = append(items, concrete.row)
+	var items []map[string]any
+	if err := r.Get(&items); err != nil {
+		return nil, nil, err
 	}
-
+	rows := make([]db.Row, len(items))
+	for i, item := range items {
+		rows[i] = NewRow(item, nil)
+	}
 	return items, rows, nil
 }
 
@@ -1613,6 +1531,9 @@ func (r *Query) Each(callback func(row db.Row) error) error {
 
 // Insert inserts one or many rows.
 func (r *Query) Insert(data any) (*db.Result, error) {
+	if emptyBatch(data) {
+		return &db.Result{}, nil
+	}
 	mapData, err := convertToSliceMap(data)
 	if err != nil {
 		return nil, err
@@ -1647,7 +1568,7 @@ func (r *Query) Insert(data any) (*db.Result, error) {
 }
 
 // InsertGetID inserts one row and returns its generated id.
-func (r *Query) InsertGetID(data any) (int64, error) {
+func (r *Query) InsertGetID(data any, sequence ...string) (int64, error) {
 	mapData, err := convertToMap(data)
 	if err != nil {
 		return 0, err
@@ -1662,7 +1583,7 @@ func (r *Query) InsertGetID(data any) (int64, error) {
 		return 0, errors.DatabaseTableIsRequired
 	}
 
-	id, err := r.builder.InsertGetID(&insertConnection{query: r}, []map[string]any{mapData}, "")
+	id, err := r.builder.InsertGetID(&insertConnection{query: r}, []map[string]any{mapData}, firstString(sequence, ""))
 	if err != nil {
 		return 0, err
 	}
@@ -1712,36 +1633,44 @@ func (r *Query) Update(column any, value ...any) (*db.Result, error) {
 
 // UpdateOrInsert updates the first matching row, or inserts a new one.
 func (r *Query) UpdateOrInsert(attributes any, values any) (*db.Result, error) {
-	mapAttributes, err := convertToMap(attributes)
+	where, err := convertToMap(attributes)
 	if err != nil {
 		return nil, err
 	}
-
-	mapValues, err := convertToMap(values)
+	query := r.Where(where)
+	exists, err := query.Exists()
 	if err != nil {
 		return nil, err
 	}
-
-	exist, err := r.clone().Where(mapAttributes).Exists()
-	if err != nil {
-		return nil, err
-	}
-
-	if exist {
-		// Laravel returns true without touching the row when no update values are given
-		// (Builder::updateOrInsert's `if (empty($values))` branch).
-		if len(mapValues) == 0 {
-			return &db.Result{RowsAffected: 0}, nil
+	switch callback := values.(type) {
+	case func(bool) any:
+		values = callback(exists)
+	case func(bool) map[string]any:
+		values = callback(exists)
+	case func(bool) (map[string]any, error):
+		values, err = callback(exists)
+		if err != nil {
+			return nil, err
 		}
-
-		return r.Where(mapAttributes).Update(values)
 	}
-
-	for key, value := range mapValues {
-		mapAttributes[key] = value
+	assignments, err := convertToMap(values)
+	if err != nil {
+		return nil, err
 	}
-
-	return r.Insert(mapAttributes)
+	if exists {
+		if len(assignments) == 0 {
+			return &db.Result{}, nil
+		}
+		return query.Limit(1).Update(assignments)
+	}
+	insert := make(map[string]any, len(where)+len(assignments))
+	for key, value := range where {
+		insert[key] = value
+	}
+	for key, value := range assignments {
+		insert[key] = value
+	}
+	return r.Insert(insert)
 }
 
 // Increment adds to a numeric column.
@@ -1819,7 +1748,7 @@ func (r *Query) findQuery(conds []any) (db.Query, error) {
 	case len(conds) == 2:
 		q = r.Where(conds[0], conds[1])
 	default:
-		q = r.clone()
+		q = r
 	}
 
 	return q, nil

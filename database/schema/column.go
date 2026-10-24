@@ -6,6 +6,22 @@ import (
 )
 
 type ColumnDefinition struct {
+	storedAs           any
+	virtualAs          any
+	expression         any
+	storedSet          bool
+	virtualSet         bool
+	persisted          bool
+	invisible          bool
+	fixed              bool
+	instant            bool
+	charset            string
+	collation          string
+	subtype            string
+	srid               *int
+	dimensions         *int
+	startingValue      *uint64
+	rawDefinition      string
 	def                any
 	onUpdate           any
 	autoIncrement      *bool
@@ -161,7 +177,7 @@ func (r *ColumnDefinition) GetPrecision() int {
 		return *r.precision
 	}
 
-	return 0
+	return int(configuredTimePrecision.Load())
 }
 
 func (r *ColumnDefinition) GetTotal() int {
@@ -224,8 +240,12 @@ func (r *ColumnDefinition) IsSetGeneratedAs() bool {
 	return r != nil && r.generatedAs != nil
 }
 
-func (r *ColumnDefinition) Nullable() driver.ColumnDefinition {
-	r.nullable = convert.Pointer(true)
+func (r *ColumnDefinition) Nullable(nullable ...bool) driver.ColumnDefinition {
+	value := true
+	if len(nullable) > 0 {
+		value = nullable[0]
+	}
+	r.nullable = &value
 
 	return r
 }

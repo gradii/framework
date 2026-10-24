@@ -3,7 +3,9 @@
 package schema
 
 import (
+	db "github.com/goravel/framework/contracts/database/db"
 	driver "github.com/goravel/framework/contracts/database/driver"
+
 	mock "github.com/stretchr/testify/mock"
 
 	orm "github.com/goravel/framework/contracts/database/orm"
@@ -115,6 +117,236 @@ func (_c *Schema_Create_Call) Return(_a0 error) *Schema_Create_Call {
 }
 
 func (_c *Schema_Create_Call) RunAndReturn(run func(string, func(schema.Blueprint)) error) *Schema_Create_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// CreateDatabase provides a mock function with given fields: name
+func (_m *Schema) CreateDatabase(name string) error {
+	ret := _m.Called(name)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreateDatabase")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(string) error); ok {
+		r0 = rf(name)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Schema_CreateDatabase_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateDatabase'
+type Schema_CreateDatabase_Call struct {
+	*mock.Call
+}
+
+// CreateDatabase is a helper method to define mock.On call
+//   - name string
+func (_e *Schema_Expecter) CreateDatabase(name interface{}) *Schema_CreateDatabase_Call {
+	return &Schema_CreateDatabase_Call{Call: _e.mock.On("CreateDatabase", name)}
+}
+
+func (_c *Schema_CreateDatabase_Call) Run(run func(name string)) *Schema_CreateDatabase_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *Schema_CreateDatabase_Call) Return(_a0 error) *Schema_CreateDatabase_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Schema_CreateDatabase_Call) RunAndReturn(run func(string) error) *Schema_CreateDatabase_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// DB provides a mock function with no fields
+func (_m *Schema) DB() db.Tx {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for DB")
+	}
+
+	var r0 db.Tx
+	if rf, ok := ret.Get(0).(func() db.Tx); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(db.Tx)
+		}
+	}
+
+	return r0
+}
+
+// Schema_DB_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DB'
+type Schema_DB_Call struct {
+	*mock.Call
+}
+
+// DB is a helper method to define mock.On call
+func (_e *Schema_Expecter) DB() *Schema_DB_Call {
+	return &Schema_DB_Call{Call: _e.mock.On("DB")}
+}
+
+func (_c *Schema_DB_Call) Run(run func()) *Schema_DB_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *Schema_DB_Call) Return(_a0 db.Tx) *Schema_DB_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Schema_DB_Call) RunAndReturn(run func() db.Tx) *Schema_DB_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// DefaultStringLength provides a mock function with given fields: length
+func (_m *Schema) DefaultStringLength(length int) error {
+	ret := _m.Called(length)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DefaultStringLength")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(int) error); ok {
+		r0 = rf(length)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Schema_DefaultStringLength_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DefaultStringLength'
+type Schema_DefaultStringLength_Call struct {
+	*mock.Call
+}
+
+// DefaultStringLength is a helper method to define mock.On call
+//   - length int
+func (_e *Schema_Expecter) DefaultStringLength(length interface{}) *Schema_DefaultStringLength_Call {
+	return &Schema_DefaultStringLength_Call{Call: _e.mock.On("DefaultStringLength", length)}
+}
+
+func (_c *Schema_DefaultStringLength_Call) Run(run func(length int)) *Schema_DefaultStringLength_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(int))
+	})
+	return _c
+}
+
+func (_c *Schema_DefaultStringLength_Call) Return(_a0 error) *Schema_DefaultStringLength_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Schema_DefaultStringLength_Call) RunAndReturn(run func(int) error) *Schema_DefaultStringLength_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// DefaultTimePrecision provides a mock function with given fields: precision
+func (_m *Schema) DefaultTimePrecision(precision int) error {
+	ret := _m.Called(precision)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DefaultTimePrecision")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(int) error); ok {
+		r0 = rf(precision)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Schema_DefaultTimePrecision_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DefaultTimePrecision'
+type Schema_DefaultTimePrecision_Call struct {
+	*mock.Call
+}
+
+// DefaultTimePrecision is a helper method to define mock.On call
+//   - precision int
+func (_e *Schema_Expecter) DefaultTimePrecision(precision interface{}) *Schema_DefaultTimePrecision_Call {
+	return &Schema_DefaultTimePrecision_Call{Call: _e.mock.On("DefaultTimePrecision", precision)}
+}
+
+func (_c *Schema_DefaultTimePrecision_Call) Run(run func(precision int)) *Schema_DefaultTimePrecision_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(int))
+	})
+	return _c
+}
+
+func (_c *Schema_DefaultTimePrecision_Call) Return(_a0 error) *Schema_DefaultTimePrecision_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Schema_DefaultTimePrecision_Call) RunAndReturn(run func(int) error) *Schema_DefaultTimePrecision_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// DisableForeignKeyConstraints provides a mock function with no fields
+func (_m *Schema) DisableForeignKeyConstraints() error {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for DisableForeignKeyConstraints")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func() error); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Schema_DisableForeignKeyConstraints_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DisableForeignKeyConstraints'
+type Schema_DisableForeignKeyConstraints_Call struct {
+	*mock.Call
+}
+
+// DisableForeignKeyConstraints is a helper method to define mock.On call
+func (_e *Schema_Expecter) DisableForeignKeyConstraints() *Schema_DisableForeignKeyConstraints_Call {
+	return &Schema_DisableForeignKeyConstraints_Call{Call: _e.mock.On("DisableForeignKeyConstraints")}
+}
+
+func (_c *Schema_DisableForeignKeyConstraints_Call) Run(run func()) *Schema_DisableForeignKeyConstraints_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *Schema_DisableForeignKeyConstraints_Call) Return(_a0 error) *Schema_DisableForeignKeyConstraints_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Schema_DisableForeignKeyConstraints_Call) RunAndReturn(run func() error) *Schema_DisableForeignKeyConstraints_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -347,6 +579,52 @@ func (_c *Schema_DropColumns_Call) RunAndReturn(run func(string, []string) error
 	return _c
 }
 
+// DropDatabaseIfExists provides a mock function with given fields: name
+func (_m *Schema) DropDatabaseIfExists(name string) error {
+	ret := _m.Called(name)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DropDatabaseIfExists")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(string) error); ok {
+		r0 = rf(name)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Schema_DropDatabaseIfExists_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DropDatabaseIfExists'
+type Schema_DropDatabaseIfExists_Call struct {
+	*mock.Call
+}
+
+// DropDatabaseIfExists is a helper method to define mock.On call
+//   - name string
+func (_e *Schema_Expecter) DropDatabaseIfExists(name interface{}) *Schema_DropDatabaseIfExists_Call {
+	return &Schema_DropDatabaseIfExists_Call{Call: _e.mock.On("DropDatabaseIfExists", name)}
+}
+
+func (_c *Schema_DropDatabaseIfExists_Call) Run(run func(name string)) *Schema_DropDatabaseIfExists_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *Schema_DropDatabaseIfExists_Call) Return(_a0 error) *Schema_DropDatabaseIfExists_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Schema_DropDatabaseIfExists_Call) RunAndReturn(run func(string) error) *Schema_DropDatabaseIfExists_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // DropIfExists provides a mock function with given fields: table
 func (_m *Schema) DropIfExists(table string) error {
 	ret := _m.Called(table)
@@ -389,6 +667,51 @@ func (_c *Schema_DropIfExists_Call) Return(_a0 error) *Schema_DropIfExists_Call 
 }
 
 func (_c *Schema_DropIfExists_Call) RunAndReturn(run func(string) error) *Schema_DropIfExists_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// EnableForeignKeyConstraints provides a mock function with no fields
+func (_m *Schema) EnableForeignKeyConstraints() error {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for EnableForeignKeyConstraints")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func() error); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Schema_EnableForeignKeyConstraints_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'EnableForeignKeyConstraints'
+type Schema_EnableForeignKeyConstraints_Call struct {
+	*mock.Call
+}
+
+// EnableForeignKeyConstraints is a helper method to define mock.On call
+func (_e *Schema_Expecter) EnableForeignKeyConstraints() *Schema_EnableForeignKeyConstraints_Call {
+	return &Schema_EnableForeignKeyConstraints_Call{Call: _e.mock.On("EnableForeignKeyConstraints")}
+}
+
+func (_c *Schema_EnableForeignKeyConstraints_Call) Run(run func()) *Schema_EnableForeignKeyConstraints_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *Schema_EnableForeignKeyConstraints_Call) Return(_a0 error) *Schema_EnableForeignKeyConstraints_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Schema_EnableForeignKeyConstraints_Call) RunAndReturn(run func() error) *Schema_EnableForeignKeyConstraints_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -489,6 +812,78 @@ func (_c *Schema_GetColumnListing_Call) RunAndReturn(run func(string) []string) 
 	return _c
 }
 
+// GetColumnType provides a mock function with given fields: table, column, fullDefinition
+func (_m *Schema) GetColumnType(table string, column string, fullDefinition ...bool) (string, error) {
+	_va := make([]interface{}, len(fullDefinition))
+	for _i := range fullDefinition {
+		_va[_i] = fullDefinition[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, table, column)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetColumnType")
+	}
+
+	var r0 string
+	var r1 error
+	if rf, ok := ret.Get(0).(func(string, string, ...bool) (string, error)); ok {
+		return rf(table, column, fullDefinition...)
+	}
+	if rf, ok := ret.Get(0).(func(string, string, ...bool) string); ok {
+		r0 = rf(table, column, fullDefinition...)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	if rf, ok := ret.Get(1).(func(string, string, ...bool) error); ok {
+		r1 = rf(table, column, fullDefinition...)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// Schema_GetColumnType_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetColumnType'
+type Schema_GetColumnType_Call struct {
+	*mock.Call
+}
+
+// GetColumnType is a helper method to define mock.On call
+//   - table string
+//   - column string
+//   - fullDefinition ...bool
+func (_e *Schema_Expecter) GetColumnType(table interface{}, column interface{}, fullDefinition ...interface{}) *Schema_GetColumnType_Call {
+	return &Schema_GetColumnType_Call{Call: _e.mock.On("GetColumnType",
+		append([]interface{}{table, column}, fullDefinition...)...)}
+}
+
+func (_c *Schema_GetColumnType_Call) Run(run func(table string, column string, fullDefinition ...bool)) *Schema_GetColumnType_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]bool, len(args)-2)
+		for i, a := range args[2:] {
+			if a != nil {
+				variadicArgs[i] = a.(bool)
+			}
+		}
+		run(args[0].(string), args[1].(string), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *Schema_GetColumnType_Call) Return(_a0 string, _a1 error) *Schema_GetColumnType_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Schema_GetColumnType_Call) RunAndReturn(run func(string, string, ...bool) (string, error)) *Schema_GetColumnType_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetColumns provides a mock function with given fields: table
 func (_m *Schema) GetColumns(table string) ([]driver.Column, error) {
 	ret := _m.Called(table)
@@ -547,6 +942,64 @@ func (_c *Schema_GetColumns_Call) RunAndReturn(run func(string) ([]driver.Column
 	return _c
 }
 
+// GetColumnsMetadata provides a mock function with given fields: table
+func (_m *Schema) GetColumnsMetadata(table string) ([]driver.ColumnMetadata, error) {
+	ret := _m.Called(table)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetColumnsMetadata")
+	}
+
+	var r0 []driver.ColumnMetadata
+	var r1 error
+	if rf, ok := ret.Get(0).(func(string) ([]driver.ColumnMetadata, error)); ok {
+		return rf(table)
+	}
+	if rf, ok := ret.Get(0).(func(string) []driver.ColumnMetadata); ok {
+		r0 = rf(table)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]driver.ColumnMetadata)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(string) error); ok {
+		r1 = rf(table)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// Schema_GetColumnsMetadata_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetColumnsMetadata'
+type Schema_GetColumnsMetadata_Call struct {
+	*mock.Call
+}
+
+// GetColumnsMetadata is a helper method to define mock.On call
+//   - table string
+func (_e *Schema_Expecter) GetColumnsMetadata(table interface{}) *Schema_GetColumnsMetadata_Call {
+	return &Schema_GetColumnsMetadata_Call{Call: _e.mock.On("GetColumnsMetadata", table)}
+}
+
+func (_c *Schema_GetColumnsMetadata_Call) Run(run func(table string)) *Schema_GetColumnsMetadata_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *Schema_GetColumnsMetadata_Call) Return(_a0 []driver.ColumnMetadata, _a1 error) *Schema_GetColumnsMetadata_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Schema_GetColumnsMetadata_Call) RunAndReturn(run func(string) ([]driver.ColumnMetadata, error)) *Schema_GetColumnsMetadata_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetConnection provides a mock function with no fields
 func (_m *Schema) GetConnection() string {
 	ret := _m.Called()
@@ -588,6 +1041,118 @@ func (_c *Schema_GetConnection_Call) Return(_a0 string) *Schema_GetConnection_Ca
 }
 
 func (_c *Schema_GetConnection_Call) RunAndReturn(run func() string) *Schema_GetConnection_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetCurrentSchemaListing provides a mock function with no fields
+func (_m *Schema) GetCurrentSchemaListing() ([]string, error) {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetCurrentSchemaListing")
+	}
+
+	var r0 []string
+	var r1 error
+	if rf, ok := ret.Get(0).(func() ([]string, error)); ok {
+		return rf()
+	}
+	if rf, ok := ret.Get(0).(func() []string); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]string)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// Schema_GetCurrentSchemaListing_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetCurrentSchemaListing'
+type Schema_GetCurrentSchemaListing_Call struct {
+	*mock.Call
+}
+
+// GetCurrentSchemaListing is a helper method to define mock.On call
+func (_e *Schema_Expecter) GetCurrentSchemaListing() *Schema_GetCurrentSchemaListing_Call {
+	return &Schema_GetCurrentSchemaListing_Call{Call: _e.mock.On("GetCurrentSchemaListing")}
+}
+
+func (_c *Schema_GetCurrentSchemaListing_Call) Run(run func()) *Schema_GetCurrentSchemaListing_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *Schema_GetCurrentSchemaListing_Call) Return(_a0 []string, _a1 error) *Schema_GetCurrentSchemaListing_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Schema_GetCurrentSchemaListing_Call) RunAndReturn(run func() ([]string, error)) *Schema_GetCurrentSchemaListing_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetCurrentSchemaName provides a mock function with no fields
+func (_m *Schema) GetCurrentSchemaName() (string, error) {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetCurrentSchemaName")
+	}
+
+	var r0 string
+	var r1 error
+	if rf, ok := ret.Get(0).(func() (string, error)); ok {
+		return rf()
+	}
+	if rf, ok := ret.Get(0).(func() string); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// Schema_GetCurrentSchemaName_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetCurrentSchemaName'
+type Schema_GetCurrentSchemaName_Call struct {
+	*mock.Call
+}
+
+// GetCurrentSchemaName is a helper method to define mock.On call
+func (_e *Schema_Expecter) GetCurrentSchemaName() *Schema_GetCurrentSchemaName_Call {
+	return &Schema_GetCurrentSchemaName_Call{Call: _e.mock.On("GetCurrentSchemaName")}
+}
+
+func (_c *Schema_GetCurrentSchemaName_Call) Run(run func()) *Schema_GetCurrentSchemaName_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *Schema_GetCurrentSchemaName_Call) Return(_a0 string, _a1 error) *Schema_GetCurrentSchemaName_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Schema_GetCurrentSchemaName_Call) RunAndReturn(run func() (string, error)) *Schema_GetCurrentSchemaName_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -804,17 +1369,76 @@ func (_c *Schema_GetModel_Call) RunAndReturn(run func(string) interface{}) *Sche
 	return _c
 }
 
-// GetTableListing provides a mock function with no fields
-func (_m *Schema) GetTableListing() []string {
+// GetSchemas provides a mock function with no fields
+func (_m *Schema) GetSchemas() ([]driver.Schema, error) {
 	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetSchemas")
+	}
+
+	var r0 []driver.Schema
+	var r1 error
+	if rf, ok := ret.Get(0).(func() ([]driver.Schema, error)); ok {
+		return rf()
+	}
+	if rf, ok := ret.Get(0).(func() []driver.Schema); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]driver.Schema)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// Schema_GetSchemas_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetSchemas'
+type Schema_GetSchemas_Call struct {
+	*mock.Call
+}
+
+// GetSchemas is a helper method to define mock.On call
+func (_e *Schema_Expecter) GetSchemas() *Schema_GetSchemas_Call {
+	return &Schema_GetSchemas_Call{Call: _e.mock.On("GetSchemas")}
+}
+
+func (_c *Schema_GetSchemas_Call) Run(run func()) *Schema_GetSchemas_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *Schema_GetSchemas_Call) Return(_a0 []driver.Schema, _a1 error) *Schema_GetSchemas_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Schema_GetSchemas_Call) RunAndReturn(run func() ([]driver.Schema, error)) *Schema_GetSchemas_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetTableListing provides a mock function with given fields: options
+func (_m *Schema) GetTableListing(options ...interface{}) []string {
+	var _ca []interface{}
+	_ca = append(_ca, options...)
+	ret := _m.Called(_ca...)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetTableListing")
 	}
 
 	var r0 []string
-	if rf, ok := ret.Get(0).(func() []string); ok {
-		r0 = rf()
+	if rf, ok := ret.Get(0).(func(...interface{}) []string); ok {
+		r0 = rf(options...)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]string)
@@ -830,13 +1454,21 @@ type Schema_GetTableListing_Call struct {
 }
 
 // GetTableListing is a helper method to define mock.On call
-func (_e *Schema_Expecter) GetTableListing() *Schema_GetTableListing_Call {
-	return &Schema_GetTableListing_Call{Call: _e.mock.On("GetTableListing")}
+//   - options ...interface{}
+func (_e *Schema_Expecter) GetTableListing(options ...interface{}) *Schema_GetTableListing_Call {
+	return &Schema_GetTableListing_Call{Call: _e.mock.On("GetTableListing",
+		append([]interface{}{}, options...)...)}
 }
 
-func (_c *Schema_GetTableListing_Call) Run(run func()) *Schema_GetTableListing_Call {
+func (_c *Schema_GetTableListing_Call) Run(run func(options ...interface{})) *Schema_GetTableListing_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run()
+		variadicArgs := make([]interface{}, len(args)-0)
+		for i, a := range args[0:] {
+			if a != nil {
+				variadicArgs[i] = a.(interface{})
+			}
+		}
+		run(variadicArgs...)
 	})
 	return _c
 }
@@ -846,14 +1478,20 @@ func (_c *Schema_GetTableListing_Call) Return(_a0 []string) *Schema_GetTableList
 	return _c
 }
 
-func (_c *Schema_GetTableListing_Call) RunAndReturn(run func() []string) *Schema_GetTableListing_Call {
+func (_c *Schema_GetTableListing_Call) RunAndReturn(run func(...interface{}) []string) *Schema_GetTableListing_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// GetTables provides a mock function with no fields
-func (_m *Schema) GetTables() ([]driver.Table, error) {
-	ret := _m.Called()
+// GetTables provides a mock function with given fields: schemas
+func (_m *Schema) GetTables(schemas ...string) ([]driver.Table, error) {
+	_va := make([]interface{}, len(schemas))
+	for _i := range schemas {
+		_va[_i] = schemas[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetTables")
@@ -861,19 +1499,19 @@ func (_m *Schema) GetTables() ([]driver.Table, error) {
 
 	var r0 []driver.Table
 	var r1 error
-	if rf, ok := ret.Get(0).(func() ([]driver.Table, error)); ok {
-		return rf()
+	if rf, ok := ret.Get(0).(func(...string) ([]driver.Table, error)); ok {
+		return rf(schemas...)
 	}
-	if rf, ok := ret.Get(0).(func() []driver.Table); ok {
-		r0 = rf()
+	if rf, ok := ret.Get(0).(func(...string) []driver.Table); ok {
+		r0 = rf(schemas...)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]driver.Table)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func() error); ok {
-		r1 = rf()
+	if rf, ok := ret.Get(1).(func(...string) error); ok {
+		r1 = rf(schemas...)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -887,13 +1525,21 @@ type Schema_GetTables_Call struct {
 }
 
 // GetTables is a helper method to define mock.On call
-func (_e *Schema_Expecter) GetTables() *Schema_GetTables_Call {
-	return &Schema_GetTables_Call{Call: _e.mock.On("GetTables")}
+//   - schemas ...string
+func (_e *Schema_Expecter) GetTables(schemas ...interface{}) *Schema_GetTables_Call {
+	return &Schema_GetTables_Call{Call: _e.mock.On("GetTables",
+		append([]interface{}{}, schemas...)...)}
 }
 
-func (_c *Schema_GetTables_Call) Run(run func()) *Schema_GetTables_Call {
+func (_c *Schema_GetTables_Call) Run(run func(schemas ...string)) *Schema_GetTables_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run()
+		variadicArgs := make([]string, len(args)-0)
+		for i, a := range args[0:] {
+			if a != nil {
+				variadicArgs[i] = a.(string)
+			}
+		}
+		run(variadicArgs...)
 	})
 	return _c
 }
@@ -903,14 +1549,20 @@ func (_c *Schema_GetTables_Call) Return(_a0 []driver.Table, _a1 error) *Schema_G
 	return _c
 }
 
-func (_c *Schema_GetTables_Call) RunAndReturn(run func() ([]driver.Table, error)) *Schema_GetTables_Call {
+func (_c *Schema_GetTables_Call) RunAndReturn(run func(...string) ([]driver.Table, error)) *Schema_GetTables_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// GetTypes provides a mock function with no fields
-func (_m *Schema) GetTypes() ([]driver.Type, error) {
-	ret := _m.Called()
+// GetTypes provides a mock function with given fields: schemas
+func (_m *Schema) GetTypes(schemas ...string) ([]driver.Type, error) {
+	_va := make([]interface{}, len(schemas))
+	for _i := range schemas {
+		_va[_i] = schemas[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetTypes")
@@ -918,19 +1570,19 @@ func (_m *Schema) GetTypes() ([]driver.Type, error) {
 
 	var r0 []driver.Type
 	var r1 error
-	if rf, ok := ret.Get(0).(func() ([]driver.Type, error)); ok {
-		return rf()
+	if rf, ok := ret.Get(0).(func(...string) ([]driver.Type, error)); ok {
+		return rf(schemas...)
 	}
-	if rf, ok := ret.Get(0).(func() []driver.Type); ok {
-		r0 = rf()
+	if rf, ok := ret.Get(0).(func(...string) []driver.Type); ok {
+		r0 = rf(schemas...)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]driver.Type)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func() error); ok {
-		r1 = rf()
+	if rf, ok := ret.Get(1).(func(...string) error); ok {
+		r1 = rf(schemas...)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -944,13 +1596,21 @@ type Schema_GetTypes_Call struct {
 }
 
 // GetTypes is a helper method to define mock.On call
-func (_e *Schema_Expecter) GetTypes() *Schema_GetTypes_Call {
-	return &Schema_GetTypes_Call{Call: _e.mock.On("GetTypes")}
+//   - schemas ...string
+func (_e *Schema_Expecter) GetTypes(schemas ...interface{}) *Schema_GetTypes_Call {
+	return &Schema_GetTypes_Call{Call: _e.mock.On("GetTypes",
+		append([]interface{}{}, schemas...)...)}
 }
 
-func (_c *Schema_GetTypes_Call) Run(run func()) *Schema_GetTypes_Call {
+func (_c *Schema_GetTypes_Call) Run(run func(schemas ...string)) *Schema_GetTypes_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run()
+		variadicArgs := make([]string, len(args)-0)
+		for i, a := range args[0:] {
+			if a != nil {
+				variadicArgs[i] = a.(string)
+			}
+		}
+		run(variadicArgs...)
 	})
 	return _c
 }
@@ -960,14 +1620,20 @@ func (_c *Schema_GetTypes_Call) Return(_a0 []driver.Type, _a1 error) *Schema_Get
 	return _c
 }
 
-func (_c *Schema_GetTypes_Call) RunAndReturn(run func() ([]driver.Type, error)) *Schema_GetTypes_Call {
+func (_c *Schema_GetTypes_Call) RunAndReturn(run func(...string) ([]driver.Type, error)) *Schema_GetTypes_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// GetViews provides a mock function with no fields
-func (_m *Schema) GetViews() ([]driver.View, error) {
-	ret := _m.Called()
+// GetViews provides a mock function with given fields: schemas
+func (_m *Schema) GetViews(schemas ...string) ([]driver.View, error) {
+	_va := make([]interface{}, len(schemas))
+	for _i := range schemas {
+		_va[_i] = schemas[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetViews")
@@ -975,19 +1641,19 @@ func (_m *Schema) GetViews() ([]driver.View, error) {
 
 	var r0 []driver.View
 	var r1 error
-	if rf, ok := ret.Get(0).(func() ([]driver.View, error)); ok {
-		return rf()
+	if rf, ok := ret.Get(0).(func(...string) ([]driver.View, error)); ok {
+		return rf(schemas...)
 	}
-	if rf, ok := ret.Get(0).(func() []driver.View); ok {
-		r0 = rf()
+	if rf, ok := ret.Get(0).(func(...string) []driver.View); ok {
+		r0 = rf(schemas...)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]driver.View)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func() error); ok {
-		r1 = rf()
+	if rf, ok := ret.Get(1).(func(...string) error); ok {
+		r1 = rf(schemas...)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -1001,13 +1667,21 @@ type Schema_GetViews_Call struct {
 }
 
 // GetViews is a helper method to define mock.On call
-func (_e *Schema_Expecter) GetViews() *Schema_GetViews_Call {
-	return &Schema_GetViews_Call{Call: _e.mock.On("GetViews")}
+//   - schemas ...string
+func (_e *Schema_Expecter) GetViews(schemas ...interface{}) *Schema_GetViews_Call {
+	return &Schema_GetViews_Call{Call: _e.mock.On("GetViews",
+		append([]interface{}{}, schemas...)...)}
 }
 
-func (_c *Schema_GetViews_Call) Run(run func()) *Schema_GetViews_Call {
+func (_c *Schema_GetViews_Call) Run(run func(schemas ...string)) *Schema_GetViews_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run()
+		variadicArgs := make([]string, len(args)-0)
+		for i, a := range args[0:] {
+			if a != nil {
+				variadicArgs[i] = a.(string)
+			}
+		}
+		run(variadicArgs...)
 	})
 	return _c
 }
@@ -1017,7 +1691,7 @@ func (_c *Schema_GetViews_Call) Return(_a0 []driver.View, _a1 error) *Schema_Get
 	return _c
 }
 
-func (_c *Schema_GetViews_Call) RunAndReturn(run func() ([]driver.View, error)) *Schema_GetViews_Call {
+func (_c *Schema_GetViews_Call) RunAndReturn(run func(...string) ([]driver.View, error)) *Schema_GetViews_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1163,17 +1837,24 @@ func (_c *Schema_HasColumns_Call) RunAndReturn(run func(string, []string) bool) 
 	return _c
 }
 
-// HasIndex provides a mock function with given fields: table, index
-func (_m *Schema) HasIndex(table string, index string) bool {
-	ret := _m.Called(table, index)
+// HasIndex provides a mock function with given fields: table, index, indexType
+func (_m *Schema) HasIndex(table string, index interface{}, indexType ...string) bool {
+	_va := make([]interface{}, len(indexType))
+	for _i := range indexType {
+		_va[_i] = indexType[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, table, index)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
 
 	if len(ret) == 0 {
 		panic("no return value specified for HasIndex")
 	}
 
 	var r0 bool
-	if rf, ok := ret.Get(0).(func(string, string) bool); ok {
-		r0 = rf(table, index)
+	if rf, ok := ret.Get(0).(func(string, interface{}, ...string) bool); ok {
+		r0 = rf(table, index, indexType...)
 	} else {
 		r0 = ret.Get(0).(bool)
 	}
@@ -1188,14 +1869,22 @@ type Schema_HasIndex_Call struct {
 
 // HasIndex is a helper method to define mock.On call
 //   - table string
-//   - index string
-func (_e *Schema_Expecter) HasIndex(table interface{}, index interface{}) *Schema_HasIndex_Call {
-	return &Schema_HasIndex_Call{Call: _e.mock.On("HasIndex", table, index)}
+//   - index interface{}
+//   - indexType ...string
+func (_e *Schema_Expecter) HasIndex(table interface{}, index interface{}, indexType ...interface{}) *Schema_HasIndex_Call {
+	return &Schema_HasIndex_Call{Call: _e.mock.On("HasIndex",
+		append([]interface{}{table, index}, indexType...)...)}
 }
 
-func (_c *Schema_HasIndex_Call) Run(run func(table string, index string)) *Schema_HasIndex_Call {
+func (_c *Schema_HasIndex_Call) Run(run func(table string, index interface{}, indexType ...string)) *Schema_HasIndex_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(string), args[1].(string))
+		variadicArgs := make([]string, len(args)-2)
+		for i, a := range args[2:] {
+			if a != nil {
+				variadicArgs[i] = a.(string)
+			}
+		}
+		run(args[0].(string), args[1].(interface{}), variadicArgs...)
 	})
 	return _c
 }
@@ -1205,7 +1894,7 @@ func (_c *Schema_HasIndex_Call) Return(_a0 bool) *Schema_HasIndex_Call {
 	return _c
 }
 
-func (_c *Schema_HasIndex_Call) RunAndReturn(run func(string, string) bool) *Schema_HasIndex_Call {
+func (_c *Schema_HasIndex_Call) RunAndReturn(run func(string, interface{}, ...string) bool) *Schema_HasIndex_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1600,17 +2289,20 @@ func (_c *Schema_SetConnection_Call) RunAndReturn(run func(string)) *Schema_SetC
 	return _c
 }
 
-// Sql provides a mock function with given fields: sql
-func (_m *Schema) Sql(sql string) error {
-	ret := _m.Called(sql)
+// Sql provides a mock function with given fields: sql, bindings
+func (_m *Schema) Sql(sql string, bindings ...interface{}) error {
+	var _ca []interface{}
+	_ca = append(_ca, sql)
+	_ca = append(_ca, bindings...)
+	ret := _m.Called(_ca...)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Sql")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(string) error); ok {
-		r0 = rf(sql)
+	if rf, ok := ret.Get(0).(func(string, ...interface{}) error); ok {
+		r0 = rf(sql, bindings...)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -1625,13 +2317,21 @@ type Schema_Sql_Call struct {
 
 // Sql is a helper method to define mock.On call
 //   - sql string
-func (_e *Schema_Expecter) Sql(sql interface{}) *Schema_Sql_Call {
-	return &Schema_Sql_Call{Call: _e.mock.On("Sql", sql)}
+//   - bindings ...interface{}
+func (_e *Schema_Expecter) Sql(sql interface{}, bindings ...interface{}) *Schema_Sql_Call {
+	return &Schema_Sql_Call{Call: _e.mock.On("Sql",
+		append([]interface{}{sql}, bindings...)...)}
 }
 
-func (_c *Schema_Sql_Call) Run(run func(sql string)) *Schema_Sql_Call {
+func (_c *Schema_Sql_Call) Run(run func(sql string, bindings ...interface{})) *Schema_Sql_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(string))
+		variadicArgs := make([]interface{}, len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(interface{})
+			}
+		}
+		run(args[0].(string), variadicArgs...)
 	})
 	return _c
 }
@@ -1641,7 +2341,7 @@ func (_c *Schema_Sql_Call) Return(_a0 error) *Schema_Sql_Call {
 	return _c
 }
 
-func (_c *Schema_Sql_Call) RunAndReturn(run func(string) error) *Schema_Sql_Call {
+func (_c *Schema_Sql_Call) RunAndReturn(run func(string, ...interface{}) error) *Schema_Sql_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1689,6 +2389,320 @@ func (_c *Schema_Table_Call) Return(_a0 error) *Schema_Table_Call {
 }
 
 func (_c *Schema_Table_Call) RunAndReturn(run func(string, func(schema.Blueprint)) error) *Schema_Table_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// WhenTableDoesntHaveColumn provides a mock function with given fields: table, column, callback
+func (_m *Schema) WhenTableDoesntHaveColumn(table string, column string, callback func(schema.Blueprint)) error {
+	ret := _m.Called(table, column, callback)
+
+	if len(ret) == 0 {
+		panic("no return value specified for WhenTableDoesntHaveColumn")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(string, string, func(schema.Blueprint)) error); ok {
+		r0 = rf(table, column, callback)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Schema_WhenTableDoesntHaveColumn_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'WhenTableDoesntHaveColumn'
+type Schema_WhenTableDoesntHaveColumn_Call struct {
+	*mock.Call
+}
+
+// WhenTableDoesntHaveColumn is a helper method to define mock.On call
+//   - table string
+//   - column string
+//   - callback func(schema.Blueprint)
+func (_e *Schema_Expecter) WhenTableDoesntHaveColumn(table interface{}, column interface{}, callback interface{}) *Schema_WhenTableDoesntHaveColumn_Call {
+	return &Schema_WhenTableDoesntHaveColumn_Call{Call: _e.mock.On("WhenTableDoesntHaveColumn", table, column, callback)}
+}
+
+func (_c *Schema_WhenTableDoesntHaveColumn_Call) Run(run func(table string, column string, callback func(schema.Blueprint))) *Schema_WhenTableDoesntHaveColumn_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string), args[1].(string), args[2].(func(schema.Blueprint)))
+	})
+	return _c
+}
+
+func (_c *Schema_WhenTableDoesntHaveColumn_Call) Return(_a0 error) *Schema_WhenTableDoesntHaveColumn_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Schema_WhenTableDoesntHaveColumn_Call) RunAndReturn(run func(string, string, func(schema.Blueprint)) error) *Schema_WhenTableDoesntHaveColumn_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// WhenTableDoesntHaveIndex provides a mock function with given fields: table, index, callback, indexType
+func (_m *Schema) WhenTableDoesntHaveIndex(table string, index interface{}, callback func(schema.Blueprint), indexType ...string) error {
+	_va := make([]interface{}, len(indexType))
+	for _i := range indexType {
+		_va[_i] = indexType[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, table, index, callback)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for WhenTableDoesntHaveIndex")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(string, interface{}, func(schema.Blueprint), ...string) error); ok {
+		r0 = rf(table, index, callback, indexType...)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Schema_WhenTableDoesntHaveIndex_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'WhenTableDoesntHaveIndex'
+type Schema_WhenTableDoesntHaveIndex_Call struct {
+	*mock.Call
+}
+
+// WhenTableDoesntHaveIndex is a helper method to define mock.On call
+//   - table string
+//   - index interface{}
+//   - callback func(schema.Blueprint)
+//   - indexType ...string
+func (_e *Schema_Expecter) WhenTableDoesntHaveIndex(table interface{}, index interface{}, callback interface{}, indexType ...interface{}) *Schema_WhenTableDoesntHaveIndex_Call {
+	return &Schema_WhenTableDoesntHaveIndex_Call{Call: _e.mock.On("WhenTableDoesntHaveIndex",
+		append([]interface{}{table, index, callback}, indexType...)...)}
+}
+
+func (_c *Schema_WhenTableDoesntHaveIndex_Call) Run(run func(table string, index interface{}, callback func(schema.Blueprint), indexType ...string)) *Schema_WhenTableDoesntHaveIndex_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]string, len(args)-3)
+		for i, a := range args[3:] {
+			if a != nil {
+				variadicArgs[i] = a.(string)
+			}
+		}
+		run(args[0].(string), args[1].(interface{}), args[2].(func(schema.Blueprint)), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *Schema_WhenTableDoesntHaveIndex_Call) Return(_a0 error) *Schema_WhenTableDoesntHaveIndex_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Schema_WhenTableDoesntHaveIndex_Call) RunAndReturn(run func(string, interface{}, func(schema.Blueprint), ...string) error) *Schema_WhenTableDoesntHaveIndex_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// WhenTableHasColumn provides a mock function with given fields: table, column, callback
+func (_m *Schema) WhenTableHasColumn(table string, column string, callback func(schema.Blueprint)) error {
+	ret := _m.Called(table, column, callback)
+
+	if len(ret) == 0 {
+		panic("no return value specified for WhenTableHasColumn")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(string, string, func(schema.Blueprint)) error); ok {
+		r0 = rf(table, column, callback)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Schema_WhenTableHasColumn_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'WhenTableHasColumn'
+type Schema_WhenTableHasColumn_Call struct {
+	*mock.Call
+}
+
+// WhenTableHasColumn is a helper method to define mock.On call
+//   - table string
+//   - column string
+//   - callback func(schema.Blueprint)
+func (_e *Schema_Expecter) WhenTableHasColumn(table interface{}, column interface{}, callback interface{}) *Schema_WhenTableHasColumn_Call {
+	return &Schema_WhenTableHasColumn_Call{Call: _e.mock.On("WhenTableHasColumn", table, column, callback)}
+}
+
+func (_c *Schema_WhenTableHasColumn_Call) Run(run func(table string, column string, callback func(schema.Blueprint))) *Schema_WhenTableHasColumn_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string), args[1].(string), args[2].(func(schema.Blueprint)))
+	})
+	return _c
+}
+
+func (_c *Schema_WhenTableHasColumn_Call) Return(_a0 error) *Schema_WhenTableHasColumn_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Schema_WhenTableHasColumn_Call) RunAndReturn(run func(string, string, func(schema.Blueprint)) error) *Schema_WhenTableHasColumn_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// WhenTableHasIndex provides a mock function with given fields: table, index, callback, indexType
+func (_m *Schema) WhenTableHasIndex(table string, index interface{}, callback func(schema.Blueprint), indexType ...string) error {
+	_va := make([]interface{}, len(indexType))
+	for _i := range indexType {
+		_va[_i] = indexType[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, table, index, callback)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for WhenTableHasIndex")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(string, interface{}, func(schema.Blueprint), ...string) error); ok {
+		r0 = rf(table, index, callback, indexType...)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Schema_WhenTableHasIndex_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'WhenTableHasIndex'
+type Schema_WhenTableHasIndex_Call struct {
+	*mock.Call
+}
+
+// WhenTableHasIndex is a helper method to define mock.On call
+//   - table string
+//   - index interface{}
+//   - callback func(schema.Blueprint)
+//   - indexType ...string
+func (_e *Schema_Expecter) WhenTableHasIndex(table interface{}, index interface{}, callback interface{}, indexType ...interface{}) *Schema_WhenTableHasIndex_Call {
+	return &Schema_WhenTableHasIndex_Call{Call: _e.mock.On("WhenTableHasIndex",
+		append([]interface{}{table, index, callback}, indexType...)...)}
+}
+
+func (_c *Schema_WhenTableHasIndex_Call) Run(run func(table string, index interface{}, callback func(schema.Blueprint), indexType ...string)) *Schema_WhenTableHasIndex_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]string, len(args)-3)
+		for i, a := range args[3:] {
+			if a != nil {
+				variadicArgs[i] = a.(string)
+			}
+		}
+		run(args[0].(string), args[1].(interface{}), args[2].(func(schema.Blueprint)), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *Schema_WhenTableHasIndex_Call) Return(_a0 error) *Schema_WhenTableHasIndex_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Schema_WhenTableHasIndex_Call) RunAndReturn(run func(string, interface{}, func(schema.Blueprint), ...string) error) *Schema_WhenTableHasIndex_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// WithWriteConnection provides a mock function with given fields: callback
+func (_m *Schema) WithWriteConnection(callback func(schema.Schema) error) error {
+	ret := _m.Called(callback)
+
+	if len(ret) == 0 {
+		panic("no return value specified for WithWriteConnection")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(func(schema.Schema) error) error); ok {
+		r0 = rf(callback)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Schema_WithWriteConnection_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'WithWriteConnection'
+type Schema_WithWriteConnection_Call struct {
+	*mock.Call
+}
+
+// WithWriteConnection is a helper method to define mock.On call
+//   - callback func(schema.Schema) error
+func (_e *Schema_Expecter) WithWriteConnection(callback interface{}) *Schema_WithWriteConnection_Call {
+	return &Schema_WithWriteConnection_Call{Call: _e.mock.On("WithWriteConnection", callback)}
+}
+
+func (_c *Schema_WithWriteConnection_Call) Run(run func(callback func(schema.Schema) error)) *Schema_WithWriteConnection_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(func(schema.Schema) error))
+	})
+	return _c
+}
+
+func (_c *Schema_WithWriteConnection_Call) Return(_a0 error) *Schema_WithWriteConnection_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Schema_WithWriteConnection_Call) RunAndReturn(run func(func(schema.Schema) error) error) *Schema_WithWriteConnection_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// WithoutForeignKeyConstraints provides a mock function with given fields: callback
+func (_m *Schema) WithoutForeignKeyConstraints(callback func(schema.Schema) error) error {
+	ret := _m.Called(callback)
+
+	if len(ret) == 0 {
+		panic("no return value specified for WithoutForeignKeyConstraints")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(func(schema.Schema) error) error); ok {
+		r0 = rf(callback)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Schema_WithoutForeignKeyConstraints_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'WithoutForeignKeyConstraints'
+type Schema_WithoutForeignKeyConstraints_Call struct {
+	*mock.Call
+}
+
+// WithoutForeignKeyConstraints is a helper method to define mock.On call
+//   - callback func(schema.Schema) error
+func (_e *Schema_Expecter) WithoutForeignKeyConstraints(callback interface{}) *Schema_WithoutForeignKeyConstraints_Call {
+	return &Schema_WithoutForeignKeyConstraints_Call{Call: _e.mock.On("WithoutForeignKeyConstraints", callback)}
+}
+
+func (_c *Schema_WithoutForeignKeyConstraints_Call) Run(run func(callback func(schema.Schema) error)) *Schema_WithoutForeignKeyConstraints_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(func(schema.Schema) error))
+	})
+	return _c
+}
+
+func (_c *Schema_WithoutForeignKeyConstraints_Call) Return(_a0 error) *Schema_WithoutForeignKeyConstraints_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Schema_WithoutForeignKeyConstraints_Call) RunAndReturn(run func(func(schema.Schema) error) error) *Schema_WithoutForeignKeyConstraints_Call {
 	_c.Call.Return(run)
 	return _c
 }

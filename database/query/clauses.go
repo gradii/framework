@@ -10,11 +10,18 @@ import (
 // Laravel also accepts a string-keyed array to alias a subselect; Go callers use SelectSub for
 // that, which is a deliberate deviation because a variadic Go call cannot carry keys.
 func (b *Builder) Select(columns ...any) *Builder {
-	b.State().Columns = nil
+	b.State().Columns = []any{}
 	b.State().Bindings["select"] = []any{}
 
-	for _, column := range columns {
-		b.State().Columns = append(b.State().Columns, column)
+	if len(columns) == 0 {
+		columns = []any{"*"}
+	}
+	for _, column := range selectColumns(columns) {
+		if column.alias != "" && IsQueryable(column.value) {
+			b.SelectSub(column.value, column.alias)
+		} else {
+			b.State().Columns = append(b.State().Columns, column.value)
+		}
 	}
 
 	return b
@@ -40,7 +47,15 @@ func (b *Builder) SelectRaw(expression string, bindings []any) *Builder {
 
 // AddSelect appends columns without clearing the list. Mirrors Builder::addSelect().
 func (b *Builder) AddSelect(columns ...any) *Builder {
-	for _, column := range columns {
+	for _, entry := range selectColumns(columns) {
+		column := entry.value
+		if entry.alias != "" && IsQueryable(column) {
+			if b.State().Columns == nil {
+				b.Select(asString(b.State().From) + ".*")
+			}
+			b.SelectSub(column, entry.alias)
+			continue
+		}
 		duplicate := false
 		// A value Expression represents a fresh Laravel object. Comparable columns use strict
 		// equality: strings match by value and *Expression matches only the same pointer.
@@ -127,7 +142,7 @@ func (b *Builder) Join(table any, first any, operator any, second any, typ strin
 		callback(join.Builder)
 	} else if first != nil {
 		if where {
-			join.Builder.addWhere(first, []any{operator, second}, BooleanAnd)
+			join.addWhere(first, []any{operator, second}, BooleanAnd)
 		} else {
 			join.On(first, operator, second, BooleanAnd)
 		}
@@ -575,9 +590,7 @@ func (b *Builder) Union(query any, all bool) *Builder {
 	var union *Builder
 	if callback, ok := query.(func(*Builder) *Builder); ok {
 		union = b.NewQuery()
-		if result := callback(union); result != nil {
-			union = result
-		}
+		callback(union)
 	} else if existing, ok := query.(*Builder); ok {
 		union = existing
 	}

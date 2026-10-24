@@ -98,7 +98,7 @@ func TestWhereAnyFamilyExpandsInSlice(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			query := test.build(newWhereAnyQuery()).(*Query)
 
-			assert.Equal(t, test.want, query.ToSql().First())
+			assert.Equal(t, test.want, query.ToSql().Get())
 			assert.Equal(t, test.bindings, query.builder.Bindings()["where"])
 		})
 	}

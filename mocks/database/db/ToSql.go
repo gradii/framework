@@ -62,6 +62,67 @@ func (_c *ToSql_Count_Call) RunAndReturn(run func() string) *ToSql_Count_Call {
 	return _c
 }
 
+// DecrementEach provides a mock function with given fields: columns, extra
+func (_m *ToSql) DecrementEach(columns interface{}, extra ...map[string]interface{}) string {
+	_va := make([]interface{}, len(extra))
+	for _i := range extra {
+		_va[_i] = extra[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, columns)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DecrementEach")
+	}
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func(interface{}, ...map[string]interface{}) string); ok {
+		r0 = rf(columns, extra...)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
+// ToSql_DecrementEach_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DecrementEach'
+type ToSql_DecrementEach_Call struct {
+	*mock.Call
+}
+
+// DecrementEach is a helper method to define mock.On call
+//   - columns interface{}
+//   - extra ...map[string]interface{}
+func (_e *ToSql_Expecter) DecrementEach(columns interface{}, extra ...interface{}) *ToSql_DecrementEach_Call {
+	return &ToSql_DecrementEach_Call{Call: _e.mock.On("DecrementEach",
+		append([]interface{}{columns}, extra...)...)}
+}
+
+func (_c *ToSql_DecrementEach_Call) Run(run func(columns interface{}, extra ...map[string]interface{})) *ToSql_DecrementEach_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]map[string]interface{}, len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(map[string]interface{})
+			}
+		}
+		run(args[0].(interface{}), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *ToSql_DecrementEach_Call) Return(_a0 string) *ToSql_DecrementEach_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *ToSql_DecrementEach_Call) RunAndReturn(run func(interface{}, ...map[string]interface{}) string) *ToSql_DecrementEach_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Delete provides a mock function with no fields
 func (_m *ToSql) Delete() string {
 	ret := _m.Called()
@@ -197,6 +258,67 @@ func (_c *ToSql_Get_Call) RunAndReturn(run func() string) *ToSql_Get_Call {
 	return _c
 }
 
+// IncrementEach provides a mock function with given fields: columns, extra
+func (_m *ToSql) IncrementEach(columns interface{}, extra ...map[string]interface{}) string {
+	_va := make([]interface{}, len(extra))
+	for _i := range extra {
+		_va[_i] = extra[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, columns)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for IncrementEach")
+	}
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func(interface{}, ...map[string]interface{}) string); ok {
+		r0 = rf(columns, extra...)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
+// ToSql_IncrementEach_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'IncrementEach'
+type ToSql_IncrementEach_Call struct {
+	*mock.Call
+}
+
+// IncrementEach is a helper method to define mock.On call
+//   - columns interface{}
+//   - extra ...map[string]interface{}
+func (_e *ToSql_Expecter) IncrementEach(columns interface{}, extra ...interface{}) *ToSql_IncrementEach_Call {
+	return &ToSql_IncrementEach_Call{Call: _e.mock.On("IncrementEach",
+		append([]interface{}{columns}, extra...)...)}
+}
+
+func (_c *ToSql_IncrementEach_Call) Run(run func(columns interface{}, extra ...map[string]interface{})) *ToSql_IncrementEach_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]map[string]interface{}, len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(map[string]interface{})
+			}
+		}
+		run(args[0].(interface{}), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *ToSql_IncrementEach_Call) Return(_a0 string) *ToSql_IncrementEach_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *ToSql_IncrementEach_Call) RunAndReturn(run func(interface{}, ...map[string]interface{}) string) *ToSql_IncrementEach_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Insert provides a mock function with given fields: data
 func (_m *ToSql) Insert(data interface{}) string {
 	ret := _m.Called(data)
@@ -239,6 +361,207 @@ func (_c *ToSql_Insert_Call) Return(_a0 string) *ToSql_Insert_Call {
 }
 
 func (_c *ToSql_Insert_Call) RunAndReturn(run func(interface{}) string) *ToSql_Insert_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// InsertGetID provides a mock function with given fields: data, sequence
+func (_m *ToSql) InsertGetID(data interface{}, sequence ...string) string {
+	_va := make([]interface{}, len(sequence))
+	for _i := range sequence {
+		_va[_i] = sequence[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, data)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for InsertGetID")
+	}
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func(interface{}, ...string) string); ok {
+		r0 = rf(data, sequence...)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
+// ToSql_InsertGetID_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'InsertGetID'
+type ToSql_InsertGetID_Call struct {
+	*mock.Call
+}
+
+// InsertGetID is a helper method to define mock.On call
+//   - data interface{}
+//   - sequence ...string
+func (_e *ToSql_Expecter) InsertGetID(data interface{}, sequence ...interface{}) *ToSql_InsertGetID_Call {
+	return &ToSql_InsertGetID_Call{Call: _e.mock.On("InsertGetID",
+		append([]interface{}{data}, sequence...)...)}
+}
+
+func (_c *ToSql_InsertGetID_Call) Run(run func(data interface{}, sequence ...string)) *ToSql_InsertGetID_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]string, len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(string)
+			}
+		}
+		run(args[0].(interface{}), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *ToSql_InsertGetID_Call) Return(_a0 string) *ToSql_InsertGetID_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *ToSql_InsertGetID_Call) RunAndReturn(run func(interface{}, ...string) string) *ToSql_InsertGetID_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// InsertOrIgnore provides a mock function with given fields: data
+func (_m *ToSql) InsertOrIgnore(data interface{}) string {
+	ret := _m.Called(data)
+
+	if len(ret) == 0 {
+		panic("no return value specified for InsertOrIgnore")
+	}
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func(interface{}) string); ok {
+		r0 = rf(data)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
+// ToSql_InsertOrIgnore_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'InsertOrIgnore'
+type ToSql_InsertOrIgnore_Call struct {
+	*mock.Call
+}
+
+// InsertOrIgnore is a helper method to define mock.On call
+//   - data interface{}
+func (_e *ToSql_Expecter) InsertOrIgnore(data interface{}) *ToSql_InsertOrIgnore_Call {
+	return &ToSql_InsertOrIgnore_Call{Call: _e.mock.On("InsertOrIgnore", data)}
+}
+
+func (_c *ToSql_InsertOrIgnore_Call) Run(run func(data interface{})) *ToSql_InsertOrIgnore_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(interface{}))
+	})
+	return _c
+}
+
+func (_c *ToSql_InsertOrIgnore_Call) Return(_a0 string) *ToSql_InsertOrIgnore_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *ToSql_InsertOrIgnore_Call) RunAndReturn(run func(interface{}) string) *ToSql_InsertOrIgnore_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// InsertOrIgnoreUsing provides a mock function with given fields: columns, query
+func (_m *ToSql) InsertOrIgnoreUsing(columns []string, query interface{}) string {
+	ret := _m.Called(columns, query)
+
+	if len(ret) == 0 {
+		panic("no return value specified for InsertOrIgnoreUsing")
+	}
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func([]string, interface{}) string); ok {
+		r0 = rf(columns, query)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
+// ToSql_InsertOrIgnoreUsing_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'InsertOrIgnoreUsing'
+type ToSql_InsertOrIgnoreUsing_Call struct {
+	*mock.Call
+}
+
+// InsertOrIgnoreUsing is a helper method to define mock.On call
+//   - columns []string
+//   - query interface{}
+func (_e *ToSql_Expecter) InsertOrIgnoreUsing(columns interface{}, query interface{}) *ToSql_InsertOrIgnoreUsing_Call {
+	return &ToSql_InsertOrIgnoreUsing_Call{Call: _e.mock.On("InsertOrIgnoreUsing", columns, query)}
+}
+
+func (_c *ToSql_InsertOrIgnoreUsing_Call) Run(run func(columns []string, query interface{})) *ToSql_InsertOrIgnoreUsing_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].([]string), args[1].(interface{}))
+	})
+	return _c
+}
+
+func (_c *ToSql_InsertOrIgnoreUsing_Call) Return(_a0 string) *ToSql_InsertOrIgnoreUsing_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *ToSql_InsertOrIgnoreUsing_Call) RunAndReturn(run func([]string, interface{}) string) *ToSql_InsertOrIgnoreUsing_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// InsertUsing provides a mock function with given fields: columns, query
+func (_m *ToSql) InsertUsing(columns []string, query interface{}) string {
+	ret := _m.Called(columns, query)
+
+	if len(ret) == 0 {
+		panic("no return value specified for InsertUsing")
+	}
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func([]string, interface{}) string); ok {
+		r0 = rf(columns, query)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
+// ToSql_InsertUsing_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'InsertUsing'
+type ToSql_InsertUsing_Call struct {
+	*mock.Call
+}
+
+// InsertUsing is a helper method to define mock.On call
+//   - columns []string
+//   - query interface{}
+func (_e *ToSql_Expecter) InsertUsing(columns interface{}, query interface{}) *ToSql_InsertUsing_Call {
+	return &ToSql_InsertUsing_Call{Call: _e.mock.On("InsertUsing", columns, query)}
+}
+
+func (_c *ToSql_InsertUsing_Call) Run(run func(columns []string, query interface{})) *ToSql_InsertUsing_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].([]string), args[1].(interface{}))
+	})
+	return _c
+}
+
+func (_c *ToSql_InsertUsing_Call) Return(_a0 string) *ToSql_InsertUsing_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *ToSql_InsertUsing_Call) RunAndReturn(run func([]string, interface{}) string) *ToSql_InsertUsing_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -286,6 +609,53 @@ func (_c *ToSql_Pluck_Call) Return(_a0 string) *ToSql_Pluck_Call {
 }
 
 func (_c *ToSql_Pluck_Call) RunAndReturn(run func(string, interface{}) string) *ToSql_Pluck_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Truncate provides a mock function with no fields
+func (_m *ToSql) Truncate() []string {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for Truncate")
+	}
+
+	var r0 []string
+	if rf, ok := ret.Get(0).(func() []string); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]string)
+		}
+	}
+
+	return r0
+}
+
+// ToSql_Truncate_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Truncate'
+type ToSql_Truncate_Call struct {
+	*mock.Call
+}
+
+// Truncate is a helper method to define mock.On call
+func (_e *ToSql_Expecter) Truncate() *ToSql_Truncate_Call {
+	return &ToSql_Truncate_Call{Call: _e.mock.On("Truncate")}
+}
+
+func (_c *ToSql_Truncate_Call) Run(run func()) *ToSql_Truncate_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *ToSql_Truncate_Call) Return(_a0 []string) *ToSql_Truncate_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *ToSql_Truncate_Call) RunAndReturn(run func() []string) *ToSql_Truncate_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -343,6 +713,110 @@ func (_c *ToSql_Update_Call) Return(_a0 string) *ToSql_Update_Call {
 }
 
 func (_c *ToSql_Update_Call) RunAndReturn(run func(interface{}, ...interface{}) string) *ToSql_Update_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpdateFrom provides a mock function with given fields: values
+func (_m *ToSql) UpdateFrom(values interface{}) string {
+	ret := _m.Called(values)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateFrom")
+	}
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func(interface{}) string); ok {
+		r0 = rf(values)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
+// ToSql_UpdateFrom_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateFrom'
+type ToSql_UpdateFrom_Call struct {
+	*mock.Call
+}
+
+// UpdateFrom is a helper method to define mock.On call
+//   - values interface{}
+func (_e *ToSql_Expecter) UpdateFrom(values interface{}) *ToSql_UpdateFrom_Call {
+	return &ToSql_UpdateFrom_Call{Call: _e.mock.On("UpdateFrom", values)}
+}
+
+func (_c *ToSql_UpdateFrom_Call) Run(run func(values interface{})) *ToSql_UpdateFrom_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(interface{}))
+	})
+	return _c
+}
+
+func (_c *ToSql_UpdateFrom_Call) Return(_a0 string) *ToSql_UpdateFrom_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *ToSql_UpdateFrom_Call) RunAndReturn(run func(interface{}) string) *ToSql_UpdateFrom_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Upsert provides a mock function with given fields: data, uniqueBy, update
+func (_m *ToSql) Upsert(data interface{}, uniqueBy []string, update ...interface{}) string {
+	var _ca []interface{}
+	_ca = append(_ca, data, uniqueBy)
+	_ca = append(_ca, update...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Upsert")
+	}
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func(interface{}, []string, ...interface{}) string); ok {
+		r0 = rf(data, uniqueBy, update...)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
+// ToSql_Upsert_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Upsert'
+type ToSql_Upsert_Call struct {
+	*mock.Call
+}
+
+// Upsert is a helper method to define mock.On call
+//   - data interface{}
+//   - uniqueBy []string
+//   - update ...interface{}
+func (_e *ToSql_Expecter) Upsert(data interface{}, uniqueBy interface{}, update ...interface{}) *ToSql_Upsert_Call {
+	return &ToSql_Upsert_Call{Call: _e.mock.On("Upsert",
+		append([]interface{}{data, uniqueBy}, update...)...)}
+}
+
+func (_c *ToSql_Upsert_Call) Run(run func(data interface{}, uniqueBy []string, update ...interface{})) *ToSql_Upsert_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]interface{}, len(args)-2)
+		for i, a := range args[2:] {
+			if a != nil {
+				variadicArgs[i] = a.(interface{})
+			}
+		}
+		run(args[0].(interface{}), args[1].([]string), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *ToSql_Upsert_Call) Return(_a0 string) *ToSql_Upsert_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *ToSql_Upsert_Call) RunAndReturn(run func(interface{}, []string, ...interface{}) string) *ToSql_Upsert_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -18,6 +18,13 @@ type Connection interface {
 
 // Processor handles execution and result processing after the grammar has compiled the statement.
 type Processor interface {
+	ProcessSelect(results any) any
+	ProcessSchemas(results []Row) []Row
+	ProcessTables(results []Row) []Row
+	ProcessViews(results []Row) []Row
+	ProcessTypes(results []Row) []Row
+	ProcessIndexes(results []Row) []Row
+	ProcessForeignKeys(results []Row) []Row
 	ProcessInsertGetID(connection Connection, statement string, values []any, sequence string) (any, error)
 	ProcessColumns(results []Row, sql ...string) []Row
 }
