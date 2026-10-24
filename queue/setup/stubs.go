@@ -22,6 +22,8 @@ func init() {
 		// Queue Connections
 		//
 		// Here you may configure the connection information for each server that is used by your application.
+		// Separate queue names with commas to consume them in priority order.
+		// The first valid queue name is also used as the default dispatch queue.
 		// Drivers: "sync", "database", "custom"
 		"connections": map[string]any{
 			"sync": map[string]any{
@@ -32,6 +34,8 @@ func init() {
 				"connection": config.Env("DB_CONNECTION"),
 				"queue":      "default",
 				"concurrent": 1,
+				// Seconds to wait for a blocking receive, e.g. 5, "1s" or 5*time.Second.
+				"timeout": 5,
 			},
 		},
 

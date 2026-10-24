@@ -6,7 +6,6 @@ import (
 	"github.com/goravel/framework/contracts/foundation"
 	"github.com/goravel/framework/errors"
 	routeconsole "github.com/goravel/framework/route/console"
-	"github.com/goravel/framework/support/color"
 )
 
 type ServiceProvider struct {
@@ -34,13 +33,7 @@ func (r *ServiceProvider) Register(app foundation.Application) {
 }
 
 func (r *ServiceProvider) Boot(app foundation.Application) {
-	route := app.MakeRoute()
-	if route == nil {
-		color.Warningln(errors.RouteFacadeNotSet.Error())
-		return
-	}
-
-	app.Commands([]console.Command{
-		routeconsole.NewList(route),
+	app.MakeArtisan().Register([]console.Command{
+		routeconsole.NewList(app.MakeRoute()),
 	})
 }

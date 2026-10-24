@@ -627,6 +627,12 @@ func (s *FactoryTestSuite) TestFactory_AllowStrayRequests() {
 }
 
 func (s *FactoryTestSuite) TestFactory_Assertions_Negatives() {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	s.factory.factoryConfig.Clients["github"] = Config{BaseUrl: server.URL}
 	s.factory.Fake(nil)
 
 	s.True(s.factory.AssertNothingSent())

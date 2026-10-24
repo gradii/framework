@@ -6,7 +6,6 @@ import (
 	"github.com/goravel/framework/contracts/foundation"
 	"github.com/goravel/framework/errors"
 	scheduleconsole "github.com/goravel/framework/schedule/console"
-	"github.com/goravel/framework/support/color"
 )
 
 type ServiceProvider struct {
@@ -49,27 +48,12 @@ func (r *ServiceProvider) Register(app foundation.Application) {
 }
 
 func (r *ServiceProvider) Boot(app foundation.Application) {
-	schedule := app.MakeSchedule()
-	if schedule == nil {
-		color.Warningln(errors.ScheduleFacadeNotSet.Error())
-		return
-	}
-
-	app.Commands([]console.Command{
-		scheduleconsole.NewList(schedule),
-		scheduleconsole.NewRun(schedule),
+	app.MakeArtisan().Register([]console.Command{
+		scheduleconsole.NewList(app.MakeSchedule()),
+		scheduleconsole.NewRun(app.MakeSchedule()),
 	})
 }
 
 func (r *ServiceProvider) Runners(app foundation.Application) []foundation.Runner {
-	if app.MakeArtisan() == nil {
-		return nil
-	}
-
-	schedule := app.MakeSchedule()
-	if schedule == nil {
-		return nil
-	}
-
-	return []foundation.Runner{NewScheduleRunner(app.MakeConfig(), schedule)}
+	return []foundation.Runner{NewScheduleRunner(app.MakeConfig(), app.MakeSchedule())}
 }

@@ -87,6 +87,12 @@ func (s *ApplicationTestSuite) TestBasePath() {
 }
 
 func (s *ApplicationTestSuite) TestBuild_ConfiguresGrpcBeforeProvidersBoot() {
+	// Default commands need the base services even when the provider repository is mocked.
+	s.app.SetJson(foundationjson.New())
+	for _, provider := range s.app.baseServiceProviders() {
+		provider.Register(s.app)
+	}
+
 	// Registering gRPC services in a provider's Boot creates the server, and
 	// server options are ignored once it exists.
 	optionsApplied := false
@@ -1435,27 +1441,23 @@ func TestRunnerWithInfoRaceFreedom(t *testing.T) {
 
 	// Simulate multiple goroutines accessing running field
 	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for j := 0; j < 100; j++ {
 				runner.running.Store(true)
 				time.Sleep(1 * time.Millisecond)
 				_ = runner.running.Load()
 				runner.running.Store(false)
 			}
-		}()
+		})
 	}
 
 	// Simulate multiple goroutines calling doneOnce
 	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			runner.doneOnce.Do(func() {
 				// This should only be called once
 			})
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -1476,15 +1478,13 @@ func TestDoneOnceGuarantee(t *testing.T) {
 
 	// Simulate multiple goroutines trying to call Done
 	for i := 0; i < 100; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			runner.doneOnce.Do(func() {
 				mu.Lock()
 				counter++
 				mu.Unlock()
 			})
-		}()
+		})
 	}
 
 	wg.Wait()

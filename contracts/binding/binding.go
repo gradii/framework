@@ -72,6 +72,11 @@ type Info struct {
 
 var (
 	Bindings = map[string]Info{
+		Artisan: {
+			Description: "The CLI tool that comes with Goravel for interacting with the command line.",
+			PkgPath:     "github.com/goravel/framework/console",
+			IsBase:      true,
+		},
 		Config: {
 			Description: "Gets and sets configuration values.",
 			PkgPath:     "github.com/goravel/framework/config",
@@ -82,16 +87,10 @@ var (
 			PkgPath:     "github.com/goravel/framework/process",
 			IsBase:      true,
 		},
-		Artisan: {
-			Description: "The CLI tool that comes with Goravel for interacting with the command line.",
-			PkgPath:     "github.com/goravel/framework/console",
-			IsBase:      false,
-		},
 		AI: {
 			Description: "Provides manager and driver contracts for AI model interactions.",
 			PkgPath:     "github.com/goravel/framework/ai",
 			Dependencies: []string{
-				Artisan,
 				Config,
 			},
 			Drivers: []Driver{
@@ -113,7 +112,6 @@ var (
 			Description: "Provides support for JWT and Session drivers.",
 			PkgPath:     "github.com/goravel/framework/auth",
 			Dependencies: []string{
-				Artisan,
 				Cache,
 				Config,
 				Log,
@@ -129,7 +127,6 @@ var (
 			Description: "Gets and sets cached items.",
 			PkgPath:     "github.com/goravel/framework/cache",
 			Dependencies: []string{
-				Artisan,
 				Config,
 				Log,
 			},
@@ -156,7 +153,6 @@ var (
 			Description: "Database management and query builder.",
 			PkgPath:     "github.com/goravel/framework/database",
 			Dependencies: []string{
-				Artisan,
 				Config,
 				Log,
 			},
@@ -186,7 +182,6 @@ var (
 			Description: "Provides a simple observer pattern implementation.",
 			PkgPath:     "github.com/goravel/framework/event",
 			Dependencies: []string{
-				Artisan,
 				Queue,
 			},
 		},
@@ -216,7 +211,6 @@ var (
 			Description: "An easy-to-use, expressive, and minimalist API built on the standard net/http library.",
 			PkgPath:     "github.com/goravel/framework/http",
 			Dependencies: []string{
-				Artisan,
 				Config,
 			},
 		},
@@ -238,7 +232,6 @@ var (
 			Description: "A clean, simple API over popular email services.",
 			PkgPath:     "github.com/goravel/framework/mail",
 			Dependencies: []string{
-				Artisan,
 				Config,
 				Queue,
 			},
@@ -257,7 +250,6 @@ var (
 			Description: "An elegant ORM for Go, inspired by Eloquent.",
 			PkgPath:     "github.com/goravel/framework/database",
 			Dependencies: []string{
-				Artisan,
 				Config,
 				Log,
 			},
@@ -287,7 +279,6 @@ var (
 			Description: "A solution by allowing you to create queued jobs that can run in the background.",
 			PkgPath:     "github.com/goravel/framework/queue",
 			Dependencies: []string{
-				Artisan,
 				Config,
 				Cache,
 				DB,
@@ -359,7 +350,6 @@ var (
 			Description: "Database schema builder and migration system.",
 			PkgPath:     "github.com/goravel/framework/database",
 			Dependencies: []string{
-				Artisan,
 				Config,
 				Log,
 				Orm,
@@ -368,9 +358,6 @@ var (
 		Seeder: {
 			Description: "Database seeding system to populate your database with test data.",
 			PkgPath:     "github.com/goravel/framework/database",
-			Dependencies: []string{
-				Artisan,
-			},
 		},
 		Session: {
 			Description: "Enables you to store user information across multiple requests.",
@@ -448,16 +435,10 @@ var (
 		Validation: {
 			Description: "Provides validation services for incoming data.",
 			PkgPath:     "github.com/goravel/framework/validation",
-			Dependencies: []string{
-				Artisan,
-			},
 		},
 		View: {
 			Description: "Provides a simple yet powerful templating engine.",
 			PkgPath:     "github.com/goravel/framework/view",
-			Dependencies: []string{
-				Artisan,
-			},
 		},
 	}
 )

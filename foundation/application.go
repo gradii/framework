@@ -22,13 +22,13 @@ import (
 
 	"github.com/goravel/framework/config"
 	frameworkconsole "github.com/goravel/framework/console"
-	"github.com/goravel/framework/console/console"
 	"github.com/goravel/framework/contracts/binding"
 	contractsconsole "github.com/goravel/framework/contracts/console"
 	"github.com/goravel/framework/contracts/foundation"
 	"github.com/goravel/framework/contracts/validation"
 	"github.com/goravel/framework/errors"
 	"github.com/goravel/framework/foundation/configuration"
+	"github.com/goravel/framework/foundation/console"
 	"github.com/goravel/framework/foundation/json"
 	"github.com/goravel/framework/process"
 	"github.com/goravel/framework/support"
@@ -99,6 +99,7 @@ func (r *Application) Boot() {
 	r.providerRepository.Register(r)
 	r.providerRepository.Boot(r)
 
+	r.registerCommands(r.defaultCommands())
 	r.bootArtisan()
 }
 
@@ -130,6 +131,7 @@ func (r *Application) Build() foundation.Application {
 	r.configureValidation()
 	r.configureRoutes()
 	r.configureRunners()
+	r.registerCommands(r.defaultCommands())
 	r.configureCallback()
 	r.bootArtisan()
 
@@ -166,14 +168,6 @@ func (r *Application) Publishes(packageName string, paths map[string]string, gro
 	for _, group := range groups {
 		r.addPublishGroup(group, paths)
 	}
-}
-
-func (r *Application) PublishesMap() map[string]map[string]string {
-	return r.publishes
-}
-
-func (r *Application) PublishGroups() map[string]map[string]string {
-	return r.publishGroups
 }
 
 func (r *Application) Refresh() {
@@ -462,6 +456,7 @@ func (r *Application) addPublishGroup(group string, paths map[string]string) {
 func (r *Application) bootArtisan() {
 	artisanFacade := r.MakeArtisan()
 	if artisanFacade == nil {
+		color.Warningln(errors.ConsoleFacadeNotSet.Error())
 		return
 	}
 
@@ -787,17 +782,15 @@ func (r *Application) defaultCommands() []contractsconsole.Command {
 func (r *Application) baseServiceProviders() []foundation.ServiceProvider {
 	return []foundation.ServiceProvider{
 		&config.ServiceProvider{},
+		&frameworkconsole.ServiceProvider{},
 		&process.ServiceProvider{},
 	}
 }
 
 func (r *Application) registerCommands(commands []contractsconsole.Command) {
-	configFacades := r.MakeConfig()
 	artisanFacade := r.MakeArtisan()
 	if artisanFacade == nil {
-		if configFacades != nil && configFacades.GetBool("app.debug", false) {
-			color.Warningln(errors.ConsoleFacadeNotSet.Error())
-		}
+		color.Warningln(errors.ConsoleFacadeNotSet.Error())
 		return
 	}
 

@@ -3,8 +3,8 @@ package middleware
 import (
 	"encoding/json"
 
-	"github.com/goravel/framework/console/console"
 	contractshttp "github.com/goravel/framework/contracts/http"
+	"github.com/goravel/framework/foundation/console"
 	"github.com/goravel/framework/http"
 )
 
