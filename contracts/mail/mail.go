@@ -1,5 +1,7 @@
 package mail
 
+// Mail configures and sends messages. Builder methods on the mail facade create
+// a pending mail; subsequent builder calls update that pending mail.
 type Mail interface {
 	// Attach attaches files to the Mail.
 	Attach(files []string) Mail
@@ -13,9 +15,9 @@ type Mail interface {
 	From(address Address) Mail
 	// Headers adds custom headers to the Mail.
 	Headers(headers map[string]string) Mail
-	// Queue a given Mail
+	// Queue a message. Mailable overrides and rendered views apply only to this job.
 	Queue(mailable ...Mailable) error
-	// Send the Mail
+	// Send a message. Mailable overrides and rendered views apply only to this send.
 	Send(mailable ...Mailable) error
 	// Subject set the subject of Mail.
 	Subject(subject string) Mail

@@ -24,7 +24,7 @@ func (r *ServiceProvider) Relationship() binding.Relationship {
 }
 
 func (r *ServiceProvider) Register(app foundation.Application) {
-	app.Bind(binding.Mail, func(app foundation.Application) (any, error) {
+	app.Singleton(binding.Mail, func(app foundation.Application) (any, error) {
 		config := app.MakeConfig()
 		if config == nil {
 			return nil, errors.ConfigFacadeNotSet.SetModule(errors.ModuleMail)

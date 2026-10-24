@@ -25,17 +25,13 @@ type Params struct {
 	Headers     map[string]string `json:"headers"`
 }
 
+var _ mail.Mail = (*Application)(nil)
+
+// Application holds the shared dependencies used to send mail.
 type Application struct {
 	config   config.Config
 	queue    contractsqueue.Queue
 	template mail.Template
-	params   Params
-	clone    int
-
-	htmlView    string
-	textView    string
-	subjectView string
-	with        map[string]any
 }
 
 func NewApplication(config config.Config, queue contractsqueue.Queue) (*Application, error) {
@@ -52,107 +48,95 @@ func NewApplication(config config.Config, queue contractsqueue.Queue) (*Applicat
 }
 
 func (r *Application) Attach(attachments []string) mail.Mail {
-	instance := r.instance()
-	instance.params.Attachments = attachments
-
-	return instance
+	return newPendingMail(r).Attach(attachments)
 }
 
 func (r *Application) Bcc(bcc []string) mail.Mail {
-	instance := r.instance()
-	instance.params.BCC = bcc
-
-	return instance
+	return newPendingMail(r).Bcc(bcc)
 }
 
 func (r *Application) Cc(cc []string) mail.Mail {
-	instance := r.instance()
-	instance.params.CC = cc
-
-	return instance
+	return newPendingMail(r).Cc(cc)
 }
 
 func (r *Application) Content(content mail.Content) mail.Mail {
-	instance := r.instance()
-	instance.params.HTML = content.Html
-	instance.params.Text = content.Text
-	instance.htmlView = content.HtmlView
-	instance.textView = content.TextView
-
-	return instance
+	return newPendingMail(r).Content(content)
 }
 
 func (r *Application) With(data map[string]any) mail.Mail {
-	instance := r.instance()
-	instance.with = data
-
-	return instance
+	return newPendingMail(r).With(data)
 }
 
 func (r *Application) From(address mail.Address) mail.Mail {
-	instance := r.instance()
-	instance.params.FromAddress = address.Address
-	instance.params.FromName = address.Name
-
-	return instance
+	return newPendingMail(r).From(address)
 }
 
 func (r *Application) Headers(headers map[string]string) mail.Mail {
-	instance := r.instance()
-	instance.params.Headers = headers
-
-	return instance
+	return newPendingMail(r).Headers(headers)
 }
 
 func (r *Application) Queue(mailable ...mail.Mailable) error {
-	if len(mailable) > 0 {
-		r.setUsingMailable(mailable[0])
-	}
+	return r.queueMessage(message{}, mailable...)
+}
 
-	if err := r.renderViewTemplate(); err != nil {
+func (r *Application) Send(mailable ...mail.Mailable) error {
+	return r.sendMessage(message{}, mailable...)
+}
+
+func (r *Application) Subject(subject string) mail.Mail {
+	return newPendingMail(r).Subject(subject)
+}
+
+func (r *Application) To(to []string) mail.Mail {
+	return newPendingMail(r).To(to)
+}
+
+func (r *Application) queueMessage(message message, mailable ...mail.Mailable) error {
+	params, err := message.prepare(r.template, mailable...)
+	if err != nil {
 		return err
 	}
 
 	job := r.queue.Job(NewSendMailJob(r.config), []contractsqueue.Arg{
 		{
 			Type:  "string",
-			Value: r.params.Subject,
+			Value: params.Subject,
 		},
 		{
 			Type:  "string",
-			Value: r.params.HTML,
+			Value: params.HTML,
 		},
 		{
 			Type:  "string",
-			Value: r.params.Text,
+			Value: params.Text,
 		},
 		{
 			Type:  "string",
-			Value: r.params.FromAddress,
+			Value: params.FromAddress,
 		},
 		{
 			Type:  "string",
-			Value: r.params.FromName,
+			Value: params.FromName,
 		},
 		{
 			Type:  "[]string",
-			Value: r.params.To,
+			Value: params.To,
 		},
 		{
 			Type:  "[]string",
-			Value: r.params.CC,
+			Value: params.CC,
 		},
 		{
 			Type:  "[]string",
-			Value: r.params.BCC,
+			Value: params.BCC,
 		},
 		{
 			Type:  "[]string",
-			Value: r.params.Attachments,
+			Value: params.Attachments,
 		},
 		{
 			Type:  "[]string",
-			Value: convertMapHeadersToSlice(r.params.Headers),
+			Value: convertMapHeadersToSlice(params.Headers),
 		},
 	})
 
@@ -170,123 +154,13 @@ func (r *Application) Queue(mailable ...mail.Mailable) error {
 	return job.Dispatch()
 }
 
-func (r *Application) Send(mailable ...mail.Mailable) error {
-	if len(mailable) > 0 {
-		r.setUsingMailable(mailable[0])
-	}
-
-	if err := r.renderViewTemplate(); err != nil {
+func (r *Application) sendMessage(message message, mailable ...mail.Mailable) error {
+	params, err := message.prepare(r.template, mailable...)
+	if err != nil {
 		return err
 	}
 
-	return SendMail(r.config, r.params)
-}
-
-func (r *Application) Subject(subject string) mail.Mail {
-	instance := r.instance()
-	instance.params.Subject = subject
-
-	return instance
-}
-
-func (r *Application) To(to []string) mail.Mail {
-	instance := r.instance()
-	instance.params.To = to
-
-	return instance
-}
-
-func (r *Application) instance() *Application {
-	if r.clone == 0 {
-		return &Application{
-			clone:    1,
-			config:   r.config,
-			queue:    r.queue,
-			template: r.template,
-		}
-	}
-
-	return r
-}
-
-func (r *Application) setUsingMailable(mailable mail.Mailable) {
-	if content := mailable.Content(); content != nil {
-		if content.Html != "" {
-			r.params.HTML = content.Html
-		}
-		if content.Text != "" {
-			r.params.Text = content.Text
-		}
-		r.htmlView = content.HtmlView
-		r.textView = content.TextView
-	}
-
-	// Read once, outside Content: With now feeds the body views and the
-	// subject view alike.
-	if with := mailable.With(); len(with) > 0 {
-		r.with = with
-	}
-
-	if attachments := mailable.Attachments(); len(attachments) > 0 {
-		r.params.Attachments = attachments
-	}
-
-	if headers := mailable.Headers(); len(headers) > 0 {
-		r.params.Headers = headers
-	}
-
-	if envelope := mailable.Envelope(); envelope != nil {
-		if envelope.From.Address != "" {
-			r.params.FromAddress = envelope.From.Address
-			r.params.FromName = envelope.From.Name
-		}
-		if len(envelope.To) > 0 {
-			r.params.To = envelope.To
-		}
-		if len(envelope.Cc) > 0 {
-			r.params.CC = envelope.Cc
-		}
-		if len(envelope.Bcc) > 0 {
-			r.params.BCC = envelope.Bcc
-		}
-		if envelope.Subject != "" {
-			r.params.Subject = envelope.Subject
-		}
-		r.subjectView = envelope.SubjectView
-	}
-}
-
-func (r *Application) renderViewTemplate() error {
-	if r.subjectView != "" && r.template != nil {
-		subject, err := r.template.Render(r.subjectView, r.with)
-		if err != nil {
-			return err
-		}
-		// A subject becomes a header, so a CR or LF in the render would start
-		// a new header. Keep the first non-empty line. Templates end in a
-		// newline, so this is the common case, not just the hostile one.
-		if subject = sanitizeSubject(subject); subject != "" {
-			r.params.Subject = subject
-		}
-	}
-
-	if r.htmlView != "" && r.template != nil {
-		html, err := r.template.Render(r.htmlView, r.with)
-		if err != nil {
-			return err
-		}
-		r.params.HTML = html
-	}
-
-	if r.textView != "" && r.template != nil {
-		text, err := r.template.Render(r.textView, r.with)
-		if err != nil {
-			return err
-		}
-		r.params.Text = text
-	}
-
-	return nil
+	return SendMail(r.config, params)
 }
 
 func SendMail(config config.Config, params Params) error {
