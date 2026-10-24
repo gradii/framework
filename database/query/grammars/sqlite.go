@@ -21,7 +21,7 @@ func NewSqliteGrammar(prefix string) *SqliteGrammar {
 }
 
 // WhereBasic mirrors SQLiteGrammar::whereBasic(): the null-safe equality operator becomes IS.
-func (g *SqliteGrammar) WhereBasic(b Query, where Where) string {
+func (g *SqliteGrammar) WhereBasic(b core.Query, where core.Where) string {
 	if where.Operator == "<=>" {
 		return g.Wrap(where.Column) + " IS " + g.Parameter(where.Value)
 	}
@@ -30,7 +30,7 @@ func (g *SqliteGrammar) WhereBasic(b Query, where Where) string {
 }
 
 // WhereLike mirrors SQLiteGrammar::whereLike(): a case sensitive match uses glob.
-func (g *SqliteGrammar) WhereLike(b Query, where Where) string {
+func (g *SqliteGrammar) WhereLike(b core.Query, where core.Where) string {
 	if !where.CaseSensitive {
 		return g.BaseGrammar.WhereLike(b, where)
 	}
@@ -58,38 +58,38 @@ func (g *SqliteGrammar) PrepareWhereLikeBinding(value string, caseSensitive bool
 }
 
 // dateBasedWhere mirrors SQLiteGrammar::dateBasedWhere().
-func (g *SqliteGrammar) dateBasedWhere(format string, where Where) string {
+func (g *SqliteGrammar) dateBasedWhere(format string, where core.Where) string {
 	return "strftime('" + format + "', " + g.Wrap(where.Column) + ") " + where.Operator +
 		" cast(" + g.Parameter(where.Value) + " as text)"
 }
 
 // WhereDate mirrors SQLiteGrammar::whereDate().
-func (g *SqliteGrammar) WhereDate(b Query, where Where) string {
+func (g *SqliteGrammar) WhereDate(b core.Query, where core.Where) string {
 	return g.dateBasedWhere("%Y-%m-%d", where)
 }
 
 // WhereDay mirrors SQLiteGrammar::whereDay().
-func (g *SqliteGrammar) WhereDay(b Query, where Where) string {
+func (g *SqliteGrammar) WhereDay(b core.Query, where core.Where) string {
 	return g.dateBasedWhere("%d", where)
 }
 
 // WhereMonth mirrors SQLiteGrammar::whereMonth().
-func (g *SqliteGrammar) WhereMonth(b Query, where Where) string {
+func (g *SqliteGrammar) WhereMonth(b core.Query, where core.Where) string {
 	return g.dateBasedWhere("%m", where)
 }
 
 // WhereYear mirrors SQLiteGrammar::whereYear().
-func (g *SqliteGrammar) WhereYear(b Query, where Where) string {
+func (g *SqliteGrammar) WhereYear(b core.Query, where core.Where) string {
 	return g.dateBasedWhere("%Y", where)
 }
 
 // WhereTime mirrors SQLiteGrammar::whereTime().
-func (g *SqliteGrammar) WhereTime(b Query, where Where) string {
+func (g *SqliteGrammar) WhereTime(b core.Query, where core.Where) string {
 	return g.dateBasedWhere("%H:%M:%S", where)
 }
 
 // CompileIndexHint mirrors SQLiteGrammar::compileIndexHint().
-func (g *SqliteGrammar) CompileIndexHint(b Query, hint *IndexHint) string {
+func (g *SqliteGrammar) CompileIndexHint(b core.Query, hint *core.IndexHint) string {
 	if hint.Type == "force" {
 		return "indexed by " + hint.Index
 	}
@@ -98,17 +98,17 @@ func (g *SqliteGrammar) CompileIndexHint(b Query, hint *IndexHint) string {
 }
 
 // CompileInsertOrIgnore mirrors SQLiteGrammar::compileInsertOrIgnore().
-func (g *SqliteGrammar) CompileInsertOrIgnore(b Query, values []map[string]any) string {
+func (g *SqliteGrammar) CompileInsertOrIgnore(b core.Query, values []map[string]any) string {
 	return strings.Replace(g.CompileInsert(b, values), "insert", "insert or ignore", 1)
 }
 
 // CompileInsertOrIgnoreUsing mirrors SQLiteGrammar::compileInsertOrIgnoreUsing().
-func (g *SqliteGrammar) CompileInsertOrIgnoreUsing(b Query, columns []any, sql string) string {
+func (g *SqliteGrammar) CompileInsertOrIgnoreUsing(b core.Query, columns []any, sql string) string {
 	return strings.Replace(g.CompileInsertUsing(b, columns, sql), "insert", "insert or ignore", 1)
 }
 
 // CompileUpdate mirrors SQLiteGrammar::compileUpdate(): joins or a limit take the rowid rewrite.
-func (g *SqliteGrammar) CompileUpdate(b Query, values UpdateValues) string {
+func (g *SqliteGrammar) CompileUpdate(b core.Query, values core.UpdateValues) string {
 	if len(b.State().Joins) > 0 || b.State().Limit != nil {
 		return g.compileUpdateWithJoinsOrLimit(b, values)
 	}
@@ -117,7 +117,7 @@ func (g *SqliteGrammar) CompileUpdate(b Query, values UpdateValues) string {
 }
 
 // compileUpdateWithJoinsOrLimit mirrors SQLiteGrammar::compileUpdateWithJoinsOrLimit().
-func (g *SqliteGrammar) compileUpdateWithJoinsOrLimit(b Query, values UpdateValues) string {
+func (g *SqliteGrammar) compileUpdateWithJoinsOrLimit(b core.Query, values core.UpdateValues) string {
 	table := g.WrapTable(b.State().From)
 	columns := g.CompileUpdateColumns(b, values)
 	alias := aliasOf(b.State().From)
@@ -132,7 +132,7 @@ func (g *SqliteGrammar) compileUpdateWithJoinsOrLimit(b Query, values UpdateValu
 // CompileUpdateColumns mirrors SQLiteGrammar::compileUpdateColumns(): the JSON selectors of one column
 // are folded into a single json_patch() assignment appended last, and the patch names the wrapped column
 // rather than the extraction inside it. Every other assignment keeps its order and its value.
-func (g *SqliteGrammar) CompileUpdateColumns(b Query, values UpdateValues) string {
+func (g *SqliteGrammar) CompileUpdateColumns(b core.Query, values core.UpdateValues) string {
 	groups := g.groupJsonColumnsForUpdate(values)
 	merged := g.mergeJsonGroups(values, groups)
 
@@ -162,7 +162,7 @@ func (g *SqliteGrammar) CompileJsonPatch(column string, value any) string {
 }
 
 // CompileDelete mirrors SQLiteGrammar::compileDelete(): joins or a limit take the rowid rewrite.
-func (g *SqliteGrammar) CompileDelete(b Query) string {
+func (g *SqliteGrammar) CompileDelete(b core.Query) string {
 	if len(b.State().Joins) > 0 || b.State().Limit != nil {
 		table := g.WrapTable(b.State().From)
 		alias := aliasOf(b.State().From)
@@ -178,7 +178,7 @@ func (g *SqliteGrammar) CompileDelete(b Query) string {
 }
 
 // CompileUpsert mirrors SQLiteGrammar::compileUpsert(): on conflict do update with excluded.
-func (g *SqliteGrammar) CompileUpsert(b Query, values []map[string]any, uniqueBy []string, update []UpsertUpdate) string {
+func (g *SqliteGrammar) CompileUpsert(b core.Query, values []map[string]any, uniqueBy []string, update []core.UpsertUpdate) string {
 	sql := g.CompileInsert(b, values)
 	sql += " on conflict (" + g.Columnize(core.StringsToAny(uniqueBy)) + ") do update set "
 
@@ -199,7 +199,7 @@ func (g *SqliteGrammar) CompileUpsert(b Query, values []map[string]any, uniqueBy
 // Laravel asks the connection's schema builder for parseSchemaAndTable. That method only splits the
 // reference on ".", so the same split is done here: a schema-qualified table keeps its schema on the
 // sqlite_sequence delete, and only the bare table name is prefixed in the binding.
-func (g *SqliteGrammar) CompileTruncate(b Query) []Statement {
+func (g *SqliteGrammar) CompileTruncate(b core.Query) []core.Statement {
 	reference := core.AsString(b.State().From)
 	schema := ""
 	table := reference
@@ -215,14 +215,14 @@ func (g *SqliteGrammar) CompileTruncate(b Query) []Statement {
 		sequence += g.WrapValue(schema) + "."
 	}
 
-	return []Statement{
+	return []core.Statement{
 		{SQL: sequence + "sqlite_sequence where name = ?", Bindings: []any{g.Prefix() + table}},
 		{SQL: "delete from " + g.WrapTable(b.State().From)},
 	}
 }
 
 // CompileLock mirrors SQLiteGrammar::compileLock().
-func (g *SqliteGrammar) CompileLock(b Query, value any) string { return "" }
+func (g *SqliteGrammar) CompileLock(b core.Query, value any) string { return "" }
 
 // WrapUnion mirrors SQLiteGrammar::wrapUnion().
 func (g *SqliteGrammar) WrapUnion(sql string) string { return "select * from (" + sql + ")" }
@@ -258,7 +258,7 @@ func (g *SqliteGrammar) CompileJsonContains(column string, value string) string 
 // the meaning MySQL's "not json_contains(column, list)" and Postgres' "not column @> list" carry, and
 // it makes the clause the exact negation of its positive form. Negating each predicate instead would
 // read "contains none" and quietly diverge from the other two dialects for the same call.
-func (g *SqliteGrammar) WhereJsonContains(b Query, where Where) string {
+func (g *SqliteGrammar) WhereJsonContains(b core.Query, where core.Where) string {
 	if core.IsExpression(where.Value) || !core.IsArrayValue(where.Value) {
 		return g.BaseGrammar.WhereJsonContains(b, where)
 	}
@@ -315,7 +315,7 @@ func (g *SqliteGrammar) CompileJsonLength(column string, operator string, value 
 // PrepareBindingsForUpdate mirrors SQLiteGrammar::prepareBindingsForUpdate(): the JSON selectors are
 // regrouped into one nested document per column, every array value is json-encoded, and the set values
 // precede the bindings of every clause except select.
-func (g *SqliteGrammar) PrepareBindingsForUpdate(bindings map[string][]any, values UpdateValues) []any {
+func (g *SqliteGrammar) PrepareBindingsForUpdate(bindings map[string][]any, values core.UpdateValues) []any {
 	groups := g.groupJsonColumnsForUpdate(values)
 	merged := g.mergeJsonGroups(values, groups)
 
@@ -328,7 +328,7 @@ func (g *SqliteGrammar) PrepareBindingsForUpdate(bindings map[string][]any, valu
 		out = g.AppendUpdateValueBinding(out, value.Value)
 	}
 
-	for _, typ := range BindingTypes {
+	for _, typ := range core.BindingTypes {
 		if typ == "select" {
 			continue
 		}
@@ -342,8 +342,8 @@ func (g *SqliteGrammar) PrepareBindingsForUpdate(bindings map[string][]any, valu
 // SQLiteGrammar::compileUpdateColumns() and SQLiteGrammar::prepareBindingsForUpdate() perform: the
 // non-selector assignments keep their order first, then each group is appended, and Collection::merge()
 // overwrites in place a plain column that shares a group's name (so a group wins over it).
-func (g *SqliteGrammar) mergeJsonGroups(values UpdateValues, groups []UpdateValue) []UpdateValue {
-	merged := make([]UpdateValue, 0, len(values)+len(groups))
+func (g *SqliteGrammar) mergeJsonGroups(values core.UpdateValues, groups []core.UpdateValue) []core.UpdateValue {
+	merged := make([]core.UpdateValue, 0, len(values)+len(groups))
 	index := make(map[string]int, len(values)+len(groups))
 
 	for _, value := range values {
@@ -370,8 +370,8 @@ func (g *SqliteGrammar) mergeJsonGroups(values UpdateValues, groups []UpdateValu
 
 // groupJsonColumnsForUpdate mirrors SQLiteGrammar::groupJsonColumnsForUpdate(): each JSON selector is
 // folded into a nested document keyed by the column it belongs to, in first-encounter order.
-func (g *SqliteGrammar) groupJsonColumnsForUpdate(values UpdateValues) []UpdateValue {
-	var groups []UpdateValue
+func (g *SqliteGrammar) groupJsonColumnsForUpdate(values core.UpdateValues) []core.UpdateValue {
+	var groups []core.UpdateValue
 	index := make(map[string]int)
 
 	for _, value := range values {
@@ -386,7 +386,7 @@ func (g *SqliteGrammar) groupJsonColumnsForUpdate(values UpdateValues) []UpdateV
 		}
 
 		index[path[0]] = len(groups)
-		groups = append(groups, UpdateValue{Column: path[0], Value: setNestedGroup(map[string]any{}, path[1:], value.Value)})
+		groups = append(groups, core.UpdateValue{Column: path[0], Value: setNestedGroup(map[string]any{}, path[1:], value.Value)})
 	}
 
 	return groups
@@ -426,7 +426,7 @@ func setNestedGroup(target map[string]any, segments []string, value any) map[str
 }
 
 // CompileGroupLimit mirrors SQLiteGrammar::compileGroupLimit(): modern SQLite uses the base rewrite.
-func (g *SqliteGrammar) CompileGroupLimit(b Query) string {
+func (g *SqliteGrammar) CompileGroupLimit(b core.Query) string {
 	return g.BaseGrammar.CompileGroupLimit(b)
 }
 

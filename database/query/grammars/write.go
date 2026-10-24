@@ -7,12 +7,12 @@ import (
 )
 
 // CompileInsert mirrors Grammar::compileInsert().
-func (g *BaseGrammar) CompileInsert(b Query, values []map[string]any) string {
+func (g *BaseGrammar) CompileInsert(b core.Query, values []map[string]any) string {
 	return g.compileInsert(b, values, "")
 }
 
 // compileInsert places a dialect's OUTPUT clause structurally, without searching the rendered SQL.
-func (g *BaseGrammar) compileInsert(b Query, values []map[string]any, output string) string {
+func (g *BaseGrammar) compileInsert(b core.Query, values []map[string]any, output string) string {
 	table := g.dialect().WrapTable(b.State().From)
 
 	if len(values) == 0 {
@@ -41,7 +41,7 @@ func (g *BaseGrammar) compileInsert(b Query, values []map[string]any, output str
 }
 
 // CompileInsertUsing mirrors Grammar::compileInsertUsing().
-func (g *BaseGrammar) CompileInsertUsing(b Query, columns []any, sql string) string {
+func (g *BaseGrammar) CompileInsertUsing(b core.Query, columns []any, sql string) string {
 	table := g.dialect().WrapTable(b.State().From)
 
 	if len(columns) == 0 || (len(columns) == 1 && columns[0] == "*") {
@@ -53,18 +53,18 @@ func (g *BaseGrammar) CompileInsertUsing(b Query, columns []any, sql string) str
 
 // CompileInsertGetId mirrors Grammar::compileInsertGetId(). Dialects that need a returning clause
 // override this.
-func (g *BaseGrammar) CompileInsertGetId(b Query, values []map[string]any, sequence string) string {
+func (g *BaseGrammar) CompileInsertGetId(b core.Query, values []map[string]any, sequence string) string {
 	return g.dialect().CompileInsert(b, values)
 }
 
 // CompileInsertOrIgnore mirrors Grammar::compileInsertOrIgnore(). The base refuses.
-func (g *BaseGrammar) CompileInsertOrIgnore(b Query, values []map[string]any) string {
+func (g *BaseGrammar) CompileInsertOrIgnore(b core.Query, values []map[string]any) string {
 	b.SetError(errInsertIgnoreNotSupported)
 	return ""
 }
 
 // CompileUpdate mirrors Grammar::compileUpdate().
-func (g *BaseGrammar) CompileUpdate(b Query, values UpdateValues) string {
+func (g *BaseGrammar) CompileUpdate(b core.Query, values core.UpdateValues) string {
 	table := g.dialect().WrapTable(b.State().From)
 	columns := g.dialect().CompileUpdateColumns(b, values)
 	where := g.dialect().CompileWheres(b)
@@ -77,19 +77,19 @@ func (g *BaseGrammar) CompileUpdate(b Query, values UpdateValues) string {
 }
 
 // CompileUpdateWithJoins mirrors Grammar::compileUpdateWithJoins().
-func (g *BaseGrammar) CompileUpdateWithJoins(b Query, table string, columns string, where string) string {
+func (g *BaseGrammar) CompileUpdateWithJoins(b core.Query, table string, columns string, where string) string {
 	joins := g.dialect().CompileJoins(b, b.State().Joins)
 
 	return "update " + table + " " + joins + " set " + columns + " " + where
 }
 
 // CompileUpdateWithoutJoins mirrors Grammar::compileUpdateWithoutJoins().
-func (g *BaseGrammar) CompileUpdateWithoutJoins(b Query, table string, columns string, where string) string {
+func (g *BaseGrammar) CompileUpdateWithoutJoins(b core.Query, table string, columns string, where string) string {
 	return "update " + table + " set " + columns + " " + where
 }
 
 // CompileUpdateColumns mirrors Grammar::compileUpdateColumns().
-func (g *BaseGrammar) CompileUpdateColumns(b Query, values UpdateValues) string {
+func (g *BaseGrammar) CompileUpdateColumns(b core.Query, values core.UpdateValues) string {
 	parts := make([]string, 0, len(values))
 
 	for _, value := range values {
@@ -100,13 +100,13 @@ func (g *BaseGrammar) CompileUpdateColumns(b Query, values UpdateValues) string 
 }
 
 // CompileUpsert mirrors Grammar::compileUpsert(). The base refuses.
-func (g *BaseGrammar) CompileUpsert(b Query, values []map[string]any, uniqueBy []string, update []UpsertUpdate) string {
+func (g *BaseGrammar) CompileUpsert(b core.Query, values []map[string]any, uniqueBy []string, update []core.UpsertUpdate) string {
 	b.SetError(errUpsertNotSupported)
 	return ""
 }
 
 // CompileDelete mirrors Grammar::compileDelete().
-func (g *BaseGrammar) CompileDelete(b Query) string {
+func (g *BaseGrammar) CompileDelete(b core.Query) string {
 	table := g.dialect().WrapTable(b.State().From)
 	where := g.dialect().CompileWheres(b)
 
@@ -118,7 +118,7 @@ func (g *BaseGrammar) CompileDelete(b Query) string {
 }
 
 // CompileDeleteWithJoins mirrors Grammar::compileDeleteWithJoins().
-func (g *BaseGrammar) CompileDeleteWithJoins(b Query, table string, where string) string {
+func (g *BaseGrammar) CompileDeleteWithJoins(b core.Query, table string, where string) string {
 	parts := strings.Split(table, " as ")
 	alias := parts[len(parts)-1]
 	joins := g.dialect().CompileJoins(b, b.State().Joins)
@@ -127,11 +127,11 @@ func (g *BaseGrammar) CompileDeleteWithJoins(b Query, table string, where string
 }
 
 // CompileDeleteWithoutJoins mirrors Grammar::compileDeleteWithoutJoins().
-func (g *BaseGrammar) CompileDeleteWithoutJoins(b Query, table string, where string) string {
+func (g *BaseGrammar) CompileDeleteWithoutJoins(b core.Query, table string, where string) string {
 	return "delete from " + table + " " + where
 }
 
 // CompileTruncate mirrors Grammar::compileTruncate().
-func (g *BaseGrammar) CompileTruncate(b Query) []Statement {
-	return []Statement{{SQL: "truncate table " + g.dialect().WrapTable(b.State().From)}}
+func (g *BaseGrammar) CompileTruncate(b core.Query) []core.Statement {
+	return []core.Statement{{SQL: "truncate table " + g.dialect().WrapTable(b.State().From)}}
 }

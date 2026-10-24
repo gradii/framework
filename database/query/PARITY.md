@@ -17,9 +17,9 @@
 The fluent builder lives in `database/query`, shared query types and value utilities in
 `database/query/core`, SQL compilers in `database/query/grammars`, and result processors in
 `database/query/processors`. `core` has no compiler or builder dependency. Builders and grammars
-call helpers such as `core.SortedKeys` directly; compatibility aliases only preserve public APIs.
+call helpers such as `core.SortedKeys` directly.
 Query descriptors and constants are referenced directly as `core.Where`, `core.UpdateValues`,
-`core.BooleanAnd`, etc.; the former `query/types.go` re-export layer has been removed.
+`core.BooleanAnd`, etc.; the `query/types.go` and `grammars/core.go` re-export layers have been removed.
 `NewBuilder(grammar, processor)` mirrors
 Laravel's builder wiring: `InsertGetID` compiles and cleans bindings before delegating execution
 to the connection's processor. DB and ORM adapters supply writer access, tracing, and model key

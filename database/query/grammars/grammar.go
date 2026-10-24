@@ -1,5 +1,7 @@
 package grammars
 
+import "github.com/goravel/framework/database/query/core"
+
 // Grammar compiles builder state into SQL. It is the Go counterpart of
 // Illuminate\Database\Query\Grammars\Grammar composed with Illuminate\Database\Grammar.
 //
@@ -12,7 +14,7 @@ type Grammar interface {
 	// --- wrapping and parameters (Illuminate\Database\Grammar) ---
 	Wrap(value any) string
 	WrapTable(table any) string
-	GetValue(expression Expression) string
+	GetValue(expression core.Expression) string
 	Parameter(value any) string
 	Parameterize(values []any) string
 	Columnize(columns []any) string
@@ -26,53 +28,53 @@ type Grammar interface {
 	WrapJsonBooleanValue(value string) string
 	PrepareBindingForJsonContains(value any) any
 	PrepareWhereLikeBinding(value string, caseSensitive bool) string
-	PrepareBindingsForUpdate(bindings map[string][]any, values UpdateValues) []any
+	PrepareBindingsForUpdate(bindings map[string][]any, values core.UpdateValues) []any
 	PrepareBindingsForDelete(bindings map[string][]any) []any
 
 	// --- select ---
 	SelectComponents() []string
-	CompileSelect(b Query) string
-	CompileComponents(b Query) []string
-	CompileAggregate(b Query, aggregate Aggregate) string
-	CompileColumns(b Query, columns []any) string
-	CompileFrom(b Query, table any) string
-	CompileIndexHint(b Query, hint *IndexHint) string
-	CompileJoins(b Query, joins []Join) string
-	CompileWheres(b Query) string
-	CompileGroups(b Query, groups []any) string
-	CompileHavings(b Query) string
-	CompileHaving(b Query, having Having) string
-	CompileOrders(b Query, orders []Order) string
-	CompileLimit(b Query, limit *int) string
-	CompileOffset(b Query, offset *int) string
-	CompileLock(b Query, value any) string
+	CompileSelect(b core.Query) string
+	CompileComponents(b core.Query) []string
+	CompileAggregate(b core.Query, aggregate core.Aggregate) string
+	CompileColumns(b core.Query, columns []any) string
+	CompileFrom(b core.Query, table any) string
+	CompileIndexHint(b core.Query, hint *core.IndexHint) string
+	CompileJoins(b core.Query, joins []core.Join) string
+	CompileWheres(b core.Query) string
+	CompileGroups(b core.Query, groups []any) string
+	CompileHavings(b core.Query) string
+	CompileHaving(b core.Query, having core.Having) string
+	CompileOrders(b core.Query, orders []core.Order) string
+	CompileLimit(b core.Query, limit *int) string
+	CompileOffset(b core.Query, offset *int) string
+	CompileLock(b core.Query, value any) string
 	CompileRandom(seed any) string
 	CompileRowNumber(partition string, orders string) string
-	CompileGroupLimit(b Query) string
-	CompileLegacyGroupLimit(b Query) string
-	UseLegacyGroupLimit(b Query) bool
-	CompileInsertOrIgnoreUsing(b Query, columns []any, sql string) string
-	CompileJoinLateral(join Join, expression string) string
+	CompileGroupLimit(b core.Query) string
+	CompileLegacyGroupLimit(b core.Query) string
+	UseLegacyGroupLimit(b core.Query) bool
+	CompileInsertOrIgnoreUsing(b core.Query, columns []any, sql string) string
+	CompileJoinLateral(join core.Join, expression string) string
 	CompileJsonValueCast(value string) string
-	CompileUnions(b Query) string
-	CompileUnionAggregate(b Query) string
+	CompileUnions(b core.Query) string
+	CompileUnionAggregate(b core.Query) string
 	WrapUnion(sql string) string
-	CompileExists(b Query) string
+	CompileExists(b core.Query) string
 
 	// --- write ---
-	CompileInsert(b Query, values []map[string]any) string
-	CompileInsertUsing(b Query, columns []any, sql string) string
-	CompileInsertGetId(b Query, values []map[string]any, sequence string) string
-	CompileInsertOrIgnore(b Query, values []map[string]any) string
-	CompileUpdate(b Query, values UpdateValues) string
-	CompileUpdateWithJoins(b Query, table string, columns string, where string) string
-	CompileUpdateWithoutJoins(b Query, table string, columns string, where string) string
-	CompileUpdateColumns(b Query, values UpdateValues) string
-	CompileUpsert(b Query, values []map[string]any, uniqueBy []string, update []UpsertUpdate) string
-	CompileDelete(b Query) string
-	CompileDeleteWithJoins(b Query, table string, where string) string
-	CompileDeleteWithoutJoins(b Query, table string, where string) string
-	CompileTruncate(b Query) []Statement
+	CompileInsert(b core.Query, values []map[string]any) string
+	CompileInsertUsing(b core.Query, columns []any, sql string) string
+	CompileInsertGetId(b core.Query, values []map[string]any, sequence string) string
+	CompileInsertOrIgnore(b core.Query, values []map[string]any) string
+	CompileUpdate(b core.Query, values core.UpdateValues) string
+	CompileUpdateWithJoins(b core.Query, table string, columns string, where string) string
+	CompileUpdateWithoutJoins(b core.Query, table string, columns string, where string) string
+	CompileUpdateColumns(b core.Query, values core.UpdateValues) string
+	CompileUpsert(b core.Query, values []map[string]any, uniqueBy []string, update []core.UpsertUpdate) string
+	CompileDelete(b core.Query) string
+	CompileDeleteWithJoins(b core.Query, table string, where string) string
+	CompileDeleteWithoutJoins(b core.Query, table string, where string) string
+	CompileTruncate(b core.Query) []core.Statement
 
 	// --- JSON, dialect specific ---
 	CompileJsonContains(column string, value string) string
@@ -82,36 +84,36 @@ type Grammar interface {
 	CompileJsonUpdateColumn(key string, value any) string
 
 	// --- where dispatch and compilers ---
-	CompileWhere(b Query, where Where) string
-	WhereRaw(b Query, where Where) string
-	WhereBasic(b Query, where Where) string
-	WhereBitwise(b Query, where Where) string
-	WhereLike(b Query, where Where) string
-	WhereIn(b Query, where Where) string
-	WhereNotIn(b Query, where Where) string
-	WhereInRaw(b Query, where Where) string
-	WhereNotInRaw(b Query, where Where) string
-	WhereNull(b Query, where Where) string
-	WhereNotNull(b Query, where Where) string
-	WhereBetween(b Query, where Where) string
-	WhereBetweenColumns(b Query, where Where) string
-	WhereValueBetween(b Query, where Where) string
-	WhereDate(b Query, where Where) string
-	WhereTime(b Query, where Where) string
-	WhereDay(b Query, where Where) string
-	WhereMonth(b Query, where Where) string
-	WhereYear(b Query, where Where) string
-	WhereColumn(b Query, where Where) string
-	WhereNested(b Query, where Where) string
-	WhereSub(b Query, where Where) string
-	WhereExists(b Query, where Where) string
-	WhereNotExists(b Query, where Where) string
-	WhereRowValues(b Query, where Where) string
-	WhereJsonBoolean(b Query, where Where) string
-	WhereJsonContains(b Query, where Where) string
-	WhereJsonOverlaps(b Query, where Where) string
-	WhereJsonContainsKey(b Query, where Where) string
-	WhereJsonLength(b Query, where Where) string
-	WhereFullText(b Query, where Where) string
-	WhereExpression(b Query, where Where) string
+	CompileWhere(b core.Query, where core.Where) string
+	WhereRaw(b core.Query, where core.Where) string
+	WhereBasic(b core.Query, where core.Where) string
+	WhereBitwise(b core.Query, where core.Where) string
+	WhereLike(b core.Query, where core.Where) string
+	WhereIn(b core.Query, where core.Where) string
+	WhereNotIn(b core.Query, where core.Where) string
+	WhereInRaw(b core.Query, where core.Where) string
+	WhereNotInRaw(b core.Query, where core.Where) string
+	WhereNull(b core.Query, where core.Where) string
+	WhereNotNull(b core.Query, where core.Where) string
+	WhereBetween(b core.Query, where core.Where) string
+	WhereBetweenColumns(b core.Query, where core.Where) string
+	WhereValueBetween(b core.Query, where core.Where) string
+	WhereDate(b core.Query, where core.Where) string
+	WhereTime(b core.Query, where core.Where) string
+	WhereDay(b core.Query, where core.Where) string
+	WhereMonth(b core.Query, where core.Where) string
+	WhereYear(b core.Query, where core.Where) string
+	WhereColumn(b core.Query, where core.Where) string
+	WhereNested(b core.Query, where core.Where) string
+	WhereSub(b core.Query, where core.Where) string
+	WhereExists(b core.Query, where core.Where) string
+	WhereNotExists(b core.Query, where core.Where) string
+	WhereRowValues(b core.Query, where core.Where) string
+	WhereJsonBoolean(b core.Query, where core.Where) string
+	WhereJsonContains(b core.Query, where core.Where) string
+	WhereJsonOverlaps(b core.Query, where core.Where) string
+	WhereJsonContainsKey(b core.Query, where core.Where) string
+	WhereJsonLength(b core.Query, where core.Where) string
+	WhereFullText(b core.Query, where core.Where) string
+	WhereExpression(b core.Query, where core.Where) string
 }

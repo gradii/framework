@@ -9,7 +9,7 @@ import (
 // SQL Server JSON updates extend Laravel's grammar to preserve the framework's JSON write API.
 // JSON_VALUE can read a selector, but an assignment must target the column and use JSON_MODIFY.
 // Multiple paths in one column are nested because SQL Server rejects duplicate SET assignments.
-func (g *SqlServerGrammar) CompileUpdateColumns(b Query, values UpdateValues) string {
+func (g *SqlServerGrammar) CompileUpdateColumns(b core.Query, values core.UpdateValues) string {
 	merged := g.groupJsonColumnsForUpdate(values)
 	parts := make([]string, 0, len(merged))
 	for _, value := range merged {
@@ -31,8 +31,8 @@ func (g *SqlServerGrammar) CompileJsonUpdateColumn(key string, value any) string
 
 // groupJsonColumnsForUpdate keeps each JSON column at its first selector's position. Both SQL
 // compilation and binding preparation use this order, including when ordinary assignments intervene.
-func (g *SqlServerGrammar) groupJsonColumnsForUpdate(values UpdateValues) UpdateValues {
-	merged := make(UpdateValues, 0, len(values))
+func (g *SqlServerGrammar) groupJsonColumnsForUpdate(values core.UpdateValues) core.UpdateValues {
+	merged := make(core.UpdateValues, 0, len(values))
 	positions := make(map[string]int)
 	for _, value := range values {
 		if !g.IsJsonSelector(value.Column) {
@@ -46,7 +46,7 @@ func (g *SqlServerGrammar) groupJsonColumnsForUpdate(values UpdateValues) Update
 			continue
 		}
 		positions[column] = len(merged)
-		merged = append(merged, UpdateValue{Column: column, Value: sqlServerJsonUpdate{value}})
+		merged = append(merged, core.UpdateValue{Column: column, Value: sqlServerJsonUpdate{value}})
 	}
 
 	return merged
@@ -68,4 +68,4 @@ func (g *SqlServerGrammar) compileJsonUpdateGroup(column string, group sqlServer
 	return field + " = " + expression
 }
 
-type sqlServerJsonUpdate []UpdateValue
+type sqlServerJsonUpdate []core.UpdateValue

@@ -1,5 +1,7 @@
 package grammars
 
+import "github.com/goravel/framework/database/query/core"
+
 // MariaDbGrammar mirrors Illuminate\Database\Query\Grammars\MariaDbGrammar, which extends the MySQL
 // grammar and overrides a handful of methods. Only the override this port exercises is declared here:
 // CompileJoinLateral, which refuses lateral joins.
@@ -26,6 +28,6 @@ func NewMariaDbGrammar(prefix string) *MariaDbGrammar {
 // CompileJoinLateral mirrors MariaDbGrammar::compileJoinLateral(): MariaDB has no lateral joins, so the
 // dialect refuses. Returning the empty string makes BaseGrammar.CompileJoins record
 // errLateralJoinNotSupported, mirroring the RuntimeException Laravel throws.
-func (g *MariaDbGrammar) CompileJoinLateral(join Join, expression string) string {
+func (g *MariaDbGrammar) CompileJoinLateral(join core.Join, expression string) string {
 	return ""
 }

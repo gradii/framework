@@ -4,40 +4,41 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/goravel/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 
 // The upstream mocks only use the builder's public from property for these grammar cases.
 type grammarTestQuery struct {
-	Query
-	state State
+	core.Query
+	state core.State
 }
 
-func (q *grammarTestQuery) State() *State { return &q.state }
+func (q *grammarTestQuery) State() *core.State { return &q.state }
 
 // DatabaseQueryGrammarTest::testWhereRawReturnsStringWhenExpressionPassed.
 func TestDatabaseQueryGrammar_WhereRawReturnsStringWhenExpressionPassed(t *testing.T) {
 	grammar := NewBaseGrammar("")
-	assert.Equal(t, `select * from "users"`, grammar.WhereRaw(nil, Where{SQL: Raw(`select * from "users"`)}))
+	assert.Equal(t, `select * from "users"`, grammar.WhereRaw(nil, core.Where{SQL: core.Raw(`select * from "users"`)}))
 }
 
 // DatabaseQueryGrammarTest::testWhereRawReturnsStringWhenStringPassed.
 func TestDatabaseQueryGrammar_WhereRawReturnsStringWhenStringPassed(t *testing.T) {
 	grammar := NewBaseGrammar("")
-	assert.Equal(t, `select * from "users"`, grammar.WhereRaw(nil, Where{SQL: `select * from "users"`}))
+	assert.Equal(t, `select * from "users"`, grammar.WhereRaw(nil, core.Where{SQL: `select * from "users"`}))
 }
 
 // DatabaseQueryGrammarTest::testCompileOrdersAcceptsExpression.
 func TestDatabaseQueryGrammar_CompileOrdersAcceptsExpression(t *testing.T) {
 	grammar := NewBaseGrammar("")
-	orders := []Order{{SQL: Raw(`length("name") desc`)}}
+	orders := []core.Order{{SQL: core.Raw(`length("name") desc`)}}
 	assert.Equal(t, `order by length("name") desc`, strings.ToLower(grammar.CompileOrders(nil, orders)))
 }
 
 // DatabaseQueryGrammarTest::testCompileOrdersAcceptsExpressionWithPlaceholders.
 func TestDatabaseQueryGrammar_CompileOrdersAcceptsExpressionWithPlaceholders(t *testing.T) {
 	grammar := NewBaseGrammar("")
-	orders := []Order{{SQL: Raw("field(status, ?, ?) asc")}}
+	orders := []core.Order{{SQL: core.Raw("field(status, ?, ?) asc")}}
 	assert.Equal(t, "order by field(status, ?, ?) asc", strings.ToLower(grammar.CompileOrders(nil, orders)))
 }
 
@@ -105,10 +106,10 @@ func TestDatabasePostgresQueryGrammar_CompileTruncate(t *testing.T) {
 	defer CascadeOnTruncate(!postgresTruncateWithoutCascade.Load())
 	CascadeOnTruncate(true)
 	grammar := NewPostgresGrammar("")
-	query := &grammarTestQuery{state: State{From: "users"}}
-	assert.Equal(t, []Statement{{SQL: `truncate "users" restart identity cascade`}}, grammar.CompileTruncate(query))
+	query := &grammarTestQuery{state: core.State{From: "users"}}
+	assert.Equal(t, []core.Statement{{SQL: `truncate "users" restart identity cascade`}}, grammar.CompileTruncate(query))
 	CascadeOnTruncate(false)
-	assert.Equal(t, []Statement{{SQL: `truncate "users" restart identity`}}, grammar.CompileTruncate(query))
+	assert.Equal(t, []core.Statement{{SQL: `truncate "users" restart identity`}}, grammar.CompileTruncate(query))
 	CascadeOnTruncate(true)
-	assert.Equal(t, []Statement{{SQL: `truncate "users" restart identity cascade`}}, grammar.CompileTruncate(query))
+	assert.Equal(t, []core.Statement{{SQL: `truncate "users" restart identity cascade`}}, grammar.CompileTruncate(query))
 }

@@ -45,16 +45,16 @@ func (g *SqlServerGrammar) GetOperators() []string {
 }
 
 // CompileSelect mirrors SqlServerGrammar::compileSelect(): offset needs an order by.
-func (g *SqlServerGrammar) CompileSelect(b Query) string {
+func (g *SqlServerGrammar) CompileSelect(b core.Query) string {
 	if b.State().Offset != nil && len(b.State().Orders) == 0 {
-		b.State().Orders = append(b.State().Orders, Order{Type: OrderRawType, SQL: "(SELECT 0)"})
+		b.State().Orders = append(b.State().Orders, core.Order{Type: core.OrderRawType, SQL: "(SELECT 0)"})
 	}
 
 	return g.BaseGrammar.CompileSelect(b)
 }
 
 // CompileColumns mirrors SqlServerGrammar::compileColumns(): a limit without an offset becomes top.
-func (g *SqlServerGrammar) CompileColumns(b Query, columns []any) string {
+func (g *SqlServerGrammar) CompileColumns(b core.Query, columns []any) string {
 	if b.State().Aggregate != nil {
 		return ""
 	}
@@ -72,7 +72,7 @@ func (g *SqlServerGrammar) CompileColumns(b Query, columns []any) string {
 }
 
 // CompileFrom mirrors SqlServerGrammar::compileFrom(): the lock is expressed on the from clause.
-func (g *SqlServerGrammar) CompileFrom(b Query, table any) string {
+func (g *SqlServerGrammar) CompileFrom(b core.Query, table any) string {
 	from := g.BaseGrammar.CompileFrom(b, table)
 
 	if s, ok := b.State().Lock.(string); ok {
@@ -91,7 +91,7 @@ func (g *SqlServerGrammar) CompileFrom(b Query, table any) string {
 }
 
 // CompileIndexHint mirrors SqlServerGrammar::compileIndexHint().
-func (g *SqlServerGrammar) CompileIndexHint(b Query, hint *IndexHint) string {
+func (g *SqlServerGrammar) CompileIndexHint(b core.Query, hint *core.IndexHint) string {
 	if hint.Type == "force" {
 		return "with (index(" + hint.Index + "))"
 	}
@@ -100,25 +100,25 @@ func (g *SqlServerGrammar) CompileIndexHint(b Query, hint *IndexHint) string {
 }
 
 // WhereBitwise mirrors SqlServerGrammar::whereBitwise().
-func (g *SqlServerGrammar) WhereBitwise(b Query, where Where) string {
+func (g *SqlServerGrammar) WhereBitwise(b core.Query, where core.Where) string {
 	operator := strings.ReplaceAll(where.Operator, "?", "??")
 
 	return "(" + g.Wrap(where.Column) + " " + operator + " " + g.Parameter(where.Value) + ") != 0"
 }
 
 // WhereDate mirrors SqlServerGrammar::whereDate().
-func (g *SqlServerGrammar) WhereDate(b Query, where Where) string {
+func (g *SqlServerGrammar) WhereDate(b core.Query, where core.Where) string {
 	return "cast(" + g.Wrap(where.Column) + " as date) " + where.Operator + " " + g.Parameter(where.Value)
 }
 
 // WhereTime mirrors SqlServerGrammar::whereTime().
-func (g *SqlServerGrammar) WhereTime(b Query, where Where) string {
+func (g *SqlServerGrammar) WhereTime(b core.Query, where core.Where) string {
 	return "cast(" + g.Wrap(where.Column) + " as time) " + where.Operator + " " + g.Parameter(where.Value)
 }
 
 // CompileHaving mirrors SqlServerGrammar::compileHaving().
-func (g *SqlServerGrammar) CompileHaving(b Query, having Having) string {
-	if having.Type == HavingBitType {
+func (g *SqlServerGrammar) CompileHaving(b core.Query, having core.Having) string {
+	if having.Type == core.HavingBitType {
 		return "(" + g.Wrap(having.Column) + " " + having.Operator + " " + g.Parameter(having.Value) + ") != 0"
 	}
 
@@ -126,7 +126,7 @@ func (g *SqlServerGrammar) CompileHaving(b Query, having Having) string {
 }
 
 // CompileDeleteWithoutJoins mirrors SqlServerGrammar::compileDeleteWithoutJoins().
-func (g *SqlServerGrammar) CompileDeleteWithoutJoins(b Query, table string, where string) string {
+func (g *SqlServerGrammar) CompileDeleteWithoutJoins(b core.Query, table string, where string) string {
 	sql := g.BaseGrammar.CompileDeleteWithoutJoins(b, table, where)
 
 	if b.State().Limit != nil && *b.State().Limit > 0 && (b.State().Offset == nil || *b.State().Offset <= 0) {
@@ -140,7 +140,7 @@ func (g *SqlServerGrammar) CompileDeleteWithoutJoins(b Query, table string, wher
 func (g *SqlServerGrammar) CompileRandom(seed any) string { return "NEWID()" }
 
 // CompileLimit mirrors SqlServerGrammar::compileLimit().
-func (g *SqlServerGrammar) CompileLimit(b Query, limit *int) string {
+func (g *SqlServerGrammar) CompileLimit(b core.Query, limit *int) string {
 	if limit == nil || *limit == 0 {
 		return ""
 	}
@@ -152,7 +152,7 @@ func (g *SqlServerGrammar) CompileLimit(b Query, limit *int) string {
 }
 
 // CompileOffset mirrors SqlServerGrammar::compileOffset().
-func (g *SqlServerGrammar) CompileOffset(b Query, offset *int) string {
+func (g *SqlServerGrammar) CompileOffset(b core.Query, offset *int) string {
 	if offset == nil || *offset == 0 {
 		return ""
 	}
@@ -161,7 +161,7 @@ func (g *SqlServerGrammar) CompileOffset(b Query, offset *int) string {
 }
 
 // CompileLock mirrors SqlServerGrammar::compileLock().
-func (g *SqlServerGrammar) CompileLock(b Query, value any) string { return "" }
+func (g *SqlServerGrammar) CompileLock(b core.Query, value any) string { return "" }
 
 // WrapUnion mirrors SqlServerGrammar::wrapUnion().
 func (g *SqlServerGrammar) WrapUnion(sql string) string {
@@ -169,9 +169,9 @@ func (g *SqlServerGrammar) WrapUnion(sql string) string {
 }
 
 // CompileExists mirrors SqlServerGrammar::compileExists().
-func (g *SqlServerGrammar) CompileExists(b Query) string {
+func (g *SqlServerGrammar) CompileExists(b core.Query) string {
 	inner := b.CloneForGrammar()
-	inner.State().Columns = []any{Expression{Value: "1 [exists]"}}
+	inner.State().Columns = []any{core.Expression{Value: "1 [exists]"}}
 	limit := 1
 	inner.State().Limit = &limit
 
@@ -179,7 +179,7 @@ func (g *SqlServerGrammar) CompileExists(b Query) string {
 }
 
 // CompileUpdateWithJoins mirrors SqlServerGrammar::compileUpdateWithJoins().
-func (g *SqlServerGrammar) CompileUpdateWithJoins(b Query, table string, columns string, where string) string {
+func (g *SqlServerGrammar) CompileUpdateWithJoins(b core.Query, table string, columns string, where string) string {
 	alias := aliasOf(table)
 	joins := g.CompileJoins(b, b.State().Joins)
 
@@ -187,7 +187,7 @@ func (g *SqlServerGrammar) CompileUpdateWithJoins(b Query, table string, columns
 }
 
 // CompileUpsert mirrors SqlServerGrammar::compileUpsert(): a merge statement.
-func (g *SqlServerGrammar) CompileUpsert(b Query, values []map[string]any, uniqueBy []string, update []UpsertUpdate) string {
+func (g *SqlServerGrammar) CompileUpsert(b core.Query, values []map[string]any, uniqueBy []string, update []core.UpsertUpdate) string {
 	columns := core.SortedKeys(values[0])
 
 	parameters := make([]string, 0, len(values))
@@ -228,7 +228,7 @@ func (g *SqlServerGrammar) CompileUpsert(b Query, values []map[string]any, uniqu
 
 // PrepareBindingsForUpdate keeps Laravel's SQL Server binding order. JSON updates additionally
 // group their bindings with the JSON_MODIFY assignment and encode array and object values.
-func (g *SqlServerGrammar) PrepareBindingsForUpdate(bindings map[string][]any, values UpdateValues) []any {
+func (g *SqlServerGrammar) PrepareBindingsForUpdate(bindings map[string][]any, values core.UpdateValues) []any {
 	out := make([]any, 0, len(values))
 	for _, value := range g.groupJsonColumnsForUpdate(values) {
 		if group, ok := value.Value.(sqlServerJsonUpdate); ok {
@@ -244,7 +244,7 @@ func (g *SqlServerGrammar) PrepareBindingsForUpdate(bindings map[string][]any, v
 		out = g.AppendUpdateValueBinding(out, value.Value)
 	}
 
-	for _, typ := range BindingTypes {
+	for _, typ := range core.BindingTypes {
 		if typ == "select" {
 			continue
 		}
@@ -255,7 +255,7 @@ func (g *SqlServerGrammar) PrepareBindingsForUpdate(bindings map[string][]any, v
 }
 
 // CompileJoinLateral mirrors SqlServerGrammar::compileJoinLateral().
-func (g *SqlServerGrammar) CompileJoinLateral(join Join, expression string) string {
+func (g *SqlServerGrammar) CompileJoinLateral(join core.Join, expression string) string {
 	typ := "cross"
 	if join.JoinType() == "left" {
 		typ = "outer"
@@ -365,7 +365,7 @@ func (g *SqlServerGrammar) CompileRowNumber(partition string, orders string) str
 
 // CompileInsertGetId returns the generated key in the INSERT result. Laravel's SQL Server
 // processor uses PDO's identity API; go-mssqldb requires an OUTPUT clause on the same statement.
-func (g *SqlServerGrammar) CompileInsertGetId(b Query, values []map[string]any, sequence string) string {
+func (g *SqlServerGrammar) CompileInsertGetId(b core.Query, values []map[string]any, sequence string) string {
 	if sequence == "" {
 		sequence = "id"
 	}

@@ -8,7 +8,7 @@ import (
 )
 
 // CompileWheres mirrors Grammar::compileWheres().
-func (g *BaseGrammar) CompileWheres(b Query) string {
+func (g *BaseGrammar) CompileWheres(b core.Query) string {
 	if len(b.State().Wheres) == 0 {
 		return ""
 	}
@@ -30,71 +30,71 @@ func (g *BaseGrammar) CompileWheres(b Query) string {
 
 // CompileWhere dispatches on the descriptor type. Mirrors Grammar::compileWheresToArray(), which
 // builds the method name as "where{$where['type']}".
-func (g *BaseGrammar) CompileWhere(b Query, where Where) string {
+func (g *BaseGrammar) CompileWhere(b core.Query, where core.Where) string {
 	d := g.dialect()
 
 	switch where.Type {
-	case WhereRawType:
+	case core.WhereRawType:
 		return d.WhereRaw(b, where)
-	case WhereBasic:
+	case core.WhereBasic:
 		return d.WhereBasic(b, where)
-	case WhereBitwise:
+	case core.WhereBitwise:
 		return d.WhereBitwise(b, where)
-	case WhereLikeType:
+	case core.WhereLikeType:
 		return d.WhereLike(b, where)
-	case WhereInType:
+	case core.WhereInType:
 		return d.WhereIn(b, where)
-	case WhereNotInType:
+	case core.WhereNotInType:
 		return d.WhereNotIn(b, where)
-	case WhereInRawType:
+	case core.WhereInRawType:
 		return d.WhereInRaw(b, where)
-	case WhereNotInRawType:
+	case core.WhereNotInRawType:
 		return d.WhereNotInRaw(b, where)
-	case WhereNullType:
+	case core.WhereNullType:
 		return d.WhereNull(b, where)
-	case WhereNotNullType:
+	case core.WhereNotNullType:
 		return d.WhereNotNull(b, where)
-	case WhereBetweenType:
+	case core.WhereBetweenType:
 		return d.WhereBetween(b, where)
-	case WhereBetweenColsType:
+	case core.WhereBetweenColsType:
 		return d.WhereBetweenColumns(b, where)
-	case WhereValueBetweenType:
+	case core.WhereValueBetweenType:
 		return d.WhereValueBetween(b, where)
-	case WhereDateType:
+	case core.WhereDateType:
 		return d.WhereDate(b, where)
-	case WhereTimeType:
+	case core.WhereTimeType:
 		return d.WhereTime(b, where)
-	case WhereDayType:
+	case core.WhereDayType:
 		return d.WhereDay(b, where)
-	case WhereMonthType:
+	case core.WhereMonthType:
 		return d.WhereMonth(b, where)
-	case WhereYearType:
+	case core.WhereYearType:
 		return d.WhereYear(b, where)
-	case WhereColumnType:
+	case core.WhereColumnType:
 		return d.WhereColumn(b, where)
-	case WhereNestedType:
+	case core.WhereNestedType:
 		return d.WhereNested(b, where)
-	case WhereSubType:
+	case core.WhereSubType:
 		return d.WhereSub(b, where)
-	case WhereExistsType:
+	case core.WhereExistsType:
 		return d.WhereExists(b, where)
-	case WhereNotExistsType:
+	case core.WhereNotExistsType:
 		return d.WhereNotExists(b, where)
-	case WhereRowValuesType:
+	case core.WhereRowValuesType:
 		return d.WhereRowValues(b, where)
-	case WhereJsonBoolean:
+	case core.WhereJsonBoolean:
 		return d.WhereJsonBoolean(b, where)
-	case WhereJsonContainsType:
+	case core.WhereJsonContainsType:
 		return d.WhereJsonContains(b, where)
-	case WhereJsonOverlapsType:
+	case core.WhereJsonOverlapsType:
 		return d.WhereJsonOverlaps(b, where)
-	case WhereJsonContainsKeyType:
+	case core.WhereJsonContainsKeyType:
 		return d.WhereJsonContainsKey(b, where)
-	case WhereJsonLengthType:
+	case core.WhereJsonLengthType:
 		return d.WhereJsonLength(b, where)
-	case WhereFullTextType:
+	case core.WhereFullTextType:
 		return d.WhereFullText(b, where)
-	case WhereExpressionType:
+	case core.WhereExpressionType:
 		return d.WhereExpression(b, where)
 	default:
 		return ""
@@ -102,7 +102,7 @@ func (g *BaseGrammar) CompileWhere(b Query, where Where) string {
 }
 
 // WhereRaw mirrors Grammar::whereRaw().
-func (g *BaseGrammar) WhereRaw(b Query, where Where) string {
+func (g *BaseGrammar) WhereRaw(b core.Query, where core.Where) string {
 	if core.IsExpression(where.SQL) {
 		return core.ExpressionValue(where.SQL)
 	}
@@ -111,7 +111,7 @@ func (g *BaseGrammar) WhereRaw(b Query, where Where) string {
 }
 
 // WhereBasic mirrors Grammar::whereBasic().
-func (g *BaseGrammar) WhereBasic(b Query, where Where) string {
+func (g *BaseGrammar) WhereBasic(b core.Query, where core.Where) string {
 	value := g.dialect().Parameter(where.Value)
 	operator := strings.ReplaceAll(where.Operator, "?", "??")
 
@@ -119,12 +119,12 @@ func (g *BaseGrammar) WhereBasic(b Query, where Where) string {
 }
 
 // WhereBitwise mirrors Grammar::whereBitwise(), which delegates to whereBasic.
-func (g *BaseGrammar) WhereBitwise(b Query, where Where) string {
+func (g *BaseGrammar) WhereBitwise(b core.Query, where core.Where) string {
 	return g.dialect().WhereBasic(b, where)
 }
 
 // WhereLike mirrors Grammar::whereLike().
-func (g *BaseGrammar) WhereLike(b Query, where Where) string {
+func (g *BaseGrammar) WhereLike(b core.Query, where core.Where) string {
 	if where.CaseSensitive {
 		b.SetError(errCaseSensitiveLikeNotSupported)
 		return ""
@@ -142,7 +142,7 @@ func (g *BaseGrammar) WhereLike(b Query, where Where) string {
 }
 
 // WhereIn mirrors Grammar::whereIn().
-func (g *BaseGrammar) WhereIn(b Query, where Where) string {
+func (g *BaseGrammar) WhereIn(b core.Query, where core.Where) string {
 	if len(where.Values) > 0 {
 		return g.dialect().Wrap(where.Column) + " in (" + g.dialect().Parameterize(where.Values) + ")"
 	}
@@ -151,7 +151,7 @@ func (g *BaseGrammar) WhereIn(b Query, where Where) string {
 }
 
 // WhereNotIn mirrors Grammar::whereNotIn().
-func (g *BaseGrammar) WhereNotIn(b Query, where Where) string {
+func (g *BaseGrammar) WhereNotIn(b core.Query, where core.Where) string {
 	if len(where.Values) > 0 {
 		return g.dialect().Wrap(where.Column) + " not in (" + g.dialect().Parameterize(where.Values) + ")"
 	}
@@ -160,7 +160,7 @@ func (g *BaseGrammar) WhereNotIn(b Query, where Where) string {
 }
 
 // WhereInRaw mirrors Grammar::whereInRaw().
-func (g *BaseGrammar) WhereInRaw(b Query, where Where) string {
+func (g *BaseGrammar) WhereInRaw(b core.Query, where core.Where) string {
 	if len(where.Values) > 0 {
 		return g.dialect().Wrap(where.Column) + " in (" + core.JoinAny(where.Values) + ")"
 	}
@@ -169,7 +169,7 @@ func (g *BaseGrammar) WhereInRaw(b Query, where Where) string {
 }
 
 // WhereNotInRaw mirrors Grammar::whereNotInRaw().
-func (g *BaseGrammar) WhereNotInRaw(b Query, where Where) string {
+func (g *BaseGrammar) WhereNotInRaw(b core.Query, where core.Where) string {
 	if len(where.Values) > 0 {
 		return g.dialect().Wrap(where.Column) + " not in (" + core.JoinAny(where.Values) + ")"
 	}
@@ -178,17 +178,17 @@ func (g *BaseGrammar) WhereNotInRaw(b Query, where Where) string {
 }
 
 // WhereNull mirrors Grammar::whereNull().
-func (g *BaseGrammar) WhereNull(b Query, where Where) string {
+func (g *BaseGrammar) WhereNull(b core.Query, where core.Where) string {
 	return g.dialect().Wrap(where.Column) + " is null"
 }
 
 // WhereNotNull mirrors Grammar::whereNotNull().
-func (g *BaseGrammar) WhereNotNull(b Query, where Where) string {
+func (g *BaseGrammar) WhereNotNull(b core.Query, where core.Where) string {
 	return g.dialect().Wrap(where.Column) + " is not null"
 }
 
 // WhereBetween mirrors Grammar::whereBetween().
-func (g *BaseGrammar) WhereBetween(b Query, where Where) string {
+func (g *BaseGrammar) WhereBetween(b core.Query, where core.Where) string {
 	between := "between"
 	if where.Not {
 		between = "not between"
@@ -200,7 +200,7 @@ func (g *BaseGrammar) WhereBetween(b Query, where Where) string {
 }
 
 // WhereBetweenColumns mirrors Grammar::whereBetweenColumns().
-func (g *BaseGrammar) WhereBetweenColumns(b Query, where Where) string {
+func (g *BaseGrammar) WhereBetweenColumns(b core.Query, where core.Where) string {
 	between := "between"
 	if where.Not {
 		between = "not between"
@@ -212,7 +212,7 @@ func (g *BaseGrammar) WhereBetweenColumns(b Query, where Where) string {
 }
 
 // WhereValueBetween mirrors Grammar::whereValueBetween().
-func (g *BaseGrammar) WhereValueBetween(b Query, where Where) string {
+func (g *BaseGrammar) WhereValueBetween(b core.Query, where core.Where) string {
 	between := "between"
 	if where.Not {
 		between = "not between"
@@ -224,41 +224,43 @@ func (g *BaseGrammar) WhereValueBetween(b Query, where Where) string {
 }
 
 // dateBasedWhere mirrors Grammar::dateBasedWhere().
-func (g *BaseGrammar) dateBasedWhere(typ string, where Where) string {
+func (g *BaseGrammar) dateBasedWhere(typ string, where core.Where) string {
 	return typ + "(" + g.dialect().Wrap(where.Column) + ") " + where.Operator + " " + g.dialect().Parameter(where.Value)
 }
 
 // WhereDate mirrors Grammar::whereDate().
-func (g *BaseGrammar) WhereDate(b Query, where Where) string {
+func (g *BaseGrammar) WhereDate(b core.Query, where core.Where) string {
 	return g.dateBasedWhere("date", where)
 }
 
 // WhereTime mirrors Grammar::whereTime().
-func (g *BaseGrammar) WhereTime(b Query, where Where) string {
+func (g *BaseGrammar) WhereTime(b core.Query, where core.Where) string {
 	return g.dateBasedWhere("time", where)
 }
 
 // WhereDay mirrors Grammar::whereDay().
-func (g *BaseGrammar) WhereDay(b Query, where Where) string { return g.dateBasedWhere("day", where) }
+func (g *BaseGrammar) WhereDay(b core.Query, where core.Where) string {
+	return g.dateBasedWhere("day", where)
+}
 
 // WhereMonth mirrors Grammar::whereMonth().
-func (g *BaseGrammar) WhereMonth(b Query, where Where) string {
+func (g *BaseGrammar) WhereMonth(b core.Query, where core.Where) string {
 	return g.dateBasedWhere("month", where)
 }
 
 // WhereYear mirrors Grammar::whereYear().
-func (g *BaseGrammar) WhereYear(b Query, where Where) string {
+func (g *BaseGrammar) WhereYear(b core.Query, where core.Where) string {
 	return g.dateBasedWhere("year", where)
 }
 
 // WhereColumn mirrors Grammar::whereColumn().
-func (g *BaseGrammar) WhereColumn(b Query, where Where) string {
+func (g *BaseGrammar) WhereColumn(b core.Query, where core.Where) string {
 	return g.dialect().Wrap(where.First) + " " + where.Operator + " " + g.dialect().Wrap(where.Second)
 }
 
 // WhereNested mirrors Grammar::whereNested(). The child compiles to "where ..." or "on ...", so the
 // leading keyword is stripped by its length.
-func (g *BaseGrammar) WhereNested(b Query, where Where) string {
+func (g *BaseGrammar) WhereNested(b core.Query, where core.Where) string {
 	if where.Query == nil {
 		return ""
 	}
@@ -278,7 +280,7 @@ func (g *BaseGrammar) WhereNested(b Query, where Where) string {
 }
 
 // WhereSub mirrors Grammar::whereSub().
-func (g *BaseGrammar) WhereSub(b Query, where Where) string {
+func (g *BaseGrammar) WhereSub(b core.Query, where core.Where) string {
 	if where.Query == nil {
 		return ""
 	}
@@ -287,7 +289,7 @@ func (g *BaseGrammar) WhereSub(b Query, where Where) string {
 }
 
 // WhereExists mirrors Grammar::whereExists().
-func (g *BaseGrammar) WhereExists(b Query, where Where) string {
+func (g *BaseGrammar) WhereExists(b core.Query, where core.Where) string {
 	if where.Query == nil {
 		return ""
 	}
@@ -296,7 +298,7 @@ func (g *BaseGrammar) WhereExists(b Query, where Where) string {
 }
 
 // WhereNotExists mirrors Grammar::whereNotExists().
-func (g *BaseGrammar) WhereNotExists(b Query, where Where) string {
+func (g *BaseGrammar) WhereNotExists(b core.Query, where core.Where) string {
 	if where.Query == nil {
 		return ""
 	}
@@ -305,7 +307,7 @@ func (g *BaseGrammar) WhereNotExists(b Query, where Where) string {
 }
 
 // WhereRowValues mirrors Grammar::whereRowValues().
-func (g *BaseGrammar) WhereRowValues(b Query, where Where) string {
+func (g *BaseGrammar) WhereRowValues(b core.Query, where core.Where) string {
 	return "(" + g.dialect().Columnize(where.Columns) + ") " + where.Operator + " (" + g.dialect().Parameterize(where.Values) + ")"
 }
 
@@ -313,7 +315,7 @@ func (g *BaseGrammar) WhereRowValues(b Query, where Where) string {
 // own, so wrapping the column comes back empty; Laravel's base grammar throws "this database engine
 // does not support JSON operations" there, and the port records the same capability error on the
 // builder, exactly as the JSON contains, key and length compilers do.
-func (g *BaseGrammar) WhereJsonBoolean(b Query, where Where) string {
+func (g *BaseGrammar) WhereJsonBoolean(b core.Query, where core.Where) string {
 	column := g.dialect().WrapJsonBooleanSelector(core.AsString(where.Column))
 	if column == "" {
 		b.SetError(errJsonSelectorNotSupported)
@@ -326,7 +328,7 @@ func (g *BaseGrammar) WhereJsonBoolean(b Query, where Where) string {
 }
 
 // WhereJsonContains mirrors Grammar::whereJsonContains().
-func (g *BaseGrammar) WhereJsonContains(b Query, where Where) string {
+func (g *BaseGrammar) WhereJsonContains(b core.Query, where core.Where) string {
 	compiled := g.dialect().CompileJsonContains(core.AsString(where.Column), g.dialect().Parameter(where.Value))
 	if compiled == "" {
 		b.SetError(errJsonContainsNotSupported)
@@ -342,7 +344,7 @@ func (g *BaseGrammar) WhereJsonContains(b Query, where Where) string {
 }
 
 // WhereJsonOverlaps mirrors Grammar::whereJsonOverlaps().
-func (g *BaseGrammar) WhereJsonOverlaps(b Query, where Where) string {
+func (g *BaseGrammar) WhereJsonOverlaps(b core.Query, where core.Where) string {
 	compiled := g.dialect().CompileJsonOverlaps(core.AsString(where.Column), g.dialect().Parameter(where.Value))
 	if compiled == "" {
 		b.SetError(errJsonOverlapsNotSupported)
@@ -358,7 +360,7 @@ func (g *BaseGrammar) WhereJsonOverlaps(b Query, where Where) string {
 }
 
 // WhereJsonContainsKey mirrors Grammar::whereJsonContainsKey().
-func (g *BaseGrammar) WhereJsonContainsKey(b Query, where Where) string {
+func (g *BaseGrammar) WhereJsonContainsKey(b core.Query, where core.Where) string {
 	compiled := g.dialect().CompileJsonContainsKey(core.AsString(where.Column))
 	if compiled == "" {
 		b.SetError(errJsonContainsKeyNotSupported)
@@ -374,7 +376,7 @@ func (g *BaseGrammar) WhereJsonContainsKey(b Query, where Where) string {
 }
 
 // WhereJsonLength mirrors Grammar::whereJsonLength().
-func (g *BaseGrammar) WhereJsonLength(b Query, where Where) string {
+func (g *BaseGrammar) WhereJsonLength(b core.Query, where core.Where) string {
 	compiled := g.dialect().CompileJsonLength(core.AsString(where.Column), where.Operator, g.dialect().Parameter(where.Value))
 	if compiled == "" {
 		b.SetError(errJsonLengthNotSupported)
@@ -385,14 +387,14 @@ func (g *BaseGrammar) WhereJsonLength(b Query, where Where) string {
 }
 
 // WhereFullText mirrors Grammar::whereFullText(). The base refuses.
-func (g *BaseGrammar) WhereFullText(b Query, where Where) string {
+func (g *BaseGrammar) WhereFullText(b core.Query, where core.Where) string {
 	b.SetError(errFullTextNotSupported)
 	return ""
 }
 
 // WhereExpression mirrors Grammar::whereExpression().
-func (g *BaseGrammar) WhereExpression(b Query, where Where) string {
-	if expr, ok := where.Column.(Expression); ok {
+func (g *BaseGrammar) WhereExpression(b core.Query, where core.Where) string {
+	if expr, ok := where.Column.(core.Expression); ok {
 		return g.dialect().GetValue(expr)
 	}
 
