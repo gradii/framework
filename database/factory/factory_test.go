@@ -6,6 +6,7 @@ import (
 
 	"github.com/brianvoe/gofakeit/v7"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/goravel/framework/contracts/database/factory"
 	"github.com/goravel/framework/support/carbon"
@@ -80,4 +81,59 @@ func TestGetRawAttributes(t *testing.T) {
 	assert.NotNil(t, attributes["CreatedAt"])
 	assert.NotNil(t, attributes["UpdatedAt"])
 	assert.NotNil(t, attributes["DeletedAt"])
+}
+
+type MappedModel struct {
+	*Model
+	Label   string `gorm:"column:full_name" db:"display_name"`
+	Address *MappedAddress
+	Friends []*MappedAddress
+	Tags    map[string][]string
+}
+
+type MappedAddress struct {
+	Name string `gorm:"column:label"`
+}
+
+func (*MappedModel) Factory() factory.Factory { return &MappedModelFactory{} }
+
+type MappedModelFactory struct{}
+
+func (*MappedModelFactory) Definition() map[string]any {
+	return map[string]any{
+		"ID": uint(7), "Label": "default", "CreatedAt": carbon.NewDateTime(carbon.Now()),
+	}
+}
+
+func TestMakeMapsFieldNamesAndEmbeddedPointers(t *testing.T) {
+	var model MappedModel
+	require.NoError(t, NewFactoryImpl(nil).Make(&model, map[string]any{"Label": "override"}))
+	require.NotNil(t, model.Model)
+	assert.Equal(t, uint(7), model.ID)
+	assert.Equal(t, "override", model.Label)
+	require.NotNil(t, model.CreatedAt)
+	assert.False(t, model.CreatedAt.IsZero())
+}
+
+func TestMakeCountKeepsDestinationsIndependent(t *testing.T) {
+	var models []MappedModel
+	require.NoError(t, NewFactoryImpl(nil).Count(2).Make(&models))
+	require.Len(t, models, 2)
+	assert.NotSame(t, models[0].Model, models[1].Model)
+	assert.NotSame(t, models[0].CreatedAt, models[1].CreatedAt)
+	assert.Equal(t, "default", models[0].Label)
+	assert.Equal(t, "default", models[1].Label)
+}
+
+func TestMakeMapsNestedAttributes(t *testing.T) {
+	var model MappedModel
+	err := NewFactoryImpl(nil).Make(&model, map[string]any{
+		"Address": map[string]any{"Name": "Home"},
+		"Friends": []any{map[string]any{"Name": "Alice"}, map[string]any{"Name": "Bob"}},
+		"Tags":    map[string]any{"roles": []any{"staff", "editor"}},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, &MappedAddress{Name: "Home"}, model.Address)
+	assert.Equal(t, []*MappedAddress{{Name: "Alice"}, {Name: "Bob"}}, model.Friends)
+	assert.Equal(t, map[string][]string{"roles": {"staff", "editor"}}, model.Tags)
 }

@@ -6,8 +6,8 @@ import (
 	"reflect"
 
 	contractsdb "github.com/goravel/framework/contracts/database/db"
-	basedb "github.com/goravel/framework/database/db"
 	databasedriver "github.com/goravel/framework/database/driver"
+	rowscan "github.com/goravel/framework/database/internal/scan"
 	querybuilder "github.com/goravel/framework/database/query"
 	"github.com/goravel/framework/errors"
 	"github.com/goravel/framework/support/carbon"
@@ -17,7 +17,7 @@ import (
 //
 // The ORM used to hand every statement to GORM, which both built and ran it. Compiling now happens
 // in this package, so execution needs its own path: a statement goes to the connection's pool, and
-// rows come back through database/db's row scanner, which maps columns onto struct fields by name.
+// rows are decoded using the ORM's field-name mapping.
 
 // statementPool is what a compiled statement runs on. A connection's writer or reader is a
 // *sql.DB; a query bound to a transaction has to run on that transaction's *sql.Tx instead, so both
@@ -228,8 +228,8 @@ func scanRowMap(rows *sql.Rows, columns []string) (map[string]any, error) {
 }
 
 // scanRows decodes every row into dest, which is a pointer either to a struct or to a slice of
-// structs, and reports how many rows it decoded. Columns are matched to fields by name, which is what
-// database/db's row scanner does, so a model needs no per-field tags for this path to fill it.
+// structs, and reports how many rows it decoded. Columns are matched to fields by name, so a model
+// needs no per-field tags for this path to fill it.
 func (r *Query) scanRows(rows *sql.Rows, dest any) (int, error) {
 	destValue := reflect.ValueOf(dest)
 	if destValue.Kind() != reflect.Pointer || destValue.IsNil() {
@@ -255,13 +255,8 @@ func (r *Query) scanRows(rows *sql.Rows, dest any) (int, error) {
 	for rows.Next() {
 		count++
 
-		row, err := scanRowMap(rows, columns)
-		if err != nil {
-			return 0, err
-		}
-
 		if !intoSlice {
-			return 1, basedb.NewRow(row, nil).Scan(dest)
+			return 1, rowscan.Row(rows, columns, dest, rowMapper)
 		}
 
 		// A slice of values is filled in place; a slice of pointers is given a value per row, because
@@ -269,7 +264,7 @@ func (r *Query) scanRows(rows *sql.Rows, dest any) (int, error) {
 		elementType := target.Type().Elem()
 		if elementType.Kind() == reflect.Pointer {
 			element := reflect.New(elementType.Elem())
-			if err := basedb.NewRow(row, nil).Scan(element.Interface()); err != nil {
+			if err := rowscan.Row(rows, columns, element.Interface(), rowMapper); err != nil {
 				return 0, err
 			}
 
@@ -279,7 +274,7 @@ func (r *Query) scanRows(rows *sql.Rows, dest any) (int, error) {
 		}
 
 		element := reflect.New(elementType).Elem()
-		if err := basedb.NewRow(row, nil).Scan(element.Addr().Interface()); err != nil {
+		if err := rowscan.Row(rows, columns, element.Addr().Interface(), rowMapper); err != nil {
 			return 0, err
 		}
 		target = reflect.Append(target, element)

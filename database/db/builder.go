@@ -12,6 +12,7 @@ import (
 )
 
 // NameMapper maps a Go field name to its database column for sqlx, which scans rows into structs.
+// Explicit db tags override this mapper, including fields of embedded structs.
 var NameMapper = func(s string) string {
 	return str.Of(s).Snake().String()
 }

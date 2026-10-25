@@ -4,12 +4,16 @@ import (
 	"maps"
 	"reflect"
 
-	"github.com/go-viper/mapstructure/v2"
-
 	"github.com/goravel/framework/contracts/database/factory"
 	ormcontract "github.com/goravel/framework/contracts/database/orm"
+	"github.com/goravel/framework/database/internal/reflectx"
+	rowscan "github.com/goravel/framework/database/internal/scan"
 	"github.com/goravel/framework/errors"
 )
+
+// Factory attributes name Go fields, including embedded fields. Database column
+// tags belong to the persistence layer and do not rename factory attributes.
+var attributeMapper = reflectx.NewMapperFunc("", func(name string) string { return name })
 
 type FactoryImpl struct {
 	count *int              // number of models to generate
@@ -63,14 +67,7 @@ func (f *FactoryImpl) Make(value any, attributes ...map[string]any) error {
 			if attributes == nil {
 				return errors.OrmFactoryMissingAttributes.SetModule(errors.ModuleOrm)
 			}
-			decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-				Squash: true,
-				Result: elemValue,
-			})
-			if err != nil {
-				return err
-			}
-			if err := decoder.Decode(attributes); err != nil {
+			if err := rowscan.Attributes(attributes, elemValue, attributeMapper); err != nil {
 				return err
 			}
 			reflectValue = reflect.Append(reflectValue, reflect.ValueOf(elemValue).Elem())
@@ -87,15 +84,7 @@ func (f *FactoryImpl) Make(value any, attributes ...map[string]any) error {
 		if attributes == nil {
 			return errors.OrmFactoryMissingAttributes.SetModule(errors.ModuleOrm)
 		}
-		decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-			Squash: true,
-			Result: value,
-		})
-		if err != nil {
-			return err
-		}
-
-		return decoder.Decode(attributes)
+		return rowscan.Attributes(attributes, value, attributeMapper)
 	}
 }
 

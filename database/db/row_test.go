@@ -1163,7 +1163,7 @@ func TestScan_ToScanner(t *testing.T) {
 		assertion func(t *testing.T, target any)
 	}{
 		{
-			name: "same type should pass through - carbon.DateTime",
+			name: "Carbon values populate datetime fields",
 			target: &struct {
 				CreatedAt carbon.DateTime
 			}{},
@@ -1374,7 +1374,7 @@ func TestScan_ToScanner(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "time.Time should skip ToScannerHookFunc",
+			name: "time.Time accepts RFC3339 text",
 			target: &struct {
 				CreatedAt time.Time
 			}{},
@@ -1384,12 +1384,12 @@ func TestScan_ToScanner(t *testing.T) {
 				result := target.(*struct {
 					CreatedAt time.Time
 				})
-				// Should be handled by ToTimeHookFunc, not ToScannerHookFunc
+				// Native timestamps accept RFC3339 text.
 				assert.False(t, result.CreatedAt.IsZero())
 			},
 		},
 		{
-			name: "a soft-delete value should skip ToScannerHookFunc",
+			name: "soft-delete values accept RFC3339 text",
 			target: &struct {
 				DeletedAt basedatabase.DeletedAt
 			}{},
@@ -1399,12 +1399,12 @@ func TestScan_ToScanner(t *testing.T) {
 				result := target.(*struct {
 					DeletedAt basedatabase.DeletedAt
 				})
-				// Should be handled by ToDeletedAtHookFunc, not ToScannerHookFunc
+				// Soft-delete timestamps preserve validity when scanned from text.
 				assert.True(t, result.DeletedAt.Valid)
 			},
 		},
 		{
-			name: "time.Time as source should be processed by ToScannerHookFunc",
+			name: "native timestamps reach custom scanners",
 			target: &struct {
 				CreatedAt carbon.DateTime
 			}{},
@@ -1415,7 +1415,7 @@ func TestScan_ToScanner(t *testing.T) {
 					CreatedAt carbon.DateTime
 				})
 				// When source is time.Time, f != reflect.TypeOf(time.Time{}) is false,
-				// so ToScannerHookFunc does NOT skip and continues processing
+				// so the destination scanner handles the native timestamp
 				assert.False(t, result.CreatedAt.IsZero())
 			},
 		},

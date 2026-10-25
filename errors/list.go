@@ -117,6 +117,7 @@ var (
 	DatabaseSeederRegisterFailed        = New("seeder register failed: %v")
 	DatabaseFailToRunSeeder             = New("fail to run seeder: %v")
 	DatabaseUnsupportedType             = New("unsupported type: %s, expected %s")
+	DatabaseFieldNotSettable            = New("cannot scan column %s into an unsettable field of %s")
 	DatabaseInvalidArgumentNumber       = New("invalid argument number: %s, expected %s")
 	DatabaseInvalidPaginationLimit      = New("invalid pagination limit: %d, must be greater than 0")
 	DatabaseTransactionNotStarted       = New("transaction not started")

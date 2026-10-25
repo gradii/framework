@@ -254,14 +254,16 @@ type Query interface {
 	FindOr(dest any, id any, callback func() error) error
 	// FindOrFail finds records that match given conditions or throws an error.
 	FindOrFail(dest any, conds ...any) error
-	// First finds record that match given conditions.
+	// First retrieves the first matching row into dest. Struct destinations use db
+	// tags and support embedded fields.
 	First(dest any) error
 	// FirstOr finds the first record that matches the given conditions or
 	// execute the callback and return its result if no record is found.
 	FirstOr(dest any, callback func() error) error
 	// FirstOrFail finds the first record that matches the given conditions or throws an error.
 	FirstOrFail(dest any) error
-	// Get retrieves all rows from the database.
+	// Get retrieves all matching rows into dest, a pointer to a slice. Struct
+	// elements use db tags and support embedded fields.
 	Get(dest any) error
 	// GroupBy specifies the group method on the query.
 	GroupBy(column ...string) Query
@@ -507,5 +509,6 @@ type ToSql interface {
 
 type Row interface {
 	Err() error
+	// Scan maps column values using db tags and supports embedded structs.
 	Scan(value any) error
 }

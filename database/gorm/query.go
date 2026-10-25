@@ -1125,7 +1125,7 @@ func assignCursorRows(dest any, items []map[string]any) error {
 	for _, item := range items {
 		if elementType.Kind() == reflect.Pointer {
 			element := reflect.New(elementType.Elem())
-			if err := db.NewRow(item, nil).Scan(element.Interface()); err != nil {
+			if err := scanRow(item, element.Interface()); err != nil {
 				return err
 			}
 
@@ -1135,7 +1135,7 @@ func assignCursorRows(dest any, items []map[string]any) error {
 		}
 
 		element := reflect.New(elementType).Elem()
-		if err := db.NewRow(item, nil).Scan(element.Addr().Interface()); err != nil {
+		if err := scanRow(item, element.Addr().Interface()); err != nil {
 			return err
 		}
 

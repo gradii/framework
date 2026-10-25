@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/go-viper/mapstructure/v2"
+	rowscan "github.com/goravel/framework/database/internal/scan"
 	"github.com/goravel/framework/errors"
 )
 
@@ -23,11 +23,5 @@ func scanAggregate(value, dest any) error {
 		clearDestination(dest)
 		return nil
 	}
-	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-		Result: dest, DecodeHook: mapstructure.ComposeDecodeHookFunc(ToFieldTypeHookFunc(), ToStringHookFunc()),
-	})
-	if err != nil {
-		return err
-	}
-	return decoder.Decode(value)
+	return rowscan.Assign(target.Elem(), value)
 }

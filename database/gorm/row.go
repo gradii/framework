@@ -1,8 +1,21 @@
 package gorm
 
 import (
-	"github.com/goravel/framework/database/db"
+	"github.com/goravel/framework/database/internal/reflectx"
+	rowscan "github.com/goravel/framework/database/internal/scan"
+	basedatabase "github.com/goravel/framework/support/database"
+	"github.com/goravel/framework/support/str"
 )
+
+var rowMapper = reflectx.NewMapperTagFunc("gorm", func(name string) string {
+	return str.Of(name).Snake().String()
+}, func(tag string) string {
+	annotation := basedatabase.ParseAnnotation(tag)
+	if annotation.Skip {
+		return "-"
+	}
+	return annotation.Column
+})
 
 type Row struct {
 	err   error
@@ -15,12 +28,14 @@ func (r *Row) Err() error {
 }
 
 func (r *Row) Scan(value any) error {
-	row := db.NewRow(r.row, r.err)
-	if err := row.Scan(value); err != nil {
+	if r.err != nil {
+		return r.err
+	}
+	if err := scanRow(r.row, value); err != nil {
 		return err
 	}
 
-	if len(r.query.conditions.eagerLoad) == 0 {
+	if r.query == nil || len(r.query.conditions.eagerLoad) == 0 {
 		return nil
 	}
 
@@ -32,4 +47,9 @@ func (r *Row) Scan(value any) error {
 	query.conditions.eagerLoad = append([]eagerLoadEntry(nil), r.query.conditions.eagerLoad...)
 
 	return query.applyEagerLoads(value)
+}
+
+// scanRow maps cursor results with the same gorm tags used by SQL row scanning.
+func scanRow(row map[string]any, dest any) error {
+	return rowscan.Map(row, dest, rowMapper)
 }
