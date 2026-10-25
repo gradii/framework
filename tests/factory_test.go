@@ -11,8 +11,9 @@ import (
 
 type FactoryTestSuite struct {
 	suite.Suite
-	factory *factory.FactoryImpl
-	query   ormcontract.Query
+	factory   *factory.FactoryImpl
+	testQuery *TestQuery
+	query     ormcontract.Query
 }
 
 func TestFactoryTestSuite(t *testing.T) {
@@ -20,12 +21,13 @@ func TestFactoryTestSuite(t *testing.T) {
 }
 
 func (s *FactoryTestSuite) SetupSuite() {
-	postgresTestQuery := NewTestQueryBuilder().Postgres("", false)
-	postgresTestQuery.CreateTable(TestTableUsers, TestTableAuthors)
-	s.query = postgresTestQuery.Query()
+	s.testQuery = NewTestQueryBuilder().Postgres("", false)
+	s.testQuery.CreateTable(TestTableUsers, TestTableAuthors)
 }
 
+// SetupTest takes a fresh query handle per test, so a fluent call in one test cannot reach the next.
 func (s *FactoryTestSuite) SetupTest() {
+	s.query = s.testQuery.Query()
 	s.factory = factory.NewFactoryImpl(s.query)
 }
 

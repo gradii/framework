@@ -5051,14 +5051,16 @@ func TestCustomConnection(t *testing.T) {
 	sqliteTestQuery := NewTestQueryBuilder().Sqlite("", false)
 	sqliteTestQuery.CreateTable()
 
-	query := postgresTestQuery.Query()
+	// Each statement starts a new chain from the connection, as Laravel's Model::query() does.
+	// Holding one handle would accumulate clauses, because a fluent call writes to its receiver.
+	query := func() contractsorm.Query { return postgresTestQuery.Query() }
 
 	review := Review{Body: "create_review"}
-	assert.Nil(t, query.Create(&review))
+	assert.Nil(t, query().Create(&review))
 	assert.True(t, review.ID > 0)
 
 	var review1 Review
-	assert.Nil(t, query.Where("body", "create_review").First(&review1))
+	assert.Nil(t, query().Where("body", "create_review").First(&review1))
 	assert.True(t, review1.ID > 0)
 
 	config := sqliteTestQuery.Driver().Pool().Writers[0]
@@ -5066,15 +5068,15 @@ func TestCustomConnection(t *testing.T) {
 	mockDatabaseConfig(postgresTestQuery.MockConfig(), config)
 
 	product := Product{Name: "create_product"}
-	assert.Nil(t, query.Create(&product))
+	assert.Nil(t, query().Create(&product))
 	assert.True(t, product.ID > 0)
 
 	var product1 Product
-	assert.Nil(t, query.Where("name", "create_product").First(&product1))
+	assert.Nil(t, query().Where("name", "create_product").First(&product1))
 	assert.True(t, product1.ID > 0)
 
 	var product2 Product
-	assert.Nil(t, query.Where("name", "create_product1").First(&product2))
+	assert.Nil(t, query().Where("name", "create_product1").First(&product2))
 	assert.True(t, product2.ID == 0)
 
 	config = postgresTestQuery.Driver().Pool().Writers[0]
@@ -5082,7 +5084,7 @@ func TestCustomConnection(t *testing.T) {
 	mockDatabaseConfig(postgresTestQuery.MockConfig(), config)
 
 	person := Person{Name: "create_person"}
-	assert.NotNil(t, query.Create(&person))
+	assert.NotNil(t, query().Create(&person))
 	assert.True(t, person.ID == 0)
 
 	docker, err := sqliteTestQuery.Driver().Docker()

@@ -2069,7 +2069,7 @@ func (r *Query) addGlobalScopes() *Query {
 		globalScopes = append(globalScopes, nameToGlobalScopes[name])
 	}
 
-	return r.Scopes(globalScopes...).(*Query)
+	return r.clone().Scopes(globalScopes...).(*Query)
 }
 
 func (r *Query) addWhere(where contractsdriver.Where) contractsorm.Query {
@@ -2219,20 +2219,25 @@ func (r *Query) deleted(dest any) error {
 // Each scope starts from what the previous ones produced, which is how GORM chained them onto one
 // statement.
 func (r *Query) withScopesApplied() *Query {
-	scopes := r.conditions.scopes
-	r.conditions.scopes = nil
+	// Laravel's applyScopes() starts from "clone $this" and applies the scopes to the copy, so the
+	// receiver keeps its own scope list and a second compile from the same query does not append the
+	// scope's clauses a second time. This is the one place a clone is required rather than optional:
+	// scopes are the caller's, not the query's, and they are applied per compiled statement.
+	query := r.clone()
+	scopes := query.conditions.scopes
+	query.conditions.scopes = nil
 
 	for _, apply := range scopes {
-		scoped, ok := apply(r).(*Query)
+		scoped, ok := apply(query).(*Query)
 		if !ok {
 			continue
 		}
 
 		scoped.conditions.scopes = nil
-		r = scoped
+		query = scoped
 	}
 
-	return r
+	return query
 }
 
 // withError returns a query carrying a condition that could not be accepted, for whichever statement
@@ -2348,9 +2353,13 @@ func (r *Query) refreshConnection() (*Query, error) {
 		r.queries[connection] = query
 	}
 
+	// The clauses come from this query, the dialect from the connection they are being moved to.
+	// Handing the receiver's builder over as-is compiles the statement with the source connection's
+	// grammar and processor: a MySQL-built builder then renders backticks on Postgres and an insert
+	// that expected no RETURNING loses its key.
 	query = query.clone()
 	query.conditions = r.conditions.clone()
-	query.builder = r.builder.Clone()
+	query.builder = r.builder.RebindGrammar(query.queryGrammar, querybuilder.NewProcessor(query.dbConfig.Driver), query.dbConfig.Driver)
 
 	return query, nil
 }
@@ -2434,6 +2443,14 @@ func (r *Query) setConditions(conditions Conditions) *Query {
 	r.conditions = conditions
 
 	return r
+}
+
+// Clone returns an independent copy of the query: it shares the connection, grammar and observers,
+// but owns its conditions and its builder, so clauses written to it never reach the receiver. It is
+// what Orm.Query() hands a caller, mirroring Laravel's Connection::query(), which builds a new
+// Query\Builder on every call.
+func (r *Query) Clone() contractsorm.Query {
+	return r.clone()
 }
 
 // clone returns a query that shares the receiver's connection and scope but owns its conditions, so

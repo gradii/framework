@@ -569,5 +569,23 @@ func (b *Builder) State() *State {
 // CloneForGrammar lets compilers rewrite a copy without depending on the concrete builder.
 func (b *Builder) CloneForGrammar() GrammarQuery { return b.Clone() }
 
+// RebindGrammar returns a copy carrying the builder's clauses but compiling them with another
+// grammar, processor and dialect. The clauses are recorded dialect-neutral and are rendered only at
+// compile time, so a query moved onto a different connection must keep its clauses and change the
+// grammar with them: hand a MySQL-built builder to Postgres and it renders backticks, hand it a
+// processor that expects no RETURNING and the insert loses its key. Laravel has the same split — the
+// clauses live on Query\Builder while the grammar and processor come from the connection it is
+// attached to.
+func (b *Builder) RebindGrammar(grammar Grammar, processor Processor, driver string) *Builder {
+	c := b.Clone()
+	c.grammar = grammar
+	if processor != nil {
+		c.processor = processor
+	}
+	c.driver = driver
+
+	return c
+}
+
 // SetError records a compilation error while preserving the first failure.
 func (b *Builder) SetError(err error) { b.setError(err) }

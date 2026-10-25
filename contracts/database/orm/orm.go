@@ -325,6 +325,13 @@ type QueryWithContext interface {
 	WithContext(ctx context.Context) Query
 }
 
+// QueryWithClone is the optional capability a Query implements when it can hand out an independent
+// copy. Orm.Query() uses it to return a new builder per call, which is what the Query() contract
+// promises and what Laravel's Connection::query() does. A Query without it is returned as stored.
+type QueryWithClone interface {
+	Clone() Query
+}
+
 type QueryWithObserver interface {
 	Observe(model any, observer Observer)
 }

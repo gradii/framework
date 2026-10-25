@@ -178,14 +178,22 @@ func (r *Orm) Observe(model any, observer contractsorm.Observer) {
 	}
 }
 
+// Query gets a new query builder instance, as the Orm contract states and as Laravel's
+// Connection::query() does: a fresh builder every call, so the Model / Where / Raw a caller writes are
+// that caller's alone. The stored handle is the connection's, not a query anyone builds on.
 func (r *Orm) Query() contractsorm.Query {
+	query := r.query
+	if cloner, ok := query.(contractsorm.QueryWithClone); ok {
+		query = cloner.Clone()
+	}
+
 	if r.ctx != context.Background() {
-		if queryWithContext, ok := r.query.(contractsorm.QueryWithContext); ok {
+		if queryWithContext, ok := query.(contractsorm.QueryWithContext); ok {
 			return queryWithContext.WithContext(r.ctx)
 		}
 	}
 
-	return r.query
+	return query
 }
 
 // Related returns a Query pre-scoped to the related rows for parent.relation. parent must be

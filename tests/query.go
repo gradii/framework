@@ -102,7 +102,13 @@ func (r *TestQuery) MockConfig() *mocksconfig.Config {
 	return r.config.(*mocksconfig.Config)
 }
 
+// Query returns a new query builder instance, the way Orm.Query() does: a suite that keeps one
+// handle and chains Model / Where per subtest must not accumulate on the handle it kept.
 func (r *TestQuery) Query() orm.Query {
+	if cloner, ok := r.query.(orm.QueryWithClone); ok {
+		return cloner.Clone()
+	}
+
 	return r.query
 }
 
