@@ -77,8 +77,10 @@ func TestDistinctPreservesSelection(t *testing.T) {
 }
 
 func TestDistinctPreservesRelationAggregate(t *testing.T) {
-	query := newRelQueryWith(t, &relUser{}).WithCount("Books").Distinct("name").(*Query)
-	query.queryGrammar = querybuilder.NewPostgresGrammar("")
+	// Rebind first: rebindGrammar installs a fresh builder, so a Distinct written before it would be
+	// discarded along with the builder it was written to.
+	query := rebindGrammar(newRelQueryWith(t, &relUser{}), "postgres", querybuilder.NewPostgresGrammar(""))
+	query = query.WithCount("Books").Distinct("name").(*Query)
 
 	statement, bindings, err := query.compileSelect()
 	require.NoError(t, err)

@@ -975,9 +975,18 @@ func (r *Query) cursorBuilder() (*querybuilder.Builder, error) {
 		return nil, err
 	}
 
-	orders := make([]any, len(r.builder.State().Orders))
-	for i, o := range r.builder.State().Orders {
-		orders[i] = o
+	// The builder stores an order as a core.Order descriptor, not as a bare fragment: a raw order keeps
+	// its text in SQL, and an order written through OrderBy() keeps a column and a direction. The cursor
+	// parser works on the fragment text, so the descriptor is flattened back into one here.
+	stored := r.builder.State().Orders
+	orders := make([]any, 0, len(stored))
+	for _, order := range stored {
+		if order.SQL != nil {
+			orders = append(orders, fmt.Sprint(order.SQL))
+
+			continue
+		}
+		orders = append(orders, fmt.Sprintf("%v %s", order.Column, order.Direction))
 	}
 	columns, directions, raws := parseCursorOrders(orders)
 	if len(columns) == 0 {

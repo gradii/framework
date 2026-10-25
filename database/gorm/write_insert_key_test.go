@@ -81,8 +81,7 @@ func TestInsertRowReadsAnIntegerKeyByItsColumnType(t *testing.T) {
 
 func TestInsertRowIgnoresSQLKeywordsInValues(t *testing.T) {
 	query, recorder := newPostgresKeyQuery(t, &insertKeyEntity{})
-	query.dbConfig.Driver = "MySQL"
-	query.queryGrammar = querybuilder.NewMySqlGrammar("")
+	query = rebindGrammar(query, "MySQL", querybuilder.NewMySqlGrammar(""))
 
 	key, err := query.insertRow(map[string]any{
 		"id":   "01AN4Z07BY79KA1307SR9X4MV3",
