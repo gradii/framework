@@ -1,11 +1,13 @@
 package gorm
 
 import (
+	"database/sql"
 	"fmt"
 	"maps"
 	"reflect"
 	"slices"
 	"strconv"
+	"strings"
 
 	contractsdb "github.com/goravel/framework/contracts/database/db"
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
@@ -211,7 +213,14 @@ func (r *Query) Value(column string, dest any) error {
 		return err
 	}
 
-	return scoped.queryScalar(dest, statement, bindings)
+	// value() is first([$column]) read back, and first() answers a missing row with null rather than
+	// an exception, so a read that matches nothing leaves dest as it was and reports no error. That
+	// is also what First does here.
+	if err := scoped.queryScalar(dest, statement, bindings); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+
+	return nil
 }
 
 // Sole retrieves the one row the query matches. Mirrors BuildsQueries::sole: the statement is limited
@@ -282,7 +291,7 @@ func (r *Query) WithAttributes(attributes any, args ...any) contractsorm.Query {
 
 	if asConditions {
 		for _, column := range slices.Sorted(maps.Keys(mapping)) {
-			r.Where(column, mapping[column])
+			r.Where(r.qualifyColumn(column), mapping[column])
 		}
 	}
 
@@ -292,6 +301,23 @@ func (r *Query) WithAttributes(attributes any, args ...any) contractsorm.Query {
 	maps.Copy(r.conditions.pendingAttributes, mapping)
 
 	return r
+}
+
+// qualifyColumn prefixes a column with the model's table, as Model::qualifyColumn does, so a where
+// written by a shortcut compares the model's own column when the statement also joins another
+// table. A Go field name is resolved to its column first; a name that already carries a table, or a
+// query with no model, is left as written.
+func (r *Query) qualifyColumn(column string) string {
+	if strings.Contains(column, ".") {
+		return column
+	}
+
+	schema := r.insertSchema()
+	if schema == nil || schema.Table == "" {
+		return column
+	}
+
+	return schema.Table + "." + resolveColumn(schema, column)
 }
 
 // applyPendingAttributes writes the recorded attributes onto a model about to be created, as
@@ -502,14 +528,22 @@ func (r *Query) addUpsertTimestamps(records []map[string]any) {
 		return
 	}
 
-	now := carbon.NewDateTime(carbon.Now())
+	now := carbon.Now()
 	for _, field := range schema.Fields {
 		if field.AutoCreateTime == 0 && field.AutoUpdateTime == 0 {
 			continue
 		}
+
+		// The value takes the field's own representation: an integer field holds a Unix timestamp,
+		// anything else the DateTime the rest of the write path stamps.
+		var stamp any = carbon.NewDateTime(now)
+		if isIntegerKeyType(field.FieldType) {
+			stamp = now.Timestamp()
+		}
+
 		for _, record := range records {
 			if value, ok := record[field.DBName]; !ok || value == nil || isZeroValue(value) {
-				record[field.DBName] = now
+				record[field.DBName] = stamp
 			}
 		}
 	}

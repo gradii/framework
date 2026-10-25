@@ -147,6 +147,18 @@ func TestValueSelectsTheColumnOfTheFirstRow(t *testing.T) {
 	assert.Equal(t, `select * from "users" where "id" = ?`, statement)
 }
 
+// value() answers a missing row the way first() does: dest is left alone and no error is reported.
+// Mirrors Builder::value, which returns null when first() finds nothing.
+func TestValueLeavesDestAloneWhenNoRowMatches(t *testing.T) {
+	query, recorder := newGetColumnsQuery(t)
+
+	name := "unchanged"
+	require.NoError(t, query.Where("id", 999).(*Query).Value("name", &name))
+
+	assert.Equal(t, "unchanged", name)
+	assert.Equal(t, `select "name" from "users" where "id" = ? limit 1`, recorder.last(t).sql)
+}
+
 // sole() limits the read to two rows so that both a missing row and a second row are detected.
 // Mirrors BuildsQueries::sole and the RecordsNotFound / MultipleRecordsFound it raises.
 func TestSoleReadsTwoRowsAndReportsNoneOrMany(t *testing.T) {
@@ -198,19 +210,32 @@ func TestFindManyReadsByKeyAndSkipsAnEmptyList(t *testing.T) {
 
 // --- WithAttributes --------------------------------------------------------------------------------
 
-// withAttributes adds each attribute as a where equality and records it for later creates. Mirrors
-// Builder::withAttributes with its default $asConditions = true.
+// withAttributes adds each attribute as a where equality, qualified by the model's table as
+// Model::qualifyColumn does, and records it for later creates. Mirrors Builder::withAttributes with
+// its default $asConditions = true.
 func TestWithAttributesAddsWheresAndRecordsTheAttributes(t *testing.T) {
 	mapped := compiledQuery(t, &shortcutUser{}, Conditions{}).WithAttributes(map[string]any{"name": "x", "score": 3}).(*Query)
 	statement, bindings := compileShortcut(t, mapped)
-	assert.Equal(t, `select * from "shortcut_users" where "name" = ? and "score" = ?`, statement)
+	assert.Equal(t, `select * from "shortcut_users" where "shortcut_users"."name" = ? and "shortcut_users"."score" = ?`, statement)
 	assert.Equal(t, []any{"x", 3}, bindings)
 	assert.Equal(t, map[string]any{"name": "x", "score": 3}, mapped.conditions.pendingAttributes)
 
 	pair := compiledQuery(t, &shortcutUser{}, Conditions{}).WithAttributes("name", "x").(*Query)
 	statement, bindings = compileShortcut(t, pair)
-	assert.Equal(t, `select * from "shortcut_users" where "name" = ?`, statement)
+	assert.Equal(t, `select * from "shortcut_users" where "shortcut_users"."name" = ?`, statement)
 	assert.Equal(t, []any{"x"}, bindings)
+}
+
+// A Go field name resolves to its column before it is qualified, and a name that already carries a
+// table is left as written, which is the str_contains($column, '.') guard in Model::qualifyColumn.
+func TestWithAttributesQualifiesTheColumnOnce(t *testing.T) {
+	field := compiledQuery(t, &shortcutUser{}, Conditions{}).WithAttributes("Score", 3).(*Query)
+	statement, _ := compileShortcut(t, field)
+	assert.Equal(t, `select * from "shortcut_users" where "shortcut_users"."score" = ?`, statement)
+
+	qualified := compiledQuery(t, &shortcutUser{}, Conditions{}).WithAttributes("other.name", "x").(*Query)
+	statement, _ = compileShortcut(t, qualified)
+	assert.Equal(t, `select * from "shortcut_users" where "other"."name" = ?`, statement)
 }
 
 // $asConditions = false records the attributes without touching the where clause.
@@ -325,9 +350,12 @@ func TestUpsertStampsTimestampsAndUpdatesAllButCreatedAt(t *testing.T) {
 	records = uniformInsertRecords(records)
 	query.addUpsertTimestamps(records)
 
+	// shortcutUser holds its timestamps as integers, so the stamp is a Unix timestamp rather than the
+	// DateTime a time-typed column would receive; either way it is no longer the zero the struct held.
 	for _, record := range records {
-		assert.NotNil(t, record["created_at"], "created_at is stamped")
-		assert.NotNil(t, record["updated_at"], "updated_at is stamped")
+		assert.NotZero(t, record["created_at"], "created_at is stamped")
+		assert.NotZero(t, record["updated_at"], "updated_at is stamped")
+		assert.IsType(t, int64(0), record["created_at"], "an integer column takes a Unix timestamp")
 	}
 
 	updates, insertOnly, err := query.upsertUpdates(records, nil)
