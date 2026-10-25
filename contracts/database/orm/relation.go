@@ -128,6 +128,28 @@ type QueryWithRelations interface {
 	// (SQL Server has no boolean literal), but the dest field may be either `bool` or an integer
 	// type - Go's database/sql layer converts 0/1 ints to bool automatically.
 	WithExists(relations ...string) Query
+
+	// WhereRelation adds a relationship existence condition with a single where on the related
+	// rows, mirroring Laravel's whereRelation: WhereRelation("Books", "title", "Go") is
+	// WhereHas("Books", func(q) { q.Where("title", "Go") }). A callback may be given in place of
+	// the column to constrain the related rows freely.
+	WhereRelation(relation string, column any, args ...any) Query
+	// OrWhereRelation is WhereRelation with an "or" conjunction.
+	OrWhereRelation(relation string, column any, args ...any) Query
+	// WhereDoesntHaveRelation adds a relationship absence condition with a single where on the
+	// related rows, mirroring Laravel's whereDoesntHaveRelation.
+	WhereDoesntHaveRelation(relation string, column any, args ...any) Query
+	// OrWhereDoesntHaveRelation is WhereDoesntHaveRelation with an "or" conjunction.
+	OrWhereDoesntHaveRelation(relation string, column any, args ...any) Query
+	// WithWhereHas constrains the query by the relation and eager loads it with the same
+	// constraint, mirroring Laravel's withWhereHas.
+	WithWhereHas(relation string, args ...any) Query
+	// WhereBelongsTo constrains the query to the rows that belong to the given model (or models),
+	// mirroring Laravel's whereBelongsTo: the parent's foreign key is matched against the related
+	// models' keys. The relation defaults to the related model's type name.
+	WhereBelongsTo(related any, relation ...string) Query
+	// OrWhereBelongsTo is WhereBelongsTo with an "or" conjunction.
+	OrWhereBelongsTo(related any, relation ...string) Query
 }
 
 // RelationCount is an entry accepted by WithCount that pairs a relation name with an optional

@@ -31,6 +31,10 @@ type Conditions struct {
 	withoutGlobalScopes []string
 	withTrashed         bool
 	onlyTrashed         bool
+	// pendingAttributes are the column values WithAttributes recorded for every model the query
+	// creates, mirroring Builder::$pendingAttributes. Keys are column names as the caller wrote them;
+	// the write path resolves them against the model's schema.
+	pendingAttributes map[string]any
 }
 
 // oneOfManyConfig captures the column + aggregate for OfMany / LatestOfMany / OldestOfMany when
@@ -112,6 +116,12 @@ func (c Conditions) clone() Conditions {
 	out.eagerLoad = append([]eagerLoadEntry(nil), c.eagerLoad...)
 	out.relations = append([]relationExistence(nil), c.relations...)
 	out.withoutGlobalScopes = append([]string(nil), c.withoutGlobalScopes...)
+	if c.pendingAttributes != nil {
+		out.pendingAttributes = make(map[string]any, len(c.pendingAttributes))
+		for key, value := range c.pendingAttributes {
+			out.pendingAttributes[key] = value
+		}
+	}
 
 	if c.table != nil {
 		table := *c.table

@@ -2096,6 +2096,13 @@ func (r *Query) clearConditions() {
 }
 
 func (r *Query) create(dest any) error {
+	// Laravel's create() goes through newModelInstance(), which merges $pendingAttributes into the
+	// attributes before the model is saved, so the values WithAttributes recorded reach the row and
+	// the saving/creating hooks see them.
+	if err := r.applyPendingAttributes(dest); err != nil {
+		return err
+	}
+
 	var err error
 	if dest, err = r.saving(dest); err != nil {
 		return err

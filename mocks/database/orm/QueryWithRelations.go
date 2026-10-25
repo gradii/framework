@@ -496,6 +496,69 @@ func (_c *QueryWithRelations_OrHasMorph_Call) RunAndReturn(run func(string, []in
 	return _c
 }
 
+// OrWhereBelongsTo provides a mock function with given fields: related, relation
+func (_m *QueryWithRelations) OrWhereBelongsTo(related interface{}, relation ...string) orm.Query {
+	_va := make([]interface{}, len(relation))
+	for _i := range relation {
+		_va[_i] = relation[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, related)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for OrWhereBelongsTo")
+	}
+
+	var r0 orm.Query
+	if rf, ok := ret.Get(0).(func(interface{}, ...string) orm.Query); ok {
+		r0 = rf(related, relation...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(orm.Query)
+		}
+	}
+
+	return r0
+}
+
+// QueryWithRelations_OrWhereBelongsTo_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'OrWhereBelongsTo'
+type QueryWithRelations_OrWhereBelongsTo_Call struct {
+	*mock.Call
+}
+
+// OrWhereBelongsTo is a helper method to define mock.On call
+//   - related interface{}
+//   - relation ...string
+func (_e *QueryWithRelations_Expecter) OrWhereBelongsTo(related interface{}, relation ...interface{}) *QueryWithRelations_OrWhereBelongsTo_Call {
+	return &QueryWithRelations_OrWhereBelongsTo_Call{Call: _e.mock.On("OrWhereBelongsTo",
+		append([]interface{}{related}, relation...)...)}
+}
+
+func (_c *QueryWithRelations_OrWhereBelongsTo_Call) Run(run func(related interface{}, relation ...string)) *QueryWithRelations_OrWhereBelongsTo_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]string, len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(string)
+			}
+		}
+		run(args[0].(interface{}), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *QueryWithRelations_OrWhereBelongsTo_Call) Return(_a0 orm.Query) *QueryWithRelations_OrWhereBelongsTo_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *QueryWithRelations_OrWhereBelongsTo_Call) RunAndReturn(run func(interface{}, ...string) orm.Query) *QueryWithRelations_OrWhereBelongsTo_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // OrWhereDoesntHave provides a mock function with given fields: relation, args
 func (_m *QueryWithRelations) OrWhereDoesntHave(relation string, args ...interface{}) orm.Query {
 	var _ca []interface{}
@@ -611,6 +674,66 @@ func (_c *QueryWithRelations_OrWhereDoesntHaveMorph_Call) Return(_a0 orm.Query) 
 }
 
 func (_c *QueryWithRelations_OrWhereDoesntHaveMorph_Call) RunAndReturn(run func(string, []interface{}, ...interface{}) orm.Query) *QueryWithRelations_OrWhereDoesntHaveMorph_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// OrWhereDoesntHaveRelation provides a mock function with given fields: relation, column, args
+func (_m *QueryWithRelations) OrWhereDoesntHaveRelation(relation string, column interface{}, args ...interface{}) orm.Query {
+	var _ca []interface{}
+	_ca = append(_ca, relation, column)
+	_ca = append(_ca, args...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for OrWhereDoesntHaveRelation")
+	}
+
+	var r0 orm.Query
+	if rf, ok := ret.Get(0).(func(string, interface{}, ...interface{}) orm.Query); ok {
+		r0 = rf(relation, column, args...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(orm.Query)
+		}
+	}
+
+	return r0
+}
+
+// QueryWithRelations_OrWhereDoesntHaveRelation_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'OrWhereDoesntHaveRelation'
+type QueryWithRelations_OrWhereDoesntHaveRelation_Call struct {
+	*mock.Call
+}
+
+// OrWhereDoesntHaveRelation is a helper method to define mock.On call
+//   - relation string
+//   - column interface{}
+//   - args ...interface{}
+func (_e *QueryWithRelations_Expecter) OrWhereDoesntHaveRelation(relation interface{}, column interface{}, args ...interface{}) *QueryWithRelations_OrWhereDoesntHaveRelation_Call {
+	return &QueryWithRelations_OrWhereDoesntHaveRelation_Call{Call: _e.mock.On("OrWhereDoesntHaveRelation",
+		append([]interface{}{relation, column}, args...)...)}
+}
+
+func (_c *QueryWithRelations_OrWhereDoesntHaveRelation_Call) Run(run func(relation string, column interface{}, args ...interface{})) *QueryWithRelations_OrWhereDoesntHaveRelation_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]interface{}, len(args)-2)
+		for i, a := range args[2:] {
+			if a != nil {
+				variadicArgs[i] = a.(interface{})
+			}
+		}
+		run(args[0].(string), args[1].(interface{}), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *QueryWithRelations_OrWhereDoesntHaveRelation_Call) Return(_a0 orm.Query) *QueryWithRelations_OrWhereDoesntHaveRelation_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *QueryWithRelations_OrWhereDoesntHaveRelation_Call) RunAndReturn(run func(string, interface{}, ...interface{}) orm.Query) *QueryWithRelations_OrWhereDoesntHaveRelation_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -734,6 +857,129 @@ func (_c *QueryWithRelations_OrWhereHasMorph_Call) RunAndReturn(run func(string,
 	return _c
 }
 
+// OrWhereRelation provides a mock function with given fields: relation, column, args
+func (_m *QueryWithRelations) OrWhereRelation(relation string, column interface{}, args ...interface{}) orm.Query {
+	var _ca []interface{}
+	_ca = append(_ca, relation, column)
+	_ca = append(_ca, args...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for OrWhereRelation")
+	}
+
+	var r0 orm.Query
+	if rf, ok := ret.Get(0).(func(string, interface{}, ...interface{}) orm.Query); ok {
+		r0 = rf(relation, column, args...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(orm.Query)
+		}
+	}
+
+	return r0
+}
+
+// QueryWithRelations_OrWhereRelation_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'OrWhereRelation'
+type QueryWithRelations_OrWhereRelation_Call struct {
+	*mock.Call
+}
+
+// OrWhereRelation is a helper method to define mock.On call
+//   - relation string
+//   - column interface{}
+//   - args ...interface{}
+func (_e *QueryWithRelations_Expecter) OrWhereRelation(relation interface{}, column interface{}, args ...interface{}) *QueryWithRelations_OrWhereRelation_Call {
+	return &QueryWithRelations_OrWhereRelation_Call{Call: _e.mock.On("OrWhereRelation",
+		append([]interface{}{relation, column}, args...)...)}
+}
+
+func (_c *QueryWithRelations_OrWhereRelation_Call) Run(run func(relation string, column interface{}, args ...interface{})) *QueryWithRelations_OrWhereRelation_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]interface{}, len(args)-2)
+		for i, a := range args[2:] {
+			if a != nil {
+				variadicArgs[i] = a.(interface{})
+			}
+		}
+		run(args[0].(string), args[1].(interface{}), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *QueryWithRelations_OrWhereRelation_Call) Return(_a0 orm.Query) *QueryWithRelations_OrWhereRelation_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *QueryWithRelations_OrWhereRelation_Call) RunAndReturn(run func(string, interface{}, ...interface{}) orm.Query) *QueryWithRelations_OrWhereRelation_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// WhereBelongsTo provides a mock function with given fields: related, relation
+func (_m *QueryWithRelations) WhereBelongsTo(related interface{}, relation ...string) orm.Query {
+	_va := make([]interface{}, len(relation))
+	for _i := range relation {
+		_va[_i] = relation[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, related)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for WhereBelongsTo")
+	}
+
+	var r0 orm.Query
+	if rf, ok := ret.Get(0).(func(interface{}, ...string) orm.Query); ok {
+		r0 = rf(related, relation...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(orm.Query)
+		}
+	}
+
+	return r0
+}
+
+// QueryWithRelations_WhereBelongsTo_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'WhereBelongsTo'
+type QueryWithRelations_WhereBelongsTo_Call struct {
+	*mock.Call
+}
+
+// WhereBelongsTo is a helper method to define mock.On call
+//   - related interface{}
+//   - relation ...string
+func (_e *QueryWithRelations_Expecter) WhereBelongsTo(related interface{}, relation ...interface{}) *QueryWithRelations_WhereBelongsTo_Call {
+	return &QueryWithRelations_WhereBelongsTo_Call{Call: _e.mock.On("WhereBelongsTo",
+		append([]interface{}{related}, relation...)...)}
+}
+
+func (_c *QueryWithRelations_WhereBelongsTo_Call) Run(run func(related interface{}, relation ...string)) *QueryWithRelations_WhereBelongsTo_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]string, len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(string)
+			}
+		}
+		run(args[0].(interface{}), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *QueryWithRelations_WhereBelongsTo_Call) Return(_a0 orm.Query) *QueryWithRelations_WhereBelongsTo_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *QueryWithRelations_WhereBelongsTo_Call) RunAndReturn(run func(interface{}, ...string) orm.Query) *QueryWithRelations_WhereBelongsTo_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // WhereDoesntHave provides a mock function with given fields: relation, args
 func (_m *QueryWithRelations) WhereDoesntHave(relation string, args ...interface{}) orm.Query {
 	var _ca []interface{}
@@ -853,6 +1099,66 @@ func (_c *QueryWithRelations_WhereDoesntHaveMorph_Call) RunAndReturn(run func(st
 	return _c
 }
 
+// WhereDoesntHaveRelation provides a mock function with given fields: relation, column, args
+func (_m *QueryWithRelations) WhereDoesntHaveRelation(relation string, column interface{}, args ...interface{}) orm.Query {
+	var _ca []interface{}
+	_ca = append(_ca, relation, column)
+	_ca = append(_ca, args...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for WhereDoesntHaveRelation")
+	}
+
+	var r0 orm.Query
+	if rf, ok := ret.Get(0).(func(string, interface{}, ...interface{}) orm.Query); ok {
+		r0 = rf(relation, column, args...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(orm.Query)
+		}
+	}
+
+	return r0
+}
+
+// QueryWithRelations_WhereDoesntHaveRelation_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'WhereDoesntHaveRelation'
+type QueryWithRelations_WhereDoesntHaveRelation_Call struct {
+	*mock.Call
+}
+
+// WhereDoesntHaveRelation is a helper method to define mock.On call
+//   - relation string
+//   - column interface{}
+//   - args ...interface{}
+func (_e *QueryWithRelations_Expecter) WhereDoesntHaveRelation(relation interface{}, column interface{}, args ...interface{}) *QueryWithRelations_WhereDoesntHaveRelation_Call {
+	return &QueryWithRelations_WhereDoesntHaveRelation_Call{Call: _e.mock.On("WhereDoesntHaveRelation",
+		append([]interface{}{relation, column}, args...)...)}
+}
+
+func (_c *QueryWithRelations_WhereDoesntHaveRelation_Call) Run(run func(relation string, column interface{}, args ...interface{})) *QueryWithRelations_WhereDoesntHaveRelation_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]interface{}, len(args)-2)
+		for i, a := range args[2:] {
+			if a != nil {
+				variadicArgs[i] = a.(interface{})
+			}
+		}
+		run(args[0].(string), args[1].(interface{}), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *QueryWithRelations_WhereDoesntHaveRelation_Call) Return(_a0 orm.Query) *QueryWithRelations_WhereDoesntHaveRelation_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *QueryWithRelations_WhereDoesntHaveRelation_Call) RunAndReturn(run func(string, interface{}, ...interface{}) orm.Query) *QueryWithRelations_WhereDoesntHaveRelation_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // WhereHas provides a mock function with given fields: relation, args
 func (_m *QueryWithRelations) WhereHas(relation string, args ...interface{}) orm.Query {
 	var _ca []interface{}
@@ -968,6 +1274,66 @@ func (_c *QueryWithRelations_WhereHasMorph_Call) Return(_a0 orm.Query) *QueryWit
 }
 
 func (_c *QueryWithRelations_WhereHasMorph_Call) RunAndReturn(run func(string, []interface{}, ...interface{}) orm.Query) *QueryWithRelations_WhereHasMorph_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// WhereRelation provides a mock function with given fields: relation, column, args
+func (_m *QueryWithRelations) WhereRelation(relation string, column interface{}, args ...interface{}) orm.Query {
+	var _ca []interface{}
+	_ca = append(_ca, relation, column)
+	_ca = append(_ca, args...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for WhereRelation")
+	}
+
+	var r0 orm.Query
+	if rf, ok := ret.Get(0).(func(string, interface{}, ...interface{}) orm.Query); ok {
+		r0 = rf(relation, column, args...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(orm.Query)
+		}
+	}
+
+	return r0
+}
+
+// QueryWithRelations_WhereRelation_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'WhereRelation'
+type QueryWithRelations_WhereRelation_Call struct {
+	*mock.Call
+}
+
+// WhereRelation is a helper method to define mock.On call
+//   - relation string
+//   - column interface{}
+//   - args ...interface{}
+func (_e *QueryWithRelations_Expecter) WhereRelation(relation interface{}, column interface{}, args ...interface{}) *QueryWithRelations_WhereRelation_Call {
+	return &QueryWithRelations_WhereRelation_Call{Call: _e.mock.On("WhereRelation",
+		append([]interface{}{relation, column}, args...)...)}
+}
+
+func (_c *QueryWithRelations_WhereRelation_Call) Run(run func(relation string, column interface{}, args ...interface{})) *QueryWithRelations_WhereRelation_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]interface{}, len(args)-2)
+		for i, a := range args[2:] {
+			if a != nil {
+				variadicArgs[i] = a.(interface{})
+			}
+		}
+		run(args[0].(string), args[1].(interface{}), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *QueryWithRelations_WhereRelation_Call) Return(_a0 orm.Query) *QueryWithRelations_WhereRelation_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *QueryWithRelations_WhereRelation_Call) RunAndReturn(run func(string, interface{}, ...interface{}) orm.Query) *QueryWithRelations_WhereRelation_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1387,6 +1753,65 @@ func (_c *QueryWithRelations_WithSum_Call) Return(_a0 orm.Query) *QueryWithRelat
 }
 
 func (_c *QueryWithRelations_WithSum_Call) RunAndReturn(run func(string, string, ...interface{}) orm.Query) *QueryWithRelations_WithSum_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// WithWhereHas provides a mock function with given fields: relation, args
+func (_m *QueryWithRelations) WithWhereHas(relation string, args ...interface{}) orm.Query {
+	var _ca []interface{}
+	_ca = append(_ca, relation)
+	_ca = append(_ca, args...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for WithWhereHas")
+	}
+
+	var r0 orm.Query
+	if rf, ok := ret.Get(0).(func(string, ...interface{}) orm.Query); ok {
+		r0 = rf(relation, args...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(orm.Query)
+		}
+	}
+
+	return r0
+}
+
+// QueryWithRelations_WithWhereHas_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'WithWhereHas'
+type QueryWithRelations_WithWhereHas_Call struct {
+	*mock.Call
+}
+
+// WithWhereHas is a helper method to define mock.On call
+//   - relation string
+//   - args ...interface{}
+func (_e *QueryWithRelations_Expecter) WithWhereHas(relation interface{}, args ...interface{}) *QueryWithRelations_WithWhereHas_Call {
+	return &QueryWithRelations_WithWhereHas_Call{Call: _e.mock.On("WithWhereHas",
+		append([]interface{}{relation}, args...)...)}
+}
+
+func (_c *QueryWithRelations_WithWhereHas_Call) Run(run func(relation string, args ...interface{})) *QueryWithRelations_WithWhereHas_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]interface{}, len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(interface{})
+			}
+		}
+		run(args[0].(string), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *QueryWithRelations_WithWhereHas_Call) Return(_a0 orm.Query) *QueryWithRelations_WithWhereHas_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *QueryWithRelations_WithWhereHas_Call) RunAndReturn(run func(string, ...interface{}) orm.Query) *QueryWithRelations_WithWhereHas_Call {
 	_c.Call.Return(run)
 	return _c
 }

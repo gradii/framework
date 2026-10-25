@@ -120,6 +120,9 @@ type Query interface {
 	// FirstOrNew finds the first record that matches the given conditions or
 	// return a new instance of the model initialized with those attributes.
 	FirstOrNew(dest any, attributes any, values ...any) error
+	// FindMany retrieves the rows whose primary key is one of ids into dest, mirroring Laravel's
+	// Builder::findMany: an empty list reads nothing and leaves dest empty.
+	FindMany(dest any, ids []any, columns ...any) error
 	// ForceDelete forces delete records matching given conditions.
 	ForceDelete(value ...any) (*db.Result, error)
 	// Get retrieves all rows from the database. A column list may be given for this call only,
@@ -178,6 +181,12 @@ type Query interface {
 	OrderByDesc(column string) Query
 	// OrderByRaw specifies the order should be raw.
 	OrderByRaw(raw string) Query
+	// Latest orders by the given column descending, defaulting to the model's created-at column,
+	// mirroring Laravel's Builder::latest.
+	Latest(column ...string) Query
+	// Oldest orders by the given column ascending, defaulting to the model's created-at column,
+	// mirroring Laravel's Builder::oldest.
+	Oldest(column ...string) Query
 	// OrWhere add an "or where" clause to the query.
 	OrWhere(query any, args ...any) Query
 	// OrWhereBetween adds an "or where column between x and y" clause to the query.
@@ -206,6 +215,9 @@ type Query interface {
 	Paginate(page, limit int, dest any, total *int64) error
 	// Pluck retrieves a single column from the database.
 	Pluck(column string, dest any) error
+	// Sole retrieves the one row the query matches, mirroring Laravel's Builder::sole: no row is an
+	// error, and so is more than one.
+	Sole(dest any) error
 	// Raw creates a raw query.
 	Raw(sql string, values ...any) Query
 	// Restore restores a soft deleted model.
@@ -234,6 +246,15 @@ type Query interface {
 	Min(column string, dest any) error
 	// Max calculates the maximum value of a column.
 	Max(column string, dest any) error
+	// Increment adds amount (default 1) to the column of every matching row, refreshing the model's
+	// updated-at column and writing extra, mirroring Laravel's Builder::increment.
+	Increment(column string, args ...any) (*db.Result, error)
+	// Decrement subtracts amount (default 1) from the column of every matching row, refreshing the
+	// model's updated-at column and writing extra, mirroring Laravel's Builder::decrement.
+	Decrement(column string, args ...any) (*db.Result, error)
+	// Touch sets the model's updated-at column (or the named column) to now on every matching row,
+	// mirroring Laravel's Builder::touch. A model without an updated-at column touches nothing.
+	Touch(column ...string) (*db.Result, error)
 	// Table specifies the table for the query.
 	//
 	// A string is a bare table name, and the connection prefix is applied to it when the statement
@@ -251,6 +272,14 @@ type Query interface {
 	// UpdateOrCreate finds the first record that matches the given attributes
 	// or create a new one with those attributes if none was found.
 	UpdateOrCreate(dest any, attributes any, values any) error
+	// Upsert inserts the rows, updating the listed columns of a row whose uniqueBy columns already
+	// exist. It mirrors Laravel's Builder::upsert on a model: the model's timestamps are stamped,
+	// the created-at column is left alone on update, and the updated-at column is always refreshed.
+	// With no update columns every inserted column is updated; an empty update list inserts only.
+	Upsert(values any, uniqueBy []string, update ...any) (*db.Result, error)
+	// Value retrieves a single column of the first row into dest, mirroring Laravel's
+	// Builder::value.
+	Value(column string, dest any) error
 	// UseWritePdo forces the query's reads to run on the write connection rather than the reader
 	// replica. Mirrors Laravel's Builder::useWritePdo.
 	UseWritePdo() Query
@@ -288,6 +317,18 @@ type Query interface {
 	WhereNotNull(column string) Query
 	// WhereNull adds a "where column is null" clause to the query.
 	WhereNull(column string) Query
+	// WhereKey constrains the query to the row (or rows) with the given primary key, mirroring
+	// Laravel's Builder::whereKey. A slice stands for several keys; a model stands for its own key.
+	WhereKey(id any) Query
+	// WhereKeyNot excludes the row (or rows) with the given primary key, mirroring Laravel's
+	// Builder::whereKeyNot.
+	WhereKeyNot(id any) Query
+	// Except excludes the given models by primary key, mirroring Laravel's Builder::except.
+	Except(models any) Query
+	// WithAttributes adds the attributes as where equalities and remembers them for every model the
+	// query creates afterwards, mirroring Laravel's Builder::withAttributes. Pass a map, or a column
+	// with its value. asConditions false records the attributes without adding the where clauses.
+	WithAttributes(attributes any, args ...any) Query
 	// WithoutEvents disables event firing for the query.
 	WithoutEvents() Query
 	// WithoutGlobalScopes disables all global scopes for the query.
