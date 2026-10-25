@@ -2314,10 +2314,18 @@ func (r *Query) getObserver(dest any) contractsorm.Observer {
 }
 
 func (r *Query) new(db *gormio.DB) *Query {
-	query := NewQuery(r.ctx, r.config, r.dbConfig, db, r.grammar, r.log, r.modelToObserver, nil, r.telemetryResolver)
+	query := r.fresh(db)
 	query.conditions = r.conditions.clone()
+	query.builder = r.builder.Clone()
 
 	return query
+}
+
+// fresh builds the same query with no state of its own: no conditions, no clauses. It is the starting
+// point for a query that addresses a different table or exists only to carry one piece of state, such
+// as the per-row eager load the cursor path builds.
+func (r *Query) fresh(db *gormio.DB) *Query {
+	return NewQuery(r.ctx, r.config, r.dbConfig, db, r.grammar, r.log, r.modelToObserver, nil, r.telemetryResolver)
 }
 
 func (r *Query) refreshConnection() (*Query, error) {
@@ -2340,7 +2348,9 @@ func (r *Query) refreshConnection() (*Query, error) {
 		r.queries[connection] = query
 	}
 
-	query.conditions = r.conditions
+	query = query.clone()
+	query.conditions = r.conditions.clone()
+	query.builder = r.builder.Clone()
 
 	return query, nil
 }
