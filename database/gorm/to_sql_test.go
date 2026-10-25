@@ -79,23 +79,18 @@ func TestToSql_ReportsAStatementItCouldNotBuild(t *testing.T) {
 func TestToSql_CountFollowsTheSelection(t *testing.T) {
 	log := mockslog.NewLog(t)
 
-	selected := NewToSql(compiledQuery(t, &relUser{}, Conditions{
-		selectItems: []any{"name"},
-	}), log, false)
+	selected := NewToSql(compiledQuery(t, &relUser{}, Conditions{}).Select("name").(*Query), log, false)
 
 	assert.Contains(t, selected.Count(), `count("name")`)
 
 	// Counting a distinct column writes the DISTINCT into the aggregate; a leading DISTINCT over
 	// count(*) would count every row.
-	distinct := NewToSql(compiledQuery(t, &relUser{}, Conditions{
-		distinct:      true,
-		selectItems: []any{"name"},
-	}), log, false)
+	distinct := NewToSql(compiledQuery(t, &relUser{}, Conditions{}).Select("name").Distinct().(*Query), log, false)
 
 	assert.Contains(t, distinct.Count(), `count(distinct "name")`)
 
 	// A wildcard, or several columns, counts the rows themselves.
-	wildcard := NewToSql(compiledQuery(t, &relUser{}, Conditions{distinct: true}), log, false)
+	wildcard := NewToSql(compiledQuery(t, &relUser{}, Conditions{}).Distinct().(*Query), log, false)
 
 	assert.Contains(t, wildcard.Count(), `count(*)`)
 }

@@ -17,6 +17,7 @@ import (
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
 	"github.com/goravel/framework/contracts/log"
 	databasedriver "github.com/goravel/framework/database/driver"
+	querybuilder "github.com/goravel/framework/database/query"
 	"github.com/goravel/framework/errors"
 	mocksconfig "github.com/goravel/framework/mocks/config"
 	"github.com/goravel/framework/support/carbon"
@@ -226,7 +227,7 @@ func TestAddGlobalScopesWithSliceAndArray(t *testing.T) {
 }
 
 func TestAddWhere(t *testing.T) {
-	query := &Query{}
+	query := &Query{builder: querybuilder.NewBuilder(nil)}
 	query = query.addWhere(contractsdriver.Where{
 		Query: "name",
 		Args:  []any{"test"},
@@ -405,7 +406,7 @@ func TestGetModelConnection(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			query := &Query{
+			query := &Query{builder: querybuilder.NewBuilder(nil),
 				conditions: Conditions{
 					model: test.model,
 				},
@@ -963,8 +964,8 @@ func TestObserverEvent(t *testing.T) {
 
 func TestWhen(t *testing.T) {
 	query := &Query{}
-	trueQuery := &Query{}
-	falseQuery := &Query{}
+	trueQuery := &Query{builder: querybuilder.NewBuilder(nil)}
+	falseQuery := &Query{builder: querybuilder.NewBuilder(nil)}
 
 	callback := func(q contractsorm.Query) contractsorm.Query {
 		assert.Same(t, query, q)
@@ -1158,25 +1159,25 @@ func TestBasicSelectWithGetColumns(t *testing.T) {
 	var first []getColumnsUser
 	assert.NoError(t, query.Get(&first))
 	assert.Equal(t, `select * from "users"`, recorder.last(t).sql)
-	assert.Nil(t, query.conditions.selectItems)
+	assert.Empty(t, query.builder.Selects())
 
 	// get(['foo', 'bar']) renders the two columns transiently.
 	var second []getColumnsUser
 	assert.NoError(t, query.Get(&second, []string{"foo", "bar"}))
 	assert.Equal(t, `select "foo", "bar" from "users"`, recorder.last(t).sql)
-	assert.Nil(t, query.conditions.selectItems)
+	assert.Empty(t, query.builder.Selects())
 
 	// get('baz') wraps the single column name.
 	var third []getColumnsUser
 	assert.NoError(t, query.Get(&third, "baz"))
 	assert.Equal(t, `select "baz" from "users"`, recorder.last(t).sql)
-	assert.Nil(t, query.conditions.selectItems)
+	assert.Empty(t, query.builder.Selects())
 
 	// toSql() is unchanged: the transient columns never touched the query.
 	statement, _, err := query.compileSelect()
 	assert.NoError(t, err)
 	assert.Equal(t, `select * from "users"`, statement)
-	assert.Nil(t, query.conditions.selectItems)
+	assert.Empty(t, query.builder.Selects())
 }
 
 // Laravel's onceWithColumns ignores the Get columns whenever a raw selection is already present.
@@ -1188,7 +1189,7 @@ func TestGetColumnsKeepsExistingRawSelect(t *testing.T) {
 	require.NoError(t, query.Get(&rows, "name"))
 	assert.Equal(t, `select count(*) as total from "users"`, recorder.last(t).sql)
 	assert.Empty(t, recorder.last(t).args)
-	assert.Nil(t, base.conditions.selectItems)
+	assert.Empty(t, base.builder.Selects())
 
 	statement, bindings, err := query.compileSelect()
 	require.NoError(t, err)

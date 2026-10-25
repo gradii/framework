@@ -14,9 +14,12 @@ import (
 // This reproduces the fault described in backlog item
 // "treat-a-byte-slice-as-a-value-on-the-remaining-in-routes":
 // Before fix: Where("note", []byte("ab")) rendered as `where "note" in (?, ?)`
-//             with bindings [97, 98] (two separate bytes)
+//
+//	with bindings [97, 98] (two separate bytes)
+//
 // After fix:  Where("note", []byte("ab")) renders as `where "note" = ?`
-//             with binding []byte("ab") (one byte slice value)
+//
+//	with binding []byte("ab") (one byte slice value)
 func TestByteSliceBindsAsValue(t *testing.T) {
 	// Test the database/gorm/sql.go applySingleWhere path (line 470)
 	query := compiledQuery(t, &relUser{}, Conditions{
@@ -36,4 +39,3 @@ func TestByteSliceBindsAsValue(t *testing.T) {
 	assert.True(t, ok, "binding should be []byte type, got %T", bindings[0])
 	assert.Equal(t, []byte("ab"), bytesVal)
 }
-

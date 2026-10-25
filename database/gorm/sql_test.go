@@ -16,6 +16,18 @@ import (
 
 // compiledQuery builds a query over a model with the given conditions, compiled by this package
 // rather than handed to GORM.
+// rebindGrammar swaps the dialect a query compiles with. Production builds the builder once, in
+// NewQuery; these tests drive several dialects through one query, so they rebind it explicitly.
+func rebindGrammar(query *Query, driver string, grammar querybuilder.Grammar) *Query {
+	builder := querybuilder.NewBuilder(grammar, querybuilder.NewProcessor(driver))
+	builder.SetDriver(driver)
+	query.builder = builder
+	query.queryGrammar = grammar
+	query.dbConfig.Driver = driver
+
+	return query
+}
+
 func compiledQuery(t *testing.T, model any, conditions Conditions) *Query {
 	t.Helper()
 
@@ -25,12 +37,9 @@ func compiledQuery(t *testing.T, model any, conditions Conditions) *Query {
 }
 
 func TestCompileSelect_WhereOrderLimit(t *testing.T) {
-	limit := 10
 	query := compiledQuery(t, &relUser{}, Conditions{
 		where: []contractsdriver.Where{{Query: "id", Args: []any{1}}},
-		order: []any{"id desc"},
-		limit: &limit,
-	})
+	}).OrderByRaw("id desc").Limit(10).(*Query)
 
 	sql, bindings, err := query.compileSelect()
 	assert.NoError(t, err)
@@ -219,7 +228,7 @@ func TestUpdateAssignments_FromStruct(t *testing.T) {
 // TestUpdateAssignments_SelectAndOmitFilter checks the query's own column filter, which is how
 // Select("name").Update(model) writes one column.
 func TestUpdateAssignments_SelectAndOmitFilter(t *testing.T) {
-	selected := compiledQuery(t, &relUser{}, Conditions{selectItems: []any{"name"}})
+	selected := compiledQuery(t, &relUser{}, Conditions{}).Select("name").(*Query)
 
 	assignments, err := selected.updateAssignments(map[string]any{"id": 7, "name": "Jane"})
 	assert.NoError(t, err)
@@ -233,7 +242,7 @@ func TestUpdateAssignments_SelectAndOmitFilter(t *testing.T) {
 
 	// A column named outright is written even when it holds the zero value, which is what lets
 	// Select("name").Update(model) clear a column; every other column is left out when it is zero.
-	clearing := compiledQuery(t, &relUser{}, Conditions{selectItems: []any{"name"}})
+	clearing := compiledQuery(t, &relUser{}, Conditions{}).Select("name").(*Query)
 
 	assignments, err = clearing.updateAssignments(relUser{ID: 7})
 	require.NoError(t, err)

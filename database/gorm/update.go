@@ -149,7 +149,7 @@ func (r *Query) selectAndOmitColumns(schema *modelSchema) (map[string]bool, bool
 	restricted := false
 	selectAll := false
 
-	for _, item := range r.conditions.selectItems {
+	for _, item := range r.builder.Selects() {
 		if column, ok := item.(string); ok {
 			if column == "*" {
 				selectAll = true

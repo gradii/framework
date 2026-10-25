@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	gormio "gorm.io/gorm"
+
+	querybuilder "github.com/goravel/framework/database/query"
 )
 
 // This file pins where a compiled statement runs: on the transaction's own *sql.Tx when the query is
@@ -54,7 +56,7 @@ func TestQueryPoolResolvesTheTransactionHandle(t *testing.T) {
 	require.NoError(t, err)
 
 	// Outside a transaction both pools are the base *sql.DB.
-	plain := &Query{instance: base}
+	plain := &Query{instance: base, builder: querybuilder.NewBuilder(nil)}
 	assert.False(t, plain.inTransaction())
 
 	writer, err := plain.queryPool()
@@ -66,7 +68,7 @@ func TestQueryPoolResolvesTheTransactionHandle(t *testing.T) {
 	tx := base.Begin()
 	require.NoError(t, tx.Error)
 
-	inTx := &Query{instance: tx}
+	inTx := &Query{instance: tx, builder: querybuilder.NewBuilder(nil)}
 	assert.True(t, inTx.inTransaction())
 
 	pool, err := inTx.queryPool()

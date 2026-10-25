@@ -23,16 +23,22 @@ func TestRandomOrderFunction(t *testing.T) {
 // Docker-gated integration suite's TestLockForUpdate / TestSharedLock.
 func TestCompileSelect_LockRendering(t *testing.T) {
 	// lockForUpdate() renders the exclusive clause, sharedLock() the shared one.
-	sql, _, err := compiledQuery(t, &relUser{}, Conditions{lockForUpdate: true}).compileSelect()
+	sql, _, err := compiledQuery(t, &relUser{}, Conditions{}).LockForUpdate().(*Query).compileSelect()
 	assert.NoError(t, err)
 	assert.Contains(t, sql, "for update")
 
-	sql, _, err = compiledQuery(t, &relUser{}, Conditions{sharedLock: true}).compileSelect()
+	sql, _, err = compiledQuery(t, &relUser{}, Conditions{}).SharedLock().(*Query).compileSelect()
 	assert.NoError(t, err)
 	assert.Contains(t, sql, "lock in share mode")
 
-	// Both flags compile through one switch, so lockForUpdate wins: a statement carries one lock clause.
-	sql, _, err = compiledQuery(t, &relUser{}, Conditions{lockForUpdate: true, sharedLock: true}).compileSelect()
+	// The two calls write the same lock slot, the way Laravel's lockForUpdate() and sharedLock() both
+	// call lock(): the later one wins, and a statement carries one lock clause.
+	sql, _, err = compiledQuery(t, &relUser{}, Conditions{}).LockForUpdate().SharedLock().(*Query).compileSelect()
+	assert.NoError(t, err)
+	assert.Contains(t, sql, "share")
+	assert.NotContains(t, sql, "for update")
+
+	sql, _, err = compiledQuery(t, &relUser{}, Conditions{}).SharedLock().LockForUpdate().(*Query).compileSelect()
 	assert.NoError(t, err)
 	assert.Contains(t, sql, "for update")
 	assert.NotContains(t, sql, "share")
@@ -47,9 +53,12 @@ func TestCompileSelect_LockRendering(t *testing.T) {
 // TestCompileSelect_SharedLockPostgres pins the dialect override: Postgres spells the shared lock
 // "for share", unlike the base and MySQL grammars' "lock in share mode".
 func TestCompileSelect_SharedLockPostgres(t *testing.T) {
-	conditions := Conditions{model: &relUser{}, sharedLock: true}
+	conditions := Conditions{model: &relUser{}}
 	query := NewQuery(context.Background(), nil, contractsdatabase.Config{Driver: "postgres"}, newStubGormDB(t), nil, nil, nil, &conditions, nil)
-	query.queryGrammar, _ = querybuilder.NewGrammar("postgres", "")
+	grammar, ok := querybuilder.NewGrammar("postgres", "")
+	assert.True(t, ok)
+	query = rebindGrammar(query, "postgres", grammar)
+	query.SharedLock()
 
 	sql, _, err := query.compileSelect()
 	assert.NoError(t, err)

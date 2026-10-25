@@ -48,9 +48,7 @@ func TestDistinctPreservesSelection(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			query := compiledQuery(t, &getColumnsUser{}, Conditions{})
-			query.dbConfig.Driver = test.name
-			query.queryGrammar = test.grammar
+			query := rebindGrammar(compiledQuery(t, &getColumnsUser{}, Conditions{}), test.name, test.grammar)
 			base := query.Select("name").SelectRaw("? as flag", 1).Where("id", 9).(*Query)
 			columns := []string{"name"}
 			selected := base.clone().Distinct(columns...).(*Query)
@@ -72,8 +70,8 @@ func TestDistinctPreservesSelection(t *testing.T) {
 			assert.Equal(t, test.count, statement)
 			assert.Equal(t, []any{9}, bindings)
 
-			assert.False(t, base.conditions.distinct)
-			assert.Len(t, base.conditions.selectItems, 2)
+			assert.False(t, base.builder.DistinctFlag())
+			assert.Len(t, base.builder.Selects(), 2)
 		})
 	}
 }
@@ -91,9 +89,7 @@ func TestDistinctPreservesRelationAggregate(t *testing.T) {
 }
 
 func TestSelectPreservesDistinctColumns(t *testing.T) {
-	query := compiledQuery(t, &getColumnsUser{}, Conditions{})
-	query.dbConfig.Driver = "postgres"
-	query.queryGrammar = querybuilder.NewPostgresGrammar("")
+	query := rebindGrammar(compiledQuery(t, &getColumnsUser{}, Conditions{}), "postgres", querybuilder.NewPostgresGrammar(""))
 	selected := query.SelectRaw("? as old", 1).Distinct("name").Select("id").(*Query)
 
 	statement, bindings, err := selected.compileSelect()

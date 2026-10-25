@@ -842,9 +842,7 @@ func (r *Query) basePivotRow(desc *relationDescriptor, parentVal, relatedID any,
 // skip duplicates.
 func (r *Query) existingPivotIDs(desc *relationDescriptor, parentVal any, ids []any) (map[string]struct{}, error) {
 	q := r.pivotTableQuery(desc.pivotTable)
-	conditions := q.conditions
-	conditions.selectItems = []any{desc.pivotRelatedRef.foreignColumn}
-	q = q.setConditions(conditions)
+	q.builder.SetSelects([]any{desc.pivotRelatedRef.foreignColumn})
 	q = q.pivotWhere(fmt.Sprintf("%s = ?", r.ident(desc.pivotTable, desc.pivotParentRef.foreignColumn)), parentVal)
 	q = q.pivotWhere(desc.pivotTable+"."+desc.pivotRelatedRef.foreignColumn, ids)
 	if desc.kind == relKindMorphToMany {
@@ -865,9 +863,7 @@ func (r *Query) existingPivotIDs(desc *relationDescriptor, parentVal any, ids []
 // Toggle to compute the diff.
 func (r *Query) allPivotIDs(desc *relationDescriptor, parentVal any) ([]any, error) {
 	q := r.pivotTableQuery(desc.pivotTable)
-	conditions := q.conditions
-	conditions.selectItems = []any{desc.pivotRelatedRef.foreignColumn}
-	q = q.setConditions(conditions)
+	q.builder.SetSelects([]any{desc.pivotRelatedRef.foreignColumn})
 	q = q.pivotWhere(fmt.Sprintf("%s = ?", r.ident(desc.pivotTable, desc.pivotParentRef.foreignColumn)), parentVal)
 	if desc.kind == relKindMorphToMany {
 		q = q.pivotWhere(fmt.Sprintf("%s = ?", r.ident(desc.pivotTable, desc.morphTypeColumn)), desc.morphValue)

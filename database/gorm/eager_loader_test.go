@@ -840,10 +840,9 @@ func TestLoadBelongsTo_ChildQueryIsCompiled(t *testing.T) {
 		ref := desc.references[0]
 
 		child := q.relatedChild(desc.relatedTable, desc.relatedTable+"."+ref.primaryColumn, []any{uint(5)})
-		conditions := child.conditions
-		conditions.selectItems = []any{"name", ref.primaryColumn}
+		child.builder.SetSelects([]any{"name", ref.primaryColumn})
 
-		compiled, bindings, err := child.setConditions(conditions).compileSelect()
+		compiled, bindings, err := child.compileSelect()
 		assert.NoError(t, err)
 		assert.Equal(t, `select "name", "id" from "rel_users" where "rel_users"."id" in (?)`, compiled)
 		assert.Equal(t, []any{uint(5)}, bindings)
@@ -979,10 +978,9 @@ func TestLoadHasOneOrMany_ChildQueryIsCompiled(t *testing.T) {
 		ref := desc.references[0]
 
 		child := q.relatedChild(desc.relatedTable, desc.relatedTable+"."+ref.foreignColumn, []any{uint(3)})
-		conditions := child.conditions
-		conditions.selectItems = []any{"title", ref.foreignColumn}
+		child.builder.SetSelects([]any{"title", ref.foreignColumn})
 
-		compiled, bindings, err := child.setConditions(conditions).compileSelect()
+		compiled, bindings, err := child.compileSelect()
 		assert.NoError(t, err)
 		assert.Equal(t, `select "title", "user_id" from "rel_books" where "rel_books"."user_id" in (?)`, compiled)
 		assert.Equal(t, []any{uint(3)}, bindings)
@@ -1121,10 +1119,9 @@ func TestLoadMorph_ChildQueryIsCompiled(t *testing.T) {
 
 		child := q.relatedChild(desc.relatedTable, desc.relatedTable+"."+ref.foreignColumn, []any{uint(9)}).
 			Where(desc.relatedTable+"."+desc.morphTypeColumn, desc.morphValue).(*Query)
-		conditions := child.conditions
-		conditions.selectItems = []any{"address", ref.foreignColumn, desc.morphTypeColumn}
+		child.builder.SetSelects([]any{"address", ref.foreignColumn, desc.morphTypeColumn})
 
-		compiled, bindings, err := child.setConditions(conditions).compileSelect()
+		compiled, bindings, err := child.compileSelect()
 		assert.NoError(t, err)
 		assert.Equal(t, `select "address", "houseable_id", "houseable_type" from "rel_houses" where "rel_houses"."houseable_id" in (?) and "rel_houses"."houseable_type" = ?`, compiled)
 		assert.Equal(t, []any{uint(9), desc.morphValue}, bindings)
@@ -1364,10 +1361,9 @@ func TestLoadMorphTo_BucketChildQueryIsCompiled(t *testing.T) {
 	t.Run("pruned select keeps the owner key", func(t *testing.T) {
 		q := newRelQueryWith(t, &morphImage{})
 		child := q.relatedChild("morph_parent_like_posts", "morph_parent_like_posts.id", []any{uint(5)})
-		conditions := child.conditions
-		conditions.selectItems = []any{"title", "id"}
+		child.builder.SetSelects([]any{"title", "id"})
 
-		compiled, bindings, err := child.setConditions(conditions).compileSelect()
+		compiled, bindings, err := child.compileSelect()
 		assert.NoError(t, err)
 		assert.Equal(t, `select "title", "id" from "morph_parent_like_posts" where "morph_parent_like_posts"."id" in (?)`, compiled)
 		assert.Equal(t, []any{uint(5)}, bindings)
@@ -1467,7 +1463,7 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 		assert.Empty(t, child.conditions.withoutGlobalScopes)
 		assert.Empty(t, child.conditions.scopes)
 		assert.Len(t, child.conditions.where, 1)
-		assert.Len(t, child.conditions.selectItems, 2)
+		assert.Len(t, child.builder.Selects(), 2)
 	})
 
 	t.Run("pivot read receives the relation scope and the hydration plan's columns", func(t *testing.T) {
@@ -1569,9 +1565,8 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 
 		// The loader passes the related key as a required column, so it survives column pruning and
 		// the dictionary can be keyed off the related rows.
-		conditions := child.conditions
-		conditions.selectItems = []any{"name", desc.pivotRelatedRef.primaryColumn}
-		pruned, prunedBindings, err := child.setConditions(conditions).compileSelect()
+		child.builder.SetSelects([]any{"name", desc.pivotRelatedRef.primaryColumn})
+		pruned, prunedBindings, err := child.compileSelect()
 		assert.NoError(t, err)
 		assert.Equal(t, `select "name", "id" from "rel_roles" where "rel_roles"."id" in (?)`, pruned)
 		assert.Equal(t, chunk, prunedBindings)

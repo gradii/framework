@@ -128,11 +128,11 @@ func (r *ToSql) Pluck(column string, dest any) string {
 	query := r.query.dest(dest).addGlobalScopes().buildConditions()
 
 	// The column replaces whatever select list the query carried, which is what the executed form does.
-	conditions := query.conditions
-	conditions.selectItems = []any{column}
-	conditions.raw = nil
+	query.builder.SetSelects([]any{column})
+	_ = query.builder.SetBindings(nil, "select")
+	query.conditions.raw = nil
 
-	statement, bindings, err := query.setConditions(conditions).compileSelect()
+	statement, bindings, err := query.compileSelect()
 
 	return r.render(statement, bindings, err)
 }

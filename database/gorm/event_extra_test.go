@@ -6,12 +6,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	gormio "gorm.io/gorm"
+
+	querybuilder "github.com/goravel/framework/database/query"
 )
 
 // TestEvent_Context_NilCtx verifies Context returns the underlying query's context (nil when
 // unset).
 func TestEvent_Context_NilCtx(t *testing.T) {
-	q := &Query{instance: &gormio.DB{Statement: &gormio.Statement{Selects: []string{}, Omits: []string{}}}}
+	q := &Query{instance: &gormio.DB{Statement: &gormio.Statement{Selects: []string{}, Omits: []string{}}}, builder: querybuilder.NewBuilder(nil)}
 	e := NewEvent(q, &testEventModel, nil)
 	assert.Nil(t, e.Context())
 }
@@ -41,15 +43,15 @@ func TestEvent_IsClean_InverseOfIsDirty(t *testing.T) {
 // TestEvent_ValidColumnFollowsTheQueryFilter pins that an observer sees the column filter the query
 // itself carries — the same one the compiled statement writes by — rather than GORM's statement.
 func TestEvent_ValidColumnFollowsTheQueryFilter(t *testing.T) {
-	selecting := &Query{instance: &gormio.DB{Statement: &gormio.Statement{}}}
-	selecting.conditions.selectItems = []any{"Name"}
+	selecting := &Query{instance: &gormio.DB{Statement: &gormio.Statement{}}, builder: querybuilder.NewBuilder(nil)}
+	selecting.builder.Select("Name")
 
 	event := NewEvent(selecting, &testEventModel, &TestEventModel{})
 
 	assert.True(t, event.validColumn("Name"), "a named column is one the observer may see")
 	assert.False(t, event.validColumn("Avatar"), "a column the filter leaves out is not")
 
-	omitting := &Query{instance: &gormio.DB{Statement: &gormio.Statement{}}}
+	omitting := &Query{instance: &gormio.DB{Statement: &gormio.Statement{}}, builder: querybuilder.NewBuilder(nil)}
 	omitting.conditions.omit = []string{"Avatar"}
 
 	omitted := NewEvent(omitting, &testEventModel, &TestEventModel{})

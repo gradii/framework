@@ -44,17 +44,15 @@ func (r *Query) compileSelect() (string, []any, error) {
 // compileFirst renders the query as the single-row select First uses: the model's primary key
 // orders it when the caller asked for no order, and one row is returned.
 func (r *Query) compileFirst() (string, []any, error) {
-	conditions := r.conditions
-	if len(conditions.order) == 0 {
+	if len(r.builder.State().Orders) == 0 {
 		if column := r.primaryKeyColumn(); column != "" {
-			conditions.order = []any{column}
+			r.builder.OrderByRaw(column, nil)
 		}
 	}
 
-	limit := 1
-	conditions.limit = &limit
+	r.builder.Limit(1)
 
-	sql, bindings, err := r.setConditions(conditions).compileSelect()
+	sql, bindings, err := r.compileSelect()
 	if err != nil {
 		return "", nil, err
 	}
@@ -237,13 +235,13 @@ func (r *Query) applySelectSubAggregates(builder *querybuilder.Builder) error {
 	return nil
 }
 
-// newBuilder builds a query builder carrying everything the conditions describe, except the where
-// clauses, which applyWhere adds.
+// newBuilder builds a query builder carrying everything the conditions describe. The persistent
+// builder already holds the SQL clauses (select, join, where, group, having, order, limit, offset,
+// distinct, lock); this clones it and adds the ORM-specific parts that compile differently per
+// statement: table, where, relation-existence subqueries, soft-delete predicate, and select-subs.
 func (r *Query) newBuilder() (*querybuilder.Builder, error) {
 	// A scope is a function the caller queued with Scopes, or one addGlobalScopes folded in from the
-	// model. GORM applied them to its own statement; they are applied to a copy of the conditions here,
-	// which is what the compiled statement is built from. The copy carries no scopes, so this delegates
-	// once rather than recursing.
+	// model. They mutate the query, so they're applied first.
 	if len(r.conditions.scopes) > 0 {
 		scoped := r.withScopesApplied()
 		if scoped.conditions.err != nil {
@@ -262,32 +260,17 @@ func (r *Query) newBuilder() (*querybuilder.Builder, error) {
 		return nil, r.instance.Error
 	}
 
-	builder := querybuilder.NewBuilder(r.queryGrammar, querybuilder.NewProcessor(r.dbConfig.Driver))
-	builder.SetDriver(r.dbConfig.Driver)
+	// Clone the persistent builder so compiling multiple statements from the same query doesn't
+	// accumulate state (soft-delete predicate, relation subqueries).
+	builder := r.builder.Clone()
 
 	if err := r.applyTable(builder); err != nil {
 		return nil, err
 	}
 
-	if r.conditions.distinct {
-		builder.Distinct(r.conditions.distinctColumns...)
-	}
-
-	if len(r.conditions.selectItems) > 0 {
-		// Iterate selectItems in order, handling both strings and *Select
-		for _, item := range r.conditions.selectItems {
-			switch v := item.(type) {
-			case string:
-				// Select preserves explicitly repeated columns, unlike AddSelect.
-				builder.SetSelects(append(builder.Selects(), v))
-			case *Select:
-				builder.SelectRaw(fmt.Sprint(v.query), v.args)
-			}
-		}
-	} else if len(r.conditions.selectSubs) > 0 {
-		// A sub-select only adds a column, so the row still needs the parent's own columns to be
-		// scanned into the model. The wildcard is pre-quoted and therefore goes in as a raw
-		// expression: Select() would quote it a second time and clear the list besides.
+	// selectSubs are ORM-level select expressions (WithCount, WithSum), so they live in conditions
+	// rather than on the builder. When present, the parent's own columns must be in the select too.
+	if len(r.conditions.selectSubs) > 0 && len(builder.Selects()) == 0 {
 		if parent := r.parentModel(); parent != nil {
 			builder.SelectRaw(r.ident(r.parentTable(parent), "*"), nil)
 		}
@@ -295,40 +278,6 @@ func (r *Query) newBuilder() (*querybuilder.Builder, error) {
 
 	if err := r.applySelectSubAggregates(builder); err != nil {
 		return nil, err
-	}
-
-	for _, join := range r.conditions.join {
-		builder.JoinRaw(join.Query, join.Args, "inner")
-	}
-
-	if len(r.conditions.groupBy) > 0 {
-		groups := make([]any, 0, len(r.conditions.groupBy))
-		for _, group := range r.conditions.groupBy {
-			groups = append(groups, group)
-		}
-		builder.GroupBy(groups...)
-	}
-
-	if r.conditions.having != nil {
-		builder.Having(r.conditions.having.Query, r.conditions.having.Args...)
-	}
-
-	for _, order := range r.conditions.order {
-		builder.OrderByRaw(fmt.Sprint(order), nil)
-	}
-
-	if r.conditions.limit != nil {
-		builder.Limit(*r.conditions.limit)
-	}
-	if r.conditions.offset != nil {
-		builder.Offset(*r.conditions.offset)
-	}
-
-	switch {
-	case r.conditions.lockForUpdate:
-		builder.Lock(true)
-	case r.conditions.sharedLock:
-		builder.Lock(false)
 	}
 
 	r.applyWhere(builder)

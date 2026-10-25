@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/goravel/framework/database/db"
+	querybuilder "github.com/goravel/framework/database/query"
 	"github.com/goravel/framework/errors"
 	"github.com/goravel/framework/support/carbon"
 	basedatabase "github.com/goravel/framework/support/database"
@@ -36,7 +37,7 @@ func TestRowScanUsesGormTags(t *testing.T) {
 		Ignored string `gorm:"-"`
 	}
 	row := &Row{
-		query: &Query{},
+		query: &Query{builder: querybuilder.NewBuilder(nil)},
 		row: map[string]any{
 			"id":           int64(1),
 			"user_id":      int64(99),

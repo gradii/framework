@@ -46,6 +46,7 @@ type Query struct {
 	dbConfig          contractsdatabase.Config
 	mutex             *sync.Mutex
 	telemetryResolver contractstelemetry.Resolver
+	builder           *querybuilder.Builder
 }
 
 func NewQuery(
@@ -75,6 +76,9 @@ func NewQuery(
 		}
 	}
 
+	builder := querybuilder.NewBuilder(queryGrammar, querybuilder.NewProcessor(dbConfig.Driver))
+	builder.SetDriver(dbConfig.Driver)
+
 	queryImpl := &Query{
 		config:            config,
 		ctx:               ctx,
@@ -87,6 +91,7 @@ func NewQuery(
 		modelToObserver:   modelToObserver,
 		queries:           make(map[string]*Query),
 		telemetryResolver: telemetryResolver,
+		builder:           builder,
 	}
 
 	if conditions != nil {
@@ -184,7 +189,7 @@ func (r *Query) Count() (int64, error) {
 func (r *Query) Create(value any) error {
 	query := r.dest(value).buildConditions()
 
-	if hasStringColumns(query.conditions.selectItems) && len(query.conditions.omit) > 0 {
+	if hasStringColumns(query.builder.Selects()) && len(query.conditions.omit) > 0 {
 		return errors.OrmQuerySelectAndOmitsConflict
 	}
 
@@ -281,14 +286,13 @@ func (r *Query) Delete(dests ...any) (*contractsdb.Result, error) {
 }
 
 func (r *Query) Distinct(columns ...string) contractsorm.Query {
-	conditions := r.conditions
-	conditions.distinct = true
-	conditions.distinctColumns = make([]any, len(columns))
+	cols := make([]any, len(columns))
 	for i, column := range columns {
-		conditions.distinctColumns[i] = column
+		cols[i] = column
 	}
+	r.builder.Distinct(cols...)
 
-	return r.setConditions(conditions)
+	return r
 }
 
 func (r *Query) Driver() string {
@@ -309,11 +313,9 @@ func (r *Query) Exists() (bool, error) {
 
 	// The statement selects rows and is limited to one, rather than selecting the literal 1: a
 	// literal would be wrapped as an identifier, which some dialects reject.
-	conditions := query.conditions
-	limit := 1
-	conditions.limit = &limit
+	query.builder.Limit(1)
 
-	statement, bindings, err := query.setConditions(conditions).compileSelect()
+	statement, bindings, err := query.compileSelect()
 	if err != nil {
 		return false, err
 	}
@@ -592,12 +594,12 @@ func (r *Query) Get(dest any, columns ...any) error {
 	// onceWithColumns temporarily installs the columns, runs the query, then restores the original
 	// selection. This is how Laravel's get($columns) works: it mutates $this->columns in place,
 	// executes, then writes the original back.
-	original := r.conditions.selectItems
-	defer func() { r.conditions.selectItems = original }()
+	original := r.builder.Selects()
+	defer func() { r.builder.SetSelects(original) }()
 
-	if !hasSelectColumns(r.conditions) {
+	if !hasSelectColumns(r) {
 		for _, col := range columnsToStrings(columns) {
-			r.conditions.selectItems = append(r.conditions.selectItems, col)
+			r.builder.AddSelect(col)
 		}
 	}
 
@@ -637,52 +639,35 @@ func (r *Query) GroupBy(column ...string) contractsorm.Query {
 		return r
 	}
 
-	conditions := r.conditions
-	conditions.groupBy = column
+	cols := make([]any, len(column))
+	for i, c := range column {
+		cols[i] = c
+	}
+	r.builder.GroupBy(cols...)
 
-	return r.setConditions(conditions)
+	return r
 }
 
 func (r *Query) Having(query any, args ...any) contractsorm.Query {
-	conditions := r.conditions
-
-	// A string that carries a binding placeholder is a raw fragment rather than a column name. The
-	// builder must keep accepting the shape GORM did, so such a string is routed to HavingRaw, exactly
-	// as applyWhere routes a string containing "?" to WhereRaw. The conditions are compiled later, so
-	// the raw fragment is carried as a nested callback that runs against the child builder then.
 	if value, ok := query.(string); ok && containsPlaceholder(value) {
-		conditions.having = &contractsdriver.Having{
-			Query: func(builder *querybuilder.Builder) *querybuilder.Builder {
-				return builder.HavingRaw(value, args, core.BooleanAnd)
-			},
-		}
-
-		return r.setConditions(conditions)
+		r.builder.HavingRaw(value, args, core.BooleanAnd)
+	} else {
+		r.builder.Having(query, args...)
 	}
 
-	conditions.having = &contractsdriver.Having{
-		Query: query,
-		Args:  args,
-	}
-
-	return r.setConditions(conditions)
+	return r
 }
 
 func (r *Query) Join(query string, args ...any) contractsorm.Query {
-	conditions := r.conditions
-	conditions.join = deep.Append(conditions.join, contractsdriver.Join{
-		Query: query,
-		Args:  args,
-	})
+	r.builder.JoinRaw(query, args, "inner")
 
-	return r.setConditions(conditions)
+	return r
 }
 
 func (r *Query) Limit(limit int) contractsorm.Query {
-	conditions := r.conditions
-	conditions.limit = &limit
+	r.builder.Limit(limit)
 
-	return r.setConditions(conditions)
+	return r
 }
 
 func (r *Query) OfMany(column, aggregate string) contractsorm.Query {
@@ -782,10 +767,9 @@ func (r *Query) LoadMissing(model any, relation string, args ...any) error {
 }
 
 func (r *Query) LockForUpdate() contractsorm.Query {
-	conditions := r.conditions
-	conditions.lockForUpdate = true
+	r.builder.Lock(true)
 
-	return r.setConditions(conditions)
+	return r
 }
 
 func (r *Query) Model(value any) contractsorm.Query {
@@ -814,10 +798,9 @@ func (r *Query) Observe(model any, observer contractsorm.Observer) {
 }
 
 func (r *Query) Offset(offset int) contractsorm.Query {
-	conditions := r.conditions
-	conditions.offset = &offset
+	r.builder.Offset(offset)
 
-	return r.setConditions(conditions)
+	return r
 }
 
 func (r *Query) Omit(columns ...string) contractsorm.Query {
@@ -846,12 +829,9 @@ func (r *Query) OrderByDesc(column string) contractsorm.Query {
 }
 
 func (r *Query) OrderByRaw(raw string) contractsorm.Query {
-	var rawAny any = raw
+	r.builder.OrderByRaw(raw, nil)
 
-	conditions := r.conditions
-	conditions.order = deep.Append(r.conditions.order, rawAny)
-
-	return r.setConditions(conditions)
+	return r
 }
 
 func (r *Query) Instance() *gormio.DB {
@@ -995,7 +975,11 @@ func (r *Query) cursorBuilder() (*querybuilder.Builder, error) {
 		return nil, err
 	}
 
-	columns, directions, raws := parseCursorOrders(r.conditions.order)
+	orders := make([]any, len(r.builder.State().Orders))
+	for i, o := range r.builder.State().Orders {
+		orders[i] = o
+	}
+	columns, directions, raws := parseCursorOrders(orders)
 	if len(columns) == 0 {
 		return builder, nil
 	}
@@ -1182,11 +1166,11 @@ func (r *Query) Pluck(column string, dest any) error {
 		return errors.DatabaseUnsupportedType.Args(reflect.TypeOf(dest).String(), "pointer to slice")
 	}
 
-	conditions := query.conditions
-	conditions.selectItems = []any{column}
-	conditions.raw = nil
+	query.builder.SetSelects([]any{column})
+	_ = query.builder.SetBindings(nil, "select")
+	query.conditions.raw = nil
 
-	statement, bindings, err := query.setConditions(conditions).compileSelect()
+	statement, bindings, err := query.compileSelect()
 	if err != nil {
 		return err
 	}
@@ -1284,7 +1268,7 @@ func (r *Query) Rollback() error {
 }
 
 func (r *Query) Save(dest any) error {
-	if hasStringColumns(r.conditions.selectItems) && len(r.conditions.omit) > 0 {
+	if hasStringColumns(r.builder.Selects()) && len(r.conditions.omit) > 0 {
 		return errors.OrmQuerySelectAndOmitsConflict
 	}
 
@@ -1369,27 +1353,23 @@ func (r *Query) Scopes(funcs ...func(contractsorm.Query) contractsorm.Query) con
 
 // Select replaces the selected columns and their bindings, mirroring Laravel's select().
 func (r *Query) Select(columns ...string) contractsorm.Query {
-	conditions := r.conditions
-	conditions.selectItems = nil
-	conditions.selectSubs = nil
+	r.conditions.selectSubs = nil
 	if len(columns) == 0 {
 		columns = []string{"*"}
 	}
-	for _, column := range columns {
-		conditions.selectItems = deep.Append[any](conditions.selectItems, column)
+	cols := make([]any, len(columns))
+	for i, column := range columns {
+		cols[i] = column
 	}
+	r.builder.Select(cols...)
 
-	return r.setConditions(conditions)
+	return r
 }
 
 func (r *Query) SelectRaw(query any, args ...any) contractsorm.Query {
-	conditions := r.conditions
-	conditions.selectItems = deep.Append[any](conditions.selectItems, &Select{
-		query: query,
-		args:  args,
-	})
+	r.builder.SelectRaw(fmt.Sprint(query), args)
 
-	return r.setConditions(conditions)
+	return r
 }
 
 func (r *Query) WithContext(ctx context.Context) contractsorm.Query {
@@ -1399,10 +1379,9 @@ func (r *Query) WithContext(ctx context.Context) contractsorm.Query {
 }
 
 func (r *Query) SharedLock() contractsorm.Query {
-	conditions := r.conditions
-	conditions.sharedLock = true
+	r.builder.Lock(false)
 
-	return r.setConditions(conditions)
+	return r
 }
 
 // UseWritePdo forces the query's reads to resolve to the write connection instead of the replica, so
@@ -2445,6 +2424,7 @@ func (r *Query) setConditions(conditions Conditions) *Query {
 func (r *Query) clone() *Query {
 	query := *r
 	query.conditions = r.conditions.clone()
+	query.builder = r.builder.Clone()
 
 	return &query
 }
@@ -2477,7 +2457,7 @@ func (r *Query) update(values any) (*contractsdb.Result, error) {
 // updateScoped compiles and runs an update, reporting how many rows it changed. A soft delete scopes
 // the statement the way a delete does rather than the way an update does.
 func (r *Query) updateScoped(values any, byDest bool) (*contractsdb.Result, error) {
-	if hasStringColumns(r.conditions.selectItems) && len(r.conditions.omit) > 0 {
+	if hasStringColumns(r.builder.Selects()) && len(r.conditions.omit) > 0 {
 		return nil, errors.OrmQuerySelectAndOmitsConflict
 	}
 
@@ -2549,9 +2529,8 @@ func (r *Query) assignUpdatedValues(assignments map[string]any) {
 // becomes count(distinct column) rather than a leading DISTINCT over count(*), which would count every
 // row instead.
 func countColumns(query *Query) []any {
-	// Count the string columns in selectItems
 	var stringColumns []string
-	for _, item := range query.conditions.selectItems {
+	for _, item := range query.builder.Selects() {
 		if col, ok := item.(string); ok {
 			stringColumns = append(stringColumns, col)
 		}
@@ -2564,7 +2543,6 @@ func countColumns(query *Query) []any {
 }
 
 func buildSelectForCount(query *Query) *Query {
-	conditions := query.conditions
 
 	// A single select column that carries a rename ("name as n") cannot be counted as it stands — the
 	// count would come out count(name as n) — so the alias is trimmed back to its bare column first.
@@ -2572,19 +2550,17 @@ func buildSelectForCount(query *Query) *Query {
 	// With several select columns there is nothing to trim: the count ignores them and reduces the
 	// whole row with *.
 	// For example: Select("name as n").Count() counts the name column, while Select("name", "age as a").Count() counts *.
-	columns := selectStringColumns(conditions.selectItems)
+	columns := selectStringColumns(query.builder.Selects())
 	if len(columns) == 1 && str.Of(columns[0]).Trim().Contains(" ") {
-		conditions.selectItems = []any{str.Of(columns[0]).Split(" ")[0]}
+		query.builder.SetSelects([]any{str.Of(columns[0]).Split(" ")[0]})
 	}
 
 	// The count a paginator runs never orders or bounds the rows it counts: Laravel builds it on a
 	// clone without the orders, limit and offset (Builder::runPaginationCountQuery), so an ordered or
 	// limited query still counts every matching row.
-	conditions.order = nil
-	conditions.limit = nil
-	conditions.offset = nil
+	query.builder.CloneWithout("orders", "limit", "offset")
 
-	return query.setConditions(conditions).addGlobalScopes().buildConditions()
+	return query.addGlobalScopes().buildConditions()
 }
 
 func filterFindConditions(conds ...any) error {
@@ -2730,6 +2706,9 @@ func hasID(dest any) bool {
 }
 
 // hasSelectColumns reports whether conditions has any selections (either column names or raw expressions).
-func hasSelectColumns(conditions Conditions) bool {
-	return len(conditions.selectItems) > 0
+func hasSelectColumns(r *Query) bool {
+	if r.builder == nil {
+		return len(r.conditions.selectSubs) > 0
+	}
+	return len(r.builder.Selects()) > 0 || len(r.conditions.selectSubs) > 0
 }

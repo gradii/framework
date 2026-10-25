@@ -5,6 +5,11 @@ import (
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
 )
 
+// Conditions holds the state that belongs to the ORM layer rather than to the SQL builder: the model
+// and destination a statement addresses, eager loads, relationship subqueries, scopes, soft-delete
+// switches and a few write-path filters. The SQL clauses themselves — select, where, join, group,
+// having, order, limit, offset, distinct and lock — live on the Query's persistent builder, the way
+// Laravel keeps them on Query\Builder. Conditions deliberately has no second copy of them.
 type Conditions struct {
 	// err carries a condition that could not be accepted — an unusable operator or value — so the
 	// error surfaces from whichever statement is eventually compiled, rather than from a query object
@@ -12,26 +17,15 @@ type Conditions struct {
 	err                 error
 	dest                any
 	model               any
-	having              *contractsdriver.Having
-	limit               *int
-	offset              *int
 	table               *Table
-	groupBy             []string
-	join                []contractsdriver.Join
 	omit                []string
-	order               []any
 	scopes              []func(contractsorm.Query) contractsorm.Query
-	selectItems         []any // Unified list: strings for columns, *Select for raw expressions
 	raw                 *Select
 	selectSubs          []selectSub
 	where               []contractsdriver.Where
 	eagerLoad           []eagerLoadEntry
 	relations           []relationExistence
 	oneOfMany           *oneOfManyConfig
-	distinctColumns     []any
-	distinct            bool
-	lockForUpdate       bool
-	sharedLock          bool
 	useWritePdo         bool
 	withoutEvents       bool
 	withoutGlobalScopes []string
@@ -111,31 +105,14 @@ func selectStringColumns(selectItems []any) []string {
 func (c Conditions) clone() Conditions {
 	out := c
 
-	out.groupBy = append([]string(nil), c.groupBy...)
-	out.join = append([]contractsdriver.Join(nil), c.join...)
 	out.omit = append([]string(nil), c.omit...)
-	out.order = append([]any(nil), c.order...)
 	out.scopes = append([]func(contractsorm.Query) contractsorm.Query(nil), c.scopes...)
-	out.selectItems = append([]any(nil), c.selectItems...)
 	out.selectSubs = append([]selectSub(nil), c.selectSubs...)
 	out.where = append([]contractsdriver.Where(nil), c.where...)
 	out.eagerLoad = append([]eagerLoadEntry(nil), c.eagerLoad...)
 	out.relations = append([]relationExistence(nil), c.relations...)
-	out.distinctColumns = append([]any(nil), c.distinctColumns...)
 	out.withoutGlobalScopes = append([]string(nil), c.withoutGlobalScopes...)
 
-	if c.having != nil {
-		having := *c.having
-		out.having = &having
-	}
-	if c.limit != nil {
-		limit := *c.limit
-		out.limit = &limit
-	}
-	if c.offset != nil {
-		offset := *c.offset
-		out.offset = &offset
-	}
 	if c.table != nil {
 		table := *c.table
 		out.table = &table

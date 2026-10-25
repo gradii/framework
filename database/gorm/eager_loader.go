@@ -10,7 +10,6 @@ import (
 
 	"github.com/samber/lo"
 
-	contractsdriver "github.com/goravel/framework/contracts/database/driver"
 	"github.com/goravel/framework/database/orm/morphmap"
 	"github.com/goravel/framework/errors"
 )
@@ -749,9 +748,7 @@ func (r *Query) runRelatedQueryCompiled(child *Query, desc *relationDescriptor, 
 			return nil, err
 		}
 		if join != "" {
-			conditions := child.conditions
-			conditions.join = append(conditions.join, contractsdriver.Join{Query: join, Args: args})
-			child = child.setConditions(conditions)
+			child.builder.JoinRaw(join, args, "inner")
 		}
 	}
 
@@ -769,12 +766,11 @@ func (r *Query) runRelatedQueryCompiled(child *Query, desc *relationDescriptor, 
 			}
 		}
 
-		conditions := child.conditions
-		conditions.selectItems = nil
+		selects := make([]any, 0, len(cols))
 		for _, col := range cols {
-			conditions.selectItems = append(conditions.selectItems, col)
+			selects = append(selects, col)
 		}
-		child = child.setConditions(conditions)
+		child.builder.SetSelects(selects)
 	}
 
 	statement, bindings, err := child.compileSelect()
@@ -883,13 +879,13 @@ func (r *Query) oneOfManyJoin(desc *relationDescriptor, cfg *oneOfManyConfig) (s
 func (r *Query) pivotChild(table string, column string, values []any, columns []string) *Query {
 	child := r.relatedChild(table, column, values)
 
-	conditions := child.conditions
-	conditions.selectItems = nil
+	selects := make([]any, 0, len(columns))
 	for _, col := range columns {
-		conditions.selectItems = append(conditions.selectItems, col)
+		selects = append(selects, col)
 	}
+	child.builder.SetSelects(selects)
 
-	return child.setConditions(conditions)
+	return child
 }
 
 // runChunkedPivotQueryCompiled runs the pivot-table read once per chunk of keys and accumulates the

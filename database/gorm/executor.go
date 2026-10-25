@@ -79,7 +79,7 @@ func (r *Query) queryPool() (statementPool, error) {
 // only correct routing, since a FOR UPDATE (or a shared lock) sent to a replica locks nothing the
 // writer can see.
 func (r *Query) readPool() (statementPool, error) {
-	if r.conditions.useWritePdo || r.conditions.lockForUpdate || r.conditions.sharedLock {
+	if r.conditions.useWritePdo || r.builder.State().Lock != nil {
 		return r.queryPool()
 	}
 

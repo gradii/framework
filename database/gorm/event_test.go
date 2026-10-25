@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"gorm.io/gorm"
 
+	querybuilder "github.com/goravel/framework/database/query"
 	"github.com/goravel/framework/support/carbon"
 	"github.com/goravel/framework/support/convert"
 )
@@ -58,6 +59,7 @@ var testQuery = &Query{
 			Omits:   []string{},
 		},
 	},
+	builder: querybuilder.NewBuilder(nil),
 }
 
 type EventTestSuite struct {
@@ -97,7 +99,7 @@ func (s *EventTestSuite) SetupTest() {
 func (s *EventTestSuite) TestSetAttribute() {
 	// dest is map
 	dest := map[string]any{"avatar": "avatar1"}
-	query := &Query{
+	query := &Query{builder: querybuilder.NewBuilder(nil),
 		instance: &gorm.DB{
 			Statement: &gorm.Statement{
 				Selects: []string{},
@@ -125,7 +127,7 @@ func (s *EventTestSuite) TestSetAttribute() {
 	dest1 := &TestEventModel{
 		Avatar: "avatar1",
 	}
-	query1 := &Query{
+	query1 := &Query{builder: querybuilder.NewBuilder(nil),
 		instance: &gorm.DB{
 			Statement: &gorm.Statement{
 				Selects: []string{},
@@ -256,14 +258,14 @@ func (s *EventTestSuite) TestValidColumn() {
 
 		// The filter an observer sees is the query's own, which is the one the statement being built
 		// writes by.
-		event.query = &Query{}
-		event.query.conditions.selectItems = []any{"name"}
+		event.query = &Query{builder: querybuilder.NewBuilder(nil)}
+		event.query.builder.Select("name")
 		s.True(event.validColumn("Name"))
 		s.True(event.validColumn("name"))
 		s.False(event.validColumn("avatar"))
 		s.False(event.validColumn("Avatar"))
 
-		event.query = &Query{}
+		event.query = &Query{builder: querybuilder.NewBuilder(nil)}
 		event.query.conditions.omit = []string{"name"}
 		s.False(event.validColumn("Name"))
 		s.False(event.validColumn("name"))
@@ -278,7 +280,7 @@ func (s *EventTestSuite) TestRawSelectDoesNotMakeZeroValuesValid() {
 		&TestEventModel{},
 		map[string]any{"name": "", "is_admin": false, "manage": 0},
 	} {
-		query := (&Query{}).SelectRaw("count(*) as total").(*Query)
+		query := (&Query{builder: querybuilder.NewBuilder(nil)}).SelectRaw("count(*) as total").(*Query)
 		event := NewEvent(query, &testEventModel, dest)
 
 		s.False(event.validValue("name", ""))

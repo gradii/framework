@@ -4,8 +4,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	contractsdriver "github.com/goravel/framework/contracts/database/driver"
 )
 
 // These tests cover oneOfManyJoin, the compiled twin of the former applyOneOfManyJoin that the
@@ -29,9 +27,7 @@ func renderOfManySQL(t *testing.T, desc *relationDescriptor, cfg *oneOfManyConfi
 	assert.NoError(t, err)
 
 	child := newRelQueryWith(t, desc.relatedModel)
-	conditions := child.conditions
-	conditions.join = append(conditions.join, contractsdriver.Join{Query: join, Args: args})
-	child = child.setConditions(conditions)
+	child.builder.JoinRaw(join, args, "inner")
 
 	statement, _, err := child.compileSelect()
 	assert.NoError(t, err)

@@ -102,9 +102,7 @@ func TestWildcardSelectionMatchesObserverAndWrite(t *testing.T) {
 // `insert into t () values ()` that every dialect rejects, and Omit("Name") deleted nothing, so an
 // omitted value reached the row.
 func TestFilterInsertColumnsResolvesGoFieldNames(t *testing.T) {
-	selectQuery := compiledQuery(t, &SchemaOuter{}, Conditions{
-		selectItems: []any{"Name"},
-	})
+	selectQuery := compiledQuery(t, &SchemaOuter{}, Conditions{}).Select("Name").(*Query)
 
 	records, err := selectQuery.insertRecords(&SchemaOuter{Name: "kept"})
 	assert.NoError(t, err)
@@ -128,9 +126,7 @@ func TestFilterInsertColumnsResolvesGoFieldNames(t *testing.T) {
 // A column named by its database name already matched, and a bare "*" selects every column, so it
 // must restrict nothing rather than filter the record down to nothing.
 func TestFilterInsertColumnsAcceptsDBColumnNamesAndWildcard(t *testing.T) {
-	columnQuery := compiledQuery(t, &SchemaOuter{}, Conditions{
-		selectItems: []any{"name"},
-	})
+	columnQuery := compiledQuery(t, &SchemaOuter{}, Conditions{}).Select("name").(*Query)
 
 	records, err := columnQuery.insertRecords(&SchemaOuter{Name: "kept"})
 	assert.NoError(t, err)
@@ -138,9 +134,7 @@ func TestFilterInsertColumnsAcceptsDBColumnNamesAndWildcard(t *testing.T) {
 		assert.Equal(t, "kept", records[0]["name"])
 	}
 
-	wildcardQuery := compiledQuery(t, &SchemaOuter{}, Conditions{
-		selectItems: []any{"*"},
-	})
+	wildcardQuery := compiledQuery(t, &SchemaOuter{}, Conditions{}).Select("*").(*Query)
 
 	records, err = wildcardQuery.insertRecords(&SchemaOuter{Name: "kept"})
 	assert.NoError(t, err)

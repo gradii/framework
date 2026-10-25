@@ -241,7 +241,10 @@ func (e *Event) validColumn(name string) bool {
 
 	// The filter is read from the query's own conditions rather than from GORM's statement, so an
 	// observer sees exactly the columns the statement being built will write.
-	selectColumns := selectStringColumns(e.query.conditions.selectItems)
+	var selectColumns []string
+	if e.query.builder != nil {
+		selectColumns = selectStringColumns(e.query.builder.Selects())
+	}
 	omitColumns := e.query.conditions.omit
 	if len(selectColumns) > 0 && !hasWildcard(selectColumns) {
 		for _, selectColumn := range selectColumns {
@@ -281,7 +284,7 @@ func (e *Event) validValue(name string, value any) bool {
 		return false
 	}
 
-	if hasStringColumns(e.query.conditions.selectItems) {
+	if hasStringColumns(e.query.builder.Selects()) {
 		return e.validColumn(name)
 	}
 
