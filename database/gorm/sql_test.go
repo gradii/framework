@@ -421,11 +421,25 @@ func TestCompileSelect_SelectAndSelectRawKeepCallOrder(t *testing.T) {
 	}
 }
 
-// A branch that appends a selection must not overwrite the backing array of another branch.
-func TestCompileSelect_SelectBranchesAreIsolated(t *testing.T) {
+// Fluent calls change the receiver, the way Laravel's builder does, so a second call on the same
+// query continues the first instead of branching from it. Isolation is what clone() is for.
+func TestCompileSelect_FluentCallsMutateTheReceiver(t *testing.T) {
+	base := compiledQuery(t, &getColumnsUser{}, Conditions{}).SelectRaw("a").SelectRaw("b").SelectRaw("c").(*Query)
+
+	continued := base.SelectRaw("d")
+	assert.Same(t, base, continued)
+
+	statement, bindings, err := base.compileSelect()
+	require.NoError(t, err)
+	assert.Equal(t, `select a, b, c, d from "users"`, statement)
+	assert.Empty(t, bindings)
+}
+
+// A clone owns its selection: appending to it leaves the query it came from alone.
+func TestCompileSelect_CloneIsolatesBranches(t *testing.T) {
 	for _, test := range []struct {
 		name   string
-		second func(contractsorm.Query) contractsorm.Query
+		second func(q contractsorm.Query) contractsorm.Query
 		want   string
 	}{
 		{
@@ -436,7 +450,7 @@ func TestCompileSelect_SelectBranchesAreIsolated(t *testing.T) {
 			want: `select a, b, c, q2_only from "users"`,
 		},
 		{
-			name: "raw and named column branches",
+			name: "named column branch",
 			second: func(q contractsorm.Query) contractsorm.Query {
 				return q.Select("name")
 			},
@@ -445,8 +459,8 @@ func TestCompileSelect_SelectBranchesAreIsolated(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			base := compiledQuery(t, &getColumnsUser{}, Conditions{}).SelectRaw("a").SelectRaw("b").SelectRaw("c")
-			first := base.SelectRaw("q1_only")
-			second := test.second(base)
+			first := base.(*Query).clone().SelectRaw("q1_only")
+			second := test.second(base.(*Query).clone())
 
 			for _, branch := range []struct {
 				query contractsorm.Query
@@ -489,7 +503,7 @@ func TestCompileSelect_SelectResetsColumns(t *testing.T) {
 		{"default wildcard", nil, `select * from "users" where "id" = ?`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			statement, bindings, err := base.Select(test.columns...).(*Query).compileSelect()
+			statement, bindings, err := base.(*Query).clone().Select(test.columns...).(*Query).compileSelect()
 			require.NoError(t, err)
 			assert.Equal(t, test.want, statement)
 			assert.Equal(t, []any{9}, bindings)

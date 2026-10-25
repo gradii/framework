@@ -239,7 +239,7 @@ func TestAddWhere(t *testing.T) {
 		Query: "name2",
 		Args:  []any{"test2"},
 	}).(*Query)
-	query1 := query.addWhere(contractsdriver.Where{
+	query1 := query.clone().addWhere(contractsdriver.Where{
 		Query: "name3",
 		Args:  []any{"test3"},
 	}).(*Query)
@@ -257,7 +257,7 @@ func TestAddWhere(t *testing.T) {
 		{Query: "name3", Args: []any{"test3"}},
 	}, query1.conditions.where)
 
-	query2 := query.addWhere(contractsdriver.Where{
+	query2 := query.clone().addWhere(contractsdriver.Where{
 		Query: "name4",
 		Args:  []any{"test4"},
 	}).(*Query)
@@ -1182,7 +1182,7 @@ func TestBasicSelectWithGetColumns(t *testing.T) {
 // Laravel's onceWithColumns ignores the Get columns whenever a raw selection is already present.
 func TestGetColumnsKeepsExistingRawSelect(t *testing.T) {
 	base, recorder := newGetColumnsQuery(t)
-	query := base.SelectRaw("count(*) as total").(*Query)
+	query := base.clone().SelectRaw("count(*) as total").(*Query)
 	var rows []struct{ Total int64 }
 
 	require.NoError(t, query.Get(&rows, "name"))

@@ -105,3 +105,49 @@ func selectStringColumns(selectItems []any) []string {
 	}
 	return columns
 }
+
+// clone returns a copy that can be changed without affecting the original: every slice is copied
+// and every pointer points at its own value.
+func (c Conditions) clone() Conditions {
+	out := c
+
+	out.groupBy = append([]string(nil), c.groupBy...)
+	out.join = append([]contractsdriver.Join(nil), c.join...)
+	out.omit = append([]string(nil), c.omit...)
+	out.order = append([]any(nil), c.order...)
+	out.scopes = append([]func(contractsorm.Query) contractsorm.Query(nil), c.scopes...)
+	out.selectItems = append([]any(nil), c.selectItems...)
+	out.selectSubs = append([]selectSub(nil), c.selectSubs...)
+	out.where = append([]contractsdriver.Where(nil), c.where...)
+	out.eagerLoad = append([]eagerLoadEntry(nil), c.eagerLoad...)
+	out.relations = append([]relationExistence(nil), c.relations...)
+	out.distinctColumns = append([]any(nil), c.distinctColumns...)
+	out.withoutGlobalScopes = append([]string(nil), c.withoutGlobalScopes...)
+
+	if c.having != nil {
+		having := *c.having
+		out.having = &having
+	}
+	if c.limit != nil {
+		limit := *c.limit
+		out.limit = &limit
+	}
+	if c.offset != nil {
+		offset := *c.offset
+		out.offset = &offset
+	}
+	if c.table != nil {
+		table := *c.table
+		out.table = &table
+	}
+	if c.raw != nil {
+		raw := *c.raw
+		out.raw = &raw
+	}
+	if c.oneOfMany != nil {
+		oneOfMany := *c.oneOfMany
+		out.oneOfMany = &oneOfMany
+	}
+
+	return out
+}

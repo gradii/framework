@@ -53,9 +53,9 @@ func TestDistinctPreservesSelection(t *testing.T) {
 			query.queryGrammar = test.grammar
 			base := query.Select("name").SelectRaw("? as flag", 1).Where("id", 9).(*Query)
 			columns := []string{"name"}
-			selected := base.Distinct(columns...).(*Query)
+			selected := base.clone().Distinct(columns...).(*Query)
 			columns[0] = "id"
-			all := selected.Distinct().(*Query)
+			all := selected.clone().Distinct().(*Query)
 
 			statement, bindings, err := selected.compileSelect()
 			require.NoError(t, err)

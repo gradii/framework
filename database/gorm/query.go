@@ -44,7 +44,7 @@ type Query struct {
 	modelToObserver   []contractsorm.ModelToObserver
 	conditions        Conditions
 	dbConfig          contractsdatabase.Config
-	mutex             sync.Mutex
+	mutex             *sync.Mutex
 	telemetryResolver contractstelemetry.Resolver
 }
 
@@ -589,14 +589,16 @@ func (r *Query) Get(dest any, columns ...any) error {
 		return r.Find(dest)
 	}
 
-	// onceWithColumns only installs the columns when the builder has none of its own; the copy keeps
-	// the original query's selection untouched.
+	// onceWithColumns temporarily installs the columns, runs the query, then restores the original
+	// selection. This is how Laravel's get($columns) works: it mutates $this->columns in place,
+	// executes, then writes the original back.
+	original := r.conditions.selectItems
+	defer func() { r.conditions.selectItems = original }()
+
 	if !hasSelectColumns(r.conditions) {
-		conditions := r.conditions
 		for _, col := range columnsToStrings(columns) {
-			conditions.selectItems = deep.Append[any](conditions.selectItems, col)
+			r.conditions.selectItems = append(r.conditions.selectItems, col)
 		}
-		r = r.setConditions(conditions)
 	}
 
 	return r.Find(dest)
@@ -798,8 +800,13 @@ func (r *Query) Model(value any) contractsorm.Query {
 }
 
 func (r *Query) Observe(model any, observer contractsorm.Observer) {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
+	mutex := r.mutex
+	if mutex == nil {
+		mutex = &sync.Mutex{}
+		r.mutex = mutex
+	}
+	mutex.Lock()
+	defer mutex.Unlock()
 	r.modelToObserver = append(r.modelToObserver, contractsorm.ModelToObserver{
 		Model:    model,
 		Observer: observer,
@@ -1457,11 +1464,11 @@ func (r *Query) Table(name any, args ...any) contractsorm.Query {
 }
 
 func (r *Query) ToSql() contractsorm.ToSql {
-	return NewToSql(r.setConditions(r.conditions), r.log, false)
+	return NewToSql(r, r.log, false)
 }
 
 func (r *Query) ToRawSql() contractsorm.ToSql {
-	return NewToSql(r.setConditions(r.conditions), r.log, true)
+	return NewToSql(r, r.log, true)
 }
 
 func (r *Query) Update(column any, value ...any) (*contractsdb.Result, error) {
@@ -2224,20 +2231,20 @@ func (r *Query) deleted(dest any) error {
 // Each scope starts from what the previous ones produced, which is how GORM chained them onto one
 // statement.
 func (r *Query) withScopesApplied() *Query {
-	conditions := r.conditions
-	conditions.scopes = nil
+	scopes := r.conditions.scopes
+	r.conditions.scopes = nil
 
-	for _, scope := range r.conditions.scopes {
-		scoped, ok := scope(r.setConditions(conditions)).(*Query)
+	for _, apply := range scopes {
+		scoped, ok := apply(r).(*Query)
 		if !ok {
 			continue
 		}
 
-		conditions = scoped.conditions
-		conditions.scopes = nil
+		scoped.conditions.scopes = nil
+		r = scoped
 	}
 
-	return r.setConditions(conditions)
+	return r
 }
 
 // withError returns a query carrying a condition that could not be accepted, for whichever statement
@@ -2319,7 +2326,10 @@ func (r *Query) getObserver(dest any) contractsorm.Observer {
 }
 
 func (r *Query) new(db *gormio.DB) *Query {
-	return NewQuery(r.ctx, r.config, r.dbConfig, db, r.grammar, r.log, r.modelToObserver, &r.conditions, r.telemetryResolver)
+	query := NewQuery(r.ctx, r.config, r.dbConfig, db, r.grammar, r.log, r.modelToObserver, nil, r.telemetryResolver)
+	query.conditions = r.conditions.clone()
+
+	return query
 }
 
 func (r *Query) refreshConnection() (*Query, error) {
@@ -2419,11 +2429,24 @@ func (r *Query) saving(dest any) (any, error) {
 	return r.event(contractsorm.EventSaving, r.conditions.model, dest)
 }
 
+// setConditions records the query's conditions and returns the query itself: a fluent call changes
+// the receiver, the way Laravel's builder does, rather than producing a new query. Callers that need
+// the original untouched clone() first.
 func (r *Query) setConditions(conditions Conditions) *Query {
-	query := r.new(r.instance)
-	query.conditions = conditions
+	r.conditions = conditions
 
-	return query
+	return r
+}
+
+// clone returns a query that shares the receiver's connection and scope but owns its conditions, so
+// changing the copy leaves the original alone. It is the isolation primitive the execution paths use:
+// dest(), the global-scope folding and the temporary clauses a compiled statement needs all start
+// from a clone, which is what the copy-on-set semantics used to give them for free.
+func (r *Query) clone() *Query {
+	query := *r
+	query.conditions = r.conditions.clone()
+
+	return &query
 }
 
 func (r *Query) updating(dest any) (any, error) {
