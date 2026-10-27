@@ -1,6 +1,6 @@
 package ai
 
-import contractshttp "github.com/goravel/framework/contracts/http"
+import contractshttp "github.com/gradii/framework/contracts/http"
 
 type StreamEventType string
 

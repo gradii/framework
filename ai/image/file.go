@@ -3,9 +3,9 @@ package image
 import (
 	"io"
 
-	frameworkai "github.com/goravel/framework/ai"
-	contractsai "github.com/goravel/framework/contracts/ai"
-	contractsfilesystem "github.com/goravel/framework/contracts/filesystem"
+	frameworkai "github.com/gradii/framework/ai"
+	contractsai "github.com/gradii/framework/contracts/ai"
+	contractsfilesystem "github.com/gradii/framework/contracts/filesystem"
 )
 
 func WithMimeType(mimeType string) contractsai.AttachmentOption {

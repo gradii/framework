@@ -3,7 +3,7 @@ package limit
 import (
 	"time"
 
-	"github.com/goravel/framework/support/carbon"
+	"github.com/gradii/framework/support/carbon"
 )
 
 // Bucket is an internal wrapper around a taker.

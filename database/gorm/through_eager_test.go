@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	contractsorm "github.com/goravel/framework/contracts/database/orm"
+	contractsorm "github.com/gradii/framework/contracts/database/orm"
 )
 
 // hasOneThroughCountry declares a HasOneThrough whose relation field is slice-shaped. The shape is

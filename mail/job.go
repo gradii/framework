@@ -3,7 +3,7 @@ package mail
 import (
 	"fmt"
 
-	"github.com/goravel/framework/contracts/config"
+	"github.com/gradii/framework/contracts/config"
 )
 
 type SendMailJob struct {

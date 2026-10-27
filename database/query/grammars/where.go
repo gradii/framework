@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/goravel/framework/database/query/core"
+	"github.com/gradii/framework/database/query/core"
 )
 
 // CompileWheres mirrors Grammar::compileWheres().

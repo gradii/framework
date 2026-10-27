@@ -3,8 +3,8 @@ package query
 import (
 	"testing"
 
-	"github.com/goravel/framework/database/query/core"
-	"github.com/goravel/framework/support/carbon"
+	"github.com/gradii/framework/database/query/core"
+	"github.com/gradii/framework/support/carbon"
 	"github.com/stretchr/testify/assert"
 )
 

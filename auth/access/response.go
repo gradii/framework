@@ -1,6 +1,6 @@
 package access
 
-import "github.com/goravel/framework/contracts/auth/access"
+import "github.com/gradii/framework/contracts/auth/access"
 
 func NewAllowResponse() access.Response {
 	return &ResponseImpl{allowed: true}

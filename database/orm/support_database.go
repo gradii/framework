@@ -3,7 +3,7 @@ package orm
 import (
 	"reflect"
 
-	"github.com/goravel/framework/database/internal/annotation"
+	"github.com/gradii/framework/database/internal/annotation"
 )
 
 func GetID(dest any) any {

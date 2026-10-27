@@ -8,13 +8,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	contractstelemetry "github.com/goravel/framework/contracts/telemetry"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/foundation/json"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	mockstelemetry "github.com/goravel/framework/mocks/telemetry"
-	"github.com/goravel/framework/support/file"
-	telemetrylog "github.com/goravel/framework/telemetry/instrumentation/log"
+	contractstelemetry "github.com/gradii/framework/contracts/telemetry"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/foundation/json"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	mockstelemetry "github.com/gradii/framework/mocks/telemetry"
+	"github.com/gradii/framework/support/file"
+	telemetrylog "github.com/gradii/framework/telemetry/instrumentation/log"
 )
 
 func TestNewApplication(t *testing.T) {

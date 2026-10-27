@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option go_package = "github.com/goravel/framework/grpc";
+option go_package = "github.com/gradii/framework/grpc";
 
 package grpc;
 

@@ -1,9 +1,9 @@
 package session
 
 import (
-	"github.com/goravel/framework/contracts/http"
-	sessioncontract "github.com/goravel/framework/contracts/session"
-	"github.com/goravel/framework/support/carbon"
+	"github.com/gradii/framework/contracts/http"
+	sessioncontract "github.com/gradii/framework/contracts/session"
+	"github.com/gradii/framework/support/carbon"
 )
 
 // WriteCookie sends the session ID to the client as a cookie. Call it again

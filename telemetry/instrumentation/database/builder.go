@@ -7,7 +7,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 
-	contractsdb "github.com/goravel/framework/contracts/database/db"
+	contractsdb "github.com/gradii/framework/contracts/database/db"
 )
 
 type tableKeyType struct{}

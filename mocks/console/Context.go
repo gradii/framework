@@ -3,7 +3,7 @@
 package console
 
 import (
-	console "github.com/goravel/framework/contracts/console"
+	console "github.com/gradii/framework/contracts/console"
 	mock "github.com/stretchr/testify/mock"
 	cli "github.com/urfave/cli/v3"
 

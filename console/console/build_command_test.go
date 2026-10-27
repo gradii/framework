@@ -7,10 +7,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/goravel/framework/contracts/console"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	mocksconsole "github.com/goravel/framework/mocks/console"
-	mocksprocess "github.com/goravel/framework/mocks/process"
+	"github.com/gradii/framework/contracts/console"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	mocksconsole "github.com/gradii/framework/mocks/console"
+	mocksprocess "github.com/gradii/framework/mocks/process"
 )
 
 func TestBuildCommand(t *testing.T) {

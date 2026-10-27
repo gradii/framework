@@ -7,9 +7,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	contractsorm "github.com/goravel/framework/contracts/database/orm"
-	"github.com/goravel/framework/database/orm/morphmap"
-	"github.com/goravel/framework/errors"
+	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	"github.com/gradii/framework/database/orm/morphmap"
+	"github.com/gradii/framework/errors"
 )
 
 // newRelationSQL compiles the statement the Related query would run, through the same path the ORM

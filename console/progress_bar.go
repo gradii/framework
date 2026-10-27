@@ -3,7 +3,7 @@ package console
 import (
 	"github.com/pterm/pterm"
 
-	"github.com/goravel/framework/contracts/console"
+	"github.com/gradii/framework/contracts/console"
 )
 
 type ProgressBar struct {

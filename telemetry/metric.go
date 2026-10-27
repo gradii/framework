@@ -16,7 +16,7 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"google.golang.org/grpc/credentials"
 
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/errors"
 )
 
 const (

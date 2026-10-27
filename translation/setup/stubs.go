@@ -10,7 +10,7 @@ func (s Stubs) LangFacade(pkg string) string {
 import (
 	"context"
 
-	"github.com/goravel/framework/contracts/translation"
+	"github.com/gradii/framework/contracts/translation"
 )
 
 func Lang(ctx context.Context) translation.Translator {

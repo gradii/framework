@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"strings"
 
-	contractsorm "github.com/goravel/framework/contracts/database/orm"
-	"github.com/goravel/framework/errors"
+	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	"github.com/gradii/framework/errors"
 )
 
 // This file ports the relationship shorthands of Eloquent\Concerns\QueriesRelationships: each is a

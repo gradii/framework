@@ -1,8 +1,8 @@
 package tests
 
 import (
-	"github.com/goravel/framework/contracts/database/db"
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/contracts/database/db"
+	"github.com/gradii/framework/errors"
 	"github.com/spf13/cast"
 )
 

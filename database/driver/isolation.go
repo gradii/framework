@@ -4,8 +4,8 @@ import (
 	"database/sql"
 	"strings"
 
-	"github.com/goravel/framework/contracts/config"
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/contracts/config"
+	"github.com/gradii/framework/errors"
 )
 
 // TransactionOptions returns the options a transaction on this connection is opened with, or nil

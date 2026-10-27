@@ -1,4 +1,4 @@
-module github.com/goravel/framework/tests
+module github.com/gradii/framework/tests
 
 go 1.26.0
 
@@ -10,7 +10,7 @@ require (
 	github.com/brianvoe/gofakeit/v7 v7.18.0
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/google/uuid v1.6.0
-	github.com/goravel/framework v1.18.0
+	github.com/gradii/framework v1.18.0
 	github.com/goravel/mysql v1.18.0
 	github.com/goravel/postgres v1.18.0
 	github.com/goravel/sqlite v1.18.0
@@ -118,7 +118,7 @@ require (
 )
 
 replace (
-	github.com/goravel/framework => ../
+	github.com/gradii/framework => ../
 	github.com/goravel/mysql v0.0.0 => github.com/goravel/mysql v0.0.0
 	github.com/goravel/postgres v0.0.0 => github.com/goravel/postgres v0.0.0
 	github.com/goravel/sqlite v0.0.0 => github.com/goravel/sqlite v0.0.0

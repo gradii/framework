@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	contractsvalidation "github.com/goravel/framework/contracts/validation"
+	contractsvalidation "github.com/gradii/framework/contracts/validation"
 )
 
 // testRule is a simple Rule implementation for testing.

@@ -1,6 +1,6 @@
 package configuration
 
-import "github.com/goravel/framework/contracts/http"
+import "github.com/gradii/framework/contracts/http"
 
 type Middleware interface {
 	// Append adds middleware to the end of the middleware stack.

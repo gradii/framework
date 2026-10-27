@@ -3,7 +3,7 @@ package query
 import (
 	"testing"
 
-	"github.com/goravel/framework/database/query/core"
+	"github.com/gradii/framework/database/query/core"
 	"github.com/stretchr/testify/assert"
 )
 

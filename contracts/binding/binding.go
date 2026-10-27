@@ -74,22 +74,22 @@ var (
 	Bindings = map[string]Info{
 		Artisan: {
 			Description: "The CLI tool that comes with Goravel for interacting with the command line.",
-			PkgPath:     "github.com/goravel/framework/console",
+			PkgPath:     "github.com/gradii/framework/console",
 			IsBase:      true,
 		},
 		Config: {
 			Description: "Gets and sets configuration values.",
-			PkgPath:     "github.com/goravel/framework/config",
+			PkgPath:     "github.com/gradii/framework/config",
 			IsBase:      true,
 		},
 		Process: {
 			Description: "Executes and manages external processes with concurrency support.",
-			PkgPath:     "github.com/goravel/framework/process",
+			PkgPath:     "github.com/gradii/framework/process",
 			IsBase:      true,
 		},
 		AI: {
 			Description: "Provides manager and driver contracts for AI model interactions.",
-			PkgPath:     "github.com/goravel/framework/ai",
+			PkgPath:     "github.com/gradii/framework/ai",
 			Dependencies: []string{
 				Config,
 			},
@@ -110,7 +110,7 @@ var (
 		},
 		Auth: {
 			Description: "Provides support for JWT and Session drivers.",
-			PkgPath:     "github.com/goravel/framework/auth",
+			PkgPath:     "github.com/gradii/framework/auth",
 			Dependencies: []string{
 				Cache,
 				Config,
@@ -120,12 +120,12 @@ var (
 		},
 		Broadcast: {
 			Description:  "Real-time event broadcasting with WebSocket support via Pusher protocol.",
-			PkgPath:      "github.com/goravel/framework/broadcasting",
+			PkgPath:      "github.com/gradii/framework/broadcasting",
 			Dependencies: []string{Config, Log, Queue, Auth, Http, Route},
 		},
 		Cache: {
 			Description: "Gets and sets cached items.",
-			PkgPath:     "github.com/goravel/framework/cache",
+			PkgPath:     "github.com/gradii/framework/cache",
 			Dependencies: []string{
 				Config,
 				Log,
@@ -144,14 +144,14 @@ var (
 		},
 		Crypt: {
 			Description: "Provides encryption and decryption services.",
-			PkgPath:     "github.com/goravel/framework/crypt",
+			PkgPath:     "github.com/gradii/framework/crypt",
 			Dependencies: []string{
 				Config,
 			},
 		},
 		DB: {
 			Description: "Database management and query builder.",
-			PkgPath:     "github.com/goravel/framework/database",
+			PkgPath:     "github.com/gradii/framework/database",
 			Dependencies: []string{
 				Config,
 				Log,
@@ -180,14 +180,14 @@ var (
 		},
 		Event: {
 			Description: "Provides a simple observer pattern implementation.",
-			PkgPath:     "github.com/goravel/framework/event",
+			PkgPath:     "github.com/gradii/framework/event",
 			Dependencies: []string{
 				Queue,
 			},
 		},
 		Gate: {
 			Description: "An easy-to-use authorization feature to manage user actions on resources.",
-			PkgPath:     "github.com/goravel/framework/auth",
+			PkgPath:     "github.com/gradii/framework/auth",
 			Dependencies: []string{
 				Cache,
 				Orm,
@@ -195,42 +195,42 @@ var (
 		},
 		Grpc: {
 			Description: "Provides gRPC server and client support.",
-			PkgPath:     "github.com/goravel/framework/grpc",
+			PkgPath:     "github.com/gradii/framework/grpc",
 			Dependencies: []string{
 				Config,
 			},
 		},
 		Hash: {
 			Description: "Provides secure Argon2id and Bcrypt hashing for storing user passwords.",
-			PkgPath:     "github.com/goravel/framework/hash",
+			PkgPath:     "github.com/gradii/framework/hash",
 			Dependencies: []string{
 				Config,
 			},
 		},
 		Http: {
 			Description: "An easy-to-use, expressive, and minimalist API built on the standard net/http library.",
-			PkgPath:     "github.com/goravel/framework/http",
+			PkgPath:     "github.com/gradii/framework/http",
 			Dependencies: []string{
 				Config,
 			},
 		},
 		Lang: {
 			Description: "Provides localization support for multiple languages.",
-			PkgPath:     "github.com/goravel/framework/translation",
+			PkgPath:     "github.com/gradii/framework/translation",
 			Dependencies: []string{
 				Log,
 			},
 		},
 		Log: {
 			Description: "Provides logging capabilities with support for multiple channels and formats.",
-			PkgPath:     "github.com/goravel/framework/log",
+			PkgPath:     "github.com/gradii/framework/log",
 			Dependencies: []string{
 				Config,
 			},
 		},
 		Mail: {
 			Description: "A clean, simple API over popular email services.",
-			PkgPath:     "github.com/goravel/framework/mail",
+			PkgPath:     "github.com/gradii/framework/mail",
 			Dependencies: []string{
 				Config,
 				Queue,
@@ -238,7 +238,7 @@ var (
 		},
 		Notification: {
 			Description: "Send notifications across mail, database, and other channels.",
-			PkgPath:     "github.com/goravel/framework/notification",
+			PkgPath:     "github.com/gradii/framework/notification",
 			Dependencies: []string{
 				Log,
 				Mail,
@@ -248,7 +248,7 @@ var (
 		},
 		Orm: {
 			Description: "An elegant ORM for Go, inspired by Eloquent.",
-			PkgPath:     "github.com/goravel/framework/database",
+			PkgPath:     "github.com/gradii/framework/database",
 			Dependencies: []string{
 				Config,
 				Log,
@@ -277,7 +277,7 @@ var (
 		},
 		Queue: {
 			Description: "A solution by allowing you to create queued jobs that can run in the background.",
-			PkgPath:     "github.com/goravel/framework/queue",
+			PkgPath:     "github.com/gradii/framework/queue",
 			Dependencies: []string{
 				Config,
 				Cache,
@@ -303,7 +303,7 @@ var (
 		},
 		RateLimiter: {
 			Description: "Provides a simple and efficient way to limit the rate of incoming requests.",
-			PkgPath:     "github.com/goravel/framework/http",
+			PkgPath:     "github.com/gradii/framework/http",
 			Dependencies: []string{
 				Cache,
 				Log,
@@ -311,7 +311,7 @@ var (
 		},
 		Route: {
 			Description: "Routing system, which supports multiple web frameworks.",
-			PkgPath:     "github.com/goravel/framework/route",
+			PkgPath:     "github.com/gradii/framework/route",
 			Dependencies: []string{
 				Cache,
 				Config,
@@ -338,7 +338,7 @@ var (
 		},
 		Schedule: {
 			Description: "A fresh approach to managing scheduled tasks on your server.",
-			PkgPath:     "github.com/goravel/framework/schedule",
+			PkgPath:     "github.com/gradii/framework/schedule",
 			Dependencies: []string{
 				Artisan,
 				Cache,
@@ -348,7 +348,7 @@ var (
 		},
 		Schema: {
 			Description: "Database schema builder and migration system.",
-			PkgPath:     "github.com/goravel/framework/database",
+			PkgPath:     "github.com/gradii/framework/database",
 			Dependencies: []string{
 				Config,
 				Log,
@@ -357,11 +357,11 @@ var (
 		},
 		Seeder: {
 			Description: "Database seeding system to populate your database with test data.",
-			PkgPath:     "github.com/goravel/framework/database",
+			PkgPath:     "github.com/gradii/framework/database",
 		},
 		Session: {
 			Description: "Enables you to store user information across multiple requests.",
-			PkgPath:     "github.com/goravel/framework/session",
+			PkgPath:     "github.com/gradii/framework/session",
 			Dependencies: []string{
 				Config,
 			},
@@ -379,7 +379,7 @@ var (
 		},
 		Storage: {
 			Description: "Provides a unified API for interacting with various file storage systems.",
-			PkgPath:     "github.com/goravel/framework/filesystem",
+			PkgPath:     "github.com/gradii/framework/filesystem",
 			Dependencies: []string{
 				Config,
 			},
@@ -413,7 +413,7 @@ var (
 		},
 		Telemetry: {
 			Description: "Provides distributed tracing with OpenTelemetry.",
-			PkgPath:     "github.com/goravel/framework/telemetry",
+			PkgPath:     "github.com/gradii/framework/telemetry",
 			Dependencies: []string{
 				Config,
 				Log,
@@ -421,7 +421,7 @@ var (
 		},
 		Testing: {
 			Description: "Provides tools for testing your application.",
-			PkgPath:     "github.com/goravel/framework/testing",
+			PkgPath:     "github.com/gradii/framework/testing",
 			Dependencies: []string{
 				Artisan,
 				Cache,
@@ -434,11 +434,11 @@ var (
 		},
 		Validation: {
 			Description: "Provides validation services for incoming data.",
-			PkgPath:     "github.com/goravel/framework/validation",
+			PkgPath:     "github.com/gradii/framework/validation",
 		},
 		View: {
 			Description: "Provides a simple yet powerful templating engine.",
-			PkgPath:     "github.com/goravel/framework/view",
+			PkgPath:     "github.com/gradii/framework/view",
 		},
 	}
 )

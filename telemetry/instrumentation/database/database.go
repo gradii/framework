@@ -15,16 +15,16 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/goravel/framework/contracts/config"
-	contractsdatabase "github.com/goravel/framework/contracts/database"
-	contractstelemetry "github.com/goravel/framework/contracts/telemetry"
-	frameworkerrors "github.com/goravel/framework/errors"
-	"github.com/goravel/framework/support/color"
-	"github.com/goravel/framework/telemetry"
+	"github.com/gradii/framework/contracts/config"
+	contractsdatabase "github.com/gradii/framework/contracts/database"
+	contractstelemetry "github.com/gradii/framework/contracts/telemetry"
+	frameworkerrors "github.com/gradii/framework/errors"
+	"github.com/gradii/framework/support/color"
+	"github.com/gradii/framework/telemetry"
 )
 
 const (
-	instrumentationName = "github.com/goravel/framework/telemetry/instrumentation/database"
+	instrumentationName = "github.com/gradii/framework/telemetry/instrumentation/database"
 
 	enabledConfigKey = "telemetry.instrumentation.database.enabled"
 

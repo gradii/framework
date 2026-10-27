@@ -8,10 +8,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	contractsai "github.com/goravel/framework/contracts/ai"
-	"github.com/goravel/framework/errors"
-	mocksai "github.com/goravel/framework/mocks/ai"
-	mocksfilesystem "github.com/goravel/framework/mocks/filesystem"
+	contractsai "github.com/gradii/framework/contracts/ai"
+	"github.com/gradii/framework/errors"
+	mocksai "github.com/gradii/framework/mocks/ai"
+	mocksfilesystem "github.com/gradii/framework/mocks/filesystem"
 )
 
 func TestApplication_Agent(t *testing.T) {

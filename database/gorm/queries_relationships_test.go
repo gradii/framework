@@ -6,9 +6,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	contractsdatabase "github.com/goravel/framework/contracts/database"
-	contractsorm "github.com/goravel/framework/contracts/database/orm"
-	"github.com/goravel/framework/errors"
+	contractsdatabase "github.com/gradii/framework/contracts/database"
+	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	"github.com/gradii/framework/errors"
 )
 
 // newRelQuery builds a Query backed by a stub gorm.DB. The DB is non-functional but is enough for

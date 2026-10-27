@@ -1,6 +1,6 @@
 package grammars
 
-import "github.com/goravel/framework/errors"
+import "github.com/gradii/framework/errors"
 
 var (
 	errJsonSelectorNotSupported      = errors.QueryJsonSelectorNotSupported

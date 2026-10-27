@@ -5,9 +5,9 @@ import (
 	"maps"
 	"reflect"
 
-	"github.com/goravel/framework/contracts/database/orm"
-	"github.com/goravel/framework/database/internal/annotation"
-	"github.com/goravel/framework/support/str"
+	"github.com/gradii/framework/contracts/database/orm"
+	"github.com/gradii/framework/database/internal/annotation"
+	"github.com/gradii/framework/support/str"
 )
 
 type Event struct {

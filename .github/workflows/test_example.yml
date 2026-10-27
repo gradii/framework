@@ -47,7 +47,7 @@ jobs:
       - name: Replace framework with local checkout
         working-directory: example
         run: |
-          go mod edit -replace github.com/goravel/framework=../framework
+          go mod edit -replace github.com/gradii/framework=../framework
           go mod tidy
 
       - name: Run tests
@@ -92,7 +92,7 @@ jobs:
       - name: Replace framework with local checkout
         working-directory: example
         run: |
-          go mod edit -replace github.com/goravel/framework=../framework
+          go mod edit -replace github.com/gradii/framework=../framework
           go mod tidy
 
       - name: Run tests

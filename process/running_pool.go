@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	contractsprocess "github.com/goravel/framework/contracts/process"
+	contractsprocess "github.com/gradii/framework/contracts/process"
 )
 
 var _ contractsprocess.RunningPool = (*RunningPool)(nil)

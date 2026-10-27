@@ -1,8 +1,8 @@
 package configuration
 
 import (
-	"github.com/goravel/framework/contracts/foundation/configuration"
-	"github.com/goravel/framework/contracts/http"
+	"github.com/gradii/framework/contracts/foundation/configuration"
+	"github.com/gradii/framework/contracts/http"
 )
 
 type Middleware struct {

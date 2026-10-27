@@ -1,7 +1,7 @@
 package rules
 
 import (
-	"github.com/goravel/framework/contracts/support/pluralizer"
+	"github.com/gradii/framework/contracts/support/pluralizer"
 	"regexp"
 )
 

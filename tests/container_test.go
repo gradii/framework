@@ -7,9 +7,9 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/contracts/testing/docker"
-	mocksdocker "github.com/goravel/framework/mocks/testing/docker"
-	supportdocker "github.com/goravel/framework/support/docker"
+	"github.com/gradii/framework/contracts/testing/docker"
+	mocksdocker "github.com/gradii/framework/mocks/testing/docker"
+	supportdocker "github.com/gradii/framework/support/docker"
 )
 
 type ContainerTestSuite struct {

@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	contractsorm "github.com/goravel/framework/contracts/database/orm"
-	databaseorm "github.com/goravel/framework/database/orm"
+	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	databaseorm "github.com/gradii/framework/database/orm"
 )
 
 // This file tests the exact SQL emitted by Goravel's relation system for every relation kind.

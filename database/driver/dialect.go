@@ -14,8 +14,8 @@ import (
 	_ "github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"
 
-	"github.com/goravel/framework/contracts/database"
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/contracts/database"
+	"github.com/gradii/framework/errors"
 )
 
 // sqliteDriverName is the name the SQLite driver registers itself under.

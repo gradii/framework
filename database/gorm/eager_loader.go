@@ -10,8 +10,8 @@ import (
 
 	"github.com/samber/lo"
 
-	"github.com/goravel/framework/database/orm/morphmap"
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/database/orm/morphmap"
+	"github.com/gradii/framework/errors"
 )
 
 // defaultEagerLoadChunkSize is the WHERE IN list size at which we split a single eager-load

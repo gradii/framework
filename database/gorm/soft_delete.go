@@ -3,7 +3,7 @@ package gorm
 import (
 	"reflect"
 
-	databaseorm "github.com/goravel/framework/database/orm"
+	databaseorm "github.com/gradii/framework/database/orm"
 )
 
 // Soft-delete decisions shared by the delete path (delete.go) and the compiled read path (sql.go).

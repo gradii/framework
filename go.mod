@@ -1,4 +1,4 @@
-module github.com/goravel/framework
+module github.com/gradii/framework
 
 go 1.26.0
 

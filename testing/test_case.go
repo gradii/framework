@@ -3,11 +3,11 @@ package testing
 import (
 	"fmt"
 
-	contractsseeder "github.com/goravel/framework/contracts/database/seeder"
-	"github.com/goravel/framework/contracts/testing"
-	contractshttp "github.com/goravel/framework/contracts/testing/http"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/testing/http"
+	contractsseeder "github.com/gradii/framework/contracts/database/seeder"
+	"github.com/gradii/framework/contracts/testing"
+	contractshttp "github.com/gradii/framework/contracts/testing/http"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/testing/http"
 )
 
 type TestCase struct {

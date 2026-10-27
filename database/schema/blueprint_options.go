@@ -1,8 +1,8 @@
 package schema
 
 import (
-	"github.com/goravel/framework/contracts/database/driver"
-	contractsschema "github.com/goravel/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/driver"
+	contractsschema "github.com/gradii/framework/contracts/database/schema"
 )
 
 func (r *Blueprint) Engine(engine string)       { r.engine = engine }

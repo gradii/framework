@@ -3,8 +3,8 @@ package db
 import (
 	"database/sql"
 
-	querybuilder "github.com/goravel/framework/database/query"
-	"github.com/goravel/framework/support/carbon"
+	querybuilder "github.com/gradii/framework/database/query"
+	"github.com/gradii/framework/support/carbon"
 )
 
 // insertConnection adapts the writer and tracing to a query processor for one insert operation.

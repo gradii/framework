@@ -6,15 +6,15 @@ import (
 
 	"github.com/stretchr/testify/mock"
 
-	"github.com/goravel/framework/contracts/binding"
-	"github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/database"
-	"github.com/goravel/framework/foundation/json"
-	mocksfoundation "github.com/goravel/framework/mocks/foundation"
 	"github.com/goravel/mysql"
 	"github.com/goravel/postgres"
 	"github.com/goravel/sqlite"
 	"github.com/goravel/sqlserver"
+	"github.com/gradii/framework/contracts/binding"
+	"github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/database"
+	"github.com/gradii/framework/foundation/json"
+	mocksfoundation "github.com/gradii/framework/mocks/foundation"
 )
 
 func TestMain(m *testing.M) {

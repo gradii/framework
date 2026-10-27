@@ -5,10 +5,10 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/contracts/binding"
-	"github.com/goravel/framework/contracts/foundation"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	mocksfoundation "github.com/goravel/framework/mocks/foundation"
+	"github.com/gradii/framework/contracts/binding"
+	"github.com/gradii/framework/contracts/foundation"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	mocksfoundation "github.com/gradii/framework/mocks/foundation"
 )
 
 type ProviderRepositoryTestSuite struct {

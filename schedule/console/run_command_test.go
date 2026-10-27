@@ -5,10 +5,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	consolecontracts "github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/contracts/console/command"
-	consolemocks "github.com/goravel/framework/mocks/console"
-	schedulemocks "github.com/goravel/framework/mocks/schedule"
+	consolecontracts "github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/contracts/console/command"
+	consolemocks "github.com/gradii/framework/mocks/console"
+	schedulemocks "github.com/gradii/framework/mocks/schedule"
 )
 
 func TestRunCommand(t *testing.T) {

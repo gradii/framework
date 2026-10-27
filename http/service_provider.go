@@ -1,14 +1,14 @@
 package http
 
 import (
-	contractsbinding "github.com/goravel/framework/contracts/binding"
-	contractsconsole "github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/contracts/foundation"
-	contractstelemetry "github.com/goravel/framework/contracts/telemetry"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/http/client"
-	"github.com/goravel/framework/http/console"
-	"github.com/goravel/framework/support/binding"
+	contractsbinding "github.com/gradii/framework/contracts/binding"
+	contractsconsole "github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/contracts/foundation"
+	contractstelemetry "github.com/gradii/framework/contracts/telemetry"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/http/client"
+	"github.com/gradii/framework/http/console"
+	"github.com/gradii/framework/support/binding"
 )
 
 type ServiceProvider struct{}

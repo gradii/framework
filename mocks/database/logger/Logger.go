@@ -7,9 +7,9 @@ import (
 
 	carbon "github.com/dromara/carbon/v2"
 
-	log "github.com/goravel/framework/contracts/log"
+	log "github.com/gradii/framework/contracts/log"
 
-	logger "github.com/goravel/framework/contracts/database/logger"
+	logger "github.com/gradii/framework/contracts/database/logger"
 
 	mock "github.com/stretchr/testify/mock"
 )

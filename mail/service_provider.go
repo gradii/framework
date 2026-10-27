@@ -1,13 +1,13 @@
 package mail
 
 import (
-	"github.com/goravel/framework/contracts/binding"
-	contractsconsole "github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/contracts/foundation"
-	contractsqueue "github.com/goravel/framework/contracts/queue"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/mail/console"
-	"github.com/goravel/framework/support/color"
+	"github.com/gradii/framework/contracts/binding"
+	contractsconsole "github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/contracts/foundation"
+	contractsqueue "github.com/gradii/framework/contracts/queue"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/mail/console"
+	"github.com/gradii/framework/support/color"
 )
 
 type ServiceProvider struct {

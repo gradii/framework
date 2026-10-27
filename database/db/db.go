@@ -7,17 +7,17 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/goravel/framework/contracts/config"
-	contractsdb "github.com/goravel/framework/contracts/database/db"
-	contractsdriver "github.com/goravel/framework/contracts/database/driver"
-	contractslogger "github.com/goravel/framework/contracts/database/logger"
-	"github.com/goravel/framework/contracts/log"
-	contractstelemetry "github.com/goravel/framework/contracts/telemetry"
-	databasedriver "github.com/goravel/framework/database/driver"
-	querybuilder "github.com/goravel/framework/database/query"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/support/carbon"
-	instrumentationdatabase "github.com/goravel/framework/telemetry/instrumentation/database"
+	"github.com/gradii/framework/contracts/config"
+	contractsdb "github.com/gradii/framework/contracts/database/db"
+	contractsdriver "github.com/gradii/framework/contracts/database/driver"
+	contractslogger "github.com/gradii/framework/contracts/database/logger"
+	"github.com/gradii/framework/contracts/log"
+	contractstelemetry "github.com/gradii/framework/contracts/telemetry"
+	databasedriver "github.com/gradii/framework/database/driver"
+	querybuilder "github.com/gradii/framework/database/query"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/support/carbon"
+	instrumentationdatabase "github.com/gradii/framework/telemetry/instrumentation/database"
 )
 
 type queriesCache struct {

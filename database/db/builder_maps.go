@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/errors"
 	"github.com/jmoiron/sqlx"
 )
 

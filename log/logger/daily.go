@@ -7,13 +7,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/goravel/framework/contracts/config"
-	"github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/log"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/log/rotation"
-	"github.com/goravel/framework/support"
-	"github.com/goravel/framework/support/carbon"
+	"github.com/gradii/framework/contracts/config"
+	"github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/log"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/log/rotation"
+	"github.com/gradii/framework/support"
+	"github.com/gradii/framework/support/carbon"
 )
 
 type Daily struct {

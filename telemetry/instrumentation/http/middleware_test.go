@@ -14,10 +14,10 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
-	contractshttp "github.com/goravel/framework/contracts/http"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	mockstelemetry "github.com/goravel/framework/mocks/telemetry"
-	"github.com/goravel/framework/telemetry"
+	contractshttp "github.com/gradii/framework/contracts/http"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	mockstelemetry "github.com/gradii/framework/mocks/telemetry"
+	"github.com/gradii/framework/telemetry"
 )
 
 type MiddlewareTestSuite struct {

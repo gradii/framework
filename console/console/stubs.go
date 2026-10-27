@@ -7,8 +7,8 @@ func (r Stubs) Command() string {
 	return `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/contracts/console/command"
+	"github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/contracts/console/command"
 )
 
 type DummyCommand struct {
@@ -31,7 +31,7 @@ func (r *DummyCommand) Extend() command.Extend {
 
 // Handle Execute the console command.
 func (r *DummyCommand) Handle(ctx console.Context) error {
-	
+
 	return nil
 }
 `

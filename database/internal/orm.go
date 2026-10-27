@@ -7,15 +7,15 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/goravel/framework/contracts/binding"
-	"github.com/goravel/framework/contracts/config"
-	"github.com/goravel/framework/contracts/database"
-	contractsorm "github.com/goravel/framework/contracts/database/orm"
-	"github.com/goravel/framework/contracts/log"
-	contractstelemetry "github.com/goravel/framework/contracts/telemetry"
-	"github.com/goravel/framework/database/driver"
-	"github.com/goravel/framework/database/factory"
-	"github.com/goravel/framework/database/gorm"
+	"github.com/gradii/framework/contracts/binding"
+	"github.com/gradii/framework/contracts/config"
+	"github.com/gradii/framework/contracts/database"
+	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	"github.com/gradii/framework/contracts/log"
+	contractstelemetry "github.com/gradii/framework/contracts/telemetry"
+	"github.com/gradii/framework/database/driver"
+	"github.com/gradii/framework/database/factory"
+	"github.com/gradii/framework/database/gorm"
 )
 
 // QueriesCache is the shared, concurrency-safe registry of connections built

@@ -5,7 +5,7 @@ package translation
 import (
 	context "context"
 
-	translation "github.com/goravel/framework/contracts/translation"
+	translation "github.com/gradii/framework/contracts/translation"
 	mock "github.com/stretchr/testify/mock"
 )
 

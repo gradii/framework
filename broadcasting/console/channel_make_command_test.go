@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	mocksconsole "github.com/goravel/framework/mocks/console"
-	"github.com/goravel/framework/support/file"
+	mocksconsole "github.com/gradii/framework/mocks/console"
+	"github.com/gradii/framework/support/file"
 )
 
 func TestChannelMakeCommand(t *testing.T) {

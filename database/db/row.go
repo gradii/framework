@@ -1,8 +1,8 @@
 package db
 
 import (
-	"github.com/goravel/framework/database/internal/reflectx"
-	rowscan "github.com/goravel/framework/database/internal/scan"
+	"github.com/gradii/framework/database/internal/reflectx"
+	rowscan "github.com/gradii/framework/database/internal/scan"
 )
 
 var rowMapper = reflectx.NewMapperFunc("db", NameMapper)

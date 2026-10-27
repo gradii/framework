@@ -6,13 +6,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	contractsqueue "github.com/goravel/framework/contracts/queue"
-	"github.com/goravel/framework/errors"
-	mocksdb "github.com/goravel/framework/mocks/database/db"
-	mocksqueue "github.com/goravel/framework/mocks/queue"
-	"github.com/goravel/framework/queue/models"
-	"github.com/goravel/framework/queue/utils"
-	"github.com/goravel/framework/support/carbon"
+	contractsqueue "github.com/gradii/framework/contracts/queue"
+	"github.com/gradii/framework/errors"
+	mocksdb "github.com/gradii/framework/mocks/database/db"
+	mocksqueue "github.com/gradii/framework/mocks/queue"
+	"github.com/gradii/framework/queue/models"
+	"github.com/gradii/framework/queue/utils"
+	"github.com/gradii/framework/support/carbon"
 )
 
 func (s *WorkerTestSuite) TestPopNextJob() {

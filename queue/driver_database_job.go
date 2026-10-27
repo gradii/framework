@@ -3,12 +3,12 @@ package queue
 import (
 	"time"
 
-	contractsdb "github.com/goravel/framework/contracts/database/db"
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	contractsqueue "github.com/goravel/framework/contracts/queue"
-	"github.com/goravel/framework/queue/models"
-	"github.com/goravel/framework/queue/utils"
-	"github.com/goravel/framework/support/carbon"
+	contractsdb "github.com/gradii/framework/contracts/database/db"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	contractsqueue "github.com/gradii/framework/contracts/queue"
+	"github.com/gradii/framework/queue/models"
+	"github.com/gradii/framework/queue/utils"
+	"github.com/gradii/framework/support/carbon"
 )
 
 type DatabaseReservedJob struct {

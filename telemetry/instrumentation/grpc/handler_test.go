@@ -10,11 +10,11 @@ import (
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 	"google.golang.org/grpc/stats"
 
-	"github.com/goravel/framework/errors"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	mockstelemetry "github.com/goravel/framework/mocks/telemetry"
-	"github.com/goravel/framework/support/color"
-	"github.com/goravel/framework/telemetry"
+	"github.com/gradii/framework/errors"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	mockstelemetry "github.com/gradii/framework/mocks/telemetry"
+	"github.com/gradii/framework/support/color"
+	"github.com/gradii/framework/telemetry"
 )
 
 type HandlerTestSuite struct {

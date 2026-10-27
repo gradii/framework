@@ -4,9 +4,9 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc/stats"
 
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/support/color"
-	"github.com/goravel/framework/telemetry"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/support/color"
+	"github.com/gradii/framework/telemetry"
 )
 
 // NewServerStatsHandler creates an OTel stats handler for the server.

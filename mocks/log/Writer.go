@@ -3,8 +3,8 @@
 package log
 
 import (
-	http "github.com/goravel/framework/contracts/http"
-	log "github.com/goravel/framework/contracts/log"
+	http "github.com/gradii/framework/contracts/http"
+	log "github.com/gradii/framework/contracts/log"
 
 	mock "github.com/stretchr/testify/mock"
 )

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/goravel/framework/contracts/schedule"
+	"github.com/gradii/framework/contracts/schedule"
 )
 
 type Event struct {

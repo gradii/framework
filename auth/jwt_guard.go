@@ -8,13 +8,13 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/spf13/cast"
 
-	contractsauth "github.com/goravel/framework/contracts/auth"
-	"github.com/goravel/framework/contracts/cache"
-	"github.com/goravel/framework/contracts/config"
-	"github.com/goravel/framework/contracts/http"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/support/carbon"
-	"github.com/goravel/framework/support/convert"
+	contractsauth "github.com/gradii/framework/contracts/auth"
+	"github.com/gradii/framework/contracts/cache"
+	"github.com/gradii/framework/contracts/config"
+	"github.com/gradii/framework/contracts/http"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/support/carbon"
+	"github.com/gradii/framework/support/convert"
 )
 
 var _ contractsauth.GuardFunc = NewJwtGuard

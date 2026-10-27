@@ -8,7 +8,7 @@ func (s Stubs) EventFacade(pkg string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/event"
+	"github.com/gradii/framework/contracts/event"
 )
 
 func Event() event.Instance {

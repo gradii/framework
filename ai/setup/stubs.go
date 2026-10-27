@@ -42,7 +42,7 @@ func (s Stubs) AIFacade(pkg string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/ai"
+	"github.com/gradii/framework/contracts/ai"
 )
 
 func AI() ai.AI {

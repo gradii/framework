@@ -11,8 +11,8 @@ import (
 	gookitcolor "github.com/gookit/color"
 	"github.com/pterm/pterm"
 
-	"github.com/goravel/framework/contracts/support"
-	"github.com/goravel/framework/support/env"
+	"github.com/gradii/framework/contracts/support"
+	"github.com/gradii/framework/support/env"
 )
 
 const (

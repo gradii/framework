@@ -3,7 +3,7 @@ disable-version-string: True
 all: True
 recursive: true
 packages:
-  github.com/goravel/framework/contracts:
+  github.com/gradii/framework/contracts:
     config:
       dir: mocks/{{replaceAll .InterfaceDirRelative "contracts" ""}}
       filename: "{{.InterfaceName}}.go"

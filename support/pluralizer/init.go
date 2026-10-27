@@ -1,11 +1,11 @@
 package pluralizer
 
 import (
-	"github.com/goravel/framework/contracts/support/pluralizer"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/support/pluralizer/english"
-	"github.com/goravel/framework/support/pluralizer/inflector"
-	"github.com/goravel/framework/support/pluralizer/rules"
+	"github.com/gradii/framework/contracts/support/pluralizer"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/support/pluralizer/english"
+	"github.com/gradii/framework/support/pluralizer/inflector"
+	"github.com/gradii/framework/support/pluralizer/rules"
 )
 
 var (

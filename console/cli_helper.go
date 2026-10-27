@@ -17,8 +17,8 @@ import (
 	"github.com/urfave/cli/v3"
 	"github.com/xrash/smetrics"
 
-	"github.com/goravel/framework/support/color"
-	"github.com/goravel/framework/support/env"
+	"github.com/gradii/framework/support/color"
+	"github.com/gradii/framework/support/env"
 )
 
 func init() {

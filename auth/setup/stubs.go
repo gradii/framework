@@ -63,8 +63,8 @@ func (s Stubs) AuthFacade(pkg string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/auth"
-	"github.com/goravel/framework/contracts/http"
+	"github.com/gradii/framework/contracts/auth"
+	"github.com/gradii/framework/contracts/http"
 )
 
 func Auth(ctx ...http.Context) auth.Auth {
@@ -79,8 +79,8 @@ func (s Stubs) GateFacade(pkg string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/auth/access"
-	"github.com/goravel/framework/contracts/http"
+	"github.com/gradii/framework/contracts/auth/access"
+	"github.com/gradii/framework/contracts/http"
 )
 
 func Gate(ctx ...http.Context) access.Gate {

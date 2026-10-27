@@ -6,10 +6,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
-	mockscache "github.com/goravel/framework/mocks/cache"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	mocksconsole "github.com/goravel/framework/mocks/console"
-	mocksfilesystem "github.com/goravel/framework/mocks/filesystem"
+	mockscache "github.com/gradii/framework/mocks/cache"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	mocksconsole "github.com/gradii/framework/mocks/console"
+	mocksfilesystem "github.com/gradii/framework/mocks/filesystem"
 )
 
 type UpCommandTestSuite struct {

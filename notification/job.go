@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/goravel/framework/contracts/notification"
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/contracts/notification"
+	"github.com/gradii/framework/errors"
 )
 
 // dispatchItem is the plain, JSON-serializable unit queued per channel.

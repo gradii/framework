@@ -12,7 +12,7 @@ import (
 	"reflect"
 	"sync"
 
-	contractsorm "github.com/goravel/framework/contracts/database/orm"
+	contractsorm "github.com/gradii/framework/contracts/database/orm"
 )
 
 var (

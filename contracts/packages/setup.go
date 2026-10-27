@@ -1,7 +1,7 @@
 package packages
 
 import (
-	"github.com/goravel/framework/contracts/packages/modify"
+	"github.com/gradii/framework/contracts/packages/modify"
 )
 
 type Setup interface {
@@ -34,7 +34,7 @@ type Paths interface {
 	Migrations() Path
 	// Models returns the path for the models package, eg: goravel/app/models.
 	Models() Path
-	// Module returns the path for the module package, eg: github.com/goravel/framework/auth.
+	// Module returns the path for the module package, eg: github.com/gradii/framework/auth.
 	Module() Path
 	// Public returns the path for the public package, eg: goravel/public.
 	Public() Path

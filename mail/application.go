@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"net/smtp"
 
-	"github.com/goravel/framework/contracts/config"
-	"github.com/goravel/framework/contracts/mail"
-	contractsqueue "github.com/goravel/framework/contracts/queue"
-	"github.com/goravel/framework/mail/template"
+	"github.com/gradii/framework/contracts/config"
+	"github.com/gradii/framework/contracts/mail"
+	contractsqueue "github.com/gradii/framework/contracts/queue"
+	"github.com/gradii/framework/mail/template"
 )
 
 // Params represents all parameters needed for sending mail

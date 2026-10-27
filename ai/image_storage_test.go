@@ -6,8 +6,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goravel/framework/errors"
-	mocksfilesystem "github.com/goravel/framework/mocks/filesystem"
+	"github.com/gradii/framework/errors"
+	mocksfilesystem "github.com/gradii/framework/mocks/filesystem"
 )
 
 func TestImageStorer_Store(t *testing.T) {

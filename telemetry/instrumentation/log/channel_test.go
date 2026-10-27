@@ -5,9 +5,9 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	contractslog "github.com/goravel/framework/contracts/log"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	mockstelemetry "github.com/goravel/framework/mocks/telemetry"
+	contractslog "github.com/gradii/framework/contracts/log"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	mockstelemetry "github.com/gradii/framework/mocks/telemetry"
 )
 
 type TelemetryChannelTestSuite struct {

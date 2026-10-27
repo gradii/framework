@@ -6,7 +6,7 @@ import (
 	"go.opentelemetry.io/contrib/propagators/b3"
 	"go.opentelemetry.io/otel/propagation"
 
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/errors"
 )
 
 const (

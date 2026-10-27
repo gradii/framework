@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	contractshttp "github.com/goravel/framework/contracts/http"
+	contractshttp "github.com/gradii/framework/contracts/http"
 )
 
 type testMiddleware struct {

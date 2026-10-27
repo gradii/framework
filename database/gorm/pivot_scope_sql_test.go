@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	contractsorm "github.com/goravel/framework/contracts/database/orm"
+	contractsorm "github.com/gradii/framework/contracts/database/orm"
 )
 
 // This file pins the exact SQL produced when OnPivotQuery is wired up on the Query.Related(...)

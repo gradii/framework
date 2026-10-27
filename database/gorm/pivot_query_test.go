@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	contractsorm "github.com/goravel/framework/contracts/database/orm"
+	contractsorm "github.com/gradii/framework/contracts/database/orm"
 )
 
 // pivotScopedQuery returns a base query addressed at table and wrapped by the builder-level twin of

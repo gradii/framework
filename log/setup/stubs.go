@@ -65,7 +65,7 @@ func (s Stubs) LogFacade(pkg string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/log"
+	"github.com/gradii/framework/contracts/log"
 )
 
 func Log() log.Log {

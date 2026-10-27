@@ -1,9 +1,9 @@
 package middleware
 
 import (
-	"github.com/goravel/framework/contracts/http"
-	"github.com/goravel/framework/session"
-	"github.com/goravel/framework/support/color"
+	"github.com/gradii/framework/contracts/http"
+	"github.com/gradii/framework/session"
+	"github.com/gradii/framework/support/color"
 )
 
 type startSessionMiddleware struct{}

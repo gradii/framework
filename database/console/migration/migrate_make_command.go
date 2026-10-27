@@ -3,17 +3,17 @@ package migration
 import (
 	"fmt"
 
-	"github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/contracts/console/command"
-	"github.com/goravel/framework/contracts/database/migration"
-	"github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/packages/match"
-	"github.com/goravel/framework/packages/modify"
-	"github.com/goravel/framework/support"
-	supportconsole "github.com/goravel/framework/support/console"
-	"github.com/goravel/framework/support/env"
-	"github.com/goravel/framework/support/str"
+	"github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/contracts/console/command"
+	"github.com/gradii/framework/contracts/database/migration"
+	"github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/packages/match"
+	"github.com/gradii/framework/packages/modify"
+	"github.com/gradii/framework/support"
+	supportconsole "github.com/gradii/framework/support/console"
+	"github.com/gradii/framework/support/env"
+	"github.com/gradii/framework/support/str"
 )
 
 type MigrateMakeCommand struct {

@@ -1,11 +1,11 @@
 package schedule
 
 import (
-	"github.com/goravel/framework/contracts/binding"
-	"github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/errors"
-	scheduleconsole "github.com/goravel/framework/schedule/console"
+	"github.com/gradii/framework/contracts/binding"
+	"github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/errors"
+	scheduleconsole "github.com/gradii/framework/schedule/console"
 )
 
 type ServiceProvider struct {

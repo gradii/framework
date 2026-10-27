@@ -60,7 +60,7 @@ func (s Stubs) HashFacade(pkg string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/hash"
+	"github.com/gradii/framework/contracts/hash"
 )
 
 func Hash() hash.Hash {

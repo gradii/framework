@@ -1,6 +1,6 @@
 package mail
 
-import contractsnotification "github.com/goravel/framework/contracts/notification"
+import contractsnotification "github.com/gradii/framework/contracts/notification"
 
 // NewMessage returns a fluent builder for a MailMessage. Every method
 // returns the same builder so calls can be chained; call Build() to

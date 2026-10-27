@@ -13,8 +13,8 @@ import (
 	huhspinner "github.com/charmbracelet/huh/spinner"
 	"github.com/charmbracelet/lipgloss"
 
-	contractsprocess "github.com/goravel/framework/contracts/process"
-	"github.com/goravel/framework/support/collect"
+	contractsprocess "github.com/gradii/framework/contracts/process"
+	"github.com/gradii/framework/support/collect"
 )
 
 var _ contractsprocess.Running = (*Running)(nil)

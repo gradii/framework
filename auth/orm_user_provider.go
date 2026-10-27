@@ -1,11 +1,11 @@
 package auth
 
 import (
-	contractsauth "github.com/goravel/framework/contracts/auth"
-	"github.com/goravel/framework/contracts/database/orm"
-	"github.com/goravel/framework/contracts/http"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/support/database"
+	contractsauth "github.com/gradii/framework/contracts/auth"
+	"github.com/gradii/framework/contracts/database/orm"
+	"github.com/gradii/framework/contracts/http"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/support/database"
 )
 
 var _ contractsauth.UserProviderFunc = NewOrmUserProvider

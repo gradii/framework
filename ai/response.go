@@ -6,9 +6,9 @@ import (
 	"slices"
 	"strings"
 
-	contractsai "github.com/goravel/framework/contracts/ai"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/support/str"
+	contractsai "github.com/gradii/framework/contracts/ai"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/support/str"
 )
 
 type textResponse struct {

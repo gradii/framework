@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	contractsdatabase "github.com/goravel/framework/contracts/database"
-	querybuilder "github.com/goravel/framework/database/query"
+	contractsdatabase "github.com/gradii/framework/contracts/database"
+	querybuilder "github.com/gradii/framework/database/query"
 )
 
 func TestRandomOrderFunction(t *testing.T) {

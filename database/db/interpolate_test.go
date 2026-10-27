@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	querybuilder "github.com/goravel/framework/database/query"
+	querybuilder "github.com/gradii/framework/database/query"
 )
 
 // TestInterpolateNumberedPlaceholders pins the fix for the db facade's query log: the postgres form

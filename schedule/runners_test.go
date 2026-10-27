@@ -5,9 +5,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	contractsschedule "github.com/goravel/framework/contracts/schedule"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	mocksschedule "github.com/goravel/framework/mocks/schedule"
+	contractsschedule "github.com/gradii/framework/contracts/schedule"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	mocksschedule "github.com/gradii/framework/mocks/schedule"
 )
 
 func TestScheduleRunner(t *testing.T) {

@@ -9,15 +9,15 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	contractsdatabase "github.com/goravel/framework/contracts/database"
-	contractsdb "github.com/goravel/framework/contracts/database/db"
-	"github.com/goravel/framework/errors"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	mocksdb "github.com/goravel/framework/mocks/database/db"
-	mocksdriver "github.com/goravel/framework/mocks/database/driver"
-	mockslogger "github.com/goravel/framework/mocks/database/logger"
-	"github.com/goravel/framework/support/carbon"
-	instrumentationdatabase "github.com/goravel/framework/telemetry/instrumentation/database"
+	contractsdatabase "github.com/gradii/framework/contracts/database"
+	contractsdb "github.com/gradii/framework/contracts/database/db"
+	"github.com/gradii/framework/errors"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	mocksdb "github.com/gradii/framework/mocks/database/db"
+	mocksdriver "github.com/gradii/framework/mocks/database/driver"
+	mockslogger "github.com/gradii/framework/mocks/database/logger"
+	"github.com/gradii/framework/support/carbon"
+	instrumentationdatabase "github.com/gradii/framework/telemetry/instrumentation/database"
 )
 
 func TestTxSelectPassesParameterizedSQL(t *testing.T) {

@@ -8,10 +8,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goravel/framework/cache"
-	contractscache "github.com/goravel/framework/contracts/cache"
-	"github.com/goravel/framework/foundation/json"
-	configmock "github.com/goravel/framework/mocks/config"
+	"github.com/gradii/framework/cache"
+	contractscache "github.com/gradii/framework/contracts/cache"
+	"github.com/gradii/framework/foundation/json"
+	configmock "github.com/gradii/framework/mocks/config"
 )
 
 // memoryCache is the memory driver seen as a cache.Cache, the way the limiter

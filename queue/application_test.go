@@ -5,8 +5,8 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	contractsqueue "github.com/goravel/framework/contracts/queue"
-	mocksqueue "github.com/goravel/framework/mocks/queue"
+	contractsqueue "github.com/gradii/framework/contracts/queue"
+	mocksqueue "github.com/gradii/framework/mocks/queue"
 )
 
 type ApplicationTestSuite struct {

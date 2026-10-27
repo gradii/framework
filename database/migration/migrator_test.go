@@ -11,16 +11,16 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/contracts/database/migration"
-	"github.com/goravel/framework/contracts/database/orm"
-	contractsschema "github.com/goravel/framework/contracts/database/schema"
-	mocksconsole "github.com/goravel/framework/mocks/console"
-	mocksmigration "github.com/goravel/framework/mocks/database/migration"
-	mocksorm "github.com/goravel/framework/mocks/database/orm"
-	mocksschema "github.com/goravel/framework/mocks/database/schema"
-	"github.com/goravel/framework/support/carbon"
-	"github.com/goravel/framework/support/color"
-	"github.com/goravel/framework/support/file"
+	"github.com/gradii/framework/contracts/database/migration"
+	"github.com/gradii/framework/contracts/database/orm"
+	contractsschema "github.com/gradii/framework/contracts/database/schema"
+	mocksconsole "github.com/gradii/framework/mocks/console"
+	mocksmigration "github.com/gradii/framework/mocks/database/migration"
+	mocksorm "github.com/gradii/framework/mocks/database/orm"
+	mocksschema "github.com/gradii/framework/mocks/database/schema"
+	"github.com/gradii/framework/support/carbon"
+	"github.com/gradii/framework/support/color"
+	"github.com/gradii/framework/support/file"
 )
 
 type MigratorSuite struct {

@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	mocksconfig "github.com/goravel/framework/mocks/config"
+	mocksconfig "github.com/gradii/framework/mocks/config"
 )
 
 func TestPrefix(t *testing.T) {

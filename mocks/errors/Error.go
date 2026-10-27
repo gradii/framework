@@ -3,7 +3,7 @@
 package errors
 
 import (
-	errors "github.com/goravel/framework/contracts/errors"
+	errors "github.com/gradii/framework/contracts/errors"
 	mock "github.com/stretchr/testify/mock"
 )
 

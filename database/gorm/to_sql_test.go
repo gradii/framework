@@ -6,9 +6,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	contractsdriver "github.com/goravel/framework/contracts/database/driver"
-	"github.com/goravel/framework/errors"
-	mockslog "github.com/goravel/framework/mocks/log"
+	contractsdriver "github.com/gradii/framework/contracts/database/driver"
+	"github.com/gradii/framework/errors"
+	mockslog "github.com/gradii/framework/mocks/log"
 )
 
 // TestToSql_ReportsTheStatementTheQueryRuns pins the forms ToSql reports. The statement comes from the

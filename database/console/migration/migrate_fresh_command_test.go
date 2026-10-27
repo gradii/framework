@@ -5,9 +5,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/goravel/framework/errors"
-	mocksconsole "github.com/goravel/framework/mocks/console"
-	mocksmigration "github.com/goravel/framework/mocks/database/migration"
+	"github.com/gradii/framework/errors"
+	mocksconsole "github.com/gradii/framework/mocks/console"
+	mocksmigration "github.com/gradii/framework/mocks/database/migration"
 )
 
 func TestMigrateFreshCommand(t *testing.T) {

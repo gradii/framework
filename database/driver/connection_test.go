@@ -9,11 +9,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goravel/framework/contracts/database"
-	contractslogger "github.com/goravel/framework/contracts/database/logger"
-	"github.com/goravel/framework/contracts/log"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	"github.com/goravel/framework/support/carbon"
+	"github.com/gradii/framework/contracts/database"
+	contractslogger "github.com/gradii/framework/contracts/database/logger"
+	"github.com/gradii/framework/contracts/log"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	"github.com/gradii/framework/support/carbon"
 )
 
 // poolConfigExpectations sets the only configuration the connection reads while opening a pool.

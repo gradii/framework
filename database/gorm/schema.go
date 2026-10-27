@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	contractsorm "github.com/goravel/framework/contracts/database/orm"
-	databaseorm "github.com/goravel/framework/database/orm"
+	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	databaseorm "github.com/gradii/framework/database/orm"
 )
 
 // This file holds the framework's own model metadata resolution. It replaces the parts of

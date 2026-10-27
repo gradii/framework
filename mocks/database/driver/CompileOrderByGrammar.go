@@ -3,7 +3,7 @@
 package driver
 
 import (
-	driver "github.com/goravel/framework/contracts/database/driver"
+	driver "github.com/gradii/framework/contracts/database/driver"
 	mock "github.com/stretchr/testify/mock"
 
 	squirrel "github.com/Masterminds/squirrel"

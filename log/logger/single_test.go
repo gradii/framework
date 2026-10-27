@@ -6,12 +6,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/log"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/foundation/json"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	"github.com/goravel/framework/support/file"
+	"github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/log"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/foundation/json"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	"github.com/gradii/framework/support/file"
 )
 
 type SingleTestSuite struct {

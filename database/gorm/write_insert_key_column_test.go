@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	contractsdatabase "github.com/goravel/framework/contracts/database"
+	contractsdatabase "github.com/gradii/framework/contracts/database"
 )
 
 // insertKeyColumnEntity carries a primary key whose column is not `id`, the shape a model with

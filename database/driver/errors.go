@@ -8,7 +8,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/errors"
 )
 
 // Laravel's detectors recognize database failures by SQLSTATE and driver messages.

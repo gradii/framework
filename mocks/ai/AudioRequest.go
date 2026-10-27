@@ -3,7 +3,7 @@
 package ai
 
 import (
-	ai "github.com/goravel/framework/contracts/ai"
+	ai "github.com/gradii/framework/contracts/ai"
 	mock "github.com/stretchr/testify/mock"
 
 	time "time"

@@ -1,10 +1,10 @@
 package gorm
 
 import (
-	"github.com/goravel/framework/contracts/log"
-	basedb "github.com/goravel/framework/database/db"
-	databaseorm "github.com/goravel/framework/database/orm"
-	querybuilder "github.com/goravel/framework/database/query"
+	"github.com/gradii/framework/contracts/log"
+	basedb "github.com/gradii/framework/database/db"
+	databaseorm "github.com/gradii/framework/database/orm"
+	querybuilder "github.com/gradii/framework/database/query"
 )
 
 // ToSql reports the statement a query would run, without running it.

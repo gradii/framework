@@ -12,7 +12,7 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
-	"github.com/goravel/framework/support/pluralizer"
+	"github.com/gradii/framework/support/pluralizer"
 )
 
 type String struct {

@@ -3,7 +3,7 @@ package ai
 import (
 	"reflect"
 
-	contractsai "github.com/goravel/framework/contracts/ai"
+	contractsai "github.com/gradii/framework/contracts/ai"
 )
 
 func WithProvider(provider string, failovers ...string) contractsai.Option {

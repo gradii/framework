@@ -5,7 +5,7 @@ package access
 import (
 	context "context"
 
-	access "github.com/goravel/framework/contracts/auth/access"
+	access "github.com/gradii/framework/contracts/auth/access"
 
 	mock "github.com/stretchr/testify/mock"
 )

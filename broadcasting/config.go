@@ -1,9 +1,9 @@
 package broadcasting
 
 import (
-	"github.com/goravel/framework/contracts/broadcasting"
-	contractsconfig "github.com/goravel/framework/contracts/config"
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/contracts/broadcasting"
+	contractsconfig "github.com/gradii/framework/contracts/config"
+	"github.com/gradii/framework/errors"
 )
 
 type Config struct {

@@ -7,10 +7,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/goravel/framework/contracts/event"
-	"github.com/goravel/framework/contracts/queue"
-	"github.com/goravel/framework/errors"
-	mocksqueue "github.com/goravel/framework/mocks/queue"
+	"github.com/gradii/framework/contracts/event"
+	"github.com/gradii/framework/contracts/queue"
+	"github.com/gradii/framework/errors"
+	mocksqueue "github.com/gradii/framework/mocks/queue"
 )
 
 func TestApplication_Dispatch(t *testing.T) {
@@ -111,7 +111,7 @@ func TestApplication_DispatchTypedClosureWithMismatchedEvent(t *testing.T) {
 
 	assert.True(t, result.Failed())
 	assert.EqualError(t, result.Error(), errors.EventListenerTypeMismatch.Args(
-		"github.com/goravel/framework/event.userCreated", "*event.userCreated", userCreated{}).Error())
+		"github.com/gradii/framework/event.userCreated", "*event.userCreated", userCreated{}).Error())
 }
 
 func TestApplication_DispatchWithoutListeners(t *testing.T) {
@@ -247,7 +247,7 @@ func TestApplication_DispatchListenerRegisteredThroughRegister(t *testing.T) {
 	// A listener registered through the deprecated Register is reached by
 	// Dispatch, and runs in process because it doesn't enable queueing.
 	assert.False(t, app.Dispatch(&userCreated{}, []event.Arg{{Type: "string", Value: "goravel"}}).Failed())
-	assert.Equal(t, []any{"github.com/goravel/framework/event.userCreated"}, listener.events)
+	assert.Equal(t, []any{"github.com/gradii/framework/event.userCreated"}, listener.events)
 	assert.Equal(t, [][]any{{"goravel"}}, listener.args)
 }
 
@@ -295,7 +295,7 @@ func TestApplication_DispatchAfterRegisterKeepsListenRegistrations(t *testing.T)
 
 	assert.False(t, app.Dispatch(&userCreated{}).Failed())
 	assert.Equal(t, 1, closureCalls)
-	assert.Len(t, app.listeners["github.com/goravel/framework/event.userCreated"], 2)
+	assert.Len(t, app.listeners["github.com/gradii/framework/event.userCreated"], 2)
 }
 
 func TestApplication_DispatchRunsEventHandleOnce(t *testing.T) {

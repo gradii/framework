@@ -7,8 +7,8 @@ func (r Stubs) Request() string {
 	return `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/http"
-	"github.com/goravel/framework/contracts/validation"
+	"github.com/gradii/framework/contracts/http"
+	"github.com/gradii/framework/contracts/validation"
 )
 
 type DummyRequest struct {
@@ -45,7 +45,7 @@ func (r Stubs) Controller() string {
 	return `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/http"
+	"github.com/gradii/framework/contracts/http"
 )
 
 type DummyController struct {
@@ -60,7 +60,7 @@ func NewDummyController() *DummyController {
 
 func (r *DummyController) Index(ctx http.Context) http.Response {
 	return nil
-}	
+}
 `
 }
 
@@ -88,7 +88,7 @@ func (r Stubs) Middleware() string {
 	return `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/http"
+	"github.com/gradii/framework/contracts/http"
 )
 
 type DummyMiddleware struct{}

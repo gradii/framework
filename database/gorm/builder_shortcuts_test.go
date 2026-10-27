@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	querybuilder "github.com/goravel/framework/database/query"
-	"github.com/goravel/framework/errors"
+	querybuilder "github.com/gradii/framework/database/query"
+	"github.com/gradii/framework/errors"
 )
 
 // shortcutUser carries the timestamp columns the orderings and writes default to, so the

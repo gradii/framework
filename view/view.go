@@ -7,9 +7,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/packages/paths"
-	"github.com/goravel/framework/support"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/packages/paths"
+	"github.com/gradii/framework/support"
 )
 
 type View struct {

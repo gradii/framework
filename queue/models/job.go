@@ -1,6 +1,6 @@
 package models
 
-import "github.com/goravel/framework/support/carbon"
+import "github.com/gradii/framework/support/carbon"
 
 type Job struct {
 	ReservedAt  *carbon.DateTime `db:"reserved_at"`

@@ -8,8 +8,8 @@ import (
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/cast"
 
-	httpvalidate "github.com/goravel/framework/contracts/validation"
-	"github.com/goravel/framework/support/carbon"
+	httpvalidate "github.com/gradii/framework/contracts/validation"
+	"github.com/gradii/framework/support/carbon"
 )
 
 type Validator struct {

@@ -3,7 +3,7 @@ package broadcasters
 import (
 	"context"
 
-	"github.com/goravel/framework/contracts/log"
+	"github.com/gradii/framework/contracts/log"
 )
 
 type LogDriver struct {

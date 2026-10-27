@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/support"
+	"github.com/gradii/framework/support"
 )
 
 type PathsTestSuite struct {

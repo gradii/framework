@@ -7,11 +7,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/goravel/framework/support"
+	"github.com/gradii/framework/support"
 )
 
 func TestMainPath(t *testing.T) {
-	assert.Equal(t, "github.com/goravel/framework", MainPath())
+	assert.Equal(t, "github.com/gradii/framework", MainPath())
 }
 
 func TestIsBootstrapSetup(t *testing.T) {
@@ -58,7 +58,7 @@ func TestIsBootstrapSetup(t *testing.T) {
 				assert.NoError(t, os.MkdirAll(bootstrapDir, 0755))
 				content := `package bootstrap
 
-import "github.com/goravel/framework/foundation"
+import "github.com/gradii/framework/foundation"
 
 var App = foundation.Setup().Create()
 `

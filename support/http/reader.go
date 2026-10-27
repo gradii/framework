@@ -3,7 +3,7 @@ package http
 import (
 	"io"
 
-	"github.com/goravel/framework/contracts/support/http"
+	"github.com/gradii/framework/contracts/support/http"
 )
 
 type readerImpl struct {

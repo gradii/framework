@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	mockstelemetry "github.com/goravel/framework/mocks/telemetry"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	mockstelemetry "github.com/gradii/framework/mocks/telemetry"
 )
 
 func TestTelemetryRunner(t *testing.T) {

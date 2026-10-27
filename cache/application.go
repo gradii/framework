@@ -3,9 +3,9 @@ package cache
 import (
 	"sync"
 
-	"github.com/goravel/framework/contracts/cache"
-	"github.com/goravel/framework/contracts/config"
-	"github.com/goravel/framework/contracts/log"
+	"github.com/gradii/framework/contracts/cache"
+	"github.com/gradii/framework/contracts/config"
+	"github.com/gradii/framework/contracts/log"
 )
 
 type Application struct {

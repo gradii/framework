@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"slices"
 
-	"github.com/goravel/framework/contracts/log"
+	"github.com/gradii/framework/contracts/log"
 )
 
 // slogAdapter wraps a log.Handler to implement slog.Handler

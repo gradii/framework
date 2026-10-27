@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/contracts/packages"
-	mockmodify "github.com/goravel/framework/mocks/packages/modify"
-	"github.com/goravel/framework/support/color"
+	"github.com/gradii/framework/contracts/packages"
+	mockmodify "github.com/gradii/framework/mocks/packages/modify"
+	"github.com/gradii/framework/support/color"
 )
 
 type PackagesSetupTestSuite struct {

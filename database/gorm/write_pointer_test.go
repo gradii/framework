@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	contractsdatabase "github.com/goravel/framework/contracts/database"
+	contractsdatabase "github.com/gradii/framework/contracts/database"
 )
 
 // The integration module's TestWith_ChunkedIN writes `u := &User{…}` and then `Create(&u)`, a pointer

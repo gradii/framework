@@ -4,7 +4,7 @@ import (
 	stderrors "errors"
 	"slices"
 
-	"github.com/goravel/framework/contracts/event"
+	"github.com/gradii/framework/contracts/event"
 )
 
 var _ event.Result = (*Result)(nil)

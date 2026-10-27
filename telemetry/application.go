@@ -13,8 +13,8 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	oteltrace "go.opentelemetry.io/otel/trace"
 
-	"github.com/goravel/framework/contracts/telemetry"
-	"github.com/goravel/framework/support/color"
+	"github.com/gradii/framework/contracts/telemetry"
+	"github.com/gradii/framework/support/color"
 )
 
 var _ telemetry.Telemetry = (*Application)(nil)

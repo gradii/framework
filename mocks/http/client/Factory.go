@@ -5,7 +5,7 @@ package client
 import (
 	context "context"
 
-	client "github.com/goravel/framework/contracts/http/client"
+	client "github.com/gradii/framework/contracts/http/client"
 
 	http "net/http"
 

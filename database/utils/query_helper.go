@@ -1,6 +1,6 @@
 package utils
 
-import "github.com/goravel/framework/errors"
+import "github.com/gradii/framework/errors"
 
 func PrepareWhereOperatorAndValue(args ...any) (op any, value any, err error) {
 	if len(args) == 0 || len(args) > 2 {

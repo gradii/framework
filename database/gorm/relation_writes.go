@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"time"
 
-	dbcontract "github.com/goravel/framework/contracts/database/db"
-	contractsdriver "github.com/goravel/framework/contracts/database/driver"
-	"github.com/goravel/framework/errors"
+	dbcontract "github.com/gradii/framework/contracts/database/db"
+	contractsdriver "github.com/gradii/framework/contracts/database/driver"
+	"github.com/gradii/framework/errors"
 )
 
 // SaveRelation inserts or updates child as a member of parent's relation. Sets child's foreign

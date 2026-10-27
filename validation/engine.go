@@ -8,8 +8,8 @@ import (
 	"slices"
 	"strings"
 
-	contractstranslation "github.com/goravel/framework/contracts/translation"
-	contractsvalidation "github.com/goravel/framework/contracts/validation"
+	contractstranslation "github.com/gradii/framework/contracts/translation"
+	contractsvalidation "github.com/gradii/framework/contracts/validation"
 )
 
 // Engine is the core validation orchestrator.

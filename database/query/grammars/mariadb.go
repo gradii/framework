@@ -1,6 +1,6 @@
 package grammars
 
-import "github.com/goravel/framework/database/query/core"
+import "github.com/gradii/framework/database/query/core"
 
 // MariaDbGrammar mirrors Illuminate\Database\Query\Grammars\MariaDbGrammar, which extends the MySQL
 // grammar and overrides a handful of methods. Only the override this port exercises is declared here:

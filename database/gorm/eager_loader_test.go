@@ -13,11 +13,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	contractsdatabase "github.com/goravel/framework/contracts/database"
-	contractsorm "github.com/goravel/framework/contracts/database/orm"
-	"github.com/goravel/framework/database/orm/morphmap"
-	"github.com/goravel/framework/errors"
-	mocksconfig "github.com/goravel/framework/mocks/config"
+	contractsdatabase "github.com/gradii/framework/contracts/database"
+	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	"github.com/gradii/framework/database/orm/morphmap"
+	"github.com/gradii/framework/errors"
+	mocksconfig "github.com/gradii/framework/mocks/config"
 )
 
 // --- Pure helpers ----------------------------------------------------------

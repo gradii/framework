@@ -3,9 +3,9 @@ package middleware
 import (
 	"encoding/json"
 
-	contractshttp "github.com/goravel/framework/contracts/http"
-	"github.com/goravel/framework/foundation/console"
-	"github.com/goravel/framework/http"
+	contractshttp "github.com/gradii/framework/contracts/http"
+	"github.com/gradii/framework/foundation/console"
+	"github.com/gradii/framework/http"
 )
 
 type maintenanceMode struct{}

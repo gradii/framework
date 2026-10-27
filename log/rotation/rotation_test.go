@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/errors"
 	"github.com/stretchr/testify/assert"
 )
 

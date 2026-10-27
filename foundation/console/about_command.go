@@ -7,9 +7,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/contracts/console/command"
-	"github.com/goravel/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/contracts/console/command"
+	"github.com/gradii/framework/contracts/foundation"
 )
 
 type AboutCommand struct {

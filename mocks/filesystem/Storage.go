@@ -5,7 +5,7 @@ package filesystem
 import (
 	context "context"
 
-	filesystem "github.com/goravel/framework/contracts/filesystem"
+	filesystem "github.com/gradii/framework/contracts/filesystem"
 	mock "github.com/stretchr/testify/mock"
 
 	time "time"

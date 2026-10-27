@@ -7,7 +7,7 @@ import (
 
 	"github.com/dave/dst"
 
-	"github.com/goravel/framework/contracts/packages/match"
+	"github.com/gradii/framework/contracts/packages/match"
 )
 
 // Config matches configuration additions in init functions.
@@ -139,7 +139,7 @@ func Filters() []match.GoNode {
 //
 //	match.GoFile("main.go").
 //	    Find(match.Imports()).
-//	    Modify(addImportToBlock("github.com/goravel/framework")).
+//	    Modify(addImportToBlock("github.com/gradii/framework")).
 //	    Apply()
 //
 // This matches:
@@ -147,7 +147,7 @@ func Filters() []match.GoNode {
 //	import (
 //	    "fmt"
 //	    "strings"
-//	    "github.com/goravel/framework/facades"
+//	    "github.com/gradii/framework/facades"
 //	)
 func Imports() []match.GoNode {
 	return []match.GoNode{

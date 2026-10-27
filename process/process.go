@@ -8,9 +8,9 @@ import (
 	"os/exec"
 	"time"
 
-	contractsprocess "github.com/goravel/framework/contracts/process"
-	"github.com/goravel/framework/support/env"
-	"github.com/goravel/framework/support/str"
+	contractsprocess "github.com/gradii/framework/contracts/process"
+	"github.com/gradii/framework/support/env"
+	"github.com/gradii/framework/support/str"
 )
 
 var _ contractsprocess.Process = (*Process)(nil)

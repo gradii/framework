@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	contractsvalidation "github.com/goravel/framework/contracts/validation"
+	contractsvalidation "github.com/gradii/framework/contracts/validation"
 )
 
 func TestFiltersOption(t *testing.T) {

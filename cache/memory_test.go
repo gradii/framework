@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	configmock "github.com/goravel/framework/mocks/config"
+	configmock "github.com/gradii/framework/mocks/config"
 )
 
 type MemoryTestSuite struct {

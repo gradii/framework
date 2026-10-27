@@ -10,10 +10,10 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/contracts/schedule"
-	mockscache "github.com/goravel/framework/mocks/cache"
-	mocksconsole "github.com/goravel/framework/mocks/console"
-	mockslog "github.com/goravel/framework/mocks/log"
+	"github.com/gradii/framework/contracts/schedule"
+	mockscache "github.com/gradii/framework/mocks/cache"
+	mocksconsole "github.com/gradii/framework/mocks/console"
+	mockslog "github.com/gradii/framework/mocks/log"
 )
 
 type ApplicationTestSuite struct {

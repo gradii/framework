@@ -3,7 +3,7 @@
 package modify
 
 import (
-	modify "github.com/goravel/framework/contracts/packages/modify"
+	modify "github.com/gradii/framework/contracts/packages/modify"
 	mock "github.com/stretchr/testify/mock"
 )
 

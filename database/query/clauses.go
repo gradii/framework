@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/goravel/framework/database/query/core"
+	"github.com/gradii/framework/database/query/core"
 )
 
 // Select sets the selected columns. Mirrors Builder::select().

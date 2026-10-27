@@ -3,8 +3,8 @@ package logger
 import (
 	"context"
 
-	"github.com/goravel/framework/contracts/log"
-	"github.com/goravel/framework/support/carbon"
+	"github.com/gradii/framework/contracts/log"
+	"github.com/gradii/framework/support/carbon"
 )
 
 // Level log level

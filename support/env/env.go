@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/goravel/framework/support"
+	"github.com/gradii/framework/support"
 )
 
 // MainPath returns the package name of application, eg: goravel.

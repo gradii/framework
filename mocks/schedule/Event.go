@@ -5,7 +5,7 @@ package schedule
 import (
 	time "time"
 
-	schedule "github.com/goravel/framework/contracts/schedule"
+	schedule "github.com/gradii/framework/contracts/schedule"
 	mock "github.com/stretchr/testify/mock"
 )
 

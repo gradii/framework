@@ -6,10 +6,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/goravel/framework/contracts/broadcasting"
-	contractshttp "github.com/goravel/framework/contracts/http"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	mockshttp "github.com/goravel/framework/mocks/http"
+	"github.com/gradii/framework/contracts/broadcasting"
+	contractshttp "github.com/gradii/framework/contracts/http"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	mockshttp "github.com/gradii/framework/mocks/http"
 )
 
 func TestNewConfig(t *testing.T) {

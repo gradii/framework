@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goravel/framework/contracts/database/factory"
-	databaseorm "github.com/goravel/framework/database/orm"
-	"github.com/goravel/framework/support/carbon"
+	"github.com/gradii/framework/contracts/database/factory"
+	databaseorm "github.com/gradii/framework/database/orm"
+	"github.com/gradii/framework/support/carbon"
 )
 
 type Model struct {

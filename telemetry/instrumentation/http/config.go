@@ -5,7 +5,7 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/goravel/framework/contracts/http"
+	"github.com/gradii/framework/contracts/http"
 )
 
 // Filter determines whether a specific request should be traced.

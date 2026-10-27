@@ -6,13 +6,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	contractshttp "github.com/goravel/framework/contracts/http"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	mocksconsole "github.com/goravel/framework/mocks/console"
-	mocksfoundation "github.com/goravel/framework/mocks/foundation"
-	mockshttp "github.com/goravel/framework/mocks/http"
-	mocksqueue "github.com/goravel/framework/mocks/queue"
-	mocksroute "github.com/goravel/framework/mocks/route"
+	contractshttp "github.com/gradii/framework/contracts/http"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	mocksconsole "github.com/gradii/framework/mocks/console"
+	mocksfoundation "github.com/gradii/framework/mocks/foundation"
+	mockshttp "github.com/gradii/framework/mocks/http"
+	mocksqueue "github.com/gradii/framework/mocks/queue"
+	mocksroute "github.com/gradii/framework/mocks/route"
 )
 
 func TestBroadcastServiceProviderBoot_Middleware(t *testing.T) {

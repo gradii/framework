@@ -8,15 +8,15 @@ import (
 
 	"github.com/spf13/cast"
 
-	"github.com/goravel/framework/contracts/config"
-	contractsdb "github.com/goravel/framework/contracts/database/db"
-	"github.com/goravel/framework/contracts/database/driver"
-	contractsorm "github.com/goravel/framework/contracts/database/orm"
-	contractsschema "github.com/goravel/framework/contracts/database/schema"
-	"github.com/goravel/framework/contracts/log"
-	"github.com/goravel/framework/database/query/processors"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/support/color"
+	"github.com/gradii/framework/contracts/config"
+	contractsdb "github.com/gradii/framework/contracts/database/db"
+	"github.com/gradii/framework/contracts/database/driver"
+	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	contractsschema "github.com/gradii/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/log"
+	"github.com/gradii/framework/database/query/processors"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/support/color"
 )
 
 var _ contractsschema.Schema = (*Schema)(nil)
@@ -770,17 +770,17 @@ func defaultGoTypes() []contractsschema.GoType {
 		{Pattern: "(?i)^json$", Type: "string", NullType: "*string"},
 
 		// Date and Time types
-		{Pattern: "(?i)^timestamptz(\\(\\d+\\))?$", Type: "carbon.DateTime", NullType: "*carbon.DateTime", Import: "github.com/goravel/framework/support/carbon"},                             // PostgreSQL
-		{Pattern: "(?i)^timestamp(\\(\\d+\\))?\\s+with(out)?\\s+time\\s+zone$", Type: "carbon.DateTime", NullType: "*carbon.DateTime", Import: "github.com/goravel/framework/support/carbon"}, // PostgreSQL
-		{Pattern: "(?i)^timestamp(\\(\\d+\\))?$", Type: "carbon.DateTime", NullType: "*carbon.DateTime", Import: "github.com/goravel/framework/support/carbon"},
-		{Pattern: "(?i)^datetime(\\(\\d+\\))?$", Type: "carbon.DateTime", NullType: "*carbon.DateTime", Import: "github.com/goravel/framework/support/carbon"},                           // MySQL
-		{Pattern: "(?i)^datetime2(\\(\\d+\\))?$", Type: "carbon.DateTime", NullType: "*carbon.DateTime", Import: "github.com/goravel/framework/support/carbon"},                          // SQL Server
-		{Pattern: "(?i)^datetimeoffset(\\(\\d+\\))?$", Type: "carbon.DateTime", NullType: "*carbon.DateTime", Import: "github.com/goravel/framework/support/carbon"},                     // SQL Server
-		{Pattern: "(?i)^smalldatetime$", Type: "carbon.DateTime", NullType: "*carbon.DateTime", Import: "github.com/goravel/framework/support/carbon"},                                   // SQL Server
-		{Pattern: "(?i)^timetz(\\(\\d+\\))?$", Type: "carbon.DateTime", NullType: "*carbon.DateTime", Import: "github.com/goravel/framework/support/carbon"},                             // PostgreSQL
-		{Pattern: "(?i)^time(\\(\\d+\\))?\\s+with(out)?\\s+time\\s+zone$", Type: "carbon.DateTime", NullType: "*carbon.DateTime", Import: "github.com/goravel/framework/support/carbon"}, // PostgreSQL
-		{Pattern: "(?i)^time(\\(\\d+\\))?$", Type: "carbon.DateTime", NullType: "*carbon.DateTime", Import: "github.com/goravel/framework/support/carbon"},
-		{Pattern: "(?i)^date$", Type: "carbon.DateTime", NullType: "*carbon.DateTime", Import: "github.com/goravel/framework/support/carbon"},
+		{Pattern: "(?i)^timestamptz(\\(\\d+\\))?$", Type: "carbon.DateTime", NullType: "*carbon.DateTime", Import: "github.com/gradii/framework/support/carbon"},                             // PostgreSQL
+		{Pattern: "(?i)^timestamp(\\(\\d+\\))?\\s+with(out)?\\s+time\\s+zone$", Type: "carbon.DateTime", NullType: "*carbon.DateTime", Import: "github.com/gradii/framework/support/carbon"}, // PostgreSQL
+		{Pattern: "(?i)^timestamp(\\(\\d+\\))?$", Type: "carbon.DateTime", NullType: "*carbon.DateTime", Import: "github.com/gradii/framework/support/carbon"},
+		{Pattern: "(?i)^datetime(\\(\\d+\\))?$", Type: "carbon.DateTime", NullType: "*carbon.DateTime", Import: "github.com/gradii/framework/support/carbon"},                           // MySQL
+		{Pattern: "(?i)^datetime2(\\(\\d+\\))?$", Type: "carbon.DateTime", NullType: "*carbon.DateTime", Import: "github.com/gradii/framework/support/carbon"},                          // SQL Server
+		{Pattern: "(?i)^datetimeoffset(\\(\\d+\\))?$", Type: "carbon.DateTime", NullType: "*carbon.DateTime", Import: "github.com/gradii/framework/support/carbon"},                     // SQL Server
+		{Pattern: "(?i)^smalldatetime$", Type: "carbon.DateTime", NullType: "*carbon.DateTime", Import: "github.com/gradii/framework/support/carbon"},                                   // SQL Server
+		{Pattern: "(?i)^timetz(\\(\\d+\\))?$", Type: "carbon.DateTime", NullType: "*carbon.DateTime", Import: "github.com/gradii/framework/support/carbon"},                             // PostgreSQL
+		{Pattern: "(?i)^time(\\(\\d+\\))?\\s+with(out)?\\s+time\\s+zone$", Type: "carbon.DateTime", NullType: "*carbon.DateTime", Import: "github.com/gradii/framework/support/carbon"}, // PostgreSQL
+		{Pattern: "(?i)^time(\\(\\d+\\))?$", Type: "carbon.DateTime", NullType: "*carbon.DateTime", Import: "github.com/gradii/framework/support/carbon"},
+		{Pattern: "(?i)^date$", Type: "carbon.DateTime", NullType: "*carbon.DateTime", Import: "github.com/gradii/framework/support/carbon"},
 		{Pattern: "(?i)^interval$", Type: "string", NullType: "*string"}, // PostgreSQL
 
 		// Range types (PostgreSQL)

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/goravel/framework/contracts/log"
+	"github.com/gradii/framework/contracts/log"
 )
 
 var entryPool = sync.Pool{

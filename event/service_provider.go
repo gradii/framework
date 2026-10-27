@@ -1,11 +1,11 @@
 package event
 
 import (
-	"github.com/goravel/framework/contracts/binding"
-	"github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/errors"
-	eventConsole "github.com/goravel/framework/event/console"
+	"github.com/gradii/framework/contracts/binding"
+	"github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/errors"
+	eventConsole "github.com/gradii/framework/event/console"
 )
 
 type ServiceProvider struct {

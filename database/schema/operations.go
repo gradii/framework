@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/goravel/framework/contracts/database/db"
-	contractsschema "github.com/goravel/framework/contracts/database/schema"
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/contracts/database/db"
+	contractsschema "github.com/gradii/framework/contracts/database/schema"
+	"github.com/gradii/framework/errors"
 )
 
 type schemaConstraintScope struct {

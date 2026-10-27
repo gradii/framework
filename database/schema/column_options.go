@@ -3,8 +3,8 @@ package schema
 import (
 	"sync/atomic"
 
-	"github.com/goravel/framework/contracts/database/driver"
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/contracts/database/driver"
+	"github.com/gradii/framework/errors"
 )
 
 var configuredStringLength atomic.Int64

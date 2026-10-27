@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	contractsvalidation "github.com/goravel/framework/contracts/validation"
+	contractsvalidation "github.com/gradii/framework/contracts/validation"
 )
 
 // --- End-to-end validation benchmarks ---

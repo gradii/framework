@@ -4,8 +4,8 @@ import (
 	"context"
 	"reflect"
 
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/support/carbon"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/support/carbon"
 )
 
 // This file turns the values an update accepts into the columns it sets.

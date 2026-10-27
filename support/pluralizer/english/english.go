@@ -42,8 +42,8 @@
 package english
 
 import (
-	"github.com/goravel/framework/contracts/support/pluralizer"
-	"github.com/goravel/framework/support/pluralizer/rules"
+	"github.com/gradii/framework/contracts/support/pluralizer"
+	"github.com/gradii/framework/support/pluralizer/rules"
 )
 
 var _ pluralizer.Language = (*Language)(nil)

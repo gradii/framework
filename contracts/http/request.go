@@ -3,9 +3,9 @@ package http
 import (
 	"net/http"
 
-	"github.com/goravel/framework/contracts/filesystem"
-	"github.com/goravel/framework/contracts/session"
-	"github.com/goravel/framework/contracts/validation"
+	"github.com/gradii/framework/contracts/filesystem"
+	"github.com/gradii/framework/contracts/session"
+	"github.com/gradii/framework/contracts/validation"
 )
 
 type ContextRequest interface {
@@ -129,9 +129,9 @@ type FormRequestWithPrepareForValidation interface {
 }
 
 type Info struct {
-	Handler            string      `json:"handler"`
-	Method             string      `json:"method"`
-	Name               string      `json:"name"`
-	Path               string      `json:"path"`
+	Handler            string       `json:"handler"`
+	Method             string       `json:"method"`
+	Name               string       `json:"name"`
+	Path               string       `json:"path"`
 	ExcludedMiddleware []Middleware `json:"excluded_middleware,omitempty"`
 }

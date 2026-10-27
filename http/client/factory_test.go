@@ -15,13 +15,13 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
-	"github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/http/client"
-	contractstelemetry "github.com/goravel/framework/contracts/telemetry"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/foundation/json"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	mockstelemetry "github.com/goravel/framework/mocks/telemetry"
+	"github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/http/client"
+	contractstelemetry "github.com/gradii/framework/contracts/telemetry"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/foundation/json"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	mockstelemetry "github.com/gradii/framework/mocks/telemetry"
 )
 
 type FactoryTestSuite struct {

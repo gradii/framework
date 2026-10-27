@@ -18,7 +18,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/errors"
 )
 
 // A FieldInfo is a collection of metadata about a struct field.

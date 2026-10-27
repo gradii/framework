@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/goravel/framework/support/pluralizer/english"
+	"github.com/gradii/framework/support/pluralizer/english"
 )
 
 func TestInflectorPlural(t *testing.T) {

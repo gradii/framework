@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	httpvalidate "github.com/goravel/framework/contracts/validation"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/http"
+	httpvalidate "github.com/gradii/framework/contracts/validation"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/http"
 )
 
 func TestMake(t *testing.T) {

@@ -4,11 +4,11 @@ import (
 	"database/sql"
 	"sync"
 
-	"github.com/goravel/framework/contracts/config"
-	"github.com/goravel/framework/contracts/database"
-	contractslogger "github.com/goravel/framework/contracts/database/logger"
-	contractstelemetry "github.com/goravel/framework/contracts/telemetry"
-	instrumentationdatabase "github.com/goravel/framework/telemetry/instrumentation/database"
+	"github.com/gradii/framework/contracts/config"
+	"github.com/gradii/framework/contracts/database"
+	contractslogger "github.com/gradii/framework/contracts/database/logger"
+	contractstelemetry "github.com/gradii/framework/contracts/telemetry"
+	instrumentationdatabase "github.com/gradii/framework/telemetry/instrumentation/database"
 )
 
 // Connection is the framework's handle on one configured database connection. It owns the pools the

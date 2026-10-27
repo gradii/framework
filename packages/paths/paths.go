@@ -6,8 +6,8 @@ import (
 	"runtime/debug"
 	"strings"
 
-	"github.com/goravel/framework/contracts/packages"
-	"github.com/goravel/framework/support"
+	"github.com/gradii/framework/contracts/packages"
+	"github.com/gradii/framework/support"
 )
 
 type Paths struct {
@@ -58,7 +58,7 @@ func (r *Paths) Models() packages.Path {
 	return NewPath(support.Config.Paths.Models, r.mainPath, false)
 }
 
-// Module returns the module path of the package, eg: github.com/goravel/framework/auth.
+// Module returns the module path of the package, eg: github.com/gradii/framework/auth.
 func (r *Paths) Module() packages.Path {
 	var p string
 	if info, ok := debug.ReadBuildInfo(); ok && strings.HasSuffix(info.Path, "setup") {
@@ -126,7 +126,7 @@ func (r *Path) Package() string {
 // Import returns the sub-package import path, or the main package import path if no sub-package path is specified.
 // For example, if r.path is "app/http/controllers" and r.main is "github.com/goravel/goravel",
 // it returns "github.com/goravel/goravel/app/http/controllers". If r.path is empty, it returns "github.com/goravel/goravel".
-// The path will be returned directly if it starts with "github.com/goravel/framework/", given it's a framework sub-package.
+// The path will be returned directly if it starts with "github.com/gradii/framework/", given it's a framework sub-package.
 func (r *Path) Import() string {
 	mainImport := strings.Trim(strings.ReplaceAll(r.main, "\\", "/"), "/")
 

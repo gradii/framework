@@ -1,8 +1,8 @@
 package http
 
 import (
-	"github.com/goravel/framework/contracts/config"
-	"github.com/goravel/framework/contracts/route"
+	"github.com/gradii/framework/contracts/config"
+	"github.com/gradii/framework/contracts/route"
 )
 
 type HTTPRunner struct {

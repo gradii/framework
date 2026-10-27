@@ -8,11 +8,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/goravel/framework/contracts/event"
-	"github.com/goravel/framework/contracts/queue"
-	"github.com/goravel/framework/errors"
-	mocksqueue "github.com/goravel/framework/mocks/queue"
-	"github.com/goravel/framework/support/str"
+	"github.com/gradii/framework/contracts/event"
+	"github.com/gradii/framework/contracts/queue"
+	"github.com/gradii/framework/errors"
+	mocksqueue "github.com/gradii/framework/mocks/queue"
+	"github.com/gradii/framework/support/str"
 )
 
 type userCreated struct{}
@@ -121,7 +121,7 @@ func TestApplication_Listen(t *testing.T) {
 				return app.Listen(&userCreated{}, func(evt any, args ...any) error { return nil })
 			},
 			assert: func(t *testing.T, app *Application) {
-				assert.Len(t, app.listeners["github.com/goravel/framework/event.userCreated"], 1)
+				assert.Len(t, app.listeners["github.com/gradii/framework/event.userCreated"], 1)
 			},
 		},
 		{
@@ -131,8 +131,8 @@ func TestApplication_Listen(t *testing.T) {
 					func(evt any, args ...any) error { return nil })
 			},
 			assert: func(t *testing.T, app *Application) {
-				assert.Len(t, app.listeners["github.com/goravel/framework/event.userCreated"], 1)
-				assert.Len(t, app.listeners["github.com/goravel/framework/event.userUpdated"], 1)
+				assert.Len(t, app.listeners["github.com/gradii/framework/event.userCreated"], 1)
+				assert.Len(t, app.listeners["github.com/gradii/framework/event.userUpdated"], 1)
 			},
 		},
 		{
@@ -143,7 +143,7 @@ func TestApplication_Listen(t *testing.T) {
 			},
 			assert: func(t *testing.T, app *Application) {
 				assert.Len(t, app.listeners["user.created"], 1)
-				assert.Len(t, app.listeners["github.com/goravel/framework/event.userUpdated"], 1)
+				assert.Len(t, app.listeners["github.com/gradii/framework/event.userUpdated"], 1)
 			},
 		},
 		{
@@ -152,7 +152,7 @@ func TestApplication_Listen(t *testing.T) {
 				return app.Listen(func(evt *userCreated) error { return nil })
 			},
 			assert: func(t *testing.T, app *Application) {
-				assert.Len(t, app.listeners["github.com/goravel/framework/event.userCreated"], 1)
+				assert.Len(t, app.listeners["github.com/gradii/framework/event.userCreated"], 1)
 			},
 		},
 		{
@@ -161,7 +161,7 @@ func TestApplication_Listen(t *testing.T) {
 				return app.Listen(&userCreated{}, func(evt *userCreated) error { return nil })
 			},
 			assert: func(t *testing.T, app *Application) {
-				assert.Len(t, app.listeners["github.com/goravel/framework/event.userCreated"], 1)
+				assert.Len(t, app.listeners["github.com/gradii/framework/event.userCreated"], 1)
 			},
 		},
 		{
@@ -169,14 +169,14 @@ func TestApplication_Listen(t *testing.T) {
 			setup: func(app *Application, mockQueue *mocksqueue.Queue) error {
 				return app.Listen("user.created", func(evt *userCreated) error { return nil })
 			},
-			expectedErr: errors.EventListenerEventMismatch.Args("github.com/goravel/framework/event.userCreated", "user.created"),
+			expectedErr: errors.EventListenerEventMismatch.Args("github.com/gradii/framework/event.userCreated", "user.created"),
 		},
 		{
 			name: "TypedClosureOnWildcard",
 			setup: func(app *Application, mockQueue *mocksqueue.Queue) error {
 				return app.Listen("user.*", func(evt *userCreated) error { return nil })
 			},
-			expectedErr: errors.EventListenerEventMismatch.Args("github.com/goravel/framework/event.userCreated", "user.*"),
+			expectedErr: errors.EventListenerEventMismatch.Args("github.com/gradii/framework/event.userCreated", "user.*"),
 		},
 		{
 			name: "Wildcard",
@@ -253,14 +253,14 @@ func TestApplication_Listen(t *testing.T) {
 
 				return app.Listen("user.created", listener)
 			},
-			expectedErr: errors.EventListenerNotPointer.Args("github.com/goravel/framework/event.recordingListener"),
+			expectedErr: errors.EventListenerNotPointer.Args("github.com/gradii/framework/event.recordingListener"),
 		},
 		{
 			name: "EmptyListenerSignature",
 			setup: func(app *Application, mockQueue *mocksqueue.Queue) error {
 				return app.Listen("user.created", &recordingListener{})
 			},
-			expectedErr: errors.EventListenerEmptySignature.Args("github.com/goravel/framework/event.recordingListener"),
+			expectedErr: errors.EventListenerEmptySignature.Args("github.com/gradii/framework/event.recordingListener"),
 		},
 		{
 			name: "ClosureWithTooManyParameters",
@@ -372,8 +372,8 @@ func TestGetEventName(t *testing.T) {
 		expectedErr  error
 	}{
 		{name: "String", event: "user.created", expectedName: "user.created"},
-		{name: "Pointer", event: &userCreated{}, expectedName: "github.com/goravel/framework/event.userCreated"},
-		{name: "Value", event: userCreated{}, expectedName: "github.com/goravel/framework/event.userCreated"},
+		{name: "Pointer", event: &userCreated{}, expectedName: "github.com/gradii/framework/event.userCreated"},
+		{name: "Value", event: userCreated{}, expectedName: "github.com/gradii/framework/event.userCreated"},
 		{name: "EmptyString", event: "", expectedErr: errors.EventInvalidEvent.Args("")},
 		{name: "Nil", event: nil, expectedErr: errors.EventInvalidEvent.Args(nil)},
 		{name: "Int", event: 42, expectedErr: errors.EventInvalidEvent.Args(42)},
@@ -455,6 +455,6 @@ func TestApplication_ListenRejectsAValueListener(t *testing.T) {
 	// queued and the other executed under the same signature.
 	err := app.Listen("user.created", valueListener{})
 
-	assert.EqualError(t, err, errors.EventListenerNotPointer.Args("github.com/goravel/framework/event.valueListener").Error())
+	assert.EqualError(t, err, errors.EventListenerNotPointer.Args("github.com/gradii/framework/event.valueListener").Error())
 	assert.Empty(t, app.listeners)
 }

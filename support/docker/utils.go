@@ -6,8 +6,8 @@ import (
 	"net"
 	"strings"
 
-	"github.com/goravel/framework/contracts/testing/docker"
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/contracts/testing/docker"
+	"github.com/gradii/framework/errors"
 )
 
 func ExposedPort(exposedPorts []string, port string) string {

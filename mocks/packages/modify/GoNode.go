@@ -4,7 +4,7 @@ package modify
 
 import (
 	dst "github.com/dave/dst"
-	modify "github.com/goravel/framework/contracts/packages/modify"
+	modify "github.com/gradii/framework/contracts/packages/modify"
 	mock "github.com/stretchr/testify/mock"
 )
 

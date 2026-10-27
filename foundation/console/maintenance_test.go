@@ -5,10 +5,10 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	frameworkerrors "github.com/goravel/framework/errors"
-	mockscache "github.com/goravel/framework/mocks/cache"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	mocksfilesystem "github.com/goravel/framework/mocks/filesystem"
+	frameworkerrors "github.com/gradii/framework/errors"
+	mockscache "github.com/gradii/framework/mocks/cache"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	mocksfilesystem "github.com/gradii/framework/mocks/filesystem"
 )
 
 type MaintenanceModeTestSuite struct {

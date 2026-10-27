@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/goravel/framework/contracts/config"
-	"github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/contracts/console/command"
-	"github.com/goravel/framework/contracts/database/driver"
-	"github.com/goravel/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/config"
+	"github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/contracts/console/command"
+	"github.com/gradii/framework/contracts/database/driver"
+	"github.com/gradii/framework/contracts/database/schema"
 )
 
 type TableCommand struct {

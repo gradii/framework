@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"reflect"
 
-	contractsorm "github.com/goravel/framework/contracts/database/orm"
-	"github.com/goravel/framework/database/orm/morphmap"
-	"github.com/goravel/framework/errors"
+	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	"github.com/gradii/framework/database/orm/morphmap"
+	"github.com/gradii/framework/errors"
 )
 
 // Related is the public Query-level entry point. The Orm-level entry (Orm.Related) delegates

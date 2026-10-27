@@ -3,8 +3,8 @@ package gorm
 import (
 	"database/sql"
 
-	querybuilder "github.com/goravel/framework/database/query"
-	"github.com/goravel/framework/support/carbon"
+	querybuilder "github.com/gradii/framework/database/query"
+	"github.com/gradii/framework/support/carbon"
 )
 
 // insertConnection keeps model key conversion, transaction routing, and tracing in the ORM adapter.

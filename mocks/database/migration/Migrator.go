@@ -3,7 +3,7 @@
 package migration
 
 import (
-	migration "github.com/goravel/framework/contracts/database/migration"
+	migration "github.com/gradii/framework/contracts/database/migration"
 	mock "github.com/stretchr/testify/mock"
 )
 

@@ -6,8 +6,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	databaseorm "github.com/goravel/framework/database/orm"
-	"github.com/goravel/framework/errors"
+	databaseorm "github.com/gradii/framework/database/orm"
+	"github.com/gradii/framework/errors"
 )
 
 // softDeleteUser carries the framework's own soft-delete type, which is what makes this package

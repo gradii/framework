@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/goravel/framework/database/query/core"
+	"github.com/gradii/framework/database/query/core"
 )
 
 // MySqlGrammar mirrors Illuminate\Database\Query\Grammars\MySqlGrammar. Only the methods whose SQL

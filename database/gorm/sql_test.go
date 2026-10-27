@@ -7,11 +7,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	contractsdatabase "github.com/goravel/framework/contracts/database"
-	contractsdriver "github.com/goravel/framework/contracts/database/driver"
-	contractsorm "github.com/goravel/framework/contracts/database/orm"
-	querybuilder "github.com/goravel/framework/database/query"
-	"github.com/goravel/framework/errors"
+	contractsdatabase "github.com/gradii/framework/contracts/database"
+	contractsdriver "github.com/gradii/framework/contracts/database/driver"
+	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	querybuilder "github.com/gradii/framework/database/query"
+	"github.com/gradii/framework/errors"
 )
 
 // compiledQuery builds a query over a model with the given conditions, compiled by this package

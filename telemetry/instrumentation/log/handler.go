@@ -8,8 +8,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	otellog "go.opentelemetry.io/otel/log"
 
-	contractslog "github.com/goravel/framework/contracts/log"
-	contractstelemetry "github.com/goravel/framework/contracts/telemetry"
+	contractslog "github.com/gradii/framework/contracts/log"
+	contractstelemetry "github.com/gradii/framework/contracts/telemetry"
 )
 
 var _ contractslog.Handler = (*handler)(nil)

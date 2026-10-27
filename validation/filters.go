@@ -13,8 +13,8 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
-	validatecontract "github.com/goravel/framework/contracts/validation"
-	"github.com/goravel/framework/errors"
+	validatecontract "github.com/gradii/framework/contracts/validation"
+	"github.com/gradii/framework/errors"
 )
 
 // builtinFilters contains all built-in filter functions.

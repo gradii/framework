@@ -1,7 +1,7 @@
 package cache
 
 import (
-	"github.com/goravel/framework/contracts/config"
+	"github.com/gradii/framework/contracts/config"
 )
 
 func prefix(config config.Config) string {

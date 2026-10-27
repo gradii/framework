@@ -3,7 +3,7 @@ package rules
 import (
 	"regexp"
 
-	"github.com/goravel/framework/contracts/support/pluralizer"
+	"github.com/gradii/framework/contracts/support/pluralizer"
 )
 
 type Transformation struct {

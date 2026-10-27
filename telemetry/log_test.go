@@ -11,7 +11,7 @@ import (
 	otellog "go.opentelemetry.io/otel/log"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/errors"
 )
 
 func TestNewLoggerProvider(t *testing.T) {

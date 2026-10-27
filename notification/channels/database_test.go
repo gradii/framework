@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	contractsnotification "github.com/goravel/framework/contracts/notification"
-	mocksorm "github.com/goravel/framework/mocks/database/orm"
-	"github.com/goravel/framework/notification/channels"
+	contractsnotification "github.com/gradii/framework/contracts/notification"
+	mocksorm "github.com/gradii/framework/mocks/database/orm"
+	"github.com/gradii/framework/notification/channels"
 )
 
 // ---- Fakes ----

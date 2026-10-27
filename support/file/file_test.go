@@ -8,8 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/goravel/framework/support/env"
-	"github.com/goravel/framework/testing/file"
+	"github.com/gradii/framework/support/env"
+	"github.com/gradii/framework/testing/file"
 )
 
 func TestClientOriginalExtension(t *testing.T) {

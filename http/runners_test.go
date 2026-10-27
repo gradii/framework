@@ -6,8 +6,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
-	configmock "github.com/goravel/framework/mocks/config"
-	routemock "github.com/goravel/framework/mocks/route"
+	configmock "github.com/gradii/framework/mocks/config"
+	routemock "github.com/gradii/framework/mocks/route"
 )
 
 type HTTPRunnerTestSuite struct {

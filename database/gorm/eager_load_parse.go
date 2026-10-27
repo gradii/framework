@@ -3,8 +3,8 @@ package gorm
 import (
 	"strings"
 
-	contractsorm "github.com/goravel/framework/contracts/database/orm"
-	"github.com/goravel/framework/errors"
+	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	"github.com/gradii/framework/errors"
 )
 
 // eagerLoadEntry is the normalised representation of one entry on the eager-load list. It is the

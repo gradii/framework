@@ -8,8 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/goravel/framework/database/orm"
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/database/orm"
+	"github.com/gradii/framework/errors"
 )
 
 type User struct {

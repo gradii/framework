@@ -10,10 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
-	configmock "github.com/goravel/framework/mocks/config"
-	"github.com/goravel/framework/support/carbon"
-	"github.com/goravel/framework/support/env"
-	"github.com/goravel/framework/support/file"
+	configmock "github.com/gradii/framework/mocks/config"
+	"github.com/gradii/framework/support/carbon"
+	"github.com/gradii/framework/support/env"
+	"github.com/gradii/framework/support/file"
 )
 
 type LocalTestSuite struct {

@@ -1,6 +1,6 @@
 package mail
 
-import "github.com/goravel/framework/contracts/mail"
+import "github.com/gradii/framework/contracts/mail"
 
 var _ mail.Mail = (*PendingMail)(nil)
 

@@ -7,14 +7,14 @@ import (
 
 	slogmulti "github.com/samber/slog-multi"
 
-	"github.com/goravel/framework/contracts/config"
-	"github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/http"
-	"github.com/goravel/framework/contracts/log"
-	contractstelemetry "github.com/goravel/framework/contracts/telemetry"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/log/logger"
-	telemetrylog "github.com/goravel/framework/telemetry/instrumentation/log"
+	"github.com/gradii/framework/contracts/config"
+	"github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/http"
+	"github.com/gradii/framework/contracts/log"
+	contractstelemetry "github.com/gradii/framework/contracts/telemetry"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/log/logger"
+	telemetrylog "github.com/gradii/framework/telemetry/instrumentation/log"
 )
 
 type Application struct {

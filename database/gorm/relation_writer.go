@@ -1,8 +1,8 @@
 package gorm
 
 import (
-	dbcontract "github.com/goravel/framework/contracts/database/db"
-	contractsorm "github.com/goravel/framework/contracts/database/orm"
+	dbcontract "github.com/gradii/framework/contracts/database/db"
+	contractsorm "github.com/gradii/framework/contracts/database/orm"
 )
 
 // relationWriter binds (parent, name) to a Query session and forwards each write to the

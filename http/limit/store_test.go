@@ -9,10 +9,10 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/contracts/foundation"
-	frameworkerrors "github.com/goravel/framework/errors"
-	"github.com/goravel/framework/foundation/json"
-	cachemocks "github.com/goravel/framework/mocks/cache"
+	"github.com/gradii/framework/contracts/foundation"
+	frameworkerrors "github.com/gradii/framework/errors"
+	"github.com/gradii/framework/foundation/json"
+	cachemocks "github.com/gradii/framework/mocks/cache"
 )
 
 type StoreTestSuite struct {

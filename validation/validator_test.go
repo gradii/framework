@@ -15,9 +15,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/foundation/json"
-	"github.com/goravel/framework/support/carbon"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/foundation/json"
+	"github.com/gradii/framework/support/carbon"
 )
 
 func TestBind_Rule(t *testing.T) {

@@ -5,9 +5,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	contractsroute "github.com/goravel/framework/contracts/route"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	mocksroute "github.com/goravel/framework/mocks/route"
+	contractsroute "github.com/gradii/framework/contracts/route"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	mocksroute "github.com/gradii/framework/mocks/route"
 )
 
 func TestNewDriver(t *testing.T) {

@@ -6,8 +6,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	contractsdatabase "github.com/goravel/framework/contracts/database"
-	querybuilder "github.com/goravel/framework/database/query"
+	contractsdatabase "github.com/gradii/framework/contracts/database"
+	querybuilder "github.com/gradii/framework/database/query"
 )
 
 // refreshTarget is a model that names a connection of its own, which is what makes a query refresh

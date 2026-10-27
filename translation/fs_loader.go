@@ -4,9 +4,9 @@ import (
 	"io/fs"
 	"path"
 
-	"github.com/goravel/framework/contracts/foundation"
-	contractstranslation "github.com/goravel/framework/contracts/translation"
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/contracts/foundation"
+	contractstranslation "github.com/gradii/framework/contracts/translation"
+	"github.com/gradii/framework/errors"
 )
 
 type FSLoader struct {

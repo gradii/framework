@@ -10,8 +10,8 @@ import (
 	"github.com/dromara/carbon/v2"
 	"github.com/rotisserie/eris"
 
-	"github.com/goravel/framework/contracts/http"
-	"github.com/goravel/framework/contracts/log"
+	"github.com/gradii/framework/contracts/http"
+	"github.com/gradii/framework/contracts/log"
 )
 
 type Writer struct {

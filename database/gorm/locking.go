@@ -1,7 +1,7 @@
 package gorm
 
 import (
-	querybuilder "github.com/goravel/framework/database/query"
+	querybuilder "github.com/gradii/framework/database/query"
 )
 
 // Random ordering is compiled here rather than by the driver modules' GORM grammar.

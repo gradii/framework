@@ -3,8 +3,8 @@
 package ai
 
 import (
-	ai "github.com/goravel/framework/contracts/ai"
-	http "github.com/goravel/framework/contracts/http"
+	ai "github.com/gradii/framework/contracts/ai"
+	http "github.com/gradii/framework/contracts/http"
 
 	mock "github.com/stretchr/testify/mock"
 )

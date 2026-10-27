@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/support"
+	"github.com/gradii/framework/support"
 )
 
 type PathsTestSuite struct {
@@ -333,7 +333,7 @@ func (s *PathTestSuite) TestNewPath() {
 		},
 		{
 			name:     "with module path",
-			path:     "github.com/goravel/framework/auth",
+			path:     "github.com/gradii/framework/auth",
 			main:     "github.com/goravel/goravel",
 			isModule: true,
 		},
@@ -429,10 +429,10 @@ func (s *PathTestSuite) TestImport() {
 		},
 		{
 			name:     "with module path",
-			path:     "github.com/goravel/framework/auth",
+			path:     "github.com/gradii/framework/auth",
 			main:     "github.com/goravel/goravel",
 			isModule: true,
-			expected: "github.com/goravel/framework/auth",
+			expected: "github.com/gradii/framework/auth",
 		},
 		{
 			name:     "with nested sub-package",
@@ -684,13 +684,13 @@ func (s *PathTestSuite) TestModuleImportBehavior() {
 	}{
 		{
 			name:        "module with framework path",
-			modulePath:  "github.com/goravel/framework/auth",
+			modulePath:  "github.com/gradii/framework/auth",
 			mainPath:    "github.com/goravel/goravel",
 			expectedPkg: "auth",
 		},
 		{
 			name:        "module with nested path",
-			modulePath:  "github.com/goravel/framework/database/orm",
+			modulePath:  "github.com/gradii/framework/database/orm",
 			mainPath:    "github.com/goravel/goravel",
 			expectedPkg: "orm",
 		},

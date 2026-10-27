@@ -9,15 +9,15 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
-	contractsqueue "github.com/goravel/framework/contracts/queue"
-	"github.com/goravel/framework/errors"
-	mocksdb "github.com/goravel/framework/mocks/database/db"
-	mocksfoundation "github.com/goravel/framework/mocks/foundation"
-	mockslog "github.com/goravel/framework/mocks/log"
-	mocksqueue "github.com/goravel/framework/mocks/queue"
-	"github.com/goravel/framework/queue/models"
-	"github.com/goravel/framework/queue/utils"
-	"github.com/goravel/framework/support/carbon"
+	contractsqueue "github.com/gradii/framework/contracts/queue"
+	"github.com/gradii/framework/errors"
+	mocksdb "github.com/gradii/framework/mocks/database/db"
+	mocksfoundation "github.com/gradii/framework/mocks/foundation"
+	mockslog "github.com/gradii/framework/mocks/log"
+	mocksqueue "github.com/gradii/framework/mocks/queue"
+	"github.com/gradii/framework/queue/models"
+	"github.com/gradii/framework/queue/utils"
+	"github.com/gradii/framework/support/carbon"
 )
 
 type WorkerTestSuite struct {

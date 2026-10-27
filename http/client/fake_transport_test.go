@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/contracts/http/client"
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/contracts/http/client"
+	"github.com/gradii/framework/errors"
 )
 
 type FakeTransportTestSuite struct {

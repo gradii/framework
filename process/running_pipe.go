@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	contractsprocess "github.com/goravel/framework/contracts/process"
+	contractsprocess "github.com/gradii/framework/contracts/process"
 )
 
 type RunningPipe struct {

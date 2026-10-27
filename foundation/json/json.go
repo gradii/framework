@@ -3,8 +3,8 @@ package json
 import (
 	encodingjson "encoding/json"
 
-	"github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/support/convert"
+	"github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/support/convert"
 )
 
 type Json struct {

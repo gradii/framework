@@ -1,6 +1,6 @@
 package query
 
-import "github.com/goravel/framework/database/query/core"
+import "github.com/gradii/framework/database/query/core"
 
 // The accessors below exist so database/db can stay a thin adapter over the builder: it needs to
 // inspect and rewrite the select list for count and pluck, and to set an aggregate without going

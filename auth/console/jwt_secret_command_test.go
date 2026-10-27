@@ -6,10 +6,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	mocksconsole "github.com/goravel/framework/mocks/console"
-	"github.com/goravel/framework/support"
-	"github.com/goravel/framework/support/file"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	mocksconsole "github.com/gradii/framework/mocks/console"
+	"github.com/gradii/framework/support"
+	"github.com/gradii/framework/support/file"
 )
 
 func TestJwtSecretCommand(t *testing.T) {

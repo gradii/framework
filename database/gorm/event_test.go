@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/support/carbon"
-	"github.com/goravel/framework/support/convert"
+	"github.com/gradii/framework/support/carbon"
+	"github.com/gradii/framework/support/convert"
 )
 
 type Model struct {

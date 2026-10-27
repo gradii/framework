@@ -6,7 +6,7 @@ type Stubs struct {
 func (receiver Stubs) Event() string {
 	return `package DummyPackage
 
-import "github.com/goravel/framework/contracts/event"
+import "github.com/gradii/framework/contracts/event"
 
 type DummyEvent struct {
 }
@@ -20,7 +20,7 @@ func (receiver *DummyEvent) Handle(args []event.Arg) ([]event.Arg, error) {
 func (receiver Stubs) EventBroadcast() string {
 	return `package DummyPackage
 
-import "github.com/goravel/framework/contracts/broadcasting"
+import "github.com/gradii/framework/contracts/broadcasting"
 
 var _ broadcasting.ShouldBroadcast = (*DummyEvent)(nil)
 
@@ -57,7 +57,7 @@ func (receiver Stubs) Listener() string {
 	return `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/event"
+	"github.com/gradii/framework/contracts/event"
 )
 
 type DummyListener struct {

@@ -7,11 +7,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/goravel/framework/errors"
-	mocksconsole "github.com/goravel/framework/mocks/console"
-	mocksmigration "github.com/goravel/framework/mocks/database/migration"
-	mocksfoundation "github.com/goravel/framework/mocks/foundation"
-	"github.com/goravel/framework/support/file"
+	"github.com/gradii/framework/errors"
+	mocksconsole "github.com/gradii/framework/mocks/console"
+	mocksmigration "github.com/gradii/framework/mocks/database/migration"
+	mocksfoundation "github.com/gradii/framework/mocks/foundation"
+	"github.com/gradii/framework/support/file"
 )
 
 func TestMigrateMakeCommand(t *testing.T) {
@@ -115,8 +115,8 @@ func TestMigrateMakeCommand(t *testing.T) {
 				assert.NoError(t, file.PutContent("database/kernel.go", `package database
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
-	"github.com/goravel/framework/contracts/database/seeder"
+	"github.com/gradii/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/seeder"
 
 	"goravel/database/migrations"
 )
@@ -162,9 +162,9 @@ func TestMigrateMakeCommand_WithBootstrapSetup(t *testing.T) {
 	bootstrapContent := `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
-	"github.com/goravel/framework/contracts/database/schema"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
+	"github.com/gradii/framework/contracts/database/schema"
 )
 
 func Boot() contractsfoundation.Application {
@@ -209,7 +209,7 @@ func Boot() contractsfoundation.Application {
 		invalidBootstrapContent := `package bootstrap
 
 import (
-	"github.com/goravel/framework/foundation"
+	"github.com/gradii/framework/foundation"
 )
 
 func Boot() {

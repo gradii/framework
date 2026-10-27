@@ -10,10 +10,10 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
-	contractsai "github.com/goravel/framework/contracts/ai"
-	contractshttp "github.com/goravel/framework/contracts/http"
-	"github.com/goravel/framework/errors"
-	mockshttp "github.com/goravel/framework/mocks/http"
+	contractsai "github.com/gradii/framework/contracts/ai"
+	contractshttp "github.com/gradii/framework/contracts/http"
+	"github.com/gradii/framework/errors"
+	mockshttp "github.com/gradii/framework/mocks/http"
 )
 
 type streamableTestResponse struct {

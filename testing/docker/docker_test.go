@@ -6,13 +6,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/errors"
-	mockscache "github.com/goravel/framework/mocks/cache"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	mocksconsole "github.com/goravel/framework/mocks/console"
-	mocksorm "github.com/goravel/framework/mocks/database/orm"
-	mocksprocess "github.com/goravel/framework/mocks/process"
-	mocksdocker "github.com/goravel/framework/mocks/testing/docker"
+	"github.com/gradii/framework/errors"
+	mockscache "github.com/gradii/framework/mocks/cache"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	mocksconsole "github.com/gradii/framework/mocks/console"
+	mocksorm "github.com/gradii/framework/mocks/database/orm"
+	mocksprocess "github.com/gradii/framework/mocks/process"
+	mocksdocker "github.com/gradii/framework/mocks/testing/docker"
 )
 
 type DockerTestSuite struct {

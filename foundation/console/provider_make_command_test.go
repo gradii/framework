@@ -7,10 +7,10 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	
-	"github.com/goravel/framework/contracts/console/command"
-	mocksconsole "github.com/goravel/framework/mocks/console"
-	"github.com/goravel/framework/support/file"
+
+	"github.com/gradii/framework/contracts/console/command"
+	mocksconsole "github.com/gradii/framework/mocks/console"
+	"github.com/gradii/framework/support/file"
 )
 
 type ProviderMakeCommandTestSuite struct {
@@ -24,30 +24,30 @@ func TestProviderMakeCommandTestSuite(t *testing.T) {
 func (s *ProviderMakeCommandTestSuite) TestSignature() {
 	expected := "make:provider"
 	cmd := &ProviderMakeCommand{}
-	
+
 	s.Require().Equal(expected, cmd.Signature())
 }
 
 func (s *ProviderMakeCommandTestSuite) TestDescription() {
 	expected := "Create a new service provider class"
 	cmd := &ProviderMakeCommand{}
-	
+
 	s.Require().Equal(expected, cmd.Description())
 }
 
 func (s *ProviderMakeCommandTestSuite) TestExtend() {
 	cmd := &ProviderMakeCommand{}
 	extend := cmd.Extend()
-	
+
 	s.Run("should return correct category", func() {
 		expected := "make"
 		s.Require().Equal(expected, extend.Category)
 	})
-	
+
 	s.Run("should have correct number of flags", func() {
 		s.Require().Len(extend.Flags, 1)
 	})
-	
+
 	if len(extend.Flags) > 0 {
 		s.Run("should have correctly configured BoolFlag", func() {
 			flag, ok := extend.Flags[0].(*command.BoolFlag)
@@ -113,7 +113,7 @@ func (s *ProviderMakeCommandTestSuite) TestHandle() {
 	s.True(file.Contain("app/providers/auth/auth_service_provider.go", "package auth"))
 	s.True(file.Contain("app/providers/auth/auth_service_provider.go", "type AuthServiceProvider struct{}"))
 	s.True(file.Contain("app/providers/auth/auth_service_provider.go", "func (r *AuthServiceProvider) Register(app foundation.Application) {"))
-	
+
 	// Clean up test files
 	s.NoError(file.Remove("app"))
 }

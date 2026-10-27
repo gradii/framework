@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/goravel/framework/contracts/console/command"
-	"github.com/goravel/framework/errors"
-	mocksconsole "github.com/goravel/framework/mocks/console"
+	"github.com/gradii/framework/contracts/console/command"
+	"github.com/gradii/framework/errors"
+	mocksconsole "github.com/gradii/framework/mocks/console"
 )
 
 func TestNotificationsTableCommand_Metadata(t *testing.T) {

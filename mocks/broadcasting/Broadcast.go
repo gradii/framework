@@ -5,7 +5,7 @@ package broadcasting
 import (
 	context "context"
 
-	broadcasting "github.com/goravel/framework/contracts/broadcasting"
+	broadcasting "github.com/gradii/framework/contracts/broadcasting"
 
 	mock "github.com/stretchr/testify/mock"
 )

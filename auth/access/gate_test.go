@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/contracts/auth/access"
+	"github.com/gradii/framework/contracts/auth/access"
 )
 
 type contextKey int

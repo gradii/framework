@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	contractsdatabase "github.com/goravel/framework/contracts/database"
-	contractsorm "github.com/goravel/framework/contracts/database/orm"
+	contractsdatabase "github.com/gradii/framework/contracts/database"
+	contractsorm "github.com/gradii/framework/contracts/database/orm"
 )
 
 // newRelQueryWith returns a Query whose conditions.model is preset, ready for build/compile tests.

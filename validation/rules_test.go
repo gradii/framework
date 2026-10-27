@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
-	contractsvalidation "github.com/goravel/framework/contracts/validation"
-	mocksorm "github.com/goravel/framework/mocks/database/orm"
+	contractsvalidation "github.com/gradii/framework/contracts/validation"
+	mocksorm "github.com/gradii/framework/mocks/database/orm"
 )
 
 type RulesTestSuite struct {

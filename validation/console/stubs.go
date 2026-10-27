@@ -9,7 +9,7 @@ func (r Stubs) Rule() string {
 import (
 	"context"
 
-	"github.com/goravel/framework/contracts/validation"
+	"github.com/gradii/framework/contracts/validation"
 )
 
 type DummyRule struct {

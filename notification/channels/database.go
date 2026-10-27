@@ -8,10 +8,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/cast"
 
-	contractsnotification "github.com/goravel/framework/contracts/notification"
+	contractsnotification "github.com/gradii/framework/contracts/notification"
 
-	"github.com/goravel/framework/contracts/database/orm"
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/contracts/database/orm"
+	"github.com/gradii/framework/errors"
 )
 
 type DatabaseNotificationModel struct {

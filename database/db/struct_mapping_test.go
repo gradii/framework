@@ -11,10 +11,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	contractsdb "github.com/goravel/framework/contracts/database/db"
-	"github.com/goravel/framework/database/db"
-	"github.com/goravel/framework/database/orm"
-	querybuilder "github.com/goravel/framework/database/query"
+	contractsdb "github.com/gradii/framework/contracts/database/db"
+	"github.com/gradii/framework/database/db"
+	"github.com/gradii/framework/database/orm"
+	querybuilder "github.com/gradii/framework/database/query"
 )
 
 func TestQueryMapsDBTagsToStructs(t *testing.T) {

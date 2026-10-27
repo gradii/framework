@@ -3,7 +3,7 @@
 package pluralizer
 
 import (
-	pluralizer "github.com/goravel/framework/contracts/support/pluralizer"
+	pluralizer "github.com/gradii/framework/contracts/support/pluralizer"
 	mock "github.com/stretchr/testify/mock"
 )
 

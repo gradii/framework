@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	contractstranslation "github.com/goravel/framework/contracts/translation"
+	contractstranslation "github.com/gradii/framework/contracts/translation"
 )
 
 // defaultMessages contains all default validation error messages.

@@ -7,11 +7,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/foundation/json"
-	"github.com/goravel/framework/support/env"
-	"github.com/goravel/framework/support/file"
+	"github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/foundation/json"
+	"github.com/gradii/framework/support/env"
+	"github.com/gradii/framework/support/file"
 )
 
 type FileLoaderTestSuite struct {

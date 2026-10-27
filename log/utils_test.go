@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/contracts/log"
+	"github.com/gradii/framework/contracts/log"
 )
 
 type UtilsTestSuite struct {

@@ -11,9 +11,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/goravel/framework/database/internal/reflectx"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/support/str"
+	"github.com/gradii/framework/database/internal/reflectx"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/support/str"
 )
 
 // Row scans a SQL row into fields selected by the mapper's cached metadata.

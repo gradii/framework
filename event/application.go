@@ -5,8 +5,8 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/goravel/framework/contracts/event"
-	contractsqueue "github.com/goravel/framework/contracts/queue"
+	"github.com/gradii/framework/contracts/event"
+	contractsqueue "github.com/gradii/framework/contracts/queue"
 )
 
 var _ event.Instance = (*Application)(nil)

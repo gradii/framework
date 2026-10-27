@@ -11,13 +11,13 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/goravel/framework/contracts/http"
-	"github.com/goravel/framework/support/color"
-	"github.com/goravel/framework/telemetry"
+	"github.com/gradii/framework/contracts/http"
+	"github.com/gradii/framework/support/color"
+	"github.com/gradii/framework/telemetry"
 )
 
 const (
-	instrumentationName = "github.com/goravel/framework/telemetry/instrumentation/http"
+	instrumentationName = "github.com/gradii/framework/telemetry/instrumentation/http"
 
 	metricRequestDuration  = "http.server.request.duration"
 	metricRequestBodySize  = "http.server.request.body.size"

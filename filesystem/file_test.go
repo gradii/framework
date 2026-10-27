@@ -11,10 +11,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/errors"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	mocksfilesystem "github.com/goravel/framework/mocks/filesystem"
-	"github.com/goravel/framework/support/file"
+	"github.com/gradii/framework/errors"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	mocksfilesystem "github.com/gradii/framework/mocks/filesystem"
+	"github.com/gradii/framework/support/file"
 )
 
 type FileTestSuite struct {

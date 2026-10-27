@@ -1,6 +1,6 @@
 package rules
 
-import "github.com/goravel/framework/contracts/support/pluralizer"
+import "github.com/gradii/framework/contracts/support/pluralizer"
 
 var _ pluralizer.Ruleset = (*Ruleset)(nil)
 

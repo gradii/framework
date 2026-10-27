@@ -5,9 +5,9 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/goravel/framework/database/internal/annotation"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/support/str"
+	"github.com/gradii/framework/database/internal/annotation"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/support/str"
 )
 
 // modelSchema describes how a model maps to a table.

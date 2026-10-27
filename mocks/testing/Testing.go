@@ -3,7 +3,7 @@
 package testing
 
 import (
-	testing "github.com/goravel/framework/contracts/testing"
+	testing "github.com/gradii/framework/contracts/testing"
 	mock "github.com/stretchr/testify/mock"
 )
 

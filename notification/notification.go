@@ -3,10 +3,10 @@ package notification
 import (
 	"sync"
 
-	"github.com/goravel/framework/contracts/log"
-	contractsnotification "github.com/goravel/framework/contracts/notification"
-	"github.com/goravel/framework/contracts/queue"
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/contracts/log"
+	contractsnotification "github.com/gradii/framework/contracts/notification"
+	"github.com/gradii/framework/contracts/queue"
+	"github.com/gradii/framework/errors"
 )
 
 type Manager struct {

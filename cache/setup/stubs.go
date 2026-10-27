@@ -57,7 +57,7 @@ func (s Stubs) CacheFacade(pkg string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/cache"
+	"github.com/gradii/framework/contracts/cache"
 )
 
 func Cache() cache.Cache {

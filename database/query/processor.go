@@ -1,6 +1,6 @@
 package query
 
-import "github.com/goravel/framework/database/query/processors"
+import "github.com/gradii/framework/database/query/processors"
 
 type Processor = processors.Processor
 

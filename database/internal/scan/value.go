@@ -8,8 +8,8 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/support/carbon"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/support/carbon"
 )
 
 // Assign assigns driver values directly, preserving scanners and the

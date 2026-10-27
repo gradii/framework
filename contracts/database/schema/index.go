@@ -1,6 +1,6 @@
 package schema
 
-import "github.com/goravel/framework/contracts/database/driver"
+import "github.com/gradii/framework/contracts/database/driver"
 
 const (
 	IndexMethodAlgorithm = "Algorithm"

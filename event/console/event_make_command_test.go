@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	mocksconsole "github.com/goravel/framework/mocks/console"
-	"github.com/goravel/framework/support/file"
+	mocksconsole "github.com/gradii/framework/mocks/console"
+	"github.com/gradii/framework/support/file"
 )
 
 func TestEventMakeCommand(t *testing.T) {
@@ -47,8 +47,8 @@ func TestEventMakeCommand(t *testing.T) {
 	mockContext.EXPECT().Success("Event created successfully").Once()
 	assert.Nil(t, eventMakeCommand.Handle(mockContext))
 	assert.True(t, file.Exists("app/events/goravel_broadcast_event.go"))
-	assert.True(t, file.Contain("app/events/goravel_broadcast_event.go", `"github.com/goravel/framework/contracts/broadcasting"`))
-	assert.False(t, file.Contain("app/events/goravel_broadcast_event.go", `"github.com/goravel/framework/contracts/event"`))
+	assert.True(t, file.Contain("app/events/goravel_broadcast_event.go", `"github.com/gradii/framework/contracts/broadcasting"`))
+	assert.False(t, file.Contain("app/events/goravel_broadcast_event.go", `"github.com/gradii/framework/contracts/event"`))
 	assert.True(t, file.Contain("app/events/goravel_broadcast_event.go", "func (receiver *GoravelBroadcastEvent) BroadcastOn() []string {"))
 	assert.True(t, file.Contain("app/events/goravel_broadcast_event.go", "func (receiver *GoravelBroadcastEvent) BroadcastAs() string {"))
 	assert.True(t, file.Contain("app/events/goravel_broadcast_event.go", "func (receiver *GoravelBroadcastEvent) BroadcastWith() map[string]any {"))
@@ -62,8 +62,8 @@ func TestEventMakeCommand(t *testing.T) {
 	mockContext.EXPECT().Success("Event created successfully").Once()
 	assert.Nil(t, eventMakeCommand.Handle(mockContext))
 	assert.True(t, file.Exists("app/events/goravel_broadcast_event_now.go"))
-	assert.True(t, file.Contain("app/events/goravel_broadcast_event_now.go", `"github.com/goravel/framework/contracts/broadcasting"`))
-	assert.False(t, file.Contain("app/events/goravel_broadcast_event_now.go", `"github.com/goravel/framework/contracts/event"`))
+	assert.True(t, file.Contain("app/events/goravel_broadcast_event_now.go", `"github.com/gradii/framework/contracts/broadcasting"`))
+	assert.False(t, file.Contain("app/events/goravel_broadcast_event_now.go", `"github.com/gradii/framework/contracts/event"`))
 	assert.True(t, file.Contain("app/events/goravel_broadcast_event_now.go", "func (receiver *GoravelBroadcastEventNow) BroadcastOn() []string {"))
 	assert.True(t, file.Contain("app/events/goravel_broadcast_event_now.go", "func (receiver *GoravelBroadcastEventNow) BroadcastAs() string {"))
 	assert.True(t, file.Contain("app/events/goravel_broadcast_event_now.go", "func (receiver *GoravelBroadcastEventNow) BroadcastWith() map[string]any {"))

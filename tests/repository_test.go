@@ -5,8 +5,8 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/database/migration"
 	"github.com/goravel/sqlite"
+	"github.com/gradii/framework/database/migration"
 )
 
 type RepositoryTestSuite struct {

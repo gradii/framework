@@ -3,7 +3,7 @@ package notification
 import (
 	"time"
 
-	contractsmail "github.com/goravel/framework/contracts/mail"
+	contractsmail "github.com/gradii/framework/contracts/mail"
 )
 
 // Channel name constants. Use these instead of raw string literals in

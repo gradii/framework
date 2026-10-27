@@ -8,12 +8,12 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
-	contractshttp "github.com/goravel/framework/contracts/http"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/http"
-	mocksfoundation "github.com/goravel/framework/mocks/foundation"
-	mockshttp "github.com/goravel/framework/mocks/http"
-	mockslog "github.com/goravel/framework/mocks/log"
+	contractshttp "github.com/gradii/framework/contracts/http"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/http"
+	mocksfoundation "github.com/gradii/framework/mocks/foundation"
+	mockshttp "github.com/gradii/framework/mocks/http"
+	mockslog "github.com/gradii/framework/mocks/log"
 )
 
 type ThrottleTestSuite struct {

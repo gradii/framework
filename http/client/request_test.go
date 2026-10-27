@@ -13,9 +13,9 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/http/client"
-	"github.com/goravel/framework/foundation/json"
+	"github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/http/client"
+	"github.com/gradii/framework/foundation/json"
 )
 
 type RequestTestSuite struct {

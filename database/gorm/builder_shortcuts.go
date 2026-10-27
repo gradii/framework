@@ -9,12 +9,12 @@ import (
 	"strconv"
 	"strings"
 
-	contractsdb "github.com/goravel/framework/contracts/database/db"
-	contractsorm "github.com/goravel/framework/contracts/database/orm"
-	querybuilder "github.com/goravel/framework/database/query"
-	"github.com/goravel/framework/database/query/core"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/support/carbon"
+	contractsdb "github.com/gradii/framework/contracts/database/db"
+	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	querybuilder "github.com/gradii/framework/database/query"
+	"github.com/gradii/framework/database/query/core"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/support/carbon"
 )
 
 // This file ports the Eloquent\Builder conveniences that have a counterpart in this ORM's shape:

@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/goravel/framework/contracts/broadcasting"
-	mocksconfig "github.com/goravel/framework/mocks/config"
+	"github.com/gradii/framework/contracts/broadcasting"
+	mocksconfig "github.com/gradii/framework/mocks/config"
 )
 
 func TestBroadcastJob_Signature(t *testing.T) {

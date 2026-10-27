@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/goravel/framework/database/query/core"
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/database/query/core"
+	"github.com/gradii/framework/errors"
 )
 
 var (

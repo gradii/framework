@@ -6,9 +6,9 @@ import (
 
 	"github.com/jmoiron/sqlx"
 
-	querybuilder "github.com/goravel/framework/database/query"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/support/str"
+	querybuilder "github.com/gradii/framework/database/query"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/support/str"
 )
 
 // NameMapper maps a Go field name to its database column for sqlx, which scans rows into structs.

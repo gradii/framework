@@ -10,10 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	contractsorm "github.com/goravel/framework/contracts/database/orm"
-	databasedb "github.com/goravel/framework/database/db"
 	"github.com/goravel/postgres"
 	"github.com/goravel/sqlite"
+	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	databasedb "github.com/gradii/framework/database/db"
 )
 
 type OrmSuite struct {

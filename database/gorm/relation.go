@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	contractsorm "github.com/goravel/framework/contracts/database/orm"
-	"github.com/goravel/framework/database/internal/annotation"
-	"github.com/goravel/framework/database/orm/morphmap"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/support/str"
+	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	"github.com/gradii/framework/database/internal/annotation"
+	"github.com/gradii/framework/database/orm/morphmap"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/support/str"
 )
 
 // relationKind enumerates every relationship flavour the resolver can describe.

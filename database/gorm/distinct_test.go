@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	querybuilder "github.com/goravel/framework/database/query"
+	querybuilder "github.com/gradii/framework/database/query"
 )
 
 // Laravel keeps the DISTINCT columns separate from both the projection and its bindings.

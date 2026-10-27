@@ -143,7 +143,7 @@ func (s Stubs) DBFacade(pkg string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/database/db"
+	"github.com/gradii/framework/contracts/database/db"
 )
 
 func DB() db.DB {
@@ -158,7 +158,7 @@ func (s Stubs) OrmFacade(pkg string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/database/orm"
+	"github.com/gradii/framework/contracts/database/orm"
 )
 
 func Orm() orm.Orm {
@@ -173,7 +173,7 @@ func (s Stubs) SchemaFacade(pkg string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/schema"
 )
 
 func Schema() schema.Schema {
@@ -188,7 +188,7 @@ func (s Stubs) SeederFacade(pkg string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/database/seeder"
+	"github.com/gradii/framework/contracts/database/seeder"
 )
 
 func Seeder() seeder.Facade {

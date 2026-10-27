@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	contractsorm "github.com/goravel/framework/contracts/database/orm"
+	contractsorm "github.com/gradii/framework/contracts/database/orm"
 )
 
 // QueriesRelationshipsTestSuite covers the QueryWithRelations contract: Has, WhereHas, DoesntHave,

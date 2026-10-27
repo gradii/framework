@@ -6,7 +6,7 @@ type Stubs struct {
 func (r Stubs) Agent() string {
 	return `package DummyPackage
 
-import "github.com/goravel/framework/contracts/ai"
+import "github.com/gradii/framework/contracts/ai"
 
 type DummyAgent struct {
 }

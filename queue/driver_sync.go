@@ -3,8 +3,8 @@ package queue
 import (
 	"time"
 
-	"github.com/goravel/framework/contracts/queue"
-	"github.com/goravel/framework/support/carbon"
+	"github.com/gradii/framework/contracts/queue"
+	"github.com/gradii/framework/support/carbon"
 )
 
 var (

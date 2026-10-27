@@ -5,10 +5,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/contracts/console/command"
-	"github.com/goravel/framework/support/color"
-	"github.com/goravel/framework/support/file"
+	"github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/contracts/console/command"
+	"github.com/gradii/framework/support/color"
+	"github.com/gradii/framework/support/file"
 )
 
 type LangPublishCommand struct {

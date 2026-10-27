@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/goravel/framework/database/query/core"
-	"github.com/goravel/framework/database/schema"
+	"github.com/gradii/framework/database/query/core"
+	"github.com/gradii/framework/database/schema"
 )
 
 // SelectComponents is Laravel's $selectComponents order. The grammar compiles in this order.

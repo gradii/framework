@@ -1,9 +1,9 @@
 package console
 
 import (
-	"github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/contracts/console/command"
-	"github.com/goravel/framework/contracts/schedule"
+	"github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/contracts/console/command"
+	"github.com/gradii/framework/contracts/schedule"
 )
 
 type Run struct {

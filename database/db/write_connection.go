@@ -5,9 +5,9 @@ import (
 	"database/sql"
 	"sync"
 
-	"github.com/goravel/framework/contracts/database/db"
-	databasedriver "github.com/goravel/framework/database/driver"
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/contracts/database/db"
+	databasedriver "github.com/gradii/framework/database/driver"
+	"github.com/gradii/framework/errors"
 	"github.com/jmoiron/sqlx"
 )
 

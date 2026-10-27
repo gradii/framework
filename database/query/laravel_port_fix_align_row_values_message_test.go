@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/errors"
 )
 
 // This file pins the message Laravel's testWhereRowValuesArityMismatch asserts. The corpus case

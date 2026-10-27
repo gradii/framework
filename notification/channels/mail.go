@@ -7,10 +7,10 @@ import (
 	"slices"
 	"strings"
 
-	contractsmail "github.com/goravel/framework/contracts/mail"
-	contractsnotification "github.com/goravel/framework/contracts/notification"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/notification/mail"
+	contractsmail "github.com/gradii/framework/contracts/mail"
+	contractsnotification "github.com/gradii/framework/contracts/notification"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/notification/mail"
 )
 
 // MailChannel delivers notifications via Goravel's mail facade.

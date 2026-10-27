@@ -1,9 +1,9 @@
 package hash
 
 import (
-	"github.com/goravel/framework/contracts/binding"
-	"github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/contracts/binding"
+	"github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/errors"
 )
 
 type ServiceProvider struct {

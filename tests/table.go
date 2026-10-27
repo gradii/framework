@@ -1,8 +1,8 @@
 package tests
 
 import (
-	"github.com/goravel/framework/contracts/database/driver"
-	"github.com/goravel/framework/database/schema"
+	"github.com/gradii/framework/contracts/database/driver"
+	"github.com/gradii/framework/database/schema"
 )
 
 type TestTable int

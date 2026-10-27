@@ -5,10 +5,10 @@ package orm
 import (
 	context "context"
 
-	database "github.com/goravel/framework/contracts/database"
+	database "github.com/gradii/framework/contracts/database"
 	mock "github.com/stretchr/testify/mock"
 
-	orm "github.com/goravel/framework/contracts/database/orm"
+	orm "github.com/gradii/framework/contracts/database/orm"
 
 	sql "database/sql"
 )

@@ -1,6 +1,6 @@
 package foundation
 
-import "github.com/goravel/framework/contracts/config"
+import "github.com/gradii/framework/contracts/config"
 
 type ProviderRepository interface {
 	// Add appends new providers to the repository.

@@ -9,18 +9,18 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	mocksconsole "github.com/goravel/framework/mocks/console"
-	"github.com/goravel/framework/support"
-	"github.com/goravel/framework/support/file"
-	"github.com/goravel/framework/support/str"
+	mocksconsole "github.com/gradii/framework/mocks/console"
+	"github.com/gradii/framework/support"
+	"github.com/gradii/framework/support/file"
+	"github.com/gradii/framework/support/str"
 )
 
 var filterValidationServiceProvider = `package providers
 
 import (
-	"github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/validation"
-	"github.com/goravel/framework/facades"
+	"github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/validation"
+	"github.com/gradii/framework/facades"
 )
 
 type ValidationServiceProvider struct {
@@ -51,8 +51,8 @@ func (receiver *ValidationServiceProvider) filters() []validation.Filter {
 var bootstrapAppFilter = `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -64,8 +64,8 @@ func Boot() contractsfoundation.Application {
 var bootstrapAppWithFilters = `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation" 
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -78,7 +78,7 @@ func Boot() contractsfoundation.Application {
 var bootstrapFilters = `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/validation"
+	"github.com/gradii/framework/contracts/validation"
 
 	"goravel/app/filters"
 )

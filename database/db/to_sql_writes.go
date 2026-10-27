@@ -1,8 +1,8 @@
 package db
 
 import (
-	querybuilder "github.com/goravel/framework/database/query"
-	"github.com/goravel/framework/errors"
+	querybuilder "github.com/gradii/framework/database/query"
+	"github.com/gradii/framework/errors"
 )
 
 func (r *ToSql) InsertGetID(data any, sequence ...string) string {

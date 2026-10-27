@@ -3,8 +3,8 @@ package gorm
 import (
 	"fmt"
 
-	contractsorm "github.com/goravel/framework/contracts/database/orm"
-	querybuilder "github.com/goravel/framework/database/query"
+	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	querybuilder "github.com/gradii/framework/database/query"
 )
 
 // queryPivotQuery adapts a contractsorm.Query to the PivotQuery interface so OnPivotQuery

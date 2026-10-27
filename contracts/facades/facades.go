@@ -1,6 +1,6 @@
 package facades
 
-import "github.com/goravel/framework/contracts/binding"
+import "github.com/gradii/framework/contracts/binding"
 
 const (
 	AI           = "AI"

@@ -1,6 +1,6 @@
 package auth
 
-import "github.com/goravel/framework/errors"
+import "github.com/gradii/framework/errors"
 
 // These errors may be used by user's project, so we can't remove them.
 var (

@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	querybuilder "github.com/goravel/framework/database/query"
-	mockslogger "github.com/goravel/framework/mocks/database/logger"
+	querybuilder "github.com/gradii/framework/database/query"
+	mockslogger "github.com/gradii/framework/mocks/database/logger"
 )
 
 // pdoRecordingDriver is a database/sql driver that records the statements it is asked to run, so a

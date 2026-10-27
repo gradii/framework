@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/goravel/framework/contracts/http"
+	"github.com/gradii/framework/contracts/http"
 )
 
 const (

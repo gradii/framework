@@ -20,11 +20,11 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 	oteltrace "go.opentelemetry.io/otel/trace"
 
-	contractsdatabase "github.com/goravel/framework/contracts/database"
-	contractstelemetry "github.com/goravel/framework/contracts/telemetry"
-	frameworkerrors "github.com/goravel/framework/errors"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	"github.com/goravel/framework/telemetry"
+	contractsdatabase "github.com/gradii/framework/contracts/database"
+	contractstelemetry "github.com/gradii/framework/contracts/telemetry"
+	frameworkerrors "github.com/gradii/framework/errors"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	"github.com/gradii/framework/telemetry"
 )
 
 type recordingSpanExporter struct {

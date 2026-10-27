@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/goravel/framework/contracts/support"
+	"github.com/gradii/framework/contracts/support"
 )
 
 func TestColors(t *testing.T) {

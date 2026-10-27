@@ -9,16 +9,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	mocksconsole "github.com/goravel/framework/mocks/console"
-	"github.com/goravel/framework/support/file"
+	mocksconsole "github.com/gradii/framework/mocks/console"
+	"github.com/gradii/framework/support/file"
 )
 
 var (
 	kernel = `package console
 
 import (
-	"github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/contracts/schedule"
+	"github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/contracts/schedule"
 )
 
 type Kernel struct {
@@ -56,8 +56,8 @@ func TestMakeCommand(t *testing.T) {
 		assert.NoError(t, file.PutContent(kernelPath, `package console
 
 import (
-	"github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/contracts/schedule"
+	"github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/contracts/schedule"
 )
 
 type Kernel struct {
@@ -153,8 +153,8 @@ func TestMakeCommand_AddCommandToBootstrapSetup(t *testing.T) {
 	bootstrapContent := `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 )
 
 func Boot() contractsfoundation.Application {
@@ -189,8 +189,8 @@ func Boot() contractsfoundation.Application {
 	expectedAppContent := `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 )
 
 func Boot() contractsfoundation.Application {
@@ -206,8 +206,8 @@ func Boot() contractsfoundation.Application {
 	expectedCommandsContent := `package bootstrap
 
 import (
-	"github.com/goravel/framework/app/console/commands"
-	"github.com/goravel/framework/contracts/console"
+	"github.com/gradii/framework/app/console/commands"
+	"github.com/gradii/framework/contracts/console"
 )
 
 func Commands() []console.Command {

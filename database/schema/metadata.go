@@ -6,9 +6,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/goravel/framework/contracts/database/driver"
-	"github.com/goravel/framework/database/query/processors"
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/contracts/database/driver"
+	"github.com/gradii/framework/database/query/processors"
+	"github.com/gradii/framework/errors"
 	"github.com/spf13/cast"
 )
 

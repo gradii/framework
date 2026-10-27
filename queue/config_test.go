@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	mocksconfig "github.com/goravel/framework/mocks/config"
+	mocksconfig "github.com/gradii/framework/mocks/config"
 )
 
 type ConfigTestSuite struct {

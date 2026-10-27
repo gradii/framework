@@ -10,7 +10,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
-	mocksdb "github.com/goravel/framework/mocks/database/db"
+	mocksdb "github.com/gradii/framework/mocks/database/db"
 )
 
 type MockResult struct {

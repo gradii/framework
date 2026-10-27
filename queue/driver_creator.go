@@ -1,12 +1,12 @@
 package queue
 
 import (
-	contractscache "github.com/goravel/framework/contracts/cache"
-	contractsdb "github.com/goravel/framework/contracts/database/db"
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	contractslog "github.com/goravel/framework/contracts/log"
-	contractsqueue "github.com/goravel/framework/contracts/queue"
-	"github.com/goravel/framework/errors"
+	contractscache "github.com/gradii/framework/contracts/cache"
+	contractsdb "github.com/gradii/framework/contracts/database/db"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	contractslog "github.com/gradii/framework/contracts/log"
+	contractsqueue "github.com/gradii/framework/contracts/queue"
+	"github.com/gradii/framework/errors"
 )
 
 type DriverCreator struct {

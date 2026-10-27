@@ -8,16 +8,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	mocksconsole "github.com/goravel/framework/mocks/console"
-	mocksfoundation "github.com/goravel/framework/mocks/foundation"
-	"github.com/goravel/framework/support/file"
+	mocksconsole "github.com/gradii/framework/mocks/console"
+	mocksfoundation "github.com/gradii/framework/mocks/foundation"
+	"github.com/gradii/framework/support/file"
 )
 
 var databaseKernel = `package database
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
-	"github.com/goravel/framework/contracts/database/seeder"
+	"github.com/gradii/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/seeder"
 )
 
 type Kernel struct {
@@ -84,9 +84,9 @@ func TestSeederMakeCommand_BootstrapSetup(t *testing.T) {
 	bootstrapContent := `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
-	"github.com/goravel/framework/contracts/database/seeder"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
+	"github.com/gradii/framework/contracts/database/seeder"
 )
 
 func Boot() contractsfoundation.Application {
@@ -132,7 +132,7 @@ func Boot() contractsfoundation.Application {
 		invalidBootstrapContent := `package bootstrap
 
 import (
-	"github.com/goravel/framework/foundation"
+	"github.com/gradii/framework/foundation"
 )
 
 func Boot() {

@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	mocktranslation "github.com/goravel/framework/mocks/translation"
+	mocktranslation "github.com/gradii/framework/mocks/translation"
 )
 
 func TestGetMessage(t *testing.T) {

@@ -8,7 +8,7 @@ func (r Stubs) Channel() string {
 import (
 	"context"
 
-	"github.com/goravel/framework/contracts/broadcasting"
+	"github.com/gradii/framework/contracts/broadcasting"
 )
 
 // DummyChannel authenticates a user for a channel.

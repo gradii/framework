@@ -4,8 +4,8 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/goravel/framework/contracts/event"
-	mocksqueue "github.com/goravel/framework/mocks/queue"
+	"github.com/gradii/framework/contracts/event"
+	mocksqueue "github.com/gradii/framework/mocks/queue"
 )
 
 // benchmarkApplication registers an exact listener plus the given number of

@@ -48,7 +48,7 @@ func (s Stubs) GrpcFacade(pkg string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/grpc"
+	"github.com/gradii/framework/contracts/grpc"
 )
 
 func Grpc() grpc.Grpc {

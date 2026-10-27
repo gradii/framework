@@ -1,7 +1,7 @@
 package db
 
 import (
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/errors"
 )
 
 type ToSql struct {

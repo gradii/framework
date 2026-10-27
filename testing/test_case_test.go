@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
-	mocksconsole "github.com/goravel/framework/mocks/console"
+	mocksconsole "github.com/gradii/framework/mocks/console"
 )
 
 type TestCaseSuite struct {

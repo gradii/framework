@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	contractsconfig "github.com/goravel/framework/contracts/config"
-	"github.com/goravel/framework/contracts/queue"
+	contractsconfig "github.com/gradii/framework/contracts/config"
+	"github.com/gradii/framework/contracts/queue"
 )
 
 // defaultReceiveTimeout is the fallback timeout for a single blocking Receive

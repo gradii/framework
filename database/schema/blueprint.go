@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/goravel/framework/contracts/database/driver"
-	"github.com/goravel/framework/contracts/database/orm"
-	"github.com/goravel/framework/contracts/database/schema"
-	"github.com/goravel/framework/support/convert"
+	"github.com/gradii/framework/contracts/database/driver"
+	"github.com/gradii/framework/contracts/database/orm"
+	"github.com/gradii/framework/contracts/database/schema"
+	"github.com/gradii/framework/support/convert"
 )
 
 const (

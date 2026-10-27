@@ -5,9 +5,9 @@ package cache
 import (
 	context "context"
 
-	cache "github.com/goravel/framework/contracts/cache"
+	cache "github.com/gradii/framework/contracts/cache"
 
-	docker "github.com/goravel/framework/contracts/testing/docker"
+	docker "github.com/gradii/framework/contracts/testing/docker"
 
 	mock "github.com/stretchr/testify/mock"
 

@@ -6,8 +6,8 @@ func (r Stubs) MailNotification() string {
 	return `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/notification"
-	"github.com/goravel/framework/notification/mail"
+	"github.com/gradii/framework/contracts/notification"
+	"github.com/gradii/framework/notification/mail"
 )
 
 type DummyNotification struct {
@@ -38,7 +38,7 @@ func (r Stubs) DatabaseNotification() string {
 	return `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/notification"
+	"github.com/gradii/framework/contracts/notification"
 )
 
 type DummyNotification struct {

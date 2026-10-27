@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/goravel/framework/contracts/database/db"
-	dbdriver "github.com/goravel/framework/database/driver"
+	"github.com/gradii/framework/contracts/database/db"
+	dbdriver "github.com/gradii/framework/database/driver"
 	"github.com/jmoiron/sqlx"
 )
 

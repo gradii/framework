@@ -3,7 +3,7 @@
 package notification
 
 import (
-	notification "github.com/goravel/framework/contracts/notification"
+	notification "github.com/gradii/framework/contracts/notification"
 	mock "github.com/stretchr/testify/mock"
 )
 

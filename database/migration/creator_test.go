@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/support/carbon"
+	"github.com/gradii/framework/support/carbon"
 )
 
 type DefaultCreatorSuite struct {
@@ -28,7 +28,7 @@ func (s *DefaultCreatorSuite) TestPopulateStub() {
 		Signature:      "202410131203_create_users_table",
 		Table:          "users",
 		FacadesPackage: "facades",
-		FacadesImport:  "github.com/goravel/framework/facades",
+		FacadesImport:  "github.com/gradii/framework/facades",
 	}
 
 	tests := []struct {
@@ -69,9 +69,9 @@ func (r *M202410131203CreateUsersTable) Down() error {
 			expected: `package migrations
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/schema"
 
-	"github.com/goravel/framework/facades"
+	"github.com/gradii/framework/facades"
 )
 
 type M202410131203CreateUsersTable struct{}
@@ -113,7 +113,7 @@ func (r *M202410131203CreateUsersTable) Down() error {
 			expected: `package migrations
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/schema"
 
 	"gitlab.com/ijobs.uz/medclinic.uz/api/app/facades"
 )
@@ -152,15 +152,15 @@ func (r *M202410131203CreateUsersTable) Down() error {
 				Signature:      "202410131203_create_users_table",
 				Table:          "users",
 				FacadesPackage: "facades",
-				FacadesImport:  "github.com/goravel/framework/facades",
+				FacadesImport:  "github.com/gradii/framework/facades",
 				SchemaFields:   []string{`table.ID()`, `table.String("name")`, `table.TimestampsTz()`},
 			},
 			expected: `package migrations
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/schema"
 
-	"github.com/goravel/framework/facades"
+	"github.com/gradii/framework/facades"
 )
 
 type M202410131203CreateUsersTable struct{}
@@ -196,9 +196,9 @@ func (r *M202410131203CreateUsersTable) Down() error {
 			expected: `package migrations
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/schema"
 
-	"github.com/goravel/framework/facades"
+	"github.com/gradii/framework/facades"
 )
 
 type M202410131203CreateUsersTable struct{}

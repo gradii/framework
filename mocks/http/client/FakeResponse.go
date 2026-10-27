@@ -5,7 +5,7 @@ package client
 import (
 	http "net/http"
 
-	client "github.com/goravel/framework/contracts/http/client"
+	client "github.com/gradii/framework/contracts/http/client"
 
 	mock "github.com/stretchr/testify/mock"
 )

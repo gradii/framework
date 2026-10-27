@@ -3,12 +3,12 @@ package validation
 import (
 	"context"
 
-	"github.com/goravel/framework/contracts/binding"
-	consolecontract "github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/contracts/database/orm"
-	"github.com/goravel/framework/contracts/foundation"
-	contractstranslation "github.com/goravel/framework/contracts/translation"
-	"github.com/goravel/framework/validation/console"
+	"github.com/gradii/framework/contracts/binding"
+	consolecontract "github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/contracts/database/orm"
+	"github.com/gradii/framework/contracts/foundation"
+	contractstranslation "github.com/gradii/framework/contracts/translation"
+	"github.com/gradii/framework/validation/console"
 )
 
 var (

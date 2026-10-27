@@ -3,7 +3,7 @@
 package factory
 
 import (
-	factory "github.com/goravel/framework/contracts/database/factory"
+	factory "github.com/gradii/framework/contracts/database/factory"
 	mock "github.com/stretchr/testify/mock"
 )
 

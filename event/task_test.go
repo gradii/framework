@@ -6,10 +6,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/goravel/framework/contracts/event"
-	"github.com/goravel/framework/contracts/queue"
-	"github.com/goravel/framework/errors"
-	queuemock "github.com/goravel/framework/mocks/queue"
+	"github.com/gradii/framework/contracts/event"
+	"github.com/gradii/framework/contracts/queue"
+	"github.com/gradii/framework/errors"
+	queuemock "github.com/gradii/framework/mocks/queue"
 )
 
 type TestQueueListener struct{}
@@ -128,7 +128,7 @@ func TestDispatchWithQueue(t *testing.T) {
 
 	mockQueue.EXPECT().Register(mock.Anything).Maybe()
 	mockQueue.EXPECT().Job(mock.Anything, []queue.Arg{
-		{Type: "string", Value: "github.com/goravel/framework/event.TestEvent"},
+		{Type: "string", Value: "github.com/gradii/framework/event.TestEvent"},
 		{Type: "string", Value: "test"},
 	}).Return(mockPendingJob).Once()
 	mockPendingJob.EXPECT().OnConnection("redis").Return(mockPendingJob).Once()
@@ -162,7 +162,7 @@ func TestDispatchWithQueueError(t *testing.T) {
 
 func TestTestUtils(t *testing.T) {
 	assert.Equal(t, "test_listener", (&TestListener{}).Signature())
-	assert.Nil(t, (&TestListener{}).Handle("github.com/goravel/framework/event.TestEvent"))
+	assert.Nil(t, (&TestListener{}).Handle("github.com/gradii/framework/event.TestEvent"))
 	assert.Equal(t, "test_listener", (&TestListenerHandleError{}).Signature())
-	assert.EqualError(t, (&TestListenerHandleError{}).Handle("github.com/goravel/framework/event.TestEvent"), "error")
+	assert.EqualError(t, (&TestListenerHandleError{}).Handle("github.com/gradii/framework/event.TestEvent"), "error")
 }

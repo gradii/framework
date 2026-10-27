@@ -1,7 +1,7 @@
 package orm
 
 import (
-	"github.com/goravel/framework/database/orm/morphmap"
+	"github.com/gradii/framework/database/orm/morphmap"
 )
 
 // MorphMap registers polymorphic aliases. Each entry maps an alias (the value stored in a

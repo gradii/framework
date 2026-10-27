@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/goravel/framework/contracts/database/db"
-	querybuilder "github.com/goravel/framework/database/query"
+	"github.com/gradii/framework/contracts/database/db"
+	querybuilder "github.com/gradii/framework/database/query"
 )
 
 // newWhereAnyQuery builds a bare facade query over "users" the tests below can extend. It needs no

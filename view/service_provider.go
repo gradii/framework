@@ -1,11 +1,11 @@
 package view
 
 import (
-	contractsbinding "github.com/goravel/framework/contracts/binding"
-	contractsconsole "github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/support/binding"
-	"github.com/goravel/framework/view/console"
+	contractsbinding "github.com/gradii/framework/contracts/binding"
+	contractsconsole "github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/support/binding"
+	"github.com/gradii/framework/view/console"
 )
 
 type ServiceProvider struct{}

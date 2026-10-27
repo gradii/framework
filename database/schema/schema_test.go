@@ -6,12 +6,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
-	contractsdatabase "github.com/goravel/framework/contracts/database"
-	contractsdriver "github.com/goravel/framework/contracts/database/driver"
-	contractsschema "github.com/goravel/framework/contracts/database/schema"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	mocksdriver "github.com/goravel/framework/mocks/database/driver"
-	mocksorm "github.com/goravel/framework/mocks/database/orm"
+	contractsdatabase "github.com/gradii/framework/contracts/database"
+	contractsdriver "github.com/gradii/framework/contracts/database/driver"
+	contractsschema "github.com/gradii/framework/contracts/database/schema"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	mocksdriver "github.com/gradii/framework/mocks/database/driver"
+	mocksorm "github.com/gradii/framework/mocks/database/orm"
 )
 
 type User struct {

@@ -11,17 +11,17 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	contractsauth "github.com/goravel/framework/contracts/auth"
-	"github.com/goravel/framework/contracts/broadcasting"
-	contractshttp "github.com/goravel/framework/contracts/http"
-	"github.com/goravel/framework/contracts/queue"
-	"github.com/goravel/framework/errors"
-	mocksauth "github.com/goravel/framework/mocks/auth"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	mocksfoundation "github.com/goravel/framework/mocks/foundation"
-	mockshttp "github.com/goravel/framework/mocks/http"
-	mockslog "github.com/goravel/framework/mocks/log"
-	mocksqueue "github.com/goravel/framework/mocks/queue"
+	contractsauth "github.com/gradii/framework/contracts/auth"
+	"github.com/gradii/framework/contracts/broadcasting"
+	contractshttp "github.com/gradii/framework/contracts/http"
+	"github.com/gradii/framework/contracts/queue"
+	"github.com/gradii/framework/errors"
+	mocksauth "github.com/gradii/framework/mocks/auth"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	mocksfoundation "github.com/gradii/framework/mocks/foundation"
+	mockshttp "github.com/gradii/framework/mocks/http"
+	mockslog "github.com/gradii/framework/mocks/log"
+	mocksqueue "github.com/gradii/framework/mocks/queue"
 )
 
 type mockBroadcastEvent struct {

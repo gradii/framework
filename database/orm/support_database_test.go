@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/goravel/framework/support/carbon"
+	"github.com/gradii/framework/support/carbon"
 )
 
 type TestModel struct {

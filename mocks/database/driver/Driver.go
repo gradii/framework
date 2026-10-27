@@ -3,10 +3,10 @@
 package driver
 
 import (
-	database "github.com/goravel/framework/contracts/database"
-	docker "github.com/goravel/framework/contracts/testing/docker"
+	database "github.com/gradii/framework/contracts/database"
+	docker "github.com/gradii/framework/contracts/testing/docker"
 
-	driver "github.com/goravel/framework/contracts/database/driver"
+	driver "github.com/gradii/framework/contracts/database/driver"
 
 	mock "github.com/stretchr/testify/mock"
 )

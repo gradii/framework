@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/errors"
 )
 
 func TestNormalizeStoreTargetPath(t *testing.T) {
@@ -29,24 +29,24 @@ func TestNormalizeStoreTargetPath(t *testing.T) {
 			expectDirectory: "audio/nested",
 		},
 		{
-			name:      "rejects parent segment",
+			name:       "rejects parent segment",
 			targetPath: "../voice.mp3",
-			expectErr: errors.AIAudioStorePathInvalid,
+			expectErr:  errors.AIAudioStorePathInvalid,
 		},
 		{
-			name:      "rejects absolute unix path",
+			name:       "rejects absolute unix path",
 			targetPath: "/tmp/voice.mp3",
-			expectErr: errors.AIAudioStorePathInvalid,
+			expectErr:  errors.AIAudioStorePathInvalid,
 		},
 		{
-			name:      "rejects windows volume path",
+			name:       "rejects windows volume path",
 			targetPath: `C:\tmp\voice.mp3`,
-			expectErr: errors.AIAudioStorePathInvalid,
+			expectErr:  errors.AIAudioStorePathInvalid,
 		},
 		{
-			name:      "requires file name",
+			name:       "requires file name",
 			targetPath: "audio/",
-			expectErr: errors.AIAudioNameRequired,
+			expectErr:  errors.AIAudioNameRequired,
 		},
 	}
 

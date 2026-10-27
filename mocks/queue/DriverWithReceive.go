@@ -5,7 +5,7 @@ package queue
 import (
 	context "context"
 
-	queue "github.com/goravel/framework/contracts/queue"
+	queue "github.com/gradii/framework/contracts/queue"
 	mock "github.com/stretchr/testify/mock"
 )
 

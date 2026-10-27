@@ -5,9 +5,9 @@ import (
 	"sort"
 	"strings"
 
-	querybuilder "github.com/goravel/framework/database/query"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/support/carbon"
+	querybuilder "github.com/gradii/framework/database/query"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/support/carbon"
 )
 
 // This file inserts rows through the framework's own compiler.

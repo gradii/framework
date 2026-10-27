@@ -7,13 +7,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/goravel/framework/contracts/database"
-	"github.com/goravel/framework/contracts/database/driver"
-	querybuilder "github.com/goravel/framework/database/query"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	mocksconsole "github.com/goravel/framework/mocks/console"
-	mocksorm "github.com/goravel/framework/mocks/database/orm"
-	mocksschema "github.com/goravel/framework/mocks/database/schema"
+	"github.com/gradii/framework/contracts/database"
+	"github.com/gradii/framework/contracts/database/driver"
+	querybuilder "github.com/gradii/framework/database/query"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	mocksconsole "github.com/gradii/framework/mocks/console"
+	mocksorm "github.com/gradii/framework/mocks/database/orm"
+	mocksschema "github.com/gradii/framework/mocks/database/schema"
 )
 
 func TestShowCommand(t *testing.T) {

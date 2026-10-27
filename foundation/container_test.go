@@ -8,10 +8,10 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/contracts/binding"
-	"github.com/goravel/framework/contracts/facades"
-	"github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/support/color"
+	"github.com/gradii/framework/contracts/binding"
+	"github.com/gradii/framework/contracts/facades"
+	"github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/support/color"
 )
 
 type ContainerTestSuite struct {

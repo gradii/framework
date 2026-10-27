@@ -5,15 +5,15 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/stats"
 
-	"github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/contracts/database/schema"
-	"github.com/goravel/framework/contracts/database/seeder"
-	"github.com/goravel/framework/contracts/event"
-	"github.com/goravel/framework/contracts/foundation"
-	contractsconfiguration "github.com/goravel/framework/contracts/foundation/configuration"
-	"github.com/goravel/framework/contracts/queue"
-	"github.com/goravel/framework/contracts/schedule"
-	"github.com/goravel/framework/contracts/validation"
+	"github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/seeder"
+	"github.com/gradii/framework/contracts/event"
+	"github.com/gradii/framework/contracts/foundation"
+	contractsconfiguration "github.com/gradii/framework/contracts/foundation/configuration"
+	"github.com/gradii/framework/contracts/queue"
+	"github.com/gradii/framework/contracts/schedule"
+	"github.com/gradii/framework/contracts/validation"
 )
 
 func Setup() foundation.ApplicationBuilder {

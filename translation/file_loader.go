@@ -3,11 +3,11 @@ package translation
 import (
 	"os"
 
-	"github.com/goravel/framework/contracts/foundation"
-	contractstranslation "github.com/goravel/framework/contracts/translation"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/packages/paths"
-	"github.com/goravel/framework/support/file"
+	"github.com/gradii/framework/contracts/foundation"
+	contractstranslation "github.com/gradii/framework/contracts/translation"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/packages/paths"
+	"github.com/gradii/framework/support/file"
 )
 
 type FileLoader struct {

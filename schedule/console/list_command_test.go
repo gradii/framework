@@ -7,11 +7,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/goravel/framework/contracts/console/command"
-	"github.com/goravel/framework/contracts/schedule"
-	consolemocks "github.com/goravel/framework/mocks/console"
-	mocksschedule "github.com/goravel/framework/mocks/schedule"
-	"github.com/goravel/framework/support/carbon"
+	"github.com/gradii/framework/contracts/console/command"
+	"github.com/gradii/framework/contracts/schedule"
+	consolemocks "github.com/gradii/framework/mocks/console"
+	mocksschedule "github.com/gradii/framework/mocks/schedule"
+	"github.com/gradii/framework/support/carbon"
 )
 
 func TestListCommand(t *testing.T) {

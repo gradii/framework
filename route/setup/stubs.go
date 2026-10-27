@@ -27,7 +27,7 @@ func (s Stubs) Controller() string {
 	return `package controllers
 
 import (
-	"github.com/goravel/framework/contracts/http"
+	"github.com/gradii/framework/contracts/http"
 )
 
 type UserController struct {}
@@ -134,7 +134,7 @@ func (s Stubs) RouteFacade(pkg string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/route"
+	"github.com/gradii/framework/contracts/route"
 )
 
 func Route() route.Route {
@@ -149,8 +149,8 @@ func (s Stubs) Routes(pkg, appImport, facadesImport, facadesPackage string) stri
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/http"
-	"github.com/goravel/framework/support"
+	"github.com/gradii/framework/contracts/http"
+	"github.com/gradii/framework/support"
 
 	"DummyAppImport/http/controllers"
 	"DummyFacadesImport"

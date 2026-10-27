@@ -3,7 +3,7 @@ package telemetry
 import (
 	"context"
 
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/errors"
 )
 
 type (

@@ -42,13 +42,13 @@ func init() {
 				"key": "",
 			},
 		},
-        
+
 		// Default Client Name
 		//
 		// This determines which client is used when you call facades.Http() or
 		// facades.Http().Client() without passing a specific name.
 		"default_client": config.Env("HTTP_CLIENT_DEFAULT", "default"),
-	
+
 		// Client Configurations
 		//
 		// Here you may define multiple independent client configurations.
@@ -59,24 +59,24 @@ func init() {
 			  // The base URL for the client. All requests made using this client
 			  // will be relative to this URL.
 			  "base_url": config.Env("HTTP_CLIENT_BASE_URL", ""),
-	
+
 			  // The maximum amount of time a request can take, including connection
 			  // establishment, redirects, and reading the response body.
 			  "timeout": config.Env("HTTP_CLIENT_TIMEOUT", "30s"),
-	
+
 			  // The maximum number of idle (keep-alive) connections to keep across
 			  // ALL hosts. Increasing this helps reuse TCP connections.
 			  "max_idle_conns": config.Env("HTTP_CLIENT_MAX_IDLE_CONNS", 100),
-	
+
 			  // The maximum number of idle (keep-alive) connections to keep PER host.
 			  // By default, Go sets this to 2, which is often a bottleneck.
 			  // Increase this value for high-throughput applications.
 			  "max_idle_conns_per_host": config.Env("HTTP_CLIENT_MAX_IDLE_CONNS_PER_HOST", 2),
-	
+
 			  // The maximum total number of connections (active + idle) allowed per host.
 			  // A value of 0 means no limit.
 			  "max_conns_per_host": config.Env("HTTP_CLIENT_MAX_CONN_PER_HOST", 0),
-	
+
 			  // The maximum amount of time an idle (keep-alive) connection will remain
 			  // in the pool before closing itself.
 			  "idle_conn_timeout": config.Env("HTTP_CLIENT_IDLE_CONN_TIMEOUT", "90s"),
@@ -97,7 +97,7 @@ func (s Stubs) HttpFacade(pkg string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/http/client"
+	"github.com/gradii/framework/contracts/http/client"
 )
 
 func Http() client.Factory {
@@ -112,7 +112,7 @@ func (s Stubs) RateLimiterFacade(pkg string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/http"
+	"github.com/gradii/framework/contracts/http"
 )
 
 func RateLimiter() http.RateLimiter {
@@ -127,7 +127,7 @@ func (s Stubs) ViewFacade(pkg string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/http"
+	"github.com/gradii/framework/contracts/http"
 )
 
 func View() http.View {

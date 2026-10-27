@@ -8,13 +8,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/goravel/framework/contracts/config"
-	"github.com/goravel/framework/contracts/database"
-	contractslogger "github.com/goravel/framework/contracts/database/logger"
-	contractstelemetry "github.com/goravel/framework/contracts/telemetry"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/support/color"
-	instrumentationdatabase "github.com/goravel/framework/telemetry/instrumentation/database"
+	"github.com/gradii/framework/contracts/config"
+	"github.com/gradii/framework/contracts/database"
+	contractslogger "github.com/gradii/framework/contracts/database/logger"
+	contractstelemetry "github.com/gradii/framework/contracts/telemetry"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/support/color"
+	instrumentationdatabase "github.com/gradii/framework/telemetry/instrumentation/database"
 )
 
 // cachedConnection holds an opened writer pool and the telemetry instrument bound to it.

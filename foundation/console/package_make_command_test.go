@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/contracts/console/command"
-	mocksconsole "github.com/goravel/framework/mocks/console"
-	"github.com/goravel/framework/support/file"
+	"github.com/gradii/framework/contracts/console/command"
+	mocksconsole "github.com/gradii/framework/mocks/console"
+	"github.com/gradii/framework/support/file"
 )
 
 type PackageMakeCommandTestSuite struct {
@@ -77,7 +77,7 @@ func (s *PackageMakeCommandTestSuite) TestHandle() {
 		// Create bootstrap/app.go to trigger IsBootstrapSetup() == true
 		_ = file.Create("bootstrap/app.go", `package bootstrap
 
-import "github.com/goravel/framework/foundation"
+import "github.com/gradii/framework/foundation"
 
 func Boot() {
 	foundation.Setup().Start()
@@ -119,8 +119,8 @@ func Boot() {
 				s.True(file.Exists("packages/sms/sms.go"))
 				s.True(file.Exists("packages/sms/contracts/sms.go"))
 				s.True(file.Exists("packages/sms/facades/sms.go"))
-				s.True(file.Contain("packages/sms/facades/sms.go", "github.com/goravel/framework/packages/sms"))
-				s.True(file.Contain("packages/sms/facades/sms.go", "github.com/goravel/framework/packages/sms/contracts"))
+				s.True(file.Contain("packages/sms/facades/sms.go", "github.com/gradii/framework/packages/sms"))
+				s.True(file.Contain("packages/sms/facades/sms.go", "github.com/gradii/framework/packages/sms/contracts"))
 				s.True(file.Exists("packages/sms/setup/stubs.go"))
 				s.True(file.Exists("packages/sms/setup/setup.go"))
 				s.NoError(file.Remove("packages"))

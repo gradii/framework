@@ -10,7 +10,7 @@ func (s Stubs) Config(pkg, facadesImport, facadesPackage string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/support/path"
+	"github.com/gradii/framework/support/path"
 
 	"DummyFacadesImport"
 )
@@ -58,7 +58,7 @@ func (s Stubs) StorageFacade(pkg string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/filesystem"
+	"github.com/gradii/framework/contracts/filesystem"
 )
 
 func Storage() filesystem.Storage {

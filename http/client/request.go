@@ -10,9 +10,9 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/http/client"
-	supportmaps "github.com/goravel/framework/support/maps"
+	"github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/http/client"
+	supportmaps "github.com/gradii/framework/support/maps"
 )
 
 var _ client.Request = (*Request)(nil)

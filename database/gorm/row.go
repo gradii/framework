@@ -1,10 +1,10 @@
 package gorm
 
 import (
-	"github.com/goravel/framework/database/internal/annotation"
-	"github.com/goravel/framework/database/internal/reflectx"
-	rowscan "github.com/goravel/framework/database/internal/scan"
-	"github.com/goravel/framework/support/str"
+	"github.com/gradii/framework/database/internal/annotation"
+	"github.com/gradii/framework/database/internal/reflectx"
+	rowscan "github.com/gradii/framework/database/internal/scan"
+	"github.com/gradii/framework/support/str"
 )
 
 var rowMapper = reflectx.NewMapperTagFunc("gorm", func(name string) string {

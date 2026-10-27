@@ -3,7 +3,7 @@
 package validation
 
 import (
-	validation "github.com/goravel/framework/contracts/validation"
+	validation "github.com/gradii/framework/contracts/validation"
 	mock "github.com/stretchr/testify/mock"
 )
 

@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	contractsprocess "github.com/goravel/framework/contracts/process"
-	"github.com/goravel/framework/errors"
+	contractsprocess "github.com/gradii/framework/contracts/process"
+	"github.com/gradii/framework/errors"
 )
 
 var _ contractsprocess.PoolBuilder = (*PoolBuilder)(nil)

@@ -1,6 +1,6 @@
 package query
 
-import "github.com/goravel/framework/database/query/core"
+import "github.com/gradii/framework/database/query/core"
 
 type Expression = core.Expression
 

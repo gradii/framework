@@ -3,7 +3,7 @@ package broadcasting
 import (
 	"strings"
 
-	"github.com/goravel/framework/contracts/broadcasting"
+	"github.com/gradii/framework/contracts/broadcasting"
 )
 
 // PublicChannel returns the channel name unchanged. It is kept as a semantic

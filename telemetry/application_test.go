@@ -15,8 +15,8 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/support/color"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/support/color"
 )
 
 func TestNewApplication(t *testing.T) {

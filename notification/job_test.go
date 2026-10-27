@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	mockslog "github.com/goravel/framework/mocks/log"
+	mockslog "github.com/gradii/framework/mocks/log"
 )
 
 // fakeChannel and fakeResolvableChannel (used below) are defined in

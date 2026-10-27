@@ -7,15 +7,15 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
-	contractshttp "github.com/goravel/framework/contracts/http"
-	"github.com/goravel/framework/http"
+	contractshttp "github.com/gradii/framework/contracts/http"
+	"github.com/gradii/framework/http"
 
-	mockscache "github.com/goravel/framework/mocks/cache"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	mocksfilesystem "github.com/goravel/framework/mocks/filesystem"
-	mocksfoundation "github.com/goravel/framework/mocks/foundation"
-	mockshash "github.com/goravel/framework/mocks/hash"
-	mockshttp "github.com/goravel/framework/mocks/http"
+	mockscache "github.com/gradii/framework/mocks/cache"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	mocksfilesystem "github.com/gradii/framework/mocks/filesystem"
+	mocksfoundation "github.com/gradii/framework/mocks/foundation"
+	mockshash "github.com/gradii/framework/mocks/hash"
+	mockshttp "github.com/gradii/framework/mocks/http"
 )
 
 type MaintenanceTestSuite struct {

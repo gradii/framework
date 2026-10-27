@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	contractsdatabase "github.com/goravel/framework/contracts/database"
-	databasedriver "github.com/goravel/framework/database/driver"
-	mocksconfig "github.com/goravel/framework/mocks/config"
+	contractsdatabase "github.com/gradii/framework/contracts/database"
+	databasedriver "github.com/gradii/framework/database/driver"
+	mocksconfig "github.com/gradii/framework/mocks/config"
 )
 
 // TestSelectWithLockUsesWritePdo ports Laravel's testSelectWithLockUsesWritePdo: a select that

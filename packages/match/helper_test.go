@@ -10,20 +10,20 @@ import (
 	"github.com/dave/dst/dstutil"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/contracts/packages/match"
+	"github.com/gradii/framework/contracts/packages/match"
 )
 
 type MatchHelperTestSuite struct {
 	suite.Suite
-	configChained       *dst.File
-	configVariable      *dst.File
-	providerVariable    *dst.File
-	providerInConfig    *dst.File
-	console             *dst.File
-	database            *dst.File
-	jobs                *dst.File
-	serviceProvider     *dst.File
-	validation          *dst.File
+	configChained    *dst.File
+	configVariable   *dst.File
+	providerVariable *dst.File
+	providerInConfig *dst.File
+	console          *dst.File
+	database         *dst.File
+	jobs             *dst.File
+	serviceProvider  *dst.File
+	validation       *dst.File
 }
 
 func (s *MatchHelperTestSuite) SetupTest() {
@@ -54,8 +54,8 @@ func init() {
 	s.console, err = decorator.Parse(`package console
 
 import (
-	"github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/contracts/schedule"
+	"github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/contracts/schedule"
 	"goravel/app/console/commands"
 )
 
@@ -75,8 +75,8 @@ func (kernel Kernel) Commands() []console.Command {
 	s.database, err = decorator.Parse(`package database
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
-	"github.com/goravel/framework/contracts/database/seeder"
+	"github.com/gradii/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/seeder"
 
 	"goravel/database/migrations"
 	"goravel/database/seeders"
@@ -101,9 +101,9 @@ func (kernel Kernel) Seeders() []seeder.Seeder {
 	s.validation, err = decorator.Parse(`package providers
 
 import (
-	"github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/validation"
-	"github.com/goravel/framework/facades"
+	"github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/validation"
+	"github.com/gradii/framework/facades"
 
 	"goravel/app/filters"
 	"goravel/app/rules"
@@ -140,10 +140,10 @@ func (receiver *ValidationServiceProvider) filters() []validation.Filter {
 	s.jobs, err = decorator.Parse(`package providers
 
 import (
-	"github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/queue"
-	"github.com/goravel/framework/facades"
-	
+	"github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/queue"
+	"github.com/gradii/framework/facades"
+
 	"goravel/app/jobs"
 )
 
@@ -169,7 +169,7 @@ func (receiver *QueueServiceProvider) Jobs() []queue.Job {
 	s.serviceProvider, err = decorator.Parse(`package providers
 
 import (
-	"github.com/goravel/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation"
 )
 
 type AppServiceProvider struct {
@@ -188,9 +188,9 @@ func (receiver *AppServiceProvider) Boot(app foundation.Application) {
 	s.providerVariable, err = decorator.Parse(`package bootstrap
 
 import (
-	"github.com/goravel/framework/auth"
-	"github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/crypt"
+	"github.com/gradii/framework/auth"
+	"github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/crypt"
 )
 
 func Providers() []foundation.ServiceProvider {
@@ -204,9 +204,9 @@ func Providers() []foundation.ServiceProvider {
 	s.providerInConfig, err = decorator.Parse(`package config
 
 import (
-	"github.com/goravel/framework/auth"
-	"github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/crypt"
+	"github.com/gradii/framework/auth"
+	"github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/crypt"
 )
 
 func init() {

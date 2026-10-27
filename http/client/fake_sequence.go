@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/http/client"
+	"github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/http/client"
 )
 
 var _ client.FakeSequence = (*FakeSequence)(nil)

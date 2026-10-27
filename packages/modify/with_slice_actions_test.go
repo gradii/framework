@@ -11,11 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/packages/match"
-	"github.com/goravel/framework/support"
-	supportfile "github.com/goravel/framework/support/file"
-	"github.com/goravel/framework/support/path"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/packages/match"
+	"github.com/gradii/framework/support"
+	supportfile "github.com/gradii/framework/support/file"
+	"github.com/gradii/framework/support/path"
 )
 
 type WithSliceHandlerTestSuite struct {
@@ -44,7 +44,7 @@ func (s *WithSliceHandlerTestSuite) TestNewWithSliceHandler() {
 		helperFuncName:  "Commands",
 		typePackage:     "console",
 		typeName:        "Command",
-		typeImportPath:  "github.com/goravel/framework/contracts/console",
+		typeImportPath:  "github.com/gradii/framework/contracts/console",
 		fileExistsError: errors.PackageCommandsFileExists,
 		stubTemplate:    commands,
 		matcherFunc:     match.Commands,
@@ -55,8 +55,8 @@ func (s *WithSliceHandlerTestSuite) TestNewWithSliceHandler() {
 		s.Require().NoError(supportfile.PutContent(s.appFile, `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 )
 
 func Boot() contractsfoundation.Application {
@@ -86,8 +86,8 @@ func Boot() contractsfoundation.Application {
 		s.Require().NoError(supportfile.PutContent(s.appFile, `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 )
 
 func Boot() contractsfoundation.Application {
@@ -98,7 +98,7 @@ func Boot() contractsfoundation.Application {
 		commandsFile := filepath.Join(s.bootstrapDir, "commands.go")
 		s.Require().NoError(supportfile.PutContent(commandsFile, `package bootstrap
 
-import "github.com/goravel/framework/contracts/console"
+import "github.com/gradii/framework/contracts/console"
 
 func Commands() []console.Command {
 	return []console.Command{}
@@ -119,7 +119,7 @@ func (s *WithSliceHandlerTestSuite) TestAddItem_NoFoundationSetup() {
 		helperFuncName:  "Commands",
 		typePackage:     "console",
 		typeName:        "Command",
-		typeImportPath:  "github.com/goravel/framework/contracts/console",
+		typeImportPath:  "github.com/gradii/framework/contracts/console",
 		fileExistsError: errors.PackageCommandsFileExists,
 		stubTemplate:    commands,
 		matcherFunc:     match.Commands,
@@ -158,7 +158,7 @@ func (s *WithSliceHandlerTestSuite) TestAddItem_NoWithMethod_NoFile() {
 		helperFuncName:  "Commands",
 		typePackage:     "console",
 		typeName:        "Command",
-		typeImportPath:  "github.com/goravel/framework/contracts/console",
+		typeImportPath:  "github.com/gradii/framework/contracts/console",
 		fileExistsError: errors.PackageCommandsFileExists,
 		stubTemplate:    commands,
 		matcherFunc:     match.Commands,
@@ -167,8 +167,8 @@ func (s *WithSliceHandlerTestSuite) TestAddItem_NoWithMethod_NoFile() {
 	appContent := `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -204,7 +204,7 @@ func (s *WithSliceHandlerTestSuite) TestAddItem_NoWithMethod_FileExists() {
 		helperFuncName:  "Commands",
 		typePackage:     "console",
 		typeName:        "Command",
-		typeImportPath:  "github.com/goravel/framework/contracts/console",
+		typeImportPath:  "github.com/gradii/framework/contracts/console",
 		fileExistsError: errors.PackageCommandsFileExists,
 		stubTemplate:    commands,
 		matcherFunc:     match.Commands,
@@ -213,8 +213,8 @@ func (s *WithSliceHandlerTestSuite) TestAddItem_NoWithMethod_FileExists() {
 	appContent := `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -228,7 +228,7 @@ func Boot() contractsfoundation.Application {
 	commandsFile := filepath.Join(s.bootstrapDir, "commands.go")
 	s.Require().NoError(supportfile.PutContent(commandsFile, `package bootstrap
 
-import "github.com/goravel/framework/contracts/console"
+import "github.com/gradii/framework/contracts/console"
 
 func Commands() []console.Command {
 	return []console.Command{}
@@ -249,7 +249,7 @@ func (s *WithSliceHandlerTestSuite) TestAddItem_WithMethodExists_FileExists() {
 		helperFuncName:  "Commands",
 		typePackage:     "console",
 		typeName:        "Command",
-		typeImportPath:  "github.com/goravel/framework/contracts/console",
+		typeImportPath:  "github.com/gradii/framework/contracts/console",
 		fileExistsError: errors.PackageCommandsFileExists,
 		stubTemplate:    commands,
 		matcherFunc:     match.Commands,
@@ -258,8 +258,8 @@ func (s *WithSliceHandlerTestSuite) TestAddItem_WithMethodExists_FileExists() {
 	appContent := `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -274,7 +274,7 @@ func Boot() contractsfoundation.Application {
 	s.Require().NoError(supportfile.PutContent(commandsFile, `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/console"
+	"github.com/gradii/framework/contracts/console"
 
 	"goravel/app/console/commands"
 )
@@ -305,7 +305,7 @@ func (s *WithSliceHandlerTestSuite) TestAddItem_WithMethodExists_NoFile_InlineAr
 		helperFuncName:  "Commands",
 		typePackage:     "console",
 		typeName:        "Command",
-		typeImportPath:  "github.com/goravel/framework/contracts/console",
+		typeImportPath:  "github.com/gradii/framework/contracts/console",
 		fileExistsError: errors.PackageCommandsFileExists,
 		stubTemplate:    commands,
 		matcherFunc:     match.Commands,
@@ -314,9 +314,9 @@ func (s *WithSliceHandlerTestSuite) TestAddItem_WithMethodExists_NoFile_InlineAr
 	appContent := `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/foundation"
 	"goravel/app/console/commands"
 	"goravel/config"
 )
@@ -354,8 +354,8 @@ func (s *WithSliceHandlerTestSuite) TestCheckWithMethodExists() {
 	appContent := `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 )
 
 func Boot() contractsfoundation.Application {
@@ -374,8 +374,8 @@ func Boot() contractsfoundation.Application {
 	appContent = `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 )
 
 func Boot() contractsfoundation.Application {
@@ -415,14 +415,14 @@ func (s *WithSliceHandlerTestSuite) TestCreateFile() {
 func (s *WithSliceHandlerTestSuite) TestAddImports() {
 	config := withSliceConfig{
 		fileName:       "commands.go",
-		typeImportPath: "github.com/goravel/framework/contracts/console",
+		typeImportPath: "github.com/gradii/framework/contracts/console",
 	}
 
 	appContent := `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 )
 
 func Boot() contractsfoundation.Application {
@@ -439,7 +439,7 @@ func Boot() contractsfoundation.Application {
 	content, err := supportfile.GetContent(s.appFile)
 	s.NoError(err)
 	s.Contains(content, `"goravel/app/console/commands"`)
-	s.Contains(content, `"github.com/goravel/framework/contracts/console"`)
+	s.Contains(content, `"github.com/gradii/framework/contracts/console"`)
 }
 
 func (s *WithSliceHandlerTestSuite) TestAddItemToFile() {
@@ -454,7 +454,7 @@ func (s *WithSliceHandlerTestSuite) TestAddItemToFile() {
 	commandsContent := `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/console"
+	"github.com/gradii/framework/contracts/console"
 )
 
 func Commands() []console.Command {
@@ -676,9 +676,9 @@ func (s *WithSliceHandlerTestSuite) TestSetupInline() {
 		appContent := `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/foundation"
 	"goravel/app/console/commands"
 )
 
@@ -709,9 +709,9 @@ func Boot() contractsfoundation.Application {
 		appContent := `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/foundation"
 	"goravel/app/console/commands"
 )
 
@@ -743,8 +743,8 @@ func (s *WithSliceHandlerTestSuite) TestSetupWithFunction() {
 	appContent := `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -772,7 +772,7 @@ func (s *WithSliceHandlerTestSuite) TestAddItem_WithMigrations() {
 		helperFuncName:  "Migrations",
 		typePackage:     "schema",
 		typeName:        "Migration",
-		typeImportPath:  "github.com/goravel/framework/contracts/database/schema",
+		typeImportPath:  "github.com/gradii/framework/contracts/database/schema",
 		fileExistsError: errors.PackageMigrationsFileExists,
 		stubTemplate:    migrations,
 		matcherFunc:     match.Migrations,
@@ -781,8 +781,8 @@ func (s *WithSliceHandlerTestSuite) TestAddItem_WithMigrations() {
 	appContent := `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -818,7 +818,7 @@ func (s *WithSliceHandlerTestSuite) TestRemoveItem() {
 		helperFuncName:  "Commands",
 		typePackage:     "console",
 		typeName:        "Command",
-		typeImportPath:  "github.com/goravel/framework/contracts/console",
+		typeImportPath:  "github.com/gradii/framework/contracts/console",
 		fileExistsError: errors.PackageCommandsFileExists,
 		stubTemplate:    commands,
 		matcherFunc:     match.Commands,
@@ -832,8 +832,8 @@ func (s *WithSliceHandlerTestSuite) TestRemoveItem() {
 		appContent := `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -858,8 +858,8 @@ func Boot() contractsfoundation.Application {
 		appContent := `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -874,7 +874,7 @@ func Boot() contractsfoundation.Application {
 		s.Require().NoError(supportfile.PutContent(commandsFile, `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/console"
+	"github.com/gradii/framework/contracts/console"
 
 	"goravel/app/console/commands"
 )
@@ -907,9 +907,9 @@ func Commands() []console.Command {
 		appContent := `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/foundation"
 	"goravel/app/console/commands"
 	"goravel/config"
 )
@@ -946,8 +946,8 @@ func Boot() contractsfoundation.Application {
 		appContent := `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -962,7 +962,7 @@ func Boot() contractsfoundation.Application {
 		s.Require().NoError(supportfile.PutContent(commandsFile, `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/console"
+	"github.com/gradii/framework/contracts/console"
 
 	"goravel/app/console/commands"
 )
@@ -993,9 +993,9 @@ func Commands() []console.Command {
 		appContent := `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/foundation"
 	"goravel/app/console/commands"
 	"goravel/config"
 )
@@ -1055,15 +1055,15 @@ func Boot() {
 func (s *WithSliceHandlerTestSuite) TestRemoveImports() {
 	config := withSliceConfig{
 		fileName:       "commands.go",
-		typeImportPath: "github.com/goravel/framework/contracts/console",
+		typeImportPath: "github.com/gradii/framework/contracts/console",
 	}
 
 	appContent := `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/foundation"
 	"goravel/app/console/commands"
 	"goravel/app/console/unused"
 	"goravel/config"
@@ -1105,7 +1105,7 @@ func (s *WithSliceHandlerTestSuite) TestRemoveItemFromFile() {
 	commandsContent := `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/console"
+	"github.com/gradii/framework/contracts/console"
 
 	"goravel/app/console/commands"
 )
@@ -1143,9 +1143,9 @@ func (s *WithSliceHandlerTestSuite) TestRemoveInline() {
 		appContent := `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/foundation"
 	"goravel/app/console/commands"
 )
 
@@ -1179,8 +1179,8 @@ func Boot() contractsfoundation.Application {
 		appContent := `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -1377,10 +1377,10 @@ func Test_appendToExistingMiddleware(t *testing.T) {
 			initialContent: `package test
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/foundation/configuration"
-	"github.com/goravel/framework/foundation"
-	"github.com/goravel/framework/http/middleware"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation/configuration"
+	"github.com/gradii/framework/foundation"
+	"github.com/gradii/framework/http/middleware"
 )
 
 func Boot() contractsfoundation.Application {
@@ -1397,10 +1397,10 @@ func Boot() contractsfoundation.Application {
 			initialContent: `package test
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/foundation/configuration"
-	"github.com/goravel/framework/foundation"
-	"github.com/goravel/framework/http/middleware"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation/configuration"
+	"github.com/gradii/framework/foundation"
+	"github.com/gradii/framework/http/middleware"
 )
 
 func Boot() contractsfoundation.Application {
@@ -1463,10 +1463,10 @@ func Test_addMiddlewareAppendCall(t *testing.T) {
 			initialContent: `package test
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/foundation/configuration"
-	"github.com/goravel/framework/foundation"
-	"github.com/goravel/framework/http/middleware"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation/configuration"
+	"github.com/gradii/framework/foundation"
+	"github.com/gradii/framework/http/middleware"
 )
 
 func Boot() contractsfoundation.Application {
@@ -1481,10 +1481,10 @@ func Boot() contractsfoundation.Application {
 			initialContent: `package test
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/foundation/configuration"
-	"github.com/goravel/framework/foundation"
-	"github.com/goravel/framework/http/middleware"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation/configuration"
+	"github.com/gradii/framework/foundation"
+	"github.com/gradii/framework/http/middleware"
 )
 
 func Boot() contractsfoundation.Application {
@@ -1547,8 +1547,8 @@ func Test_addMiddlewareImports(t *testing.T) {
 			initialContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -1556,11 +1556,11 @@ func Boot() contractsfoundation.Application {
 	return foundation.Setup().WithConfig(config.Boot).Start()
 }
 `,
-			pkg:         "github.com/goravel/framework/http/middleware",
+			pkg:         "github.com/gradii/framework/http/middleware",
 			expectError: false,
 			expectedImports: []string{
-				"github.com/goravel/framework/http/middleware",
-				"github.com/goravel/framework/contracts/foundation/configuration",
+				"github.com/gradii/framework/http/middleware",
+				"github.com/gradii/framework/contracts/foundation/configuration",
 			},
 		},
 		{
@@ -1568,9 +1568,9 @@ func Boot() contractsfoundation.Application {
 			initialContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/foundation/configuration"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation/configuration"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -1578,11 +1578,11 @@ func Boot() contractsfoundation.Application {
 	return foundation.Setup().WithConfig(config.Boot).Start()
 }
 `,
-			pkg:         "github.com/goravel/framework/http/middleware",
+			pkg:         "github.com/gradii/framework/http/middleware",
 			expectError: false,
 			expectedImports: []string{
-				"github.com/goravel/framework/http/middleware",
-				"github.com/goravel/framework/contracts/foundation/configuration",
+				"github.com/gradii/framework/http/middleware",
+				"github.com/gradii/framework/contracts/foundation/configuration",
 			},
 		},
 		{
@@ -1590,9 +1590,9 @@ func Boot() contractsfoundation.Application {
 			initialContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
-	"github.com/goravel/framework/http/middleware"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
+	"github.com/gradii/framework/http/middleware"
 	"goravel/config"
 )
 
@@ -1600,11 +1600,11 @@ func Boot() contractsfoundation.Application {
 	return foundation.Setup().WithConfig(config.Boot).Start()
 }
 `,
-			pkg:         "github.com/goravel/framework/http/middleware",
+			pkg:         "github.com/gradii/framework/http/middleware",
 			expectError: false,
 			expectedImports: []string{
-				"github.com/goravel/framework/http/middleware",
-				"github.com/goravel/framework/contracts/foundation/configuration",
+				"github.com/gradii/framework/http/middleware",
+				"github.com/gradii/framework/contracts/foundation/configuration",
 			},
 		},
 	}
@@ -1649,8 +1649,8 @@ func Test_createWithMiddleware(t *testing.T) {
 			initialContent: `package test
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -1670,8 +1670,8 @@ func Boot() contractsfoundation.Application {
 			initialContent: `package test
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -1798,8 +1798,8 @@ func Test_findFoundationSetupCallsForMiddleware(t *testing.T) {
 			initialContent: `package test
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -1816,10 +1816,10 @@ func Boot() contractsfoundation.Application {
 			initialContent: `package test
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/foundation/configuration"
-	"github.com/goravel/framework/foundation"
-	"github.com/goravel/framework/http/middleware"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation/configuration"
+	"github.com/gradii/framework/foundation"
+	"github.com/gradii/framework/http/middleware"
 	"goravel/config"
 )
 
@@ -1840,8 +1840,8 @@ func Boot() contractsfoundation.Application {
 			initialContent: `package test
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -1924,10 +1924,10 @@ func Test_findMiddlewareAppendCall(t *testing.T) {
 			initialContent: `package test
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/foundation/configuration"
-	"github.com/goravel/framework/foundation"
-	"github.com/goravel/framework/http/middleware"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation/configuration"
+	"github.com/gradii/framework/foundation"
+	"github.com/gradii/framework/http/middleware"
 )
 
 func Boot() contractsfoundation.Application {
@@ -1943,10 +1943,10 @@ func Boot() contractsfoundation.Application {
 			initialContent: `package test
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/foundation/configuration"
-	"github.com/goravel/framework/foundation"
-	"github.com/goravel/framework/http/middleware"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation/configuration"
+	"github.com/gradii/framework/foundation"
+	"github.com/gradii/framework/http/middleware"
 )
 
 func Boot() contractsfoundation.Application {
@@ -1963,10 +1963,10 @@ func Boot() contractsfoundation.Application {
 			initialContent: `package test
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/foundation/configuration"
-	"github.com/goravel/framework/foundation"
-	"github.com/goravel/framework/http/middleware"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation/configuration"
+	"github.com/gradii/framework/foundation"
+	"github.com/gradii/framework/http/middleware"
 )
 
 func Boot() contractsfoundation.Application {
@@ -1981,10 +1981,10 @@ func Boot() contractsfoundation.Application {
 			initialContent: `package test
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/foundation/configuration"
-	"github.com/goravel/framework/foundation"
-	"github.com/goravel/framework/http/middleware"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation/configuration"
+	"github.com/gradii/framework/foundation"
+	"github.com/gradii/framework/http/middleware"
 )
 
 func Boot() contractsfoundation.Application {
@@ -2044,8 +2044,8 @@ func Test_foundationSetupMiddleware(t *testing.T) {
 			initialContent: `package test
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -2057,8 +2057,8 @@ func Boot() contractsfoundation.Application {
 			expectedResult: `package test
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -2077,10 +2077,10 @@ func Boot() contractsfoundation.Application {
 			initialContent: `package test
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/foundation/configuration"
-	"github.com/goravel/framework/foundation"
-	"github.com/goravel/framework/http/middleware"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation/configuration"
+	"github.com/gradii/framework/foundation"
+	"github.com/gradii/framework/http/middleware"
 	"goravel/config"
 )
 
@@ -2095,10 +2095,10 @@ func Boot() contractsfoundation.Application {
 			expectedResult: `package test
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/foundation/configuration"
-	"github.com/goravel/framework/foundation"
-	"github.com/goravel/framework/http/middleware"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation/configuration"
+	"github.com/gradii/framework/foundation"
+	"github.com/gradii/framework/http/middleware"
 	"goravel/config"
 )
 
@@ -2117,7 +2117,7 @@ func Boot() contractsfoundation.Application {
 			initialContent: `package test
 
 import (
-	"github.com/goravel/framework/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -2130,7 +2130,7 @@ func Boot() {
 			expectedResult: `package test
 
 import (
-	"github.com/goravel/framework/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 

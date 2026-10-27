@@ -4,12 +4,12 @@ import (
 	"net/http"
 	"sync"
 
-	contractsconfig "github.com/goravel/framework/contracts/config"
-	"github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/http/client"
-	contractstelemetry "github.com/goravel/framework/contracts/telemetry"
-	"github.com/goravel/framework/errors"
-	telemetryhttp "github.com/goravel/framework/telemetry/instrumentation/http"
+	contractsconfig "github.com/gradii/framework/contracts/config"
+	"github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/http/client"
+	contractstelemetry "github.com/gradii/framework/contracts/telemetry"
+	"github.com/gradii/framework/errors"
+	telemetryhttp "github.com/gradii/framework/telemetry/instrumentation/http"
 )
 
 var _ client.Factory = (*Factory)(nil)

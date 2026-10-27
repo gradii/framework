@@ -6,10 +6,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/http/client"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/support/convert"
+	"github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/http/client"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/support/convert"
 )
 
 var _ client.Response = (*Response)(nil)

@@ -8,12 +8,12 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/contracts/console/command"
-	"github.com/goravel/framework/contracts/foundation"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	mocksconsole "github.com/goravel/framework/mocks/console"
-	mocksfoundation "github.com/goravel/framework/mocks/foundation"
-	"github.com/goravel/framework/support/color"
+	"github.com/gradii/framework/contracts/console/command"
+	"github.com/gradii/framework/contracts/foundation"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	mocksconsole "github.com/gradii/framework/mocks/console"
+	mocksfoundation "github.com/gradii/framework/mocks/foundation"
+	"github.com/gradii/framework/support/color"
 )
 
 type AboutCommandTestSuite struct {

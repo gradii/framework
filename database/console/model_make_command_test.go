@@ -8,11 +8,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/goravel/framework/contracts/database/driver"
-	"github.com/goravel/framework/contracts/database/schema"
-	mocksconsole "github.com/goravel/framework/mocks/console"
-	mocksschema "github.com/goravel/framework/mocks/database/schema"
-	"github.com/goravel/framework/support/file"
+	"github.com/gradii/framework/contracts/database/driver"
+	"github.com/gradii/framework/contracts/database/schema"
+	mocksconsole "github.com/gradii/framework/mocks/console"
+	mocksschema "github.com/gradii/framework/mocks/database/schema"
+	"github.com/gradii/framework/support/file"
 )
 
 func TestModelMakeCommand(t *testing.T) {
@@ -44,7 +44,7 @@ func TestModelMakeCommand(t *testing.T) {
 	expectedUserContent := `package models
 
 import (
-	"github.com/goravel/framework/database/orm"
+	"github.com/gradii/framework/database/orm"
 )
 
 type User struct {
@@ -82,7 +82,7 @@ func (r *User) TableName() string {
 	expectedPhoneContent := `package User
 
 import (
-	"github.com/goravel/framework/database/orm"
+	"github.com/gradii/framework/database/orm"
 )
 
 type Phone struct {
@@ -111,7 +111,7 @@ func (r *Phone) TableName() string {
 	expectedArticleContent := `package models
 
 import (
-	"github.com/goravel/framework/database/orm"
+	"github.com/gradii/framework/database/orm"
 )
 
 type Article struct {
@@ -160,7 +160,7 @@ type Article struct {
 
 import (
 	"database/sql"
-	"github.com/goravel/framework/database/orm"
+	"github.com/gradii/framework/database/orm"
 )
 
 type Product struct {
@@ -231,7 +231,7 @@ func TestGenerateModelInfo(t *testing.T) {
 	}, info.Embeds)
 	assert.Equal(t, map[string]struct{}{
 		"database/sql": {},
-		"github.com/goravel/framework/database/orm": {},
+		"github.com/gradii/framework/database/orm": {},
 	}, info.Imports)
 
 	// Test with only nullable timestamps (no id, with soft deletes)
@@ -423,7 +423,7 @@ type User struct {
 	expectedContent = `package models
 
 import (
-	"github.com/goravel/framework/database/orm"
+	"github.com/gradii/framework/database/orm"
 )
 
 type EmptyModel struct {
@@ -458,14 +458,14 @@ type ModelWithFields struct {
 	modelInfo = modelDefinition{
 		Fields:          []string{},
 		Embeds:          []string{"orm.Timestamps"},
-		Imports:         map[string]struct{}{"github.com/goravel/framework/database/orm": {}},
+		Imports:         map[string]struct{}{"github.com/gradii/framework/database/orm": {}},
 		TableNameMethod: "",
 	}
 
 	expectedContent = `package models
 
 import (
-	"github.com/goravel/framework/database/orm"
+	"github.com/gradii/framework/database/orm"
 )
 
 type ModelWithEmbeds struct {

@@ -6,9 +6,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	querybuilder "github.com/goravel/framework/database/query"
-	mocksdb "github.com/goravel/framework/mocks/database/db"
-	mockslogger "github.com/goravel/framework/mocks/database/logger"
+	querybuilder "github.com/gradii/framework/database/query"
+	mocksdb "github.com/gradii/framework/mocks/database/db"
+	mockslogger "github.com/gradii/framework/mocks/database/logger"
 )
 
 // insertBatchRow carries a pointer column, the shape a schema with a nullable column has.

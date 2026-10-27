@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/goravel/framework/contracts/testing/docker"
+	"github.com/gradii/framework/contracts/testing/docker"
 )
 
 type Cache interface {

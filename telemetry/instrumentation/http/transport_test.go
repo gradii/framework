@@ -9,10 +9,10 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
-	contractsconfig "github.com/goravel/framework/contracts/config"
-	contractstelemetry "github.com/goravel/framework/contracts/telemetry"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	mockstelemetry "github.com/goravel/framework/mocks/telemetry"
+	contractsconfig "github.com/gradii/framework/contracts/config"
+	contractstelemetry "github.com/gradii/framework/contracts/telemetry"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	mockstelemetry "github.com/gradii/framework/mocks/telemetry"
 )
 
 type TransportTestSuite struct {

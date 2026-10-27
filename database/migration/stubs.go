@@ -29,7 +29,7 @@ func (receiver Stubs) Create() string {
 	return `package {{.Package}}
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/schema"
 
 	"{{.FacadesImport}}"
 )
@@ -70,7 +70,7 @@ func (receiver Stubs) Update() string {
 	return `package {{.Package}}
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/schema"
 
 	"{{.FacadesImport}}"
 )

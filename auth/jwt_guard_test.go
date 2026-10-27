@@ -12,15 +12,15 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
-	contractsauth "github.com/goravel/framework/contracts/auth"
-	"github.com/goravel/framework/contracts/http"
-	"github.com/goravel/framework/errors"
-	mocksauth "github.com/goravel/framework/mocks/auth"
-	mockscache "github.com/goravel/framework/mocks/cache"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	mocksorm "github.com/goravel/framework/mocks/database/orm"
-	mockslog "github.com/goravel/framework/mocks/log"
-	"github.com/goravel/framework/support/carbon"
+	contractsauth "github.com/gradii/framework/contracts/auth"
+	"github.com/gradii/framework/contracts/http"
+	"github.com/gradii/framework/errors"
+	mocksauth "github.com/gradii/framework/mocks/auth"
+	mockscache "github.com/gradii/framework/mocks/cache"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	mocksorm "github.com/gradii/framework/mocks/database/orm"
+	mockslog "github.com/gradii/framework/mocks/log"
+	"github.com/gradii/framework/support/carbon"
 )
 
 type JwtGuardTestSuite struct {

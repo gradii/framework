@@ -3,7 +3,7 @@
 package testing
 
 import (
-	docker "github.com/goravel/framework/contracts/testing/docker"
+	docker "github.com/gradii/framework/contracts/testing/docker"
 	mock "github.com/stretchr/testify/mock"
 )
 

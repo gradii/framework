@@ -9,18 +9,18 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	mocksconsole "github.com/goravel/framework/mocks/console"
-	"github.com/goravel/framework/support"
-	"github.com/goravel/framework/support/file"
-	"github.com/goravel/framework/support/str"
+	mocksconsole "github.com/gradii/framework/mocks/console"
+	"github.com/gradii/framework/support"
+	"github.com/gradii/framework/support/file"
+	"github.com/gradii/framework/support/str"
 )
 
 var queueServiceProvider = `package providers
 
 import (
-	"github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/queue"
-	"github.com/goravel/framework/facades"
+	"github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/queue"
+	"github.com/gradii/framework/facades"
 )
 
 type QueueServiceProvider struct {
@@ -42,8 +42,8 @@ func (receiver *QueueServiceProvider) Jobs() []queue.Job {
 var bootstrapApp = `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -55,8 +55,8 @@ func Boot() contractsfoundation.Application {
 var bootstrapAppWithJobs = `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -69,7 +69,7 @@ func Boot() contractsfoundation.Application {
 var bootstrapJobs = `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/queue"
+	"github.com/gradii/framework/contracts/queue"
 
 	"goravel/app/jobs"
 )

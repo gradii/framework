@@ -1,9 +1,9 @@
 package db
 
 import (
-	"github.com/goravel/framework/contracts/database/db"
-	querybuilder "github.com/goravel/framework/database/query"
-	"github.com/goravel/framework/database/query/core"
+	"github.com/gradii/framework/contracts/database/db"
+	querybuilder "github.com/gradii/framework/database/query"
+	"github.com/gradii/framework/database/query/core"
 )
 
 func (r *Query) SelectRaw(sql string, bindings ...any) db.Query {

@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	contractsdatabase "github.com/goravel/framework/contracts/database"
-	querybuilder "github.com/goravel/framework/database/query"
-	"github.com/goravel/framework/errors"
+	contractsdatabase "github.com/gradii/framework/contracts/database"
+	querybuilder "github.com/gradii/framework/database/query"
+	"github.com/gradii/framework/errors"
 )
 
 // newCursorQuery builds a query over a model whose compiled statements are recorded by the in-package

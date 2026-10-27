@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	contractsorm "github.com/goravel/framework/contracts/database/orm"
+	contractsorm "github.com/gradii/framework/contracts/database/orm"
 )
 
 // TestCapture_RelationSQL is a one-shot helper that writes the actual SQL generated for every

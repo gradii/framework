@@ -14,10 +14,10 @@ import (
 	"github.com/spf13/cast"
 	"github.com/urfave/cli/v3"
 
-	"github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/contracts/console/command"
-	"github.com/goravel/framework/support/color"
-	supportconsole "github.com/goravel/framework/support/console"
+	"github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/contracts/console/command"
+	"github.com/gradii/framework/support/color"
+	supportconsole "github.com/gradii/framework/support/console"
 )
 
 type CliContext struct {

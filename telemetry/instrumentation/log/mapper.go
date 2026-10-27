@@ -16,7 +16,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	otellog "go.opentelemetry.io/otel/log"
 
-	contractslog "github.com/goravel/framework/contracts/log"
+	contractslog "github.com/gradii/framework/contracts/log"
 )
 
 func toSeverity(level contractslog.Level) otellog.Severity {

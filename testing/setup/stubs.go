@@ -47,7 +47,7 @@ func (s Stubs) TestCase(pkg, bootstrapImport, bootstrapPackage string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/testing"
+	"github.com/gradii/framework/testing"
 
 	"DummyBootstrapImport"
 )
@@ -72,7 +72,7 @@ func (s Stubs) TestingFacade(pkg string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/testing"
+	"github.com/gradii/framework/contracts/testing"
 )
 
 func Testing() testing.Testing {

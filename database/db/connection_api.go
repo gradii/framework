@@ -7,11 +7,11 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/goravel/framework/contracts/database/db"
-	databasedriver "github.com/goravel/framework/database/driver"
-	querybuilder "github.com/goravel/framework/database/query"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/support/carbon"
+	"github.com/gradii/framework/contracts/database/db"
+	databasedriver "github.com/gradii/framework/database/driver"
+	querybuilder "github.com/gradii/framework/database/query"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/support/carbon"
 )
 
 func (r *DB) Listen(callback func(db.QueryExecuted)) {

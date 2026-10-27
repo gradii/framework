@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/support/carbon"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/support/carbon"
 )
 
 type TxLog struct {

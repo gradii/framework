@@ -11,10 +11,10 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/contracts/database/logger"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	mockslog "github.com/goravel/framework/mocks/log"
-	"github.com/goravel/framework/support/carbon"
+	"github.com/gradii/framework/contracts/database/logger"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	mockslog "github.com/gradii/framework/mocks/log"
+	"github.com/gradii/framework/support/carbon"
 )
 
 func TestNewLogger(t *testing.T) {

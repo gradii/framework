@@ -8,7 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/urfave/cli/v3"
 
-	"github.com/goravel/framework/contracts/console/command"
+	"github.com/gradii/framework/contracts/console/command"
 )
 
 type Command interface {

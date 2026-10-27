@@ -5,20 +5,20 @@ import (
 	"slices"
 	"strings"
 
-	contractsbinding "github.com/goravel/framework/contracts/binding"
-	"github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/contracts/console/command"
-	"github.com/goravel/framework/contracts/facades"
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/process"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/support"
-	"github.com/goravel/framework/support/collect"
-	"github.com/goravel/framework/support/color"
-	"github.com/goravel/framework/support/convert"
-	"github.com/goravel/framework/support/env"
-	"github.com/goravel/framework/support/file"
-	"github.com/goravel/framework/support/str"
+	contractsbinding "github.com/gradii/framework/contracts/binding"
+	"github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/contracts/console/command"
+	"github.com/gradii/framework/contracts/facades"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/process"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/support"
+	"github.com/gradii/framework/support/collect"
+	"github.com/gradii/framework/support/color"
+	"github.com/gradii/framework/support/convert"
+	"github.com/gradii/framework/support/env"
+	"github.com/gradii/framework/support/file"
+	"github.com/gradii/framework/support/str"
 )
 
 type PackageInstallCommand struct {
@@ -172,7 +172,7 @@ func (r *PackageInstallCommand) selectFacades(ctx console.Context) ([]string, er
 
 func (r *PackageInstallCommand) inputThirdPackage(ctx console.Context) (string, error) {
 	return ctx.Ask("Enter the package", console.AskOption{
-		Description: "E.g.: github.com/goravel/framework or github.com/goravel/framework@master",
+		Description: "E.g.: github.com/gradii/framework or github.com/gradii/framework@master",
 	})
 }
 

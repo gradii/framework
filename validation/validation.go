@@ -6,8 +6,8 @@ import (
 	"net/url"
 	"slices"
 
-	validatecontract "github.com/goravel/framework/contracts/validation"
-	"github.com/goravel/framework/errors"
+	validatecontract "github.com/gradii/framework/contracts/validation"
+	"github.com/gradii/framework/errors"
 )
 
 type Validation struct {

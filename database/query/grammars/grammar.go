@@ -1,6 +1,6 @@
 package grammars
 
-import "github.com/goravel/framework/database/query/core"
+import "github.com/gradii/framework/database/query/core"
 
 // Grammar compiles builder state into SQL. It is the Go counterpart of
 // Illuminate\Database\Query\Grammars\Grammar composed with Illuminate\Database\Grammar.

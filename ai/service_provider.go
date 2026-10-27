@@ -3,13 +3,13 @@ package ai
 import (
 	"context"
 
-	"github.com/goravel/framework/ai/console"
-	contractsai "github.com/goravel/framework/contracts/ai"
-	"github.com/goravel/framework/contracts/binding"
-	contractsconsole "github.com/goravel/framework/contracts/console"
-	contractsfilesystem "github.com/goravel/framework/contracts/filesystem"
-	"github.com/goravel/framework/contracts/foundation"
-	contractshttpclient "github.com/goravel/framework/contracts/http/client"
+	"github.com/gradii/framework/ai/console"
+	contractsai "github.com/gradii/framework/contracts/ai"
+	"github.com/gradii/framework/contracts/binding"
+	contractsconsole "github.com/gradii/framework/contracts/console"
+	contractsfilesystem "github.com/gradii/framework/contracts/filesystem"
+	"github.com/gradii/framework/contracts/foundation"
+	contractshttpclient "github.com/gradii/framework/contracts/http/client"
 )
 
 var (

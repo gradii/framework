@@ -6,12 +6,12 @@ import (
 	"reflect"
 	"time"
 
-	contractsdb "github.com/goravel/framework/contracts/database/db"
-	databasedriver "github.com/goravel/framework/database/driver"
-	rowscan "github.com/goravel/framework/database/internal/scan"
-	querybuilder "github.com/goravel/framework/database/query"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/support/carbon"
+	contractsdb "github.com/gradii/framework/contracts/database/db"
+	databasedriver "github.com/gradii/framework/database/driver"
+	rowscan "github.com/gradii/framework/database/internal/scan"
+	querybuilder "github.com/gradii/framework/database/query"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/support/carbon"
 )
 
 // This file executes SQL the framework compiles itself.

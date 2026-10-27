@@ -5,11 +5,11 @@ import (
 	"reflect"
 	"strings"
 
-	contractsdriver "github.com/goravel/framework/contracts/database/driver"
-	contractsorm "github.com/goravel/framework/contracts/database/orm"
-	querybuilder "github.com/goravel/framework/database/query"
-	"github.com/goravel/framework/database/query/core"
-	"github.com/goravel/framework/errors"
+	contractsdriver "github.com/gradii/framework/contracts/database/driver"
+	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	querybuilder "github.com/gradii/framework/database/query"
+	"github.com/gradii/framework/database/query/core"
+	"github.com/gradii/framework/errors"
 )
 
 // This file compiles a query's conditions into SQL.

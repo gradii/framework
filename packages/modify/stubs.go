@@ -3,14 +3,14 @@ package modify
 import (
 	"strings"
 
-	"github.com/goravel/framework/packages/paths"
-	"github.com/goravel/framework/support/env"
+	"github.com/gradii/framework/packages/paths"
+	"github.com/gradii/framework/support/env"
 )
 
 func commands() string {
 	content := `package DummyPackage
 
-import "github.com/goravel/framework/contracts/console"
+import "github.com/gradii/framework/contracts/console"
 
 func Commands() []console.Command {
 	return []console.Command{}
@@ -23,7 +23,7 @@ func Commands() []console.Command {
 func filters() string {
 	content := `package DummyPackage
 
-import "github.com/goravel/framework/contracts/validation"
+import "github.com/gradii/framework/contracts/validation"
 
 func Filters() []validation.Filter {
 	return []validation.Filter{}
@@ -36,7 +36,7 @@ func Filters() []validation.Filter {
 func migrations() string {
 	content := `package DummyPackage
 
-import "github.com/goravel/framework/contracts/database/schema"
+import "github.com/gradii/framework/contracts/database/schema"
 
 func Migrations() []schema.Migration {
 	return []schema.Migration{}
@@ -49,7 +49,7 @@ func Migrations() []schema.Migration {
 func providers() string {
 	content := `package DummyPackage
 
-import "github.com/goravel/framework/contracts/foundation"
+import "github.com/gradii/framework/contracts/foundation"
 
 func Providers() []foundation.ServiceProvider {
 	return []foundation.ServiceProvider{}
@@ -62,7 +62,7 @@ func Providers() []foundation.ServiceProvider {
 func jobs() string {
 	content := `package DummyPackage
 
-import "github.com/goravel/framework/contracts/queue"
+import "github.com/gradii/framework/contracts/queue"
 
 func Jobs() []queue.Job {
 	return []queue.Job{}
@@ -75,7 +75,7 @@ func Jobs() []queue.Job {
 func seeders() string {
 	content := `package DummyPackage
 
-import "github.com/goravel/framework/contracts/database/seeder"
+import "github.com/gradii/framework/contracts/database/seeder"
 
 func Seeders() []seeder.Seeder {
 	return []seeder.Seeder{}
@@ -88,7 +88,7 @@ func Seeders() []seeder.Seeder {
 func rules() string {
 	content := `package DummyPackage
 
-import "github.com/goravel/framework/contracts/validation"
+import "github.com/gradii/framework/contracts/validation"
 
 func Rules() []validation.Rule {
 	return []validation.Rule{}

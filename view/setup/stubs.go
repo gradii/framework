@@ -8,7 +8,7 @@ func (s Stubs) ViewFacade(pkg string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/view"
+	"github.com/gradii/framework/contracts/view"
 )
 
 func View() view.View {

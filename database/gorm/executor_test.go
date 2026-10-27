@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	querybuilder "github.com/goravel/framework/database/query"
+	querybuilder "github.com/gradii/framework/database/query"
 )
 
 // This file pins where a compiled statement runs: on the transaction's own *sql.Tx when the query is

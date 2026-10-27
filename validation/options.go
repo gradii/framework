@@ -3,7 +3,7 @@ package validation
 import (
 	"context"
 
-	contractsvalidation "github.com/goravel/framework/contracts/validation"
+	contractsvalidation "github.com/gradii/framework/contracts/validation"
 )
 
 func Filters(filters map[string]any) contractsvalidation.Option {

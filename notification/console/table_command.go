@@ -7,11 +7,11 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/contracts/console/command"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/packages/modify"
-	"github.com/goravel/framework/support/env"
+	"github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/contracts/console/command"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/packages/modify"
+	"github.com/gradii/framework/support/env"
 )
 
 // Usage:
@@ -90,7 +90,7 @@ func migrationStub(timestamp string) string {
 	return `package migrations
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/schema"
 
 	"goravel/app/facades"
 )

@@ -5,8 +5,8 @@ import (
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
-	contractsconfig "github.com/goravel/framework/contracts/config"
-	contractstelemetry "github.com/goravel/framework/contracts/telemetry"
+	contractsconfig "github.com/gradii/framework/contracts/config"
+	contractstelemetry "github.com/gradii/framework/contracts/telemetry"
 )
 
 // NewTransport returns an http.RoundTripper instrumented with OpenTelemetry.

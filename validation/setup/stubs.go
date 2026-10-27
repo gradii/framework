@@ -8,7 +8,7 @@ func (s Stubs) ValidationFacade(pkg string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/validation"
+	"github.com/gradii/framework/contracts/validation"
 )
 
 func Validation() validation.Validation {

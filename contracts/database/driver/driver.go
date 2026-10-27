@@ -1,8 +1,8 @@
 package driver
 
 import (
-	"github.com/goravel/framework/contracts/database"
-	"github.com/goravel/framework/contracts/testing/docker"
+	"github.com/gradii/framework/contracts/database"
+	"github.com/gradii/framework/contracts/testing/docker"
 )
 
 type Driver interface {

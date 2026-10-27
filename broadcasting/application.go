@@ -13,13 +13,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/goravel/framework/contracts/broadcasting"
-	contractsconfig "github.com/goravel/framework/contracts/config"
-	"github.com/goravel/framework/contracts/foundation"
-	contractshttp "github.com/goravel/framework/contracts/http"
-	"github.com/goravel/framework/contracts/log"
-	"github.com/goravel/framework/contracts/queue"
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/contracts/broadcasting"
+	contractsconfig "github.com/gradii/framework/contracts/config"
+	"github.com/gradii/framework/contracts/foundation"
+	contractshttp "github.com/gradii/framework/contracts/http"
+	"github.com/gradii/framework/contracts/log"
+	"github.com/gradii/framework/contracts/queue"
+	"github.com/gradii/framework/errors"
 )
 
 type authEntry struct {

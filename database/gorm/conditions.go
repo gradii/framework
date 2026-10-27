@@ -1,8 +1,8 @@
 package gorm
 
 import (
-	contractsdriver "github.com/goravel/framework/contracts/database/driver"
-	contractsorm "github.com/goravel/framework/contracts/database/orm"
+	contractsdriver "github.com/gradii/framework/contracts/database/driver"
+	contractsorm "github.com/gradii/framework/contracts/database/orm"
 )
 
 // Conditions holds the state that belongs to the ORM layer rather than to the SQL builder: the model

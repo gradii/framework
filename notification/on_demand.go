@@ -1,6 +1,6 @@
 package notification
 
-import contractsnotification "github.com/goravel/framework/contracts/notification"
+import contractsnotification "github.com/gradii/framework/contracts/notification"
 
 // onDemandNotifiable is a Notifiable built on the fly by Manager.Route.
 type onDemandNotifiable struct {

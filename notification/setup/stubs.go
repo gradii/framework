@@ -8,7 +8,7 @@ func (s Stubs) NotificationFacade(pkg string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/notification"
+	"github.com/gradii/framework/contracts/notification"
 )
 
 func Notification() notification.Manager {

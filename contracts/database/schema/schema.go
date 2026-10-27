@@ -1,9 +1,9 @@
 package schema
 
 import (
-	"github.com/goravel/framework/contracts/database/db"
-	"github.com/goravel/framework/contracts/database/driver"
-	"github.com/goravel/framework/contracts/database/orm"
+	"github.com/gradii/framework/contracts/database/db"
+	"github.com/gradii/framework/contracts/database/driver"
+	"github.com/gradii/framework/contracts/database/orm"
 )
 
 type Schema interface {

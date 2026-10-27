@@ -5,9 +5,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/goravel/framework/contracts/config"
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	contractstelemetry "github.com/goravel/framework/contracts/telemetry"
+	"github.com/gradii/framework/contracts/config"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	contractstelemetry "github.com/gradii/framework/contracts/telemetry"
 )
 
 const (

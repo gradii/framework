@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	contractsfilesystem "github.com/goravel/framework/contracts/filesystem"
+	contractsfilesystem "github.com/gradii/framework/contracts/filesystem"
 )
 
 func TestFromPath(t *testing.T) {

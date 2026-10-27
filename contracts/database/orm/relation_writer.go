@@ -1,7 +1,7 @@
 package orm
 
 import (
-	"github.com/goravel/framework/contracts/database/db"
+	"github.com/gradii/framework/contracts/database/db"
 )
 
 // RelationWriter is the write-side builder for a single (parent, relation) pair, returned by

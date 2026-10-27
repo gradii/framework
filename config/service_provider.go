@@ -1,9 +1,9 @@
 package config
 
 import (
-	"github.com/goravel/framework/contracts/binding"
-	"github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/support"
+	"github.com/gradii/framework/contracts/binding"
+	"github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/support"
 )
 
 type ServiceProvider struct {

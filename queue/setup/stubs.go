@@ -62,7 +62,7 @@ func (s Stubs) JobMigration(pkg, facadesImport, facadesPackage string) (fileName
 	content = `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/schema"
 
 	"DummyFacadesImport"
 )
@@ -134,7 +134,7 @@ func (s Stubs) QueueFacade(pkg string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/queue"
+	"github.com/gradii/framework/contracts/queue"
 )
 
 func Queue() queue.Queue {

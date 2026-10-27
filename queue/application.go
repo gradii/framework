@@ -3,11 +3,11 @@ package queue
 import (
 	"fmt"
 
-	"github.com/goravel/framework/contracts/cache"
-	"github.com/goravel/framework/contracts/database/db"
-	"github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/log"
-	"github.com/goravel/framework/contracts/queue"
+	"github.com/gradii/framework/contracts/cache"
+	"github.com/gradii/framework/contracts/database/db"
+	"github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/log"
+	"github.com/gradii/framework/contracts/queue"
 )
 
 type Application struct {

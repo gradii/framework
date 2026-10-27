@@ -1,6 +1,6 @@
 package ai
 
-import contractshttp "github.com/goravel/framework/contracts/http"
+import contractshttp "github.com/gradii/framework/contracts/http"
 
 // AgentResponse exposes generated text and provider metadata.
 type AgentResponse interface {

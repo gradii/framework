@@ -1,7 +1,7 @@
 package image
 
 import (
-	contractsai "github.com/goravel/framework/contracts/ai"
+	contractsai "github.com/gradii/framework/contracts/ai"
 )
 
 type Quality = contractsai.ImageQuality

@@ -1,10 +1,10 @@
 package console
 
 import (
-	"github.com/goravel/framework/console/console"
-	"github.com/goravel/framework/contracts/binding"
-	consolecontract "github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/contracts/foundation"
+	"github.com/gradii/framework/console/console"
+	"github.com/gradii/framework/contracts/binding"
+	consolecontract "github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/contracts/foundation"
 )
 
 type ServiceProvider struct {

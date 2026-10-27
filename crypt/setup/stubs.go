@@ -8,7 +8,7 @@ func (s Stubs) CryptFacade(pkg string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/crypt"
+	"github.com/gradii/framework/contracts/crypt"
 )
 
 func Crypt() crypt.Crypt {

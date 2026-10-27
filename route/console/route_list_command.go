@@ -5,11 +5,11 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/contracts/console/command"
-	"github.com/goravel/framework/contracts/http"
-	"github.com/goravel/framework/contracts/route"
-	"github.com/goravel/framework/support/collect"
+	"github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/contracts/console/command"
+	"github.com/gradii/framework/contracts/http"
+	"github.com/gradii/framework/contracts/route"
+	"github.com/gradii/framework/support/collect"
 )
 
 var (

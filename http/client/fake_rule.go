@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/goravel/framework/contracts/http/client"
+	"github.com/gradii/framework/contracts/http/client"
 )
 
 type FakeRule struct {

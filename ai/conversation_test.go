@@ -7,9 +7,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
-	contractsai "github.com/goravel/framework/contracts/ai"
-	"github.com/goravel/framework/errors"
-	mocksai "github.com/goravel/framework/mocks/ai"
+	contractsai "github.com/gradii/framework/contracts/ai"
+	"github.com/gradii/framework/errors"
+	mocksai "github.com/gradii/framework/mocks/ai"
 )
 
 type ConversationTestSuite struct {

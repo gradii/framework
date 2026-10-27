@@ -7,15 +7,15 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
-	contractsai "github.com/goravel/framework/contracts/ai"
-	"github.com/goravel/framework/contracts/binding"
-	contractsconsole "github.com/goravel/framework/contracts/console"
-	contractsfilesystem "github.com/goravel/framework/contracts/filesystem"
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	contractshttpclient "github.com/goravel/framework/contracts/http/client"
-	mocksai "github.com/goravel/framework/mocks/ai"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	mocksfoundation "github.com/goravel/framework/mocks/foundation"
+	contractsai "github.com/gradii/framework/contracts/ai"
+	"github.com/gradii/framework/contracts/binding"
+	contractsconsole "github.com/gradii/framework/contracts/console"
+	contractsfilesystem "github.com/gradii/framework/contracts/filesystem"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	contractshttpclient "github.com/gradii/framework/contracts/http/client"
+	mocksai "github.com/gradii/framework/mocks/ai"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	mocksfoundation "github.com/gradii/framework/mocks/foundation"
 )
 
 type ServiceProviderTestSuite struct {

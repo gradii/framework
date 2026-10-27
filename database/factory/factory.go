@@ -4,11 +4,11 @@ import (
 	"maps"
 	"reflect"
 
-	"github.com/goravel/framework/contracts/database/factory"
-	ormcontract "github.com/goravel/framework/contracts/database/orm"
-	"github.com/goravel/framework/database/internal/reflectx"
-	rowscan "github.com/goravel/framework/database/internal/scan"
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/contracts/database/factory"
+	ormcontract "github.com/gradii/framework/contracts/database/orm"
+	"github.com/gradii/framework/database/internal/reflectx"
+	rowscan "github.com/gradii/framework/database/internal/scan"
+	"github.com/gradii/framework/errors"
 )
 
 // Factory attributes name Go fields, including embedded fields. Database column

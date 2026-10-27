@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	contractsdriver "github.com/goravel/framework/contracts/database/driver"
+	contractsdriver "github.com/gradii/framework/contracts/database/driver"
 )
 
 // TestByteSliceBindsAsValue verifies that []byte is treated as a single value

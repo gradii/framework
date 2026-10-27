@@ -6,13 +6,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/goravel/framework/contracts/binding"
-	contractsconsole "github.com/goravel/framework/contracts/console"
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/errors"
-	eventConsole "github.com/goravel/framework/event/console"
-	mocksfoundation "github.com/goravel/framework/mocks/foundation"
-	mocksqueue "github.com/goravel/framework/mocks/queue"
+	"github.com/gradii/framework/contracts/binding"
+	contractsconsole "github.com/gradii/framework/contracts/console"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/errors"
+	eventConsole "github.com/gradii/framework/event/console"
+	mocksfoundation "github.com/gradii/framework/mocks/foundation"
+	mocksqueue "github.com/gradii/framework/mocks/queue"
 )
 
 func TestServiceProviderRelationship(t *testing.T) {

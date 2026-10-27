@@ -3,7 +3,7 @@ package queue
 import (
 	"time"
 
-	"github.com/goravel/framework/contracts/config"
+	"github.com/gradii/framework/contracts/config"
 )
 
 // DefaultReceiveTimeout is the fallback timeout for a single blocking receive

@@ -3,11 +3,11 @@ package gorm
 import (
 	"reflect"
 
-	contractsdb "github.com/goravel/framework/contracts/database/db"
-	databaseorm "github.com/goravel/framework/database/orm"
-	querybuilder "github.com/goravel/framework/database/query"
-	"github.com/goravel/framework/database/query/core"
-	"github.com/goravel/framework/support/carbon"
+	contractsdb "github.com/gradii/framework/contracts/database/db"
+	databaseorm "github.com/gradii/framework/database/orm"
+	querybuilder "github.com/gradii/framework/database/query"
+	"github.com/gradii/framework/database/query/core"
+	"github.com/gradii/framework/support/carbon"
 )
 
 // This file removes rows through the framework's own compiler.

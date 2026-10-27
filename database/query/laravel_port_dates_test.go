@@ -4,7 +4,7 @@ import (
 	"testing"
 	stdtime "time"
 
-	"github.com/goravel/framework/support/carbon"
+	"github.com/gradii/framework/support/carbon"
 	"github.com/stretchr/testify/assert"
 )
 

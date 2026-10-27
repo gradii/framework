@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/foundation/json"
+	"github.com/gradii/framework/foundation/json"
 )
 
 type FakeResponseTestSuite struct {

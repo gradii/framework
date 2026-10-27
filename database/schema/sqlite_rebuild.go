@@ -5,8 +5,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/goravel/framework/contracts/database/driver"
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/contracts/database/driver"
+	"github.com/gradii/framework/errors"
 )
 
 type sqliteToken struct {

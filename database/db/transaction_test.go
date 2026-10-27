@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/goravel/framework/contracts/database/db"
-	querybuilder "github.com/goravel/framework/database/query"
-	"github.com/goravel/framework/errors"
-	mocksdb "github.com/goravel/framework/mocks/database/db"
+	"github.com/gradii/framework/contracts/database/db"
+	querybuilder "github.com/gradii/framework/database/query"
+	"github.com/gradii/framework/errors"
+	mocksdb "github.com/gradii/framework/mocks/database/db"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

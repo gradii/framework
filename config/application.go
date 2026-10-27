@@ -8,10 +8,10 @@ import (
 	"github.com/spf13/cast"
 	"github.com/spf13/viper"
 
-	"github.com/goravel/framework/contracts/config"
-	"github.com/goravel/framework/support/color"
-	"github.com/goravel/framework/support/convert"
-	"github.com/goravel/framework/support/file"
+	"github.com/gradii/framework/contracts/config"
+	"github.com/gradii/framework/support/color"
+	"github.com/gradii/framework/support/convert"
+	"github.com/gradii/framework/support/file"
 )
 
 var _ config.Config = &Application{}

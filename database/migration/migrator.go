@@ -4,17 +4,17 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/goravel/framework/contracts/console"
-	contractsmigration "github.com/goravel/framework/contracts/database/migration"
-	"github.com/goravel/framework/contracts/database/orm"
-	contractsschema "github.com/goravel/framework/contracts/database/schema"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/packages"
-	"github.com/goravel/framework/support/collect"
-	"github.com/goravel/framework/support/color"
-	"github.com/goravel/framework/support/env"
-	supportfile "github.com/goravel/framework/support/file"
-	"github.com/goravel/framework/support/str"
+	"github.com/gradii/framework/contracts/console"
+	contractsmigration "github.com/gradii/framework/contracts/database/migration"
+	"github.com/gradii/framework/contracts/database/orm"
+	contractsschema "github.com/gradii/framework/contracts/database/schema"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/packages"
+	"github.com/gradii/framework/support/collect"
+	"github.com/gradii/framework/support/color"
+	"github.com/gradii/framework/support/env"
+	supportfile "github.com/gradii/framework/support/file"
+	"github.com/gradii/framework/support/str"
 )
 
 type Migrator struct {
@@ -56,7 +56,7 @@ func (r *Migrator) Create(name string, modelName string) (string, error) {
 	fileName := r.creator.GetFileName(name)
 	facadesImport := packages.Paths().Facades().Import()
 	if !env.IsBootstrapSetup() {
-		facadesImport = "github.com/goravel/framework/facades"
+		facadesImport = "github.com/gradii/framework/facades"
 	}
 
 	templateData := StubData{

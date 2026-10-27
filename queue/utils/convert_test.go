@@ -5,10 +5,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	contractsqueue "github.com/goravel/framework/contracts/queue"
-	mocksfoundation "github.com/goravel/framework/mocks/foundation"
-	mocksqueue "github.com/goravel/framework/mocks/queue"
-	"github.com/goravel/framework/support/carbon"
+	contractsqueue "github.com/gradii/framework/contracts/queue"
+	mocksfoundation "github.com/gradii/framework/mocks/foundation"
+	mocksqueue "github.com/gradii/framework/mocks/queue"
+	"github.com/gradii/framework/support/carbon"
 )
 
 func TestTaskToJson(t *testing.T) {

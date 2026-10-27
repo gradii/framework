@@ -12,10 +12,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/support"
-	supportfile "github.com/goravel/framework/support/file"
-	"github.com/goravel/framework/support/path"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/support"
+	supportfile "github.com/gradii/framework/support/file"
+	"github.com/gradii/framework/support/path"
 )
 
 func TestAddCommand(t *testing.T) {
@@ -35,8 +35,8 @@ func TestAddCommand(t *testing.T) {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -49,8 +49,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -62,7 +62,7 @@ func Boot() contractsfoundation.Application {
 			expectedCommands: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/console"
+	"github.com/gradii/framework/contracts/console"
 
 	"goravel/app/console/commands"
 )
@@ -79,8 +79,8 @@ func Commands() []console.Command {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -92,7 +92,7 @@ func Boot() contractsfoundation.Application {
 			commandsContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/console"
+	"github.com/gradii/framework/contracts/console"
 
 	"goravel/app/console/commands"
 )
@@ -108,8 +108,8 @@ func Commands() []console.Command {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -121,7 +121,7 @@ func Boot() contractsfoundation.Application {
 			expectedCommands: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/console"
+	"github.com/gradii/framework/contracts/console"
 
 	"goravel/app/console/commands"
 )
@@ -139,9 +139,9 @@ func Commands() []console.Command {
 			appContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/console"
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	"github.com/gradii/framework/contracts/console"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/app/console/commands"
 	"goravel/config"
 )
@@ -160,9 +160,9 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/console"
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	"github.com/gradii/framework/contracts/console"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/app/console/commands"
 	"goravel/config"
 )
@@ -183,8 +183,8 @@ func Boot() contractsfoundation.Application {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -195,7 +195,7 @@ func Boot() contractsfoundation.Application {
 			commandsContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/console"
+	"github.com/gradii/framework/contracts/console"
 
 	"goravel/app/console/commands"
 )
@@ -215,8 +215,8 @@ func Commands() []console.Command {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 )
 
 func Boot() contractsfoundation.Application {
@@ -228,8 +228,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 )
 
 func Boot() contractsfoundation.Application {
@@ -240,7 +240,7 @@ func Boot() contractsfoundation.Application {
 			expectedCommands: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/console"
+	"github.com/gradii/framework/contracts/console"
 
 	"goravel/app/console/commands"
 )
@@ -313,8 +313,8 @@ func TestAddFilter(t *testing.T) {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -327,8 +327,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -340,7 +340,7 @@ func Boot() contractsfoundation.Application {
 			expectedFilters: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/validation"
+	"github.com/gradii/framework/contracts/validation"
 
 	"goravel/app/validators"
 )
@@ -357,8 +357,8 @@ func Filters() []validation.Filter {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -370,7 +370,7 @@ func Boot() contractsfoundation.Application {
 			filtersContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/validation"
+	"github.com/gradii/framework/contracts/validation"
 
 	"goravel/app/validators"
 )
@@ -386,8 +386,8 @@ func Filters() []validation.Filter {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -399,7 +399,7 @@ func Boot() contractsfoundation.Application {
 			expectedFilters: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/validation"
+	"github.com/gradii/framework/contracts/validation"
 
 	"goravel/app/validators"
 )
@@ -417,9 +417,9 @@ func Filters() []validation.Filter {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/validation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/validation"
+	"github.com/gradii/framework/foundation"
 	"goravel/app/validators"
 	"goravel/config"
 )
@@ -438,9 +438,9 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/validation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/validation"
+	"github.com/gradii/framework/foundation"
 	"goravel/app/validators"
 	"goravel/config"
 )
@@ -461,8 +461,8 @@ func Boot() contractsfoundation.Application {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -473,7 +473,7 @@ func Boot() contractsfoundation.Application {
 			filtersContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/validation"
+	"github.com/gradii/framework/contracts/validation"
 
 	"goravel/app/validators"
 )
@@ -493,8 +493,8 @@ func Filters() []validation.Filter {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 )
 
 func Boot() contractsfoundation.Application {
@@ -506,8 +506,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 )
 
 func Boot() contractsfoundation.Application {
@@ -518,7 +518,7 @@ func Boot() contractsfoundation.Application {
 			expectedFilters: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/validation"
+	"github.com/gradii/framework/contracts/validation"
 
 	"goravel/app/validators"
 )
@@ -535,8 +535,8 @@ func Filters() []validation.Filter {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -549,8 +549,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -562,7 +562,7 @@ func Boot() contractsfoundation.Application {
 			expectedFilters: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/validation"
+	"github.com/gradii/framework/contracts/validation"
 	"github.com/mycompany/customfilters"
 )
 
@@ -578,8 +578,8 @@ func Filters() []validation.Filter {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -591,7 +591,7 @@ func Boot() contractsfoundation.Application {
 			filtersContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/validation"
+	"github.com/gradii/framework/contracts/validation"
 
 	"goravel/app/validators"
 )
@@ -607,8 +607,8 @@ func Filters() []validation.Filter {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -620,7 +620,7 @@ func Boot() contractsfoundation.Application {
 			expectedFilters: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/validation"
+	"github.com/gradii/framework/contracts/validation"
 
 	"goravel/app/validators"
 )
@@ -694,8 +694,8 @@ func TestAddJob(t *testing.T) {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -708,8 +708,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -721,7 +721,7 @@ func Boot() contractsfoundation.Application {
 			expectedJobs: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/queue"
+	"github.com/gradii/framework/contracts/queue"
 
 	"goravel/app/jobs"
 )
@@ -738,8 +738,8 @@ func Jobs() []queue.Job {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -751,7 +751,7 @@ func Boot() contractsfoundation.Application {
 			jobsContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/queue"
+	"github.com/gradii/framework/contracts/queue"
 
 	"goravel/app/jobs"
 )
@@ -767,8 +767,8 @@ func Jobs() []queue.Job {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -780,7 +780,7 @@ func Boot() contractsfoundation.Application {
 			expectedJobs: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/queue"
+	"github.com/gradii/framework/contracts/queue"
 
 	"goravel/app/jobs"
 )
@@ -798,9 +798,9 @@ func Jobs() []queue.Job {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/queue"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/queue"
+	"github.com/gradii/framework/foundation"
 	"goravel/app/jobs"
 	"goravel/config"
 )
@@ -819,9 +819,9 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/queue"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/queue"
+	"github.com/gradii/framework/foundation"
 	"goravel/app/jobs"
 	"goravel/config"
 )
@@ -842,8 +842,8 @@ func Boot() contractsfoundation.Application {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -854,7 +854,7 @@ func Boot() contractsfoundation.Application {
 			jobsContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/queue"
+	"github.com/gradii/framework/contracts/queue"
 
 	"goravel/app/jobs"
 )
@@ -874,8 +874,8 @@ func Jobs() []queue.Job {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 )
 
 func Boot() contractsfoundation.Application {
@@ -887,8 +887,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 )
 
 func Boot() contractsfoundation.Application {
@@ -899,7 +899,7 @@ func Boot() contractsfoundation.Application {
 			expectedJobs: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/queue"
+	"github.com/gradii/framework/contracts/queue"
 
 	"goravel/app/jobs"
 )
@@ -916,8 +916,8 @@ func Jobs() []queue.Job {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -930,8 +930,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -943,7 +943,7 @@ func Boot() contractsfoundation.Application {
 			expectedJobs: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/queue"
+	"github.com/gradii/framework/contracts/queue"
 	"github.com/mycompany/customjobs"
 )
 
@@ -959,8 +959,8 @@ func Jobs() []queue.Job {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -972,7 +972,7 @@ func Boot() contractsfoundation.Application {
 			jobsContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/queue"
+	"github.com/gradii/framework/contracts/queue"
 
 	"goravel/app/jobs"
 )
@@ -988,8 +988,8 @@ func Jobs() []queue.Job {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -1001,7 +1001,7 @@ func Boot() contractsfoundation.Application {
 			expectedJobs: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/queue"
+	"github.com/gradii/framework/contracts/queue"
 
 	"goravel/app/jobs"
 )
@@ -1072,8 +1072,8 @@ func TestAddMiddleware(t *testing.T) {
 			content: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -1081,15 +1081,15 @@ func Boot() contractsfoundation.Application {
 	return foundation.Setup().WithConfig(config.Boot).Start()
 }
 `,
-			pkg: "github.com/goravel/framework/http/middleware",
+			pkg: "github.com/gradii/framework/http/middleware",
 			mw:  "&middleware.Auth{}",
 			expected: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/foundation/configuration"
-	"github.com/goravel/framework/foundation"
-	"github.com/goravel/framework/http/middleware"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation/configuration"
+	"github.com/gradii/framework/foundation"
+	"github.com/gradii/framework/http/middleware"
 	"goravel/config"
 )
 
@@ -1108,10 +1108,10 @@ func Boot() contractsfoundation.Application {
 			content: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/foundation/configuration"
-	"github.com/goravel/framework/foundation"
-	"github.com/goravel/framework/http/middleware"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation/configuration"
+	"github.com/gradii/framework/foundation"
+	"github.com/gradii/framework/http/middleware"
 	"goravel/config"
 )
 
@@ -1122,15 +1122,15 @@ func Boot() contractsfoundation.Application {
 		}).WithConfig(config.Boot).Start()
 }
 `,
-			pkg: "github.com/goravel/framework/http/middleware",
+			pkg: "github.com/gradii/framework/http/middleware",
 			mw:  "&middleware.Auth{}",
 			expected: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/foundation/configuration"
-	"github.com/goravel/framework/foundation"
-	"github.com/goravel/framework/http/middleware"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation/configuration"
+	"github.com/gradii/framework/foundation"
+	"github.com/gradii/framework/http/middleware"
 	"goravel/config"
 )
 
@@ -1149,8 +1149,8 @@ func Boot() contractsfoundation.Application {
 			content: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -1158,15 +1158,15 @@ func Boot() contractsfoundation.Application {
 	return foundation.Setup().WithConfig(config.Boot).WithRoute(route.Boot).Start()
 }
 `,
-			pkg: "github.com/goravel/framework/http/middleware",
+			pkg: "github.com/gradii/framework/http/middleware",
 			mw:  "&middleware.Cors{}",
 			expected: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/foundation/configuration"
-	"github.com/goravel/framework/foundation"
-	"github.com/goravel/framework/http/middleware"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation/configuration"
+	"github.com/gradii/framework/foundation"
+	"github.com/gradii/framework/http/middleware"
 	"goravel/config"
 )
 
@@ -1185,10 +1185,10 @@ func Boot() contractsfoundation.Application {
 			content: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/foundation/configuration"
-	"github.com/goravel/framework/foundation"
-	"github.com/goravel/framework/http/middleware"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation/configuration"
+	"github.com/gradii/framework/foundation"
+	"github.com/gradii/framework/http/middleware"
 	"goravel/config"
 )
 
@@ -1198,15 +1198,15 @@ func Boot() contractsfoundation.Application {
 		}).WithConfig(config.Boot).Start()
 }
 `,
-			pkg: "github.com/goravel/framework/http/middleware",
+			pkg: "github.com/gradii/framework/http/middleware",
 			mw:  "&middleware.Auth{}",
 			expected: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/foundation/configuration"
-	"github.com/goravel/framework/foundation"
-	"github.com/goravel/framework/http/middleware"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation/configuration"
+	"github.com/gradii/framework/foundation"
+	"github.com/gradii/framework/http/middleware"
 	"goravel/config"
 )
 
@@ -1225,8 +1225,8 @@ func Boot() contractsfoundation.Application {
 			content: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -1235,15 +1235,15 @@ func Boot() contractsfoundation.Application {
 	return foundation.Setup().WithConfig(config.Boot).Start()
 }
 `,
-			pkg: "github.com/goravel/framework/http/middleware",
+			pkg: "github.com/gradii/framework/http/middleware",
 			mw:  "&middleware.Throttle{}",
 			expected: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/foundation/configuration"
-	"github.com/goravel/framework/foundation"
-	"github.com/goravel/framework/http/middleware"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation/configuration"
+	"github.com/gradii/framework/foundation"
+	"github.com/gradii/framework/http/middleware"
 	"goravel/config"
 )
 
@@ -1301,8 +1301,8 @@ func TestAddMigration(t *testing.T) {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -1315,8 +1315,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -1328,7 +1328,7 @@ func Boot() contractsfoundation.Application {
 			expectedMigrations: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/schema"
 
 	"goravel/database/migrations"
 )
@@ -1345,8 +1345,8 @@ func Migrations() []schema.Migration {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -1358,7 +1358,7 @@ func Boot() contractsfoundation.Application {
 			migrationsContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/schema"
 
 	"goravel/database/migrations"
 )
@@ -1374,8 +1374,8 @@ func Migrations() []schema.Migration {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -1387,7 +1387,7 @@ func Boot() contractsfoundation.Application {
 			expectedMigrations: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/schema"
 
 	"goravel/database/migrations"
 )
@@ -1405,9 +1405,9 @@ func Migrations() []schema.Migration {
 			appContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	"github.com/gradii/framework/contracts/database/schema"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 	"goravel/database/migrations"
 )
@@ -1426,9 +1426,9 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	"github.com/gradii/framework/contracts/database/schema"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 	"goravel/database/migrations"
 )
@@ -1449,8 +1449,8 @@ func Boot() contractsfoundation.Application {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -1461,7 +1461,7 @@ func Boot() contractsfoundation.Application {
 			migrationsContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/schema"
 
 	"goravel/database/migrations"
 )
@@ -1481,8 +1481,8 @@ func Migrations() []schema.Migration {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 )
 
 func Boot() contractsfoundation.Application {
@@ -1494,8 +1494,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 )
 
 func Boot() contractsfoundation.Application {
@@ -1506,7 +1506,7 @@ func Boot() contractsfoundation.Application {
 			expectedMigrations: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/schema"
 
 	"goravel/database/migrations"
 )
@@ -1579,8 +1579,8 @@ func TestAddProvider(t *testing.T) {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -1593,8 +1593,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -1606,7 +1606,7 @@ func Boot() contractsfoundation.Application {
 			expectedProviders: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation"
 
 	"goravel/app/providers"
 )
@@ -1623,8 +1623,8 @@ func Providers() []foundation.ServiceProvider {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -1636,7 +1636,7 @@ func Boot() contractsfoundation.Application {
 			providersContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation"
 
 	"goravel/app/providers"
 )
@@ -1652,8 +1652,8 @@ func Providers() []foundation.ServiceProvider {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -1665,7 +1665,7 @@ func Boot() contractsfoundation.Application {
 			expectedProviders: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation"
 
 	"goravel/app/providers"
 )
@@ -1683,8 +1683,8 @@ func Providers() []foundation.ServiceProvider {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/app/providers"
 	"goravel/config"
 )
@@ -1703,8 +1703,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/app/providers"
 	"goravel/config"
 )
@@ -1725,8 +1725,8 @@ func Boot() contractsfoundation.Application {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -1737,7 +1737,7 @@ func Boot() contractsfoundation.Application {
 			providersContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation"
 
 	"goravel/app/providers"
 )
@@ -1758,8 +1758,8 @@ func Providers() []foundation.ServiceProvider {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 )
 
 func Boot() contractsfoundation.Application {
@@ -1771,8 +1771,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 )
 
 func Boot() contractsfoundation.Application {
@@ -1783,7 +1783,7 @@ func Boot() contractsfoundation.Application {
 			expectedProviders: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation"
 
 	"goravel/app/providers"
 )
@@ -1800,8 +1800,8 @@ func Providers() []foundation.ServiceProvider {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -1814,8 +1814,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -1827,7 +1827,7 @@ func Boot() contractsfoundation.Application {
 			expectedProviders: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation"
 	"github.com/goravel/redis"
 )
 
@@ -1843,8 +1843,8 @@ func Providers() []foundation.ServiceProvider {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -1857,8 +1857,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -1870,7 +1870,7 @@ func Boot() contractsfoundation.Application {
 			expectedProviders: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation"
 	r "github.com/goravel/redis"
 )
 
@@ -1886,8 +1886,8 @@ func Providers() []foundation.ServiceProvider {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -1899,7 +1899,7 @@ func Boot() contractsfoundation.Application {
 			providersContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation"
 
 	"goravel/app/providers"
 )
@@ -1915,8 +1915,8 @@ func Providers() []foundation.ServiceProvider {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -1928,7 +1928,7 @@ func Boot() contractsfoundation.Application {
 			expectedProviders: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation"
 
 	"goravel/app/providers"
 )
@@ -2000,8 +2000,8 @@ func TestAddRoute(t *testing.T) {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -2014,8 +2014,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 	"goravel/routes"
 )
@@ -2033,8 +2033,8 @@ func Boot() contractsfoundation.Application {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 	"goravel/routes"
 )
@@ -2049,8 +2049,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 	"goravel/routes"
 )
@@ -2068,8 +2068,8 @@ func Boot() contractsfoundation.Application {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 	"goravel/routes"
 )
@@ -2086,8 +2086,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 	"goravel/routes"
 )
@@ -2106,8 +2106,8 @@ func Boot() contractsfoundation.Application {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 	"goravel/routes"
 )
@@ -2124,8 +2124,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/app/routes"
 	"goravel/config"
 	"goravel/routes"
@@ -2145,8 +2145,8 @@ func Boot() contractsfoundation.Application {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -2161,8 +2161,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 	"goravel/routes"
 )
@@ -2229,8 +2229,8 @@ func TestAddRule(t *testing.T) {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -2243,8 +2243,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -2256,7 +2256,7 @@ func Boot() contractsfoundation.Application {
 			expectedRules: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/validation"
+	"github.com/gradii/framework/contracts/validation"
 
 	"goravel/app/rules"
 )
@@ -2273,8 +2273,8 @@ func Rules() []validation.Rule {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -2286,7 +2286,7 @@ func Boot() contractsfoundation.Application {
 			rulesContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/validation"
+	"github.com/gradii/framework/contracts/validation"
 
 	"goravel/app/rules"
 )
@@ -2302,8 +2302,8 @@ func Rules() []validation.Rule {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -2315,7 +2315,7 @@ func Boot() contractsfoundation.Application {
 			expectedRules: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/validation"
+	"github.com/gradii/framework/contracts/validation"
 
 	"goravel/app/rules"
 )
@@ -2333,9 +2333,9 @@ func Rules() []validation.Rule {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/validation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/validation"
+	"github.com/gradii/framework/foundation"
 	"goravel/app/rules"
 	"goravel/config"
 )
@@ -2345,7 +2345,7 @@ func Boot() contractsfoundation.Application {
 		WithRules(func() []validation.Rule {
 			return []validation.Rule{
 				&rules.ExistingRule{},
-			}	
+			}
 		}).WithConfig(config.Boot).Start()
 }
 `,
@@ -2354,9 +2354,9 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/validation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/validation"
+	"github.com/gradii/framework/foundation"
 	"goravel/app/rules"
 	"goravel/config"
 )
@@ -2377,8 +2377,8 @@ func Boot() contractsfoundation.Application {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -2389,7 +2389,7 @@ func Boot() contractsfoundation.Application {
 			rulesContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/validation"
+	"github.com/gradii/framework/contracts/validation"
 
 	"goravel/app/rules"
 )
@@ -2409,8 +2409,8 @@ func Rules() []validation.Rule {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 )
 
 func Boot() contractsfoundation.Application {
@@ -2422,8 +2422,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 )
 
 func Boot() contractsfoundation.Application {
@@ -2434,7 +2434,7 @@ func Boot() contractsfoundation.Application {
 			expectedRules: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/validation"
+	"github.com/gradii/framework/contracts/validation"
 
 	"goravel/app/rules"
 )
@@ -2451,8 +2451,8 @@ func Rules() []validation.Rule {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -2465,8 +2465,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -2478,7 +2478,7 @@ func Boot() contractsfoundation.Application {
 			expectedRules: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/validation"
+	"github.com/gradii/framework/contracts/validation"
 	"github.com/mycompany/customrules"
 )
 
@@ -2494,8 +2494,8 @@ func Rules() []validation.Rule {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -2508,8 +2508,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -2521,7 +2521,7 @@ func Boot() contractsfoundation.Application {
 			expectedRules: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/validation"
+	"github.com/gradii/framework/contracts/validation"
 
 	"goravel/app/rules"
 )
@@ -2538,8 +2538,8 @@ func Rules() []validation.Rule {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -2551,7 +2551,7 @@ func Boot() contractsfoundation.Application {
 			rulesContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/validation"
+	"github.com/gradii/framework/contracts/validation"
 
 	"goravel/app/rules"
 )
@@ -2567,8 +2567,8 @@ func Rules() []validation.Rule {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -2580,7 +2580,7 @@ func Boot() contractsfoundation.Application {
 			expectedRules: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/validation"
+	"github.com/gradii/framework/contracts/validation"
 
 	"goravel/app/rules"
 )
@@ -2597,8 +2597,8 @@ func Rules() []validation.Rule {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -2611,8 +2611,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -2624,7 +2624,7 @@ func Boot() contractsfoundation.Application {
 			expectedRules: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/validation"
+	"github.com/gradii/framework/contracts/validation"
 
 	"goravel/app/rules"
 )
@@ -2641,8 +2641,8 @@ func Rules() []validation.Rule {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -2657,8 +2657,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -2672,7 +2672,7 @@ func Boot() contractsfoundation.Application {
 			expectedRules: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/validation"
+	"github.com/gradii/framework/contracts/validation"
 
 	"goravel/app/rules"
 )
@@ -2752,8 +2752,8 @@ func TestAddSeeder(t *testing.T) {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -2766,8 +2766,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -2779,7 +2779,7 @@ func Boot() contractsfoundation.Application {
 			expectedSeeders: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/database/seeder"
+	"github.com/gradii/framework/contracts/database/seeder"
 
 	"goravel/database/seeders"
 )
@@ -2796,8 +2796,8 @@ func Seeders() []seeder.Seeder {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -2809,7 +2809,7 @@ func Boot() contractsfoundation.Application {
 			seedersContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/database/seeder"
+	"github.com/gradii/framework/contracts/database/seeder"
 
 	"goravel/database/seeders"
 )
@@ -2825,8 +2825,8 @@ func Seeders() []seeder.Seeder {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -2838,7 +2838,7 @@ func Boot() contractsfoundation.Application {
 			expectedSeeders: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/database/seeder"
+	"github.com/gradii/framework/contracts/database/seeder"
 
 	"goravel/database/seeders"
 )
@@ -2856,9 +2856,9 @@ func Seeders() []seeder.Seeder {
 			appContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/database/seeder"
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	"github.com/gradii/framework/contracts/database/seeder"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 	"goravel/database/seeders"
 )
@@ -2877,9 +2877,9 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/database/seeder"
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	"github.com/gradii/framework/contracts/database/seeder"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 	"goravel/database/seeders"
 )
@@ -2900,8 +2900,8 @@ func Boot() contractsfoundation.Application {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -2912,7 +2912,7 @@ func Boot() contractsfoundation.Application {
 			seedersContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/database/seeder"
+	"github.com/gradii/framework/contracts/database/seeder"
 
 	"goravel/database/seeders"
 )
@@ -2933,8 +2933,8 @@ func Seeders() []seeder.Seeder {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 )
 
 func Boot() contractsfoundation.Application {
@@ -2946,8 +2946,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 )
 
 func Boot() contractsfoundation.Application {
@@ -2958,7 +2958,7 @@ func Boot() contractsfoundation.Application {
 			expectedSeeders: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/database/seeder"
+	"github.com/gradii/framework/contracts/database/seeder"
 
 	"goravel/database/seeders"
 )
@@ -3109,8 +3109,8 @@ func TestRemoveProvider(t *testing.T) {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -3122,7 +3122,7 @@ func Boot() contractsfoundation.Application {
 			providersContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation"
 
 	"goravel/app/providers"
 )
@@ -3139,8 +3139,8 @@ func Providers() []foundation.ServiceProvider {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -3152,7 +3152,7 @@ func Boot() contractsfoundation.Application {
 			expectedProviders: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation"
 
 	"goravel/app/providers"
 )
@@ -3169,8 +3169,8 @@ func Providers() []foundation.ServiceProvider {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/app/providers"
 	"goravel/config"
 )
@@ -3190,8 +3190,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/app/providers"
 	"goravel/config"
 )
@@ -3211,8 +3211,8 @@ func Boot() contractsfoundation.Application {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -3224,7 +3224,7 @@ func Boot() contractsfoundation.Application {
 			providersContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation"
 
 	"goravel/app/providers"
 )
@@ -3240,8 +3240,8 @@ func Providers() []foundation.ServiceProvider {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -3253,7 +3253,7 @@ func Boot() contractsfoundation.Application {
 			expectedProviders: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation"
 )
 
 func Providers() []foundation.ServiceProvider {
@@ -3266,8 +3266,8 @@ func Providers() []foundation.ServiceProvider {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -3279,7 +3279,7 @@ func Boot() contractsfoundation.Application {
 			providersContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation"
 	"github.com/goravel/redis"
 
 	"goravel/app/providers"
@@ -3297,8 +3297,8 @@ func Providers() []foundation.ServiceProvider {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -3310,7 +3310,7 @@ func Boot() contractsfoundation.Application {
 			expectedProviders: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation"
 
 	"goravel/app/providers"
 )
@@ -3327,8 +3327,8 @@ func Providers() []foundation.ServiceProvider {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -3340,7 +3340,7 @@ func Boot() contractsfoundation.Application {
 			providersContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation"
 	r "github.com/goravel/redis"
 
 	"goravel/app/providers"
@@ -3358,8 +3358,8 @@ func Providers() []foundation.ServiceProvider {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -3371,7 +3371,7 @@ func Boot() contractsfoundation.Application {
 			expectedProviders: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation"
 
 	"goravel/app/providers"
 )
@@ -3388,8 +3388,8 @@ func Providers() []foundation.ServiceProvider {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -3402,8 +3402,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -3417,8 +3417,8 @@ func Boot() contractsfoundation.Application {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -3430,7 +3430,7 @@ func Boot() contractsfoundation.Application {
 			providersContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation"
 
 	"goravel/app/providers"
 )
@@ -3446,8 +3446,8 @@ func Providers() []foundation.ServiceProvider {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -3459,7 +3459,7 @@ func Boot() contractsfoundation.Application {
 			expectedProviders: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation"
 
 	"goravel/app/providers"
 )
@@ -3476,8 +3476,8 @@ func Providers() []foundation.ServiceProvider {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -3489,7 +3489,7 @@ func Boot() contractsfoundation.Application {
 			providersContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation"
 
 	"goravel/app/providers"
 )
@@ -3506,8 +3506,8 @@ func Providers() []foundation.ServiceProvider {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -3519,7 +3519,7 @@ func Boot() contractsfoundation.Application {
 			expectedProviders: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/foundation"
 
 	"goravel/app/providers"
 )
@@ -3581,8 +3581,8 @@ func TestRemoveMigration(t *testing.T) {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -3594,7 +3594,7 @@ func Boot() contractsfoundation.Application {
 			migrationsContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/schema"
 
 	"goravel/database/migrations"
 )
@@ -3611,8 +3611,8 @@ func Migrations() []schema.Migration {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -3624,7 +3624,7 @@ func Boot() contractsfoundation.Application {
 			expectedMigrations: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/schema"
 
 	"goravel/database/migrations"
 )
@@ -3641,9 +3641,9 @@ func Migrations() []schema.Migration {
 			appContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	"github.com/gradii/framework/contracts/database/schema"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 	"goravel/database/migrations"
 )
@@ -3663,9 +3663,9 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	"github.com/gradii/framework/contracts/database/schema"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 	"goravel/database/migrations"
 )
@@ -3685,8 +3685,8 @@ func Boot() contractsfoundation.Application {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -3698,7 +3698,7 @@ func Boot() contractsfoundation.Application {
 			migrationsContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/schema"
 
 	"goravel/database/migrations"
 )
@@ -3714,8 +3714,8 @@ func Migrations() []schema.Migration {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -3727,7 +3727,7 @@ func Boot() contractsfoundation.Application {
 			expectedMigrations: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/schema"
 )
 
 func Migrations() []schema.Migration {
@@ -3740,8 +3740,8 @@ func Migrations() []schema.Migration {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -3753,7 +3753,7 @@ func Boot() contractsfoundation.Application {
 			migrationsContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/schema"
 	"github.com/third-party/dbmigrations"
 
 	"goravel/database/migrations"
@@ -3771,8 +3771,8 @@ func Migrations() []schema.Migration {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -3784,7 +3784,7 @@ func Boot() contractsfoundation.Application {
 			expectedMigrations: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/schema"
 
 	"goravel/database/migrations"
 )
@@ -3801,8 +3801,8 @@ func Migrations() []schema.Migration {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -3815,8 +3815,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -3830,8 +3830,8 @@ func Boot() contractsfoundation.Application {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -3843,7 +3843,7 @@ func Boot() contractsfoundation.Application {
 			migrationsContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/schema"
 
 	"goravel/database/migrations"
 )
@@ -3859,8 +3859,8 @@ func Migrations() []schema.Migration {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -3872,7 +3872,7 @@ func Boot() contractsfoundation.Application {
 			expectedMigrations: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/schema"
 
 	"goravel/database/migrations"
 )
@@ -3889,8 +3889,8 @@ func Migrations() []schema.Migration {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -3902,7 +3902,7 @@ func Boot() contractsfoundation.Application {
 			migrationsContent: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/schema"
 
 	"goravel/database/migrations"
 )
@@ -3919,8 +3919,8 @@ func Migrations() []schema.Migration {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -3932,7 +3932,7 @@ func Boot() contractsfoundation.Application {
 			expectedMigrations: `package bootstrap
 
 import (
-	"github.com/goravel/framework/contracts/database/schema"
+	"github.com/gradii/framework/contracts/database/schema"
 
 	"goravel/database/migrations"
 )
@@ -3992,8 +3992,8 @@ func TestRemoveRoute(t *testing.T) {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 	"goravel/routes"
 )
@@ -4011,8 +4011,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 	"goravel/routes"
 )
@@ -4030,8 +4030,8 @@ func Boot() contractsfoundation.Application {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 	"goravel/routes"
 )
@@ -4048,8 +4048,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -4064,8 +4064,8 @@ func Boot() contractsfoundation.Application {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/app/routes"
 	"goravel/config"
 	"goravel/routes"
@@ -4084,8 +4084,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/app/routes"
 	"goravel/config"
 	"goravel/routes"
@@ -4104,8 +4104,8 @@ func Boot() contractsfoundation.Application {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 	"goravel/routes"
 )
@@ -4124,8 +4124,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 	"goravel/routes"
 )
@@ -4144,8 +4144,8 @@ func Boot() contractsfoundation.Application {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -4158,8 +4158,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 )
 
@@ -4173,8 +4173,8 @@ func Boot() contractsfoundation.Application {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 	"goravel/routes"
 )
@@ -4191,8 +4191,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 	"goravel/routes"
 )
@@ -4210,8 +4210,8 @@ func Boot() contractsfoundation.Application {
 			appContent: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 	"goravel/routes"
 )
@@ -4231,8 +4231,8 @@ func Boot() contractsfoundation.Application {
 			expectedApp: `package bootstrap
 
 import (
-	contractsfoundation "github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/foundation"
+	contractsfoundation "github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/foundation"
 	"goravel/config"
 	"goravel/routes"
 )
@@ -4273,7 +4273,7 @@ func Boot() contractsfoundation.Application {
 func TestUsesImport(t *testing.T) {
 	df, err := decorator.Parse(`package main
 import (
-    "fmt"        
+    "fmt"
     mylog "log"
 )
 

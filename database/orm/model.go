@@ -1,7 +1,7 @@
 package orm
 
 import (
-	"github.com/goravel/framework/support/carbon"
+	"github.com/gradii/framework/support/carbon"
 )
 
 // Model is the base model for all models in the application.

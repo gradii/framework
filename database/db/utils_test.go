@@ -6,9 +6,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	databaseorm "github.com/goravel/framework/database/orm"
-	"github.com/goravel/framework/support/carbon"
-	"github.com/goravel/framework/support/convert"
+	databaseorm "github.com/gradii/framework/database/orm"
+	"github.com/gradii/framework/support/carbon"
+	"github.com/gradii/framework/support/convert"
 )
 
 type Body struct {

@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	contractshttp "github.com/goravel/framework/contracts/testing/http"
-	"github.com/goravel/framework/foundation/json"
+	contractshttp "github.com/gradii/framework/contracts/testing/http"
+	"github.com/gradii/framework/foundation/json"
 )
 
 type AssertableJsonTestSuite struct {

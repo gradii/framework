@@ -1,11 +1,11 @@
 package queue
 
 import (
-	"github.com/goravel/framework/contracts/binding"
-	"github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/errors"
-	queueconsole "github.com/goravel/framework/queue/console"
+	"github.com/gradii/framework/contracts/binding"
+	"github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/errors"
+	queueconsole "github.com/gradii/framework/queue/console"
 )
 
 type ServiceProvider struct {

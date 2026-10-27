@@ -11,10 +11,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	contractshttp "github.com/goravel/framework/contracts/http"
-	contractsession "github.com/goravel/framework/contracts/session"
-	mockhttp "github.com/goravel/framework/mocks/http"
-	mocksession "github.com/goravel/framework/mocks/session"
+	contractshttp "github.com/gradii/framework/contracts/http"
+	contractsession "github.com/gradii/framework/contracts/session"
+	mockhttp "github.com/gradii/framework/mocks/http"
+	mocksession "github.com/gradii/framework/mocks/session"
 )
 
 func TestTokenMatch(t *testing.T) {

@@ -8,10 +8,10 @@ import (
 
 	"github.com/jmoiron/sqlx"
 
-	"github.com/goravel/framework/contracts/database/db"
-	databasedriver "github.com/goravel/framework/database/driver"
-	querybuilder "github.com/goravel/framework/database/query"
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/contracts/database/db"
+	databasedriver "github.com/gradii/framework/database/driver"
+	querybuilder "github.com/gradii/framework/database/query"
+	"github.com/gradii/framework/errors"
 )
 
 const (

@@ -9,14 +9,14 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/contracts/binding"
-	"github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/errors"
-	mocksconsole "github.com/goravel/framework/mocks/console"
-	mocksfoundation "github.com/goravel/framework/mocks/foundation"
-	mocksprocess "github.com/goravel/framework/mocks/process"
-	"github.com/goravel/framework/support/color"
-	"github.com/goravel/framework/support/file"
+	"github.com/gradii/framework/contracts/binding"
+	"github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/errors"
+	mocksconsole "github.com/gradii/framework/mocks/console"
+	mocksfoundation "github.com/gradii/framework/mocks/foundation"
+	mocksprocess "github.com/gradii/framework/mocks/process"
+	"github.com/gradii/framework/support/color"
+	"github.com/gradii/framework/support/file"
 )
 
 type PackageInstallCommandTestSuite struct {
@@ -58,15 +58,15 @@ func (s *PackageInstallCommandTestSuite) TestHandle() {
 		bindings = map[string]binding.Info{
 			binding.Auth: {
 				Description:  "Description",
-				PkgPath:      "github.com/goravel/framework/auth",
+				PkgPath:      "github.com/gradii/framework/auth",
 				Dependencies: []string{binding.Config, binding.Orm},
 			},
 			binding.Config: {
-				PkgPath: "github.com/goravel/framework/config",
+				PkgPath: "github.com/gradii/framework/config",
 				IsBase:  true,
 			},
 			binding.Orm: {
-				PkgPath:      "github.com/goravel/framework/database",
+				PkgPath:      "github.com/gradii/framework/database",
 				Dependencies: []string{binding.Config},
 			},
 		}
@@ -95,7 +95,7 @@ func (s *PackageInstallCommandTestSuite) TestHandle() {
 				s.mockProcess.EXPECT().Run("go", "get", pkg).Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().Run("go", "mod", "download", "all").Return(mockSuccessResult(s.T())).Once()
 				failedResult := mockFailedResult(s.T(), assert.AnError)
-				s.mockProcess.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(failedResult).Once()
+				s.mockProcess.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/gradii/framework", "--paths="+pathsJSON).Return(failedResult).Once()
 				s.mockProcess.EXPECT().WithSpinner("Installing " + pkg).Return(s.mockProcess).Once()
 				s.mockContext.EXPECT().Error(fmt.Sprintf("failed to install package: %s", assert.AnError)).Once()
 			},
@@ -108,7 +108,7 @@ func (s *PackageInstallCommandTestSuite) TestHandle() {
 				s.mockContext.EXPECT().OptionBool("dev").Return(false).Once()
 				s.mockProcess.EXPECT().Run("go", "get", pkg).Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().Run("go", "mod", "download", "all").Return(mockSuccessResult(s.T())).Once()
-				s.mockProcess.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
+				s.mockProcess.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/gradii/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().WithSpinner("Installing " + pkg).Return(s.mockProcess).Once()
 				failedResult := mockFailedResult(s.T(), assert.AnError)
 				s.mockProcess.EXPECT().Run("go", "mod", "tidy").Return(failedResult).Once()
@@ -122,7 +122,7 @@ func (s *PackageInstallCommandTestSuite) TestHandle() {
 				s.mockContext.EXPECT().OptionBool("dev").Return(false).Once()
 				s.mockProcess.EXPECT().Run("go", "get", pkg).Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().Run("go", "mod", "download", "all").Return(mockSuccessResult(s.T())).Once()
-				s.mockProcess.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
+				s.mockProcess.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/gradii/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().WithSpinner("Installing " + pkg).Return(s.mockProcess).Once()
 				s.mockProcess.EXPECT().Run("go", "mod", "tidy").Return(mockSuccessResult(s.T())).Once()
 				s.mockContext.EXPECT().Success("Package " + pkg + " installed successfully").Once()
@@ -158,7 +158,7 @@ func (s *PackageInstallCommandTestSuite) TestHandle() {
 				s.mockContext.EXPECT().Choice("Which facades or package do you want to install?", options).
 					Return("third", nil).Once()
 				s.mockContext.EXPECT().Ask("Enter the package", console.AskOption{
-					Description: "E.g.: github.com/goravel/framework or github.com/goravel/framework@master",
+					Description: "E.g.: github.com/gradii/framework or github.com/gradii/framework@master",
 				}).Return("", assert.AnError).Once()
 				s.mockContext.EXPECT().Error(assert.AnError.Error()).Once()
 			},
@@ -182,11 +182,11 @@ func (s *PackageInstallCommandTestSuite) TestHandle() {
 			setup: func() {
 				bindings = map[string]binding.Info{
 					binding.Auth: {
-						PkgPath:      "github.com/goravel/framework/auth",
+						PkgPath:      "github.com/gradii/framework/auth",
 						Dependencies: []string{binding.Config, binding.Orm},
 					},
 					binding.Config: {
-						PkgPath: "github.com/goravel/framework/config",
+						PkgPath: "github.com/gradii/framework/config",
 						IsBase:  true,
 					},
 				}
@@ -194,7 +194,7 @@ func (s *PackageInstallCommandTestSuite) TestHandle() {
 				s.mockContext.EXPECT().Arguments().Return([]string{}).Once()
 				s.mockContext.EXPECT().OptionBool("all").Return(true).Once()
 				failedResult := mockFailedResult(s.T(), assert.AnError)
-				s.mockProcess.EXPECT().Run("go", "run", bindings[binding.Auth].PkgPath+"/setup", "install", "--facade=Auth", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(failedResult).Once()
+				s.mockProcess.EXPECT().Run("go", "run", bindings[binding.Auth].PkgPath+"/setup", "install", "--facade=Auth", "--main-path=github.com/gradii/framework", "--paths="+pathsJSON).Return(failedResult).Once()
 				s.mockProcess.EXPECT().WithSpinner("Installing Auth").Return(s.mockProcess).Once()
 				s.mockContext.EXPECT().Error(fmt.Sprintf("failed to install facade %s: %s", "Auth", assert.AnError)).Once()
 			},
@@ -207,7 +207,7 @@ func (s *PackageInstallCommandTestSuite) TestHandle() {
 				s.mockContext.EXPECT().Arguments().Return([]string{facade}).Once()
 				s.mockContext.EXPECT().OptionBool("all").Return(false).Once()
 				s.mockContext.EXPECT().Info(fmt.Sprintf("%s depends on %s, they will be installed simultaneously", facade, "Orm")).Once()
-				s.mockProcess.EXPECT().Run("go", "run", bindings[binding.Auth].PkgPath+"/setup", "install", "--facade=Auth", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
+				s.mockProcess.EXPECT().Run("go", "run", bindings[binding.Auth].PkgPath+"/setup", "install", "--facade=Auth", "--main-path=github.com/gradii/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().WithSpinner("Installing Auth").Return(s.mockProcess).Once()
 				s.mockProcess.EXPECT().Run("go", "mod", "tidy").Return(mockSuccessResult(s.T())).Once()
 				s.mockContext.EXPECT().Success("Facade Auth installed successfully").Once()
@@ -220,11 +220,11 @@ func (s *PackageInstallCommandTestSuite) TestHandle() {
 				s.mockContext.EXPECT().OptionBool("all").Return(false).Once()
 				s.mockContext.EXPECT().Info(fmt.Sprintf("%s depends on %s, they will be installed simultaneously", facade, "Orm")).Once()
 				s.mockProcess.EXPECT().WithSpinner("Installing Orm").Return(s.mockProcess).Once()
-				s.mockProcess.EXPECT().Run("go", "run", bindings[binding.Orm].PkgPath+"/setup", "install", "--facade=Orm", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
+				s.mockProcess.EXPECT().Run("go", "run", bindings[binding.Orm].PkgPath+"/setup", "install", "--facade=Orm", "--main-path=github.com/gradii/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
 				s.mockContext.EXPECT().Success("Facade Orm installed successfully").Once()
 
 				s.mockProcess.EXPECT().WithSpinner("Installing Auth").Return(s.mockProcess).Once()
-				s.mockProcess.EXPECT().Run("go", "run", bindings[binding.Auth].PkgPath+"/setup", "install", "--facade=Auth", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
+				s.mockProcess.EXPECT().Run("go", "run", bindings[binding.Auth].PkgPath+"/setup", "install", "--facade=Auth", "--main-path=github.com/gradii/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
 				s.mockContext.EXPECT().Success("Facade Auth installed successfully").Once()
 				s.mockProcess.EXPECT().Run("go", "mod", "tidy").Return(mockSuccessResult(s.T())).Once()
 			},
@@ -237,18 +237,18 @@ func (s *PackageInstallCommandTestSuite) TestHandle() {
 				s.mockContext.EXPECT().OptionBool("dev").Return(false).Once()
 				s.mockProcess.EXPECT().Run("go", "get", pkg).Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().Run("go", "mod", "download", "all").Return(mockSuccessResult(s.T())).Once()
-				s.mockProcess.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
+				s.mockProcess.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/gradii/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().WithSpinner("Installing " + pkg).Return(s.mockProcess).Once()
 				s.mockProcess.EXPECT().Run("go", "mod", "tidy").Return(mockSuccessResult(s.T())).Once()
 				s.mockContext.EXPECT().Success("Package " + pkg + " installed successfully").Once()
 
 				s.mockContext.EXPECT().OptionBool("all").Return(false).Once()
 				s.mockContext.EXPECT().Info(fmt.Sprintf("%s depends on %s, they will be installed simultaneously", facade, "Orm")).Once()
-				s.mockProcess.EXPECT().Run("go", "run", bindings[binding.Orm].PkgPath+"/setup", "install", "--facade=Orm", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
+				s.mockProcess.EXPECT().Run("go", "run", bindings[binding.Orm].PkgPath+"/setup", "install", "--facade=Orm", "--main-path=github.com/gradii/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().WithSpinner("Installing Orm").Return(s.mockProcess).Once()
 				s.mockContext.EXPECT().Success("Facade Orm installed successfully").Once()
 
-				s.mockProcess.EXPECT().Run("go", "run", bindings[binding.Auth].PkgPath+"/setup", "install", "--facade=Auth", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
+				s.mockProcess.EXPECT().Run("go", "run", bindings[binding.Auth].PkgPath+"/setup", "install", "--facade=Auth", "--main-path=github.com/gradii/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().WithSpinner("Installing Auth").Return(s.mockProcess).Once()
 				s.mockContext.EXPECT().Success("Facade Auth installed successfully").Once()
 				s.mockProcess.EXPECT().Run("go", "mod", "tidy").Return(mockSuccessResult(s.T())).Once()
@@ -287,11 +287,11 @@ func (s *PackageInstallCommandTestSuite) Test_installFacade_TwoFacadesHaveTheSam
 		}
 		bindings = map[string]binding.Info{
 			binding.DB: {
-				PkgPath: "github.com/goravel/framework/database",
+				PkgPath: "github.com/gradii/framework/database",
 				Drivers: drivers,
 			},
 			binding.Orm: {
-				PkgPath: "github.com/goravel/framework/database",
+				PkgPath: "github.com/gradii/framework/database",
 				Drivers: drivers,
 			},
 		}
@@ -303,7 +303,7 @@ func (s *PackageInstallCommandTestSuite) Test_installFacade_TwoFacadesHaveTheSam
 	packageInstallCommand := NewPackageInstallCommand(bindings, s.mockProcess, s.mockJson)
 
 	// Install DB facade
-	s.mockProcess.EXPECT().Run("go", "run", bindings[binding.DB].PkgPath+"/setup", "install", "--facade=DB", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
+	s.mockProcess.EXPECT().Run("go", "run", bindings[binding.DB].PkgPath+"/setup", "install", "--facade=DB", "--main-path=github.com/gradii/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
 	s.mockProcess.EXPECT().WithSpinner("Installing DB").Return(s.mockProcess).Once()
 	s.mockProcess.EXPECT().Run("go", "mod", "tidy").Return(mockSuccessResult(s.T())).Once()
 	s.mockContext.EXPECT().Success("Facade DB installed successfully").Once()
@@ -318,7 +318,7 @@ func (s *PackageInstallCommandTestSuite) Test_installFacade_TwoFacadesHaveTheSam
 	s.mockContext.EXPECT().OptionBool("dev").Return(false).Once()
 	s.mockProcess.EXPECT().Run("go", "get", pkg).Return(mockSuccessResult(s.T())).Once()
 	s.mockProcess.EXPECT().Run("go", "mod", "download", "all").Return(mockSuccessResult(s.T())).Once()
-	s.mockProcess.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
+	s.mockProcess.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/gradii/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
 	s.mockProcess.EXPECT().WithSpinner("Installing " + pkg).Return(s.mockProcess).Once()
 	s.mockProcess.EXPECT().Run("go", "mod", "tidy").Return(mockSuccessResult(s.T())).Once()
 	s.mockContext.EXPECT().Success("Package " + pkg + " installed successfully").Once()
@@ -326,7 +326,7 @@ func (s *PackageInstallCommandTestSuite) Test_installFacade_TwoFacadesHaveTheSam
 	s.NoError(packageInstallCommand.installFacade(s.mockContext, dbFacade))
 
 	// Install Orm facade, should not install the driver again
-	s.mockProcess.EXPECT().Run("go", "run", bindings[binding.Orm].PkgPath+"/setup", "install", "--facade=Orm", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
+	s.mockProcess.EXPECT().Run("go", "run", bindings[binding.Orm].PkgPath+"/setup", "install", "--facade=Orm", "--main-path=github.com/gradii/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
 	s.mockProcess.EXPECT().WithSpinner("Installing Orm").Return(s.mockProcess).Once()
 	s.mockProcess.EXPECT().Run("go", "mod", "tidy").Return(mockSuccessResult(s.T())).Once()
 	s.mockContext.EXPECT().Success("Facade Orm installed successfully").Once()
@@ -340,7 +340,7 @@ func (s *PackageInstallCommandTestSuite) Test_installDriver() {
 
 		facade      = "Route"
 		bindingInfo = binding.Info{
-			PkgPath:      "github.com/goravel/framework/route",
+			PkgPath:      "github.com/gradii/framework/route",
 			Dependencies: []string{binding.Config},
 			Drivers: []binding.Driver{
 				{
@@ -361,7 +361,7 @@ func (s *PackageInstallCommandTestSuite) Test_installDriver() {
 		bindings = map[string]binding.Info{
 			binding.Route: bindingInfo,
 			binding.Config: {
-				PkgPath: "github.com/goravel/framework/config",
+				PkgPath: "github.com/gradii/framework/config",
 				IsBase:  true,
 			},
 		}
@@ -472,7 +472,7 @@ func (s *PackageInstallCommandTestSuite) Test_installDriver() {
 				s.mockProcess.EXPECT().Run("go", "get", pkg).Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().Run("go", "mod", "download", "all").Return(mockSuccessResult(s.T())).Once()
 				mockProcessWithSpinner := mocksprocess.NewProcess(s.T())
-				mockProcessWithSpinner.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
+				mockProcessWithSpinner.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/gradii/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().WithSpinner("Installing " + pkg).Return(mockProcessWithSpinner).Once()
 				s.mockProcess.EXPECT().Run("go", "mod", "tidy").Return(mockSuccessResult(s.T())).Once()
 				s.mockContext.EXPECT().Success("Package " + pkg + " installed successfully").Once()
@@ -493,7 +493,7 @@ func (s *PackageInstallCommandTestSuite) Test_installDriver() {
 				}).Return("route", nil).Once()
 				mockProcessWithSpinner := mocksprocess.NewProcess(s.T())
 				failedResult := mockFailedResult(s.T(), assert.AnError)
-				mockProcessWithSpinner.EXPECT().Run("go", "run", "github.com/goravel/framework/route/setup", "install", "--driver=route", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(failedResult).Once()
+				mockProcessWithSpinner.EXPECT().Run("go", "run", "github.com/gradii/framework/route/setup", "install", "--driver=route", "--main-path=github.com/gradii/framework", "--paths="+pathsJSON).Return(failedResult).Once()
 				s.mockProcess.EXPECT().WithSpinner("Installing route").Return(mockProcessWithSpinner).Once()
 			},
 			expectError: fmt.Errorf("failed to install driver %s: %s", "route", assert.AnError),
@@ -512,7 +512,7 @@ func (s *PackageInstallCommandTestSuite) Test_installDriver() {
 					Description: fmt.Sprintf("A driver is required for %s, please select one to install.", facade),
 				}).Return("route", nil).Once()
 				mockProcessWithSpinner := mocksprocess.NewProcess(s.T())
-				mockProcessWithSpinner.EXPECT().Run("go", "run", "github.com/goravel/framework/route/setup", "install", "--driver=route", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
+				mockProcessWithSpinner.EXPECT().Run("go", "run", "github.com/gradii/framework/route/setup", "install", "--driver=route", "--main-path=github.com/gradii/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().WithSpinner("Installing route").Return(mockProcessWithSpinner).Once()
 				s.mockContext.EXPECT().Success("Driver route installed successfully").Once()
 			},
@@ -535,15 +535,15 @@ func (s *PackageInstallCommandTestSuite) Test_installDriver() {
 func Test_getAvailableFacades(t *testing.T) {
 	bindings := map[string]binding.Info{
 		binding.Auth: {
-			PkgPath:      "github.com/goravel/framework/auth",
+			PkgPath:      "github.com/gradii/framework/auth",
 			Dependencies: []string{binding.Config, binding.Orm},
 		},
 		binding.Config: {
-			PkgPath: "github.com/goravel/framework/config",
+			PkgPath: "github.com/gradii/framework/config",
 			IsBase:  true,
 		},
 		binding.Orm: {
-			PkgPath:      "github.com/goravel/framework/database",
+			PkgPath:      "github.com/gradii/framework/database",
 			Dependencies: []string{binding.Config},
 		},
 	}
@@ -555,15 +555,15 @@ func Test_getFacadeDescription(t *testing.T) {
 	bindings := map[string]binding.Info{
 		binding.Auth: {
 			Description:  "Description",
-			PkgPath:      "github.com/goravel/framework/auth",
+			PkgPath:      "github.com/gradii/framework/auth",
 			Dependencies: []string{binding.Config, binding.Orm},
 		},
 		binding.Config: {
-			PkgPath: "github.com/goravel/framework/config",
+			PkgPath: "github.com/gradii/framework/config",
 			IsBase:  true,
 		},
 		binding.Orm: {
-			PkgPath:      "github.com/goravel/framework/database",
+			PkgPath:      "github.com/gradii/framework/database",
 			Dependencies: []string{binding.Config},
 		},
 	}
@@ -656,7 +656,7 @@ func (s *PackageInstallCommandTestSuite) Test_installDriver_WithDefaultFlag() {
 		pathsJSON   = `{"App":"app"}`
 		facade      = "Route"
 		bindingInfo = binding.Info{
-			PkgPath:      "github.com/goravel/framework/route",
+			PkgPath:      "github.com/gradii/framework/route",
 			Dependencies: []string{binding.Config},
 			Drivers: []binding.Driver{
 				{
@@ -672,7 +672,7 @@ func (s *PackageInstallCommandTestSuite) Test_installDriver_WithDefaultFlag() {
 		bindings = map[string]binding.Info{
 			binding.Route: bindingInfo,
 			binding.Config: {
-				PkgPath: "github.com/goravel/framework/config",
+				PkgPath: "github.com/gradii/framework/config",
 				IsBase:  true,
 			},
 		}
@@ -694,7 +694,7 @@ func (s *PackageInstallCommandTestSuite) Test_installDriver_WithDefaultFlag() {
 				s.mockProcess.EXPECT().Run("go", "get", pkg).Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().Run("go", "mod", "download", "all").Return(mockSuccessResult(s.T())).Once()
 				mockProcessWithSpinner := mocksprocess.NewProcess(s.T())
-				mockProcessWithSpinner.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
+				mockProcessWithSpinner.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/gradii/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().WithSpinner("Installing " + pkg).Return(mockProcessWithSpinner).Once()
 				s.mockProcess.EXPECT().Run("go", "mod", "tidy").Return(mockSuccessResult(s.T())).Once()
 				s.mockContext.EXPECT().Success("Package " + pkg + " installed successfully").Once()
@@ -703,7 +703,7 @@ func (s *PackageInstallCommandTestSuite) Test_installDriver_WithDefaultFlag() {
 		{
 			name: "install default driver (internal driver)",
 			bindingInfo: binding.Info{
-				PkgPath:      "github.com/goravel/framework/route",
+				PkgPath:      "github.com/gradii/framework/route",
 				Dependencies: []string{binding.Config},
 				Drivers: []binding.Driver{
 					{
@@ -719,7 +719,7 @@ func (s *PackageInstallCommandTestSuite) Test_installDriver_WithDefaultFlag() {
 			setup: func() {
 				s.mockContext.EXPECT().OptionBool("default").Return(true).Once()
 				mockProcessWithSpinner := mocksprocess.NewProcess(s.T())
-				mockProcessWithSpinner.EXPECT().Run("go", "run", "github.com/goravel/framework/route/setup", "install", "--driver=route", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
+				mockProcessWithSpinner.EXPECT().Run("go", "run", "github.com/gradii/framework/route/setup", "install", "--driver=route", "--main-path=github.com/gradii/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().WithSpinner("Installing route").Return(mockProcessWithSpinner).Once()
 				s.mockContext.EXPECT().Success("Driver route installed successfully").Once()
 			},
@@ -772,7 +772,7 @@ func (s *PackageInstallCommandTestSuite) Test_installPackage_WithDevFlag() {
 				s.mockProcess.EXPECT().Run("go", "get", pkg+"@master").Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().Run("go", "mod", "download", "all").Return(mockSuccessResult(s.T())).Once()
 				mockProcessWithSpinner := mocksprocess.NewProcess(s.T())
-				mockProcessWithSpinner.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
+				mockProcessWithSpinner.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/gradii/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().WithSpinner("Installing " + pkg + "@master").Return(mockProcessWithSpinner).Once()
 				s.mockProcess.EXPECT().Run("go", "mod", "tidy").Return(mockSuccessResult(s.T())).Once()
 				s.mockContext.EXPECT().Success("Package " + pkg + "@master installed successfully").Once()
@@ -785,7 +785,7 @@ func (s *PackageInstallCommandTestSuite) Test_installPackage_WithDevFlag() {
 				s.mockProcess.EXPECT().Run("go", "get", pkg+"@v1.0.0").Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().Run("go", "mod", "download", "all").Return(mockSuccessResult(s.T())).Once()
 				mockProcessWithSpinner := mocksprocess.NewProcess(s.T())
-				mockProcessWithSpinner.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
+				mockProcessWithSpinner.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/gradii/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().WithSpinner("Installing " + pkg + "@v1.0.0").Return(mockProcessWithSpinner).Once()
 				s.mockProcess.EXPECT().Run("go", "mod", "tidy").Return(mockSuccessResult(s.T())).Once()
 				s.mockContext.EXPECT().Success("Package " + pkg + "@v1.0.0 installed successfully").Once()
@@ -799,7 +799,7 @@ func (s *PackageInstallCommandTestSuite) Test_installPackage_WithDevFlag() {
 				s.mockProcess.EXPECT().Run("go", "get", pkg).Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().Run("go", "mod", "download", "all").Return(mockSuccessResult(s.T())).Once()
 				mockProcessWithSpinner := mocksprocess.NewProcess(s.T())
-				mockProcessWithSpinner.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/goravel/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
+				mockProcessWithSpinner.EXPECT().Run("go", "run", pkg+"/setup", "install", "--main-path=github.com/gradii/framework", "--paths="+pathsJSON).Return(mockSuccessResult(s.T())).Once()
 				s.mockProcess.EXPECT().WithSpinner("Installing " + pkg).Return(mockProcessWithSpinner).Once()
 				s.mockProcess.EXPECT().Run("go", "mod", "tidy").Return(mockSuccessResult(s.T())).Once()
 				s.mockContext.EXPECT().Success("Package " + pkg + " installed successfully").Once()

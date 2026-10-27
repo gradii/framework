@@ -7,9 +7,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/contracts/queue"
-	mocksqueue "github.com/goravel/framework/mocks/queue"
-	"github.com/goravel/framework/queue/utils"
+	"github.com/gradii/framework/contracts/queue"
+	mocksqueue "github.com/gradii/framework/mocks/queue"
+	"github.com/gradii/framework/queue/utils"
 )
 
 var (

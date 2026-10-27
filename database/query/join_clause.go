@@ -1,6 +1,6 @@
 package query
 
-import "github.com/goravel/framework/database/query/core"
+import "github.com/gradii/framework/database/query/core"
 
 // JoinClause is a builder specialised to a join. It embeds *Builder, mirroring PHP's
 // `class JoinClause extends Builder`, so on clauses are stored in the same where descriptors and

@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	querybuilder "github.com/goravel/framework/database/query"
+	querybuilder "github.com/gradii/framework/database/query"
 )
 
 func TestDistinctPreservesSelection(t *testing.T) {

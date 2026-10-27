@@ -3,8 +3,8 @@ package console
 import (
 	"strings"
 
-	"github.com/goravel/framework/support/env"
-	"github.com/goravel/framework/support/str"
+	"github.com/gradii/framework/support/env"
+	"github.com/gradii/framework/support/str"
 )
 
 type Stubs struct {
@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	
+
 	DummyTestImport
 )
 
@@ -48,8 +48,8 @@ func (r Stubs) ServiceProvider() string {
 	return `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/binding"
-	"github.com/goravel/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/binding"
+	"github.com/gradii/framework/contracts/foundation"
 )
 
 type DummyServiceProvider struct{}
@@ -100,8 +100,8 @@ func (r PackageMakeCommandStubs) ServiceProvider() string {
 	content := `package DummyName
 
 import (
-	"github.com/goravel/framework/contracts/binding"
-	"github.com/goravel/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/binding"
+	"github.com/gradii/framework/contracts/foundation"
 )
 
 const Binding = "DummyPackage"
@@ -164,7 +164,7 @@ import (
 func init() {
 	config := DummyFacadesPackage.Config()
 	config.Add("DummyName", map[string]any{
-		
+
 	})
 }
 `
@@ -193,13 +193,13 @@ func (r PackageMakeCommandStubs) OldConfig() string {
 	content := `package config
 
 import (
-	"github.com/goravel/framework/facades"
+	"github.com/gradii/framework/facades"
 )
 
 func init() {
 	config := facades.Config()
 	config.Add("DummyName", map[string]any{
-		
+
 	})
 }
 `
@@ -252,9 +252,9 @@ package main
 import (
 	"os"
 
-	"github.com/goravel/framework/packages"
-	"github.com/goravel/framework/packages/modify"
-	"github.com/goravel/framework/support/path"
+	"github.com/gradii/framework/packages"
+	"github.com/gradii/framework/packages/modify"
+	"github.com/gradii/framework/support/path"
 )
 
 func main() {
@@ -289,10 +289,10 @@ func (r PackageMakeCommandStubs) OldSetup() string {
 import (
 	"os"
 
-	"github.com/goravel/framework/packages"
-	"github.com/goravel/framework/packages/match"
-	"github.com/goravel/framework/packages/modify"
-	"github.com/goravel/framework/support/path"
+	"github.com/gradii/framework/packages"
+	"github.com/gradii/framework/packages/match"
+	"github.com/gradii/framework/packages/modify"
+	"github.com/gradii/framework/support/path"
 )
 
 func main() {

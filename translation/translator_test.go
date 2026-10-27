@@ -10,12 +10,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
-	contractstranslation "github.com/goravel/framework/contracts/translation"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/foundation/json"
-	"github.com/goravel/framework/http"
-	mocklog "github.com/goravel/framework/mocks/log"
-	mockloader "github.com/goravel/framework/mocks/translation"
+	contractstranslation "github.com/gradii/framework/contracts/translation"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/foundation/json"
+	"github.com/gradii/framework/http"
+	mocklog "github.com/gradii/framework/mocks/log"
+	mockloader "github.com/gradii/framework/mocks/translation"
 )
 
 type TranslatorTestSuite struct {

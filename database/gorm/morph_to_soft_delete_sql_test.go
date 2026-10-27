@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	databaseorm "github.com/goravel/framework/database/orm"
+	databaseorm "github.com/gradii/framework/database/orm"
 )
 
 // These tests pin the soft-delete predicate the inverse polymorphic existence subquery must add per

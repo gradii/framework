@@ -3,7 +3,7 @@ package query
 import (
 	"strings"
 
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/errors"
 )
 
 // DefaultCursorName is the query-parameter name a cursor travels under, mirroring Laravel's

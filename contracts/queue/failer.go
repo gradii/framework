@@ -1,6 +1,6 @@
 package queue
 
-import "github.com/goravel/framework/support/carbon"
+import "github.com/gradii/framework/support/carbon"
 
 type Failer interface {
 	All() ([]FailedJob, error)

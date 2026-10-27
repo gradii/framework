@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	contractsai "github.com/goravel/framework/contracts/ai"
+	contractsai "github.com/gradii/framework/contracts/ai"
 )
 
 func TestNewTranscriptionResponse(t *testing.T) {

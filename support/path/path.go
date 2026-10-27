@@ -1,8 +1,8 @@
 package path
 
 import (
-	"github.com/goravel/framework/packages"
-	packagespaths "github.com/goravel/framework/packages/paths"
+	"github.com/gradii/framework/packages"
+	packagespaths "github.com/gradii/framework/packages/paths"
 )
 
 func App(paths ...string) string {

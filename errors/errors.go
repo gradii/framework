@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	contractserrors "github.com/goravel/framework/contracts/errors"
+	contractserrors "github.com/gradii/framework/contracts/errors"
 )
 
 type errorString struct {

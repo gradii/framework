@@ -6,8 +6,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/database/gorm"
-	mockslog "github.com/goravel/framework/mocks/log"
+	"github.com/gradii/framework/database/gorm"
+	mockslog "github.com/gradii/framework/mocks/log"
 )
 
 type ToSqlTestSuite struct {

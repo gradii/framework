@@ -8,11 +8,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	contractsmail "github.com/goravel/framework/contracts/mail"
-	contractsnotification "github.com/goravel/framework/contracts/notification"
-	mocksmail "github.com/goravel/framework/mocks/mail"
-	"github.com/goravel/framework/notification/channels"
-	"github.com/goravel/framework/notification/mail"
+	contractsmail "github.com/gradii/framework/contracts/mail"
+	contractsnotification "github.com/gradii/framework/contracts/notification"
+	mocksmail "github.com/gradii/framework/mocks/mail"
+	"github.com/gradii/framework/notification/channels"
+	"github.com/gradii/framework/notification/mail"
 )
 
 // ---- Fakes ----

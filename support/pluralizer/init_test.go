@@ -5,9 +5,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/goravel/framework/contracts/support/pluralizer"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/support/pluralizer/rules"
+	"github.com/gradii/framework/contracts/support/pluralizer"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/support/pluralizer/rules"
 )
 
 func TestDefaultLanguage(t *testing.T) {

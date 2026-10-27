@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	contractsai "github.com/goravel/framework/contracts/ai"
-	contractshttp "github.com/goravel/framework/contracts/http"
+	contractsai "github.com/gradii/framework/contracts/ai"
+	contractshttp "github.com/gradii/framework/contracts/http"
 )
 
 func TestWithProvider(t *testing.T) {

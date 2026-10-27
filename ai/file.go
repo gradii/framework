@@ -14,9 +14,9 @@ import (
 
 	"github.com/gabriel-vasile/mimetype"
 
-	contractsai "github.com/goravel/framework/contracts/ai"
-	contractsfilesystem "github.com/goravel/framework/contracts/filesystem"
-	"github.com/goravel/framework/errors"
+	contractsai "github.com/gradii/framework/contracts/ai"
+	contractsfilesystem "github.com/gradii/framework/contracts/filesystem"
+	"github.com/gradii/framework/errors"
 )
 
 type resolver func(context.Context) ([]byte, string, string, error)

@@ -6,8 +6,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/contracts/queue"
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/contracts/queue"
+	"github.com/gradii/framework/errors"
 )
 
 // MockJob is a mock implementation of the queue.Job interface for testing

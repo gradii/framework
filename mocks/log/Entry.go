@@ -5,7 +5,7 @@ package log
 import (
 	context "context"
 
-	log "github.com/goravel/framework/contracts/log"
+	log "github.com/gradii/framework/contracts/log"
 	mock "github.com/stretchr/testify/mock"
 
 	time "time"

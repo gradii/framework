@@ -1,12 +1,12 @@
 package log
 
 import (
-	contractsconfig "github.com/goravel/framework/contracts/config"
-	contractslog "github.com/goravel/framework/contracts/log"
-	contractstelemetry "github.com/goravel/framework/contracts/telemetry"
+	contractsconfig "github.com/gradii/framework/contracts/config"
+	contractslog "github.com/gradii/framework/contracts/log"
+	contractstelemetry "github.com/gradii/framework/contracts/telemetry"
 )
 
-const DefaultInstrumentationName = "github.com/goravel/framework/telemetry/instrumentation/log"
+const DefaultInstrumentationName = "github.com/gradii/framework/telemetry/instrumentation/log"
 
 type TelemetryChannel struct {
 	config   contractsconfig.Config

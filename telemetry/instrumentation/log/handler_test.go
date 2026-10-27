@@ -10,9 +10,9 @@ import (
 	"go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/log/logtest"
 
-	contractslog "github.com/goravel/framework/contracts/log"
-	contractstelemetry "github.com/goravel/framework/contracts/telemetry"
-	mockstelemetry "github.com/goravel/framework/mocks/telemetry"
+	contractslog "github.com/gradii/framework/contracts/log"
+	contractstelemetry "github.com/gradii/framework/contracts/telemetry"
+	mockstelemetry "github.com/gradii/framework/mocks/telemetry"
 )
 
 type HandlerTestSuite struct {

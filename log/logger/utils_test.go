@@ -78,7 +78,7 @@ func TestFilterContextValues(t *testing.T) {
 			name: "framework keys (typed string) dropped by default",
 			values: map[any]any{
 				utilsContextKey("GoravelAuthJwt"): "secret",
-				utilsContextKey("request_id"):    "req-1",
+				utilsContextKey("request_id"):     "req-1",
 			},
 			expect: map[string]any{"request_id": "req-1"},
 		},
@@ -169,7 +169,7 @@ func TestFilterContextValues(t *testing.T) {
 			values: map[any]any{
 				structSentinelKey{}: "user-42",
 			},
-			user:   []any{"github.com/goravel/framework/log/logger.structSentinelKey"},
+			user:   []any{"github.com/gradii/framework/log/logger.structSentinelKey"},
 			expect: nil,
 		},
 	}

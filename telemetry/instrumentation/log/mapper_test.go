@@ -10,7 +10,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/log"
 
-	contractslog "github.com/goravel/framework/contracts/log"
+	contractslog "github.com/gradii/framework/contracts/log"
 )
 
 func TestToSeverity(t *testing.T) {

@@ -1,6 +1,6 @@
 package ai
 
-import contractsai "github.com/goravel/framework/contracts/ai"
+import contractsai "github.com/gradii/framework/contracts/ai"
 
 type middlewareResponse struct {
 	response  contractsai.AgentResponse

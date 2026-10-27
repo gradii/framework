@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"sync"
 
-	contractsai "github.com/goravel/framework/contracts/ai"
-	contractshttp "github.com/goravel/framework/contracts/http"
-	"github.com/goravel/framework/errors"
+	contractsai "github.com/gradii/framework/contracts/ai"
+	contractshttp "github.com/gradii/framework/contracts/http"
+	"github.com/gradii/framework/errors"
 )
 
 var (

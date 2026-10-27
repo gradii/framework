@@ -1,12 +1,12 @@
 package broadcasting
 
 import (
-	"github.com/goravel/framework/broadcasting/console"
-	"github.com/goravel/framework/contracts/binding"
-	contractsconsole "github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/contracts/foundation"
-	"github.com/goravel/framework/contracts/queue"
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/broadcasting/console"
+	"github.com/gradii/framework/contracts/binding"
+	contractsconsole "github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/contracts/foundation"
+	"github.com/gradii/framework/contracts/queue"
+	"github.com/gradii/framework/errors"
 )
 
 type ServiceProvider struct{}

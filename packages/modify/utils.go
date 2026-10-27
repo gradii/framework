@@ -7,9 +7,9 @@ import (
 	"github.com/dave/dst"
 	"github.com/dave/dst/decorator"
 
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/packages/match"
-	"github.com/goravel/framework/support/path"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/packages/match"
+	"github.com/gradii/framework/support/path"
 )
 
 // AddCommand adds command to the foundation.Setup() chain in the Boot function.
@@ -20,7 +20,7 @@ func AddCommand(pkg, command string) error {
 		helperFuncName:  "Commands",
 		typePackage:     "console",
 		typeName:        "Command",
-		typeImportPath:  "github.com/goravel/framework/contracts/console",
+		typeImportPath:  "github.com/gradii/framework/contracts/console",
 		fileExistsError: errors.PackageCommandsFileExists,
 		stubTemplate:    commands,
 		matcherFunc:     match.Commands,
@@ -38,7 +38,7 @@ func AddFilter(pkg, filter string) error {
 		helperFuncName:  "Filters",
 		typePackage:     "validation",
 		typeName:        "Filter",
-		typeImportPath:  "github.com/goravel/framework/contracts/validation",
+		typeImportPath:  "github.com/gradii/framework/contracts/validation",
 		fileExistsError: errors.PackageFiltersFileExists,
 		stubTemplate:    filters,
 		matcherFunc:     match.Filters,
@@ -56,7 +56,7 @@ func AddJob(pkg, job string) error {
 		helperFuncName:  "Jobs",
 		typePackage:     "queue",
 		typeName:        "Job",
-		typeImportPath:  "github.com/goravel/framework/contracts/queue",
+		typeImportPath:  "github.com/gradii/framework/contracts/queue",
 		fileExistsError: errors.PackageJobsFileExists,
 		stubTemplate:    jobs,
 		matcherFunc:     match.Jobs,
@@ -85,7 +85,7 @@ func AddMigration(pkg, migration string) error {
 		helperFuncName:  "Migrations",
 		typePackage:     "schema",
 		typeName:        "Migration",
-		typeImportPath:  "github.com/goravel/framework/contracts/database/schema",
+		typeImportPath:  "github.com/gradii/framework/contracts/database/schema",
 		fileExistsError: errors.PackageMigrationsFileExists,
 		stubTemplate:    migrations,
 		matcherFunc:     match.Migrations,
@@ -103,7 +103,7 @@ func AddProvider(pkg, provider string) error {
 		helperFuncName:  "Providers",
 		typePackage:     "foundation",
 		typeName:        "ServiceProvider",
-		typeImportPath:  "github.com/goravel/framework/contracts/foundation",
+		typeImportPath:  "github.com/gradii/framework/contracts/foundation",
 		fileExistsError: errors.PackageProvidersFileExists,
 		stubTemplate:    providers,
 		matcherFunc:     match.Providers,
@@ -136,7 +136,7 @@ func AddRule(pkg, rule string) error {
 		helperFuncName:  "Rules",
 		typePackage:     "validation",
 		typeName:        "Rule",
-		typeImportPath:  "github.com/goravel/framework/contracts/validation",
+		typeImportPath:  "github.com/gradii/framework/contracts/validation",
 		fileExistsError: errors.PackageRulesFileExists,
 		stubTemplate:    rules,
 		matcherFunc:     match.Rules,
@@ -154,7 +154,7 @@ func AddSeeder(pkg, seeder string) error {
 		helperFuncName:  "Seeders",
 		typePackage:     "seeder",
 		typeName:        "Seeder",
-		typeImportPath:  "github.com/goravel/framework/contracts/database/seeder",
+		typeImportPath:  "github.com/gradii/framework/contracts/database/seeder",
 		fileExistsError: errors.PackageSeedersFileExists,
 		stubTemplate:    seeders,
 		matcherFunc:     match.Seeders,
@@ -216,7 +216,7 @@ func ExprIndex(x []dst.Expr, y dst.Expr) int {
 //
 // Parameters:
 //   - df: The parsed Go file to inspect
-//   - path: Import path of the package (e.g., "github.com/goravel/framework/contracts/console")
+//   - path: Import path of the package (e.g., "github.com/gradii/framework/contracts/console")
 //   - name: Optional package name. If not provided, uses the last segment of the path
 //
 // Returns true if the package is used anywhere in the file, false otherwise.
@@ -224,12 +224,12 @@ func ExprIndex(x []dst.Expr, y dst.Expr) int {
 // Example:
 //
 //	file, _ := decorator.Parse(src)
-//	// Check if "console" package from "github.com/goravel/framework/contracts/console" is used
-//	if IsUsingImport(file, "github.com/goravel/framework/contracts/console") {
+//	// Check if "console" package from "github.com/gradii/framework/contracts/console" is used
+//	if IsUsingImport(file, "github.com/gradii/framework/contracts/console") {
 //		fmt.Println("console package is being used")
 //	}
 //	// Or specify a custom name
-//	if IsUsingImport(file, "github.com/goravel/framework/contracts/console", "customName") {
+//	if IsUsingImport(file, "github.com/gradii/framework/contracts/console", "customName") {
 //		fmt.Println("Package with alias 'customName' is being used")
 //	}
 func IsUsingImport(df *dst.File, path string, name ...string) bool {
@@ -360,7 +360,7 @@ func RemoveMigration(pkg, migration string) error {
 		helperFuncName: "Migrations",
 		typePackage:    "schema",
 		typeName:       "Migration",
-		typeImportPath: "github.com/goravel/framework/contracts/database/schema",
+		typeImportPath: "github.com/gradii/framework/contracts/database/schema",
 		matcherFunc:    match.Migrations,
 	}
 
@@ -376,7 +376,7 @@ func RemoveProvider(pkg, provider string) error {
 		helperFuncName: "Providers",
 		typePackage:    "foundation",
 		typeName:       "ServiceProvider",
-		typeImportPath: "github.com/goravel/framework/contracts/foundation",
+		typeImportPath: "github.com/gradii/framework/contracts/foundation",
 		matcherFunc:    match.Providers,
 	}
 
@@ -459,7 +459,7 @@ func addImportsToFile(filePath, pkg string) error {
 //
 //	isThirdParty("fmt") // false - standard library
 //	isThirdParty("encoding/json") // false - standard library
-//	isThirdParty("github.com/goravel/framework") // true - third party
+//	isThirdParty("github.com/gradii/framework") // true - third party
 //	isThirdParty("example.com/package") // true - third party
 func isThirdParty(importPath string) bool {
 	// Third party package import path usually contains "." (".com", ".org", ...)

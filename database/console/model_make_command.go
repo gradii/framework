@@ -8,15 +8,15 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/goravel/framework/contracts/console"
-	"github.com/goravel/framework/contracts/console/command"
-	"github.com/goravel/framework/contracts/database/driver"
-	"github.com/goravel/framework/contracts/database/schema"
-	"github.com/goravel/framework/errors"
-	"github.com/goravel/framework/support"
-	supportconsole "github.com/goravel/framework/support/console"
-	"github.com/goravel/framework/support/file"
-	"github.com/goravel/framework/support/str"
+	"github.com/gradii/framework/contracts/console"
+	"github.com/gradii/framework/contracts/console/command"
+	"github.com/gradii/framework/contracts/database/driver"
+	"github.com/gradii/framework/contracts/database/schema"
+	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/support"
+	supportconsole "github.com/gradii/framework/support/console"
+	"github.com/gradii/framework/support/file"
+	"github.com/gradii/framework/support/str"
 )
 
 type modelDefinition struct {
@@ -183,7 +183,7 @@ func (r *ModelMakeCommand) generateModelInfo(columns []driver.Column, structName
 	}
 
 	if len(info.Embeds) > 0 {
-		info.Imports["github.com/goravel/framework/database/orm"] = struct{}{}
+		info.Imports["github.com/gradii/framework/database/orm"] = struct{}{}
 	}
 
 	goTypeMapping := r.schema.GoTypes()

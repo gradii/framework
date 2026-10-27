@@ -6,10 +6,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/goravel/framework/contracts/event"
-	"github.com/goravel/framework/contracts/queue"
-	mocksevent "github.com/goravel/framework/mocks/event"
-	mocksqueue "github.com/goravel/framework/mocks/queue"
+	"github.com/gradii/framework/contracts/event"
+	"github.com/gradii/framework/contracts/queue"
+	mocksevent "github.com/gradii/framework/mocks/event"
+	mocksqueue "github.com/gradii/framework/mocks/queue"
 )
 
 func TestApplication_Register(t *testing.T) {
@@ -119,7 +119,7 @@ func TestApplication_RegisterDoesNotOverwriteAnotherListenersQueueClaim(t *testi
 
 	assert.Equal(t, claimed, app.registered["sig"])
 	assert.False(t, app.Dispatch(&userUpdated{}).Failed())
-	assert.Equal(t, []any{"github.com/goravel/framework/event.userUpdated"}, second.events)
+	assert.Equal(t, []any{"github.com/gradii/framework/event.userUpdated"}, second.events)
 }
 
 func TestApplication_RegisterThenListenWithTheSameListenerRegistersTheJobOnce(t *testing.T) {

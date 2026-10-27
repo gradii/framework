@@ -88,7 +88,7 @@ func (s Stubs) MailFacade(pkg string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/mail"
+	"github.com/gradii/framework/contracts/mail"
 )
 
 func Mail() mail.Mail {

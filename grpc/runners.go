@@ -1,8 +1,8 @@
 package grpc
 
 import (
-	"github.com/goravel/framework/contracts/config"
-	"github.com/goravel/framework/contracts/grpc"
+	"github.com/gradii/framework/contracts/config"
+	"github.com/gradii/framework/contracts/grpc"
 )
 
 type GrpcRunner struct {

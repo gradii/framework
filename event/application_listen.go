@@ -5,9 +5,9 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/goravel/framework/contracts/event"
-	contractsqueue "github.com/goravel/framework/contracts/queue"
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/contracts/event"
+	contractsqueue "github.com/gradii/framework/contracts/queue"
+	"github.com/gradii/framework/errors"
 )
 
 var errorType = reflect.TypeFor[error]()

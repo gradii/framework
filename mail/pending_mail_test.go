@@ -18,12 +18,12 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goravel/framework/contracts/mail"
-	contractsqueue "github.com/goravel/framework/contracts/queue"
-	mailtemplate "github.com/goravel/framework/mail/template"
-	mocksconfig "github.com/goravel/framework/mocks/config"
-	mocksmail "github.com/goravel/framework/mocks/mail"
-	mocksqueue "github.com/goravel/framework/mocks/queue"
+	"github.com/gradii/framework/contracts/mail"
+	contractsqueue "github.com/gradii/framework/contracts/queue"
+	mailtemplate "github.com/gradii/framework/mail/template"
+	mocksconfig "github.com/gradii/framework/mocks/config"
+	mocksmail "github.com/gradii/framework/mocks/mail"
+	mocksqueue "github.com/gradii/framework/mocks/queue"
 )
 
 func TestSendDoesNotReuseMailableData(t *testing.T) {

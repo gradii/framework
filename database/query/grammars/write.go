@@ -3,7 +3,7 @@ package grammars
 import (
 	"strings"
 
-	"github.com/goravel/framework/database/query/core"
+	"github.com/gradii/framework/database/query/core"
 )
 
 // CompileInsert mirrors Grammar::compileInsert().

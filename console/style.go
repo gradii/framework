@@ -6,7 +6,7 @@ import (
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/pterm/pterm"
 
-	"github.com/goravel/framework/contracts/console"
+	"github.com/gradii/framework/contracts/console"
 )
 
 var (

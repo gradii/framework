@@ -10,8 +10,8 @@ func (s Stubs) Config(pkg, facadesImport, facadesPackage string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/support/path"
-	"github.com/goravel/framework/support/str"
+	"github.com/gradii/framework/support/path"
+	"github.com/gradii/framework/support/str"
 
 	"DummyFacadesImport"
 )
@@ -113,7 +113,7 @@ func (s Stubs) SessionFacade(pkg string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/session"
+	"github.com/gradii/framework/contracts/session"
 )
 
 func Session() session.Manager {

@@ -12,7 +12,7 @@ import (
 	"{{$path}}"
 {{- end }}
 {{- if and (not .Embeds) (not .Fields) }}
-	"github.com/goravel/framework/database/orm"
+	"github.com/gradii/framework/database/orm"
 {{- end }}
 )
 {{- end }}
@@ -40,7 +40,7 @@ func (r Stubs) Observer() string {
 	return `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/database/orm"
+	"github.com/gradii/framework/contracts/database/orm"
 )
 
 
@@ -66,7 +66,7 @@ func (u *DummyObserver) ForceDeleted(event orm.Event) error {
 
 func (r Stubs) Seeder() string {
 	return `package DummyPackage
-	
+
 type DummySeeder struct {
 }
 

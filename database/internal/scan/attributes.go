@@ -3,8 +3,8 @@ package scan
 import (
 	"reflect"
 
-	"github.com/goravel/framework/database/internal/reflectx"
-	"github.com/goravel/framework/errors"
+	"github.com/gradii/framework/database/internal/reflectx"
+	"github.com/gradii/framework/errors"
 )
 
 // Attributes also accepts nested Go maps and collections produced by factories.

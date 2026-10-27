@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"reflect"
 
-	rowscan "github.com/goravel/framework/database/internal/scan"
-	"github.com/goravel/framework/errors"
+	rowscan "github.com/gradii/framework/database/internal/scan"
+	"github.com/gradii/framework/errors"
 )
 
 // Aggregates may return NULL, integers, floats or decimal text depending on the driver.

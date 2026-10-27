@@ -1,6 +1,6 @@
 ## Project Overview
 
-Goravel (`github.com/goravel/framework`) is the framework core package, not an application.
+Goravel (`github.com/gradii/framework`) is the framework core package, not an application.
 Application scaffold: [goravel/goravel](https://github.com/goravel/goravel).
 
 ## Common Commands

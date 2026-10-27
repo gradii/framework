@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/support/convert"
+	"github.com/gradii/framework/support/convert"
 )
 
 type ColumnDefinitionTestSuite struct {

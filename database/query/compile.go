@@ -3,7 +3,7 @@ package query
 import (
 	"strings"
 
-	"github.com/goravel/framework/database/query/core"
+	"github.com/gradii/framework/database/query/core"
 )
 
 // ToSelectSQL compiles a select statement and its bindings.

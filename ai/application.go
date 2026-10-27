@@ -4,8 +4,8 @@ import (
 	"context"
 	"slices"
 
-	contractsai "github.com/goravel/framework/contracts/ai"
-	"github.com/goravel/framework/errors"
+	contractsai "github.com/gradii/framework/contracts/ai"
+	"github.com/gradii/framework/errors"
 )
 
 var _ contractsai.AI = (*Application)(nil)

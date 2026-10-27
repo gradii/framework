@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/goravel/framework/contracts/testing/docker"
+	"github.com/gradii/framework/contracts/testing/docker"
 )
 
 func TestExposedPort(t *testing.T) {

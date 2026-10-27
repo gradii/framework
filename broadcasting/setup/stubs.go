@@ -10,7 +10,7 @@ func (s Stubs) BroadcastFacade(pkg string) string {
 	content := `package DummyPackage
 
 import (
-	"github.com/goravel/framework/contracts/broadcasting"
+	"github.com/gradii/framework/contracts/broadcasting"
 )
 
 func Broadcast() broadcasting.Broadcast {
@@ -25,7 +25,7 @@ func (s Stubs) Config(facadesImport, facadesPackage string) string {
 	content := `package config
 
 import (
-	contractshttp "github.com/goravel/framework/contracts/http"
+	contractshttp "github.com/gradii/framework/contracts/http"
 
 	"DummyFacadesImport"
 )
