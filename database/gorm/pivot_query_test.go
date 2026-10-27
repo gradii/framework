@@ -122,7 +122,7 @@ func (pivotWireUser) Relations() map[string]contractsorm.Relation {
 
 func TestDescriptor_OnPivotQuery_Many2Many(t *testing.T) {
 	q := newRelQueryWith(t, &pivotWireUser{})
-	desc, err := resolveRelation(q.instance, &pivotWireUser{}, "Roles")
+	desc, err := resolveRelation(&pivotWireUser{}, "Roles")
 	assert.NoError(t, err)
 	assert.NotNil(t, desc.onPivotQuery, "Many2Many.OnPivotQuery must land on descriptor")
 
@@ -154,8 +154,7 @@ func (pivotWireMorphPost) Relations() map[string]contractsorm.Relation {
 }
 
 func TestDescriptor_OnPivotQuery_MorphToMany(t *testing.T) {
-	q := newRelQueryWith(t, &pivotWireMorphPost{})
-	desc, err := resolveRelation(q.instance, &pivotWireMorphPost{}, "Tags")
+	desc, err := resolveRelation(&pivotWireMorphPost{}, "Tags")
 	assert.NoError(t, err)
 	assert.NotNil(t, desc.onPivotQuery, "MorphToMany.OnPivotQuery must land on descriptor")
 }
@@ -180,8 +179,7 @@ func (pivotWireTag) Relations() map[string]contractsorm.Relation {
 }
 
 func TestDescriptor_OnPivotQuery_MorphedByMany(t *testing.T) {
-	q := newRelQueryWith(t, &pivotWireTag{})
-	desc, err := resolveRelation(q.instance, &pivotWireTag{}, "Posts")
+	desc, err := resolveRelation(&pivotWireTag{}, "Posts")
 	assert.NoError(t, err)
 	assert.NotNil(t, desc.onPivotQuery, "MorphedByMany.OnPivotQuery must land on descriptor")
 }
@@ -202,8 +200,7 @@ func (touchesUser) Relations() map[string]contractsorm.Relation {
 }
 
 func TestDescriptor_Touches_Many2Many(t *testing.T) {
-	q := newRelQueryWith(t, &touchesUser{})
-	desc, err := resolveRelation(q.instance, &touchesUser{}, "Roles")
+	desc, err := resolveRelation(&touchesUser{}, "Roles")
 	assert.NoError(t, err)
 	assert.True(t, desc.touches)
 }
@@ -222,8 +219,7 @@ func (touchesPost) Relations() map[string]contractsorm.Relation {
 }
 
 func TestDescriptor_Touches_MorphToMany(t *testing.T) {
-	q := newRelQueryWith(t, &touchesPost{})
-	desc, err := resolveRelation(q.instance, &touchesPost{}, "Tags")
+	desc, err := resolveRelation(&touchesPost{}, "Tags")
 	assert.NoError(t, err)
 	assert.True(t, desc.touches)
 }
@@ -242,8 +238,7 @@ func (touchesTag) Relations() map[string]contractsorm.Relation {
 }
 
 func TestDescriptor_Touches_MorphedByMany(t *testing.T) {
-	q := newRelQueryWith(t, &touchesTag{})
-	desc, err := resolveRelation(q.instance, &touchesTag{}, "Posts")
+	desc, err := resolveRelation(&touchesTag{}, "Posts")
 	assert.NoError(t, err)
 	assert.True(t, desc.touches)
 }
@@ -251,8 +246,7 @@ func TestDescriptor_Touches_MorphedByMany(t *testing.T) {
 // Default: when Touches is omitted, descriptor.touches is false. Sanity guard against accidental
 // always-on behavior.
 func TestDescriptor_Touches_DefaultsFalse(t *testing.T) {
-	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(q.instance, &relUser{}, "Roles")
+	desc, err := resolveRelation(&relUser{}, "Roles")
 	assert.NoError(t, err)
 	assert.False(t, desc.touches)
 }
@@ -292,29 +286,25 @@ func (pivotFieldUser) Relations() map[string]contractsorm.Relation {
 }
 
 func TestDescriptor_PivotField_DefaultsToPivot(t *testing.T) {
-	q := newRelQueryWith(t, &pivotFieldUser{})
-	desc, err := resolveRelation(q.instance, &pivotFieldUser{}, "Roles")
+	desc, err := resolveRelation(&pivotFieldUser{}, "Roles")
 	assert.NoError(t, err)
 	assert.Equal(t, "Pivot", desc.pivotField)
 }
 
 func TestDescriptor_PivotField_CustomMany2Many(t *testing.T) {
-	q := newRelQueryWith(t, &pivotFieldUser{})
-	desc, err := resolveRelation(q.instance, &pivotFieldUser{}, "AuditedRoles")
+	desc, err := resolveRelation(&pivotFieldUser{}, "AuditedRoles")
 	assert.NoError(t, err)
 	assert.Equal(t, "AuditPivot", desc.pivotField)
 }
 
 func TestDescriptor_PivotField_CustomMorphToMany(t *testing.T) {
-	q := newRelQueryWith(t, &pivotFieldUser{})
-	desc, err := resolveRelation(q.instance, &pivotFieldUser{}, "TaggedPosts")
+	desc, err := resolveRelation(&pivotFieldUser{}, "TaggedPosts")
 	assert.NoError(t, err)
 	assert.Equal(t, "TagPivot", desc.pivotField)
 }
 
 func TestDescriptor_PivotField_CustomMorphedByMany(t *testing.T) {
-	q := newRelQueryWith(t, &pivotFieldUser{})
-	desc, err := resolveRelation(q.instance, &pivotFieldUser{}, "InversedTagged")
+	desc, err := resolveRelation(&pivotFieldUser{}, "InversedTagged")
 	assert.NoError(t, err)
 	assert.Equal(t, "InversePivot", desc.pivotField)
 }

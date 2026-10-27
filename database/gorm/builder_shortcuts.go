@@ -80,7 +80,7 @@ func (r *Query) qualifiedPrimaryKeyColumn() string {
 		return ""
 	}
 
-	schema, err := parseSchema(r.instance, model)
+	schema, err := parseSchema(model)
 	if err != nil || len(schema.PrimaryFields) == 0 {
 		return ""
 	}
@@ -353,7 +353,7 @@ func (r *Query) applyPendingAttributes(dest any) error {
 		return nil
 	}
 
-	schema, err := parseSchema(r.instance, dest)
+	schema, err := parseSchema(dest)
 	if err != nil {
 		return err
 	}

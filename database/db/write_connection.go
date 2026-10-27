@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/goravel/framework/contracts/database/db"
+	databasedriver "github.com/goravel/framework/database/driver"
 	"github.com/goravel/framework/errors"
 	"github.com/jmoiron/sqlx"
 )
@@ -141,7 +142,11 @@ func (r *Tx) beginPinnedTransaction() (db.Tx, error) {
 	if r.state.pretend() {
 		builder = &pretendTxBuilder{}
 	} else {
-		tx, err := r.pinned.connection.BeginTxx(r.ctx, nil)
+		options, err := databasedriver.TransactionOptions(r.config, r.state.name)
+		if err != nil {
+			return nil, err
+		}
+		tx, err := r.pinned.connection.BeginTxx(r.ctx, options)
 		if err != nil {
 			return nil, err
 		}

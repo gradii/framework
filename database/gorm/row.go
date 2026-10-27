@@ -42,7 +42,7 @@ func (r *Row) Scan(value any) error {
 	// Per-row eager loading for the Cursor() path. applyEagerLoads consumes its own slice
 	// (sets it to nil after running), so we copy into a fresh query so subsequent rows in the
 	// cursor still see the queued entries.
-	query := r.query.fresh(r.query.instance)
+	query := r.query.fresh()
 	query.clearConditions()
 	query.conditions.eagerLoad = append([]eagerLoadEntry(nil), r.query.conditions.eagerLoad...)
 

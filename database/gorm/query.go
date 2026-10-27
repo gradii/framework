@@ -29,17 +29,21 @@ import (
 	"github.com/goravel/framework/support/deep"
 	"github.com/goravel/framework/support/str"
 	"github.com/spf13/cast"
-	gormio "gorm.io/gorm"
 )
 
 type Query struct {
-	config            config.Config
-	ctx               context.Context
-	grammar           contractsdriver.Grammar
-	queryGrammar      querybuilder.Grammar
-	log               log.Log
-	logger            contractslogger.Logger
-	instance          *gormio.DB
+	config       config.Config
+	ctx          context.Context
+	grammar      contractsdriver.Grammar
+	queryGrammar querybuilder.Grammar
+	log          log.Log
+	logger       contractslogger.Logger
+	// writer is the connection's writer pool, and tx is the transaction the query runs inside when it
+	// is bound to one. A query inside a transaction must run every statement on tx: the pool would
+	// execute in auto-commit, so a rollback would roll nothing back and a locking read would take no
+	// lock.
+	writer            *sql.DB
+	tx                *sql.Tx
 	queries           map[string]*Query
 	modelToObserver   []contractsorm.ModelToObserver
 	conditions        Conditions
@@ -53,7 +57,8 @@ func NewQuery(
 	ctx context.Context,
 	config config.Config,
 	dbConfig contractsdatabase.Config,
-	instance *gormio.DB,
+	writer *sql.DB,
+	tx *sql.Tx,
 	grammar contractsdriver.Grammar,
 	log log.Log,
 	modelToObserver []contractsorm.ModelToObserver,
@@ -83,7 +88,8 @@ func NewQuery(
 		config:            config,
 		ctx:               ctx,
 		dbConfig:          dbConfig,
-		instance:          instance,
+		writer:            writer,
+		tx:                tx,
 		grammar:           grammar,
 		queryGrammar:      queryGrammar,
 		log:               log,
@@ -136,12 +142,12 @@ func BuildQuery(ctx context.Context, config config.Config, connection string, lo
 
 	pool := driver.Pool()
 	logger := db.NewLogger(config, log)
-	gorm, _, err := databasedriver.BuildGorm(config, logger, pool, connection, telemetryResolver)
+	writer, _, err := databasedriver.BuildConnection(config, logger, pool, connection, telemetryResolver)
 	if err != nil {
 		return nil, pool.Writers[0], err
 	}
 
-	return NewQuery(ctx, config, pool.Writers[0], gorm, driver.Grammar(), log, modelToObserver, nil, telemetryResolver), pool.Writers[0], nil
+	return NewQuery(ctx, config, pool.Writers[0], writer, nil, driver.Grammar(), log, modelToObserver, nil, telemetryResolver), pool.Writers[0], nil
 }
 
 // DEPRECATED Use BeginTransaction instead.
@@ -154,16 +160,25 @@ func (r *Query) BeginTransaction() (contractsorm.Query, error) {
 		return r, nil
 	}
 
-	tx := r.instance.Begin()
-	if tx.Error != nil {
-		return nil, tx.Error
+	options, err := databasedriver.TransactionOptions(r.config, r.dbConfig.Connection)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := r.writer.BeginTx(r.ctx, options)
+	if err != nil {
+		return nil, err
 	}
 
 	return r.new(tx), nil
 }
 
 func (r *Query) Commit() error {
-	return r.instance.Commit().Error
+	if r.tx == nil {
+		return errors.OrmQueryTransactionNotStarted
+	}
+
+	return r.tx.Commit()
 }
 
 func (r *Query) Context() context.Context {
@@ -253,7 +268,7 @@ func (r *Query) Cursor() chan contractsdb.Row {
 }
 
 func (r *Query) DB() (*sql.DB, error) {
-	return r.instance.DB()
+	return r.writer, nil
 }
 
 func (r *Query) Delete(dests ...any) (*contractsdb.Result, error) {
@@ -834,18 +849,12 @@ func (r *Query) OrderByRaw(raw string) contractsorm.Query {
 	return r
 }
 
-func (r *Query) Instance() *gormio.DB {
-	return r.instance
-}
-
 func (r *Query) InRandomOrder() contractsorm.Query {
 	return r.OrderByRaw(randomOrderFunction(r.dbConfig.Driver))
 }
 
 func (r *Query) InTransaction() bool {
-	committer, ok := r.Instance().Statement.ConnPool.(gormio.TxCommitter)
-
-	return ok && committer != nil
+	return r.tx != nil
 }
 
 func (r *Query) OrWhere(query any, args ...any) contractsorm.Query {
@@ -1273,7 +1282,11 @@ func (r *Query) Restore(dests ...any) (*contractsdb.Result, error) {
 }
 
 func (r *Query) Rollback() error {
-	return r.instance.Rollback().Error
+	if r.tx == nil {
+		return errors.OrmQueryTransactionNotStarted
+	}
+
+	return r.tx.Rollback()
 }
 
 func (r *Query) Save(dest any) error {
@@ -1382,9 +1395,12 @@ func (r *Query) SelectRaw(query any, args ...any) contractsorm.Query {
 }
 
 func (r *Query) WithContext(ctx context.Context) contractsorm.Query {
-	instance := r.instance.WithContext(ctx)
+	query := *r
+	query.ctx = ctx
+	query.conditions = r.conditions.clone()
+	query.builder = r.builder.Clone()
 
-	return NewQuery(ctx, r.config, r.dbConfig, instance, r.grammar, r.log, r.modelToObserver, nil, r.telemetryResolver)
+	return &query
 }
 
 func (r *Query) SharedLock() contractsorm.Query {
@@ -1587,7 +1603,7 @@ func (r *Query) foldFindCondition(find any) (*Query, error) {
 		return r.withFindConditions([]any{find}), nil
 	}
 
-	schema, err := parseSchema(r.instance, find)
+	schema, err := parseSchema(find)
 	if err != nil {
 		return nil, err
 	}
@@ -1644,7 +1660,7 @@ func (r *Query) assignValue(dest any, value any) error {
 		return nil
 	}
 
-	schema, err := parseSchema(r.instance, dest)
+	schema, err := parseSchema(dest)
 	if err != nil {
 		return err
 	}
@@ -1664,7 +1680,7 @@ func (r *Query) assignValue(dest any, value any) error {
 // assignColumn writes one column of a model, looked up by its Go field name or by its column name. A
 // column the model does not carry is left alone.
 func (r *Query) assignColumn(dest any, name string, value any) error {
-	schema, err := parseSchema(r.instance, dest)
+	schema, err := parseSchema(dest)
 	if err != nil {
 		return err
 	}
@@ -2325,8 +2341,9 @@ func (r *Query) getObserver(dest any) contractsorm.Observer {
 	return nil
 }
 
-func (r *Query) new(db *gormio.DB) *Query {
-	query := r.fresh(db)
+func (r *Query) new(tx *sql.Tx) *Query {
+	query := r.fresh()
+	query.tx = tx
 	query.conditions = r.conditions.clone()
 	query.builder = r.builder.Clone()
 
@@ -2336,8 +2353,8 @@ func (r *Query) new(db *gormio.DB) *Query {
 // fresh builds the same query with no state of its own: no conditions, no clauses. It is the starting
 // point for a query that addresses a different table or exists only to carry one piece of state, such
 // as the per-row eager load the cursor path builds.
-func (r *Query) fresh(db *gormio.DB) *Query {
-	return NewQuery(r.ctx, r.config, r.dbConfig, db, r.grammar, r.log, r.modelToObserver, nil, r.telemetryResolver)
+func (r *Query) fresh() *Query {
+	return NewQuery(r.ctx, r.config, r.dbConfig, r.writer, r.tx, r.grammar, r.log, r.modelToObserver, nil, r.telemetryResolver)
 }
 
 func (r *Query) refreshConnection() (*Query, error) {
@@ -2551,7 +2568,7 @@ func (r *Query) assignUpdatedValues(assignments map[string]any) {
 		return
 	}
 
-	schema, err := parseSchema(r.instance, model)
+	schema, err := parseSchema(model)
 	if err != nil {
 		return
 	}

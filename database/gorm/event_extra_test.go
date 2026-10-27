@@ -5,15 +5,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	gormio "gorm.io/gorm"
-
-	querybuilder "github.com/goravel/framework/database/query"
 )
 
 // TestEvent_Context_NilCtx verifies Context returns the underlying query's context (nil when
 // unset).
 func TestEvent_Context_NilCtx(t *testing.T) {
-	q := &Query{instance: &gormio.DB{Statement: &gormio.Statement{Selects: []string{}, Omits: []string{}}}, builder: querybuilder.NewBuilder(nil)}
+	// A query built for compilation alone carries no context, so neither does the event.
+	q := &Query{}
 	e := NewEvent(q, &testEventModel, nil)
 	assert.Nil(t, e.Context())
 }
@@ -23,10 +21,7 @@ func TestEvent_Context_ReturnsCtx(t *testing.T) {
 	type ctxKey int
 	const k ctxKey = 1
 	ctx := context.WithValue(context.Background(), k, "value")
-	q := &Query{
-		ctx:      ctx,
-		instance: &gormio.DB{Statement: &gormio.Statement{Selects: []string{}, Omits: []string{}}},
-	}
+	q := &Query{ctx: ctx}
 	e := NewEvent(q, &testEventModel, nil)
 	assert.Equal(t, "value", e.Context().Value(k))
 }
@@ -34,16 +29,16 @@ func TestEvent_Context_ReturnsCtx(t *testing.T) {
 // TestEvent_IsClean_InverseOfIsDirty verifies IsClean returns !IsDirty.
 func TestEvent_IsClean_InverseOfIsDirty(t *testing.T) {
 	// When dest is empty/nil, IsDirty returns false, so IsClean returns true.
-	q := &Query{instance: &gormio.DB{Statement: &gormio.Statement{Selects: []string{}, Omits: []string{}}}}
+	q := compiledQuery(t, &testEventModel, Conditions{})
 	e := NewEvent(q, &testEventModel, nil)
 	assert.True(t, e.IsClean())
 	assert.False(t, e.IsDirty())
 }
 
 // TestEvent_ValidColumnFollowsTheQueryFilter pins that an observer sees the column filter the query
-// itself carries — the same one the compiled statement writes by — rather than GORM's statement.
+// itself carries — the same one the compiled statement writes by.
 func TestEvent_ValidColumnFollowsTheQueryFilter(t *testing.T) {
-	selecting := &Query{instance: &gormio.DB{Statement: &gormio.Statement{}}, builder: querybuilder.NewBuilder(nil)}
+	selecting := compiledQuery(t, &testEventModel, Conditions{})
 	selecting.builder.Select("Name")
 
 	event := NewEvent(selecting, &testEventModel, &TestEventModel{})
@@ -51,8 +46,7 @@ func TestEvent_ValidColumnFollowsTheQueryFilter(t *testing.T) {
 	assert.True(t, event.validColumn("Name"), "a named column is one the observer may see")
 	assert.False(t, event.validColumn("Avatar"), "a column the filter leaves out is not")
 
-	omitting := &Query{instance: &gormio.DB{Statement: &gormio.Statement{}}, builder: querybuilder.NewBuilder(nil)}
-	omitting.conditions.omit = []string{"Avatar"}
+	omitting := compiledQuery(t, &testEventModel, Conditions{omit: []string{"Avatar"}})
 
 	omitted := NewEvent(omitting, &testEventModel, &TestEventModel{})
 

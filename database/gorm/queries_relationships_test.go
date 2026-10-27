@@ -16,9 +16,9 @@ import (
 // Conditions value and never execute SQL.
 func newRelQuery(t *testing.T) *Query {
 	t.Helper()
-	db := newStubGormDB(t)
+	db := stubWriter(t)
 	conditions := Conditions{}
-	return NewQuery(context.Background(), nil, contractsdatabase.Config{}, db, nil, nil, nil, &conditions, nil)
+	return NewQuery(context.Background(), nil, contractsdatabase.Config{}, db, nil, nil, nil, nil, &conditions, nil)
 }
 
 func toQuery(q contractsorm.Query) *Query {
@@ -397,15 +397,15 @@ func TestParentModelFromConditions(t *testing.T) {
 	assert.Nil(t, q3.parentModel())
 }
 
-func TestFreshSession(t *testing.T) {
+// fresh() is the child a loader or a callback starts from: it addresses the same connection and
+// transaction but carries none of the parent's clauses.
+func TestFresh(t *testing.T) {
 	q := newRelQuery(t)
-	s := q.freshSession()
-	assert.NotNil(t, s)
-}
+	fresh := q.fresh()
 
-func TestWrapReturnsQuery(t *testing.T) {
-	q := newRelQuery(t)
-	wrapped := q.wrap(q.instance)
-	assert.NotNil(t, wrapped)
-	assert.NotNil(t, wrapped.instance)
+	assert.NotNil(t, fresh)
+	assert.Equal(t, q.writer, fresh.writer)
+	assert.Equal(t, q.tx, fresh.tx)
+	assert.Nil(t, fresh.conditions.model)
+	assert.Nil(t, fresh.conditions.dest)
 }

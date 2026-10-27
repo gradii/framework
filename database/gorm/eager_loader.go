@@ -64,7 +64,7 @@ func (r *Query) runEagerLoads(parents []reflect.Value, entries []eagerLoadEntry)
 }
 
 func (r *Query) loadOneRelation(parents []reflect.Value, parentModel any, entry eagerLoadEntry, nested []eagerLoadEntry) error {
-	desc, err := resolveRelation(r.instance, parentModel, entry.relation)
+	desc, err := resolveRelation(parentModel, entry.relation)
 	if err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func (r *Query) loadHasOneOrMany(parents []reflect.Value, parentModel any, desc 
 		return errors.OrmRelationUnsupported.Args(entry.relation, "", "no references")
 	}
 	ref := desc.references[0]
-	parentSchema, err := parseSchema(r.instance, parentModel)
+	parentSchema, err := parseSchema(parentModel)
 	if err != nil {
 		return err
 	}
@@ -119,7 +119,7 @@ func (r *Query) loadHasOneOrMany(parents []reflect.Value, parentModel any, desc 
 		return err
 	}
 
-	relatedSchema, err := parseSchema(r.instance, desc.relatedModel)
+	relatedSchema, err := parseSchema(desc.relatedModel)
 	if err != nil {
 		return err
 	}
@@ -145,7 +145,7 @@ func (r *Query) loadBelongsTo(parents []reflect.Value, parentModel any, desc *re
 		return errors.OrmRelationUnsupported.Args(entry.relation, "", "no references")
 	}
 	ref := desc.references[0]
-	parentSchema, err := parseSchema(r.instance, parentModel)
+	parentSchema, err := parseSchema(parentModel)
 	if err != nil {
 		return err
 	}
@@ -170,7 +170,7 @@ func (r *Query) loadBelongsTo(parents []reflect.Value, parentModel any, desc *re
 		return err
 	}
 
-	relatedSchema, err := parseSchema(r.instance, desc.relatedModel)
+	relatedSchema, err := parseSchema(desc.relatedModel)
 	if err != nil {
 		return err
 	}
@@ -196,7 +196,7 @@ func (r *Query) loadMorph(parents []reflect.Value, parentModel any, desc *relati
 		return errors.OrmRelationUnsupported.Args(entry.relation, "", "no references")
 	}
 	ref := desc.references[0]
-	parentSchema, err := parseSchema(r.instance, parentModel)
+	parentSchema, err := parseSchema(parentModel)
 	if err != nil {
 		return err
 	}
@@ -222,7 +222,7 @@ func (r *Query) loadMorph(parents []reflect.Value, parentModel any, desc *relati
 		return err
 	}
 
-	relatedSchema, err := parseSchema(r.instance, desc.relatedModel)
+	relatedSchema, err := parseSchema(desc.relatedModel)
 	if err != nil {
 		return err
 	}
@@ -248,7 +248,7 @@ func (r *Query) loadMorph(parents []reflect.Value, parentModel any, desc *relati
 // row from the value of the *_type column. Parents are bucketed by morph type, and each bucket
 // runs an IN query against its resolved table.
 func (r *Query) loadMorphTo(parents []reflect.Value, parentModel any, desc *relationDescriptor, entry eagerLoadEntry, nested []eagerLoadEntry) error {
-	parentSchema, err := parseSchema(r.instance, parentModel)
+	parentSchema, err := parseSchema(parentModel)
 	if err != nil {
 		return err
 	}
@@ -316,7 +316,7 @@ func (r *Query) loadMorphTo(parents []reflect.Value, parentModel any, desc *rela
 		if sample == nil {
 			return errors.OrmMorphTypeUnknown.Args(morphType)
 		}
-		relatedTable, terr := tableNameFor(r.instance, sample)
+		relatedTable, terr := tableNameFor(sample)
 		if terr != nil {
 			return terr
 		}
@@ -345,7 +345,7 @@ func (r *Query) loadMorphTo(parents []reflect.Value, parentModel any, desc *rela
 		}
 		allRows = append(allRows, rows...)
 
-		relatedSchema, perr := parseSchema(r.instance, sample)
+		relatedSchema, perr := parseSchema(sample)
 		if perr != nil {
 			return perr
 		}
@@ -397,7 +397,7 @@ func (r *Query) loadMorphTo(parents []reflect.Value, parentModel any, desc *rela
 // and the related rows are both read through statements this package compiles itself, and the
 // pivot schema the loader matches against comes from the relation descriptor.
 func (r *Query) loadMany2Many(parents []reflect.Value, parentModel any, desc *relationDescriptor, entry eagerLoadEntry, nested []eagerLoadEntry) error {
-	parentSchema, err := parseSchema(r.instance, parentModel)
+	parentSchema, err := parseSchema(parentModel)
 	if err != nil {
 		return err
 	}
@@ -417,7 +417,7 @@ func (r *Query) loadMany2Many(parents []reflect.Value, parentModel any, desc *re
 	// The related model's Pivot field, when it declares one, contributes extra pivot columns to the
 	// SELECT through the hydration plan. Struct-only: when the related model has no field by
 	// desc.pivotField, no pivot hydration happens.
-	relatedSchema, err := parseSchema(r.instance, desc.relatedModel)
+	relatedSchema, err := parseSchema(desc.relatedModel)
 	if err != nil {
 		return err
 	}
@@ -521,7 +521,7 @@ func (r *Query) loadMany2Many(parents []reflect.Value, parentModel any, desc *re
 // MorphedByMany (inverse) share this code path; the difference between them is captured in
 // desc.morphValue at descriptor-build time.
 func (r *Query) loadMorphToMany(parents []reflect.Value, parentModel any, desc *relationDescriptor, entry eagerLoadEntry, nested []eagerLoadEntry) error {
-	parentSchema, err := parseSchema(r.instance, parentModel)
+	parentSchema, err := parseSchema(parentModel)
 	if err != nil {
 		return err
 	}
@@ -541,7 +541,7 @@ func (r *Query) loadMorphToMany(parents []reflect.Value, parentModel any, desc *
 	// Check if the related model has a Pivot field — if yes, we'll SELECT extra pivot columns
 	// using the desc.pivotUsing struct schema. struct-only: when desc.pivotUsing is nil, no pivot
 	// hydration happens regardless of whether the related model has a Pivot field.
-	relatedSchema, err := parseSchema(r.instance, desc.relatedModel)
+	relatedSchema, err := parseSchema(desc.relatedModel)
 	if err != nil {
 		return err
 	}
@@ -640,7 +640,7 @@ func (r *Query) loadMorphToMany(parents []reflect.Value, parentModel any, desc *
 }
 
 func (r *Query) loadThrough(parents []reflect.Value, parentModel any, desc *relationDescriptor, entry eagerLoadEntry, nested []eagerLoadEntry, isMany bool) error {
-	parentSchema, err := parseSchema(r.instance, parentModel)
+	parentSchema, err := parseSchema(parentModel)
 	if err != nil {
 		return err
 	}
@@ -688,7 +688,7 @@ func (r *Query) loadThrough(parents []reflect.Value, parentModel any, desc *rela
 		return err
 	}
 
-	relatedSchema, err := parseSchema(r.instance, desc.relatedModel)
+	relatedSchema, err := parseSchema(desc.relatedModel)
 	if err != nil {
 		return err
 	}
@@ -1214,7 +1214,7 @@ func preparePivotHydration(r *Query, desc *relationDescriptor) (*pivotHydrationP
 		)
 	}
 	// Parse the field type's GORM schema by instantiating a zero value of it.
-	usingSchema, err := parseSchema(r.instance, reflect.New(pivotStructField.Type).Interface())
+	usingSchema, err := parseSchema(reflect.New(pivotStructField.Type).Interface())
 	if err != nil {
 		return nil, err
 	}

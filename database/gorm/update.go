@@ -129,7 +129,7 @@ func (r *Query) updateSchema() *modelSchema {
 		return nil
 	}
 
-	schema, err := parseSchemaWithTable(r.instance, model, r.declaredTable())
+	schema, err := parseSchemaWithTable(model, r.declaredTable())
 	if err != nil {
 		return nil
 	}

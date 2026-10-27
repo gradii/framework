@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
-	"fmt"
 	"io"
 	"reflect"
 	"strings"
@@ -13,7 +12,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	gormio "gorm.io/gorm"
 
 	contractsdatabase "github.com/goravel/framework/contracts/database"
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
@@ -109,23 +107,22 @@ func TestNewSampleModel(t *testing.T) {
 }
 
 func TestParseSchema(t *testing.T) {
-	db := newStubGormDB(t)
-	s, err := parseSchema(db, &relUser{})
+	s, err := parseSchema(&relUser{})
 	assert.NoError(t, err)
 	assert.Equal(t, "rel_users", s.Table)
 
-	_, err = parseSchema(db, "bad-model")
+	_, err = parseSchema("bad-model")
 	assert.Error(t, err)
 }
 
 func TestExtractKeysDeduplicatesAndSkipsZero(t *testing.T) {
-	db := newStubGormDB(t)
-	s, err := parseSchema(db, &relUser{})
+	db := stubWriter(t)
+	s, err := parseSchema(&relUser{})
 	assert.NoError(t, err)
 	idField := s.FieldsByDBName["id"]
 	assert.NotNil(t, idField)
 
-	q := NewQuery(context.Background(), nil, contractsdatabase.Config{}, db, nil, nil, nil, &Conditions{}, nil)
+	q := NewQuery(context.Background(), nil, contractsdatabase.Config{}, db, nil, nil, nil, nil, &Conditions{}, nil)
 
 	parents := []reflect.Value{
 		reflect.ValueOf(relUser{ID: 1}),
@@ -437,8 +434,7 @@ func TestPreparePivotHydration_CustomFieldName_FromFieldType(t *testing.T) {
 // preparePivotHydration so we can exercise writePivotField independently.
 func mustPivotPlan(t *testing.T, fieldName string, pivotProto any) *pivotHydrationPlan {
 	t.Helper()
-	q := newRelQueryWith(t, &relUser{})
-	usingSchema, err := parseSchema(q.instance, pivotProto)
+	usingSchema, err := parseSchema(pivotProto)
 	if err != nil {
 		t.Fatalf("parse pivot schema: %v", err)
 	}
@@ -512,12 +508,12 @@ func TestWritePivotField_EdgeCases(t *testing.T) {
 }
 
 func TestExtractKeys_EmptyInput(t *testing.T) {
-	db := newStubGormDB(t)
-	s, err := parseSchema(db, &relUser{})
+	db := stubWriter(t)
+	s, err := parseSchema(&relUser{})
 	assert.NoError(t, err)
 	idField := s.FieldsByDBName["id"]
 
-	q := NewQuery(context.Background(), nil, contractsdatabase.Config{}, db, nil, nil, nil, &Conditions{}, nil)
+	q := NewQuery(context.Background(), nil, contractsdatabase.Config{}, db, nil, nil, nil, nil, &Conditions{}, nil)
 	keys := extractKeys(q, []reflect.Value{}, idField)
 	assert.Empty(t, keys)
 }
@@ -550,12 +546,12 @@ func TestRunEagerLoads_InvalidRelation(t *testing.T) {
 //
 // The loader tests below pin the statement a loader builds and executes, so they must observe the
 // loader's own call site rather than a child the test rebuilt by hand. A loader compiles its child
-// and runs it through the connection pool (executor.go), which the stub gorm.DB used elsewhere in
-// the package cannot provide: it has no *sql.DB behind it. These helpers give the Query a real
-// *sql.DB backed by a recording driver, in the connector-with-a-stub-driver shape database/driver's
-// tests use to hand a gorm.DB a usable pool. Every statement the loader executes is captured and an
-// empty result set comes back, so the loader completes its read path without a database and the
-// assertion lands on the SQL the loader itself produced.
+// and runs it through the connection pool (executor.go), which the nil writer stubWriter returns
+// cannot provide: it has no *sql.DB behind it. These helpers give the Query a real *sql.DB backed by
+// a recording driver, in the connector-with-a-stub-driver shape database/driver's tests use. Every
+// statement the loader executes is captured and an empty result set comes back, so the loader
+// completes its read path without a database and the assertion lands on the SQL the loader itself
+// produced.
 
 type recordedStatement struct {
 	sql  string
@@ -720,16 +716,8 @@ func newRecordingRelQuery(t *testing.T, model any) (*Query, *recordingSQLDriver)
 	sqlDB := sql.OpenDB(recordingConnector{driver: recordDriver})
 	t.Cleanup(func() { _ = sqlDB.Close() })
 
-	db, err := gormio.Open(stubDialector{}, &gormio.Config{
-		ConnPool:             sqlDB,
-		DisableAutomaticPing: true,
-	})
-	if err != nil {
-		t.Fatalf("open recording gorm: %v", err)
-	}
-
 	conditions := Conditions{model: model}
-	return NewQuery(context.Background(), nil, contractsdatabase.Config{}, db, nil, nil, nil, &conditions, nil), recordDriver
+	return NewQuery(context.Background(), nil, contractsdatabase.Config{}, sqlDB, nil, nil, nil, nil, &conditions, nil), recordDriver
 }
 
 // driverBindings maps a chunk of keys to the driver.Value slice database/sql hands the driver: an
@@ -760,16 +748,8 @@ func driverBindings(keys []any) []driver.Value {
 // related table filtered by its owner key, addressed through relatedChild so the framework compiler
 // renders the statement instead of GORM.
 //
-// Each case also renders the GORM statement the loader used to hand over and compares the two after
-// normalisation, so the conversion cannot drift from the SQL it replaced. The bindings the driver
-// received are asserted exactly: same key type, same order, same arity.
+// The bindings the driver received are asserted exactly: same key type, same order, same arity.
 func TestLoadBelongsTo_ChildQueryIsCompiled(t *testing.T) {
-	// Case and keyword spacing differ between the two builders; the predicate does not.
-	normalize := func(sql string) string {
-		sql = strings.Join(strings.Fields(strings.ToLower(sql)), " ")
-		return strings.ReplaceAll(sql, ", ", ",")
-	}
-
 	cases := []struct {
 		name  string
 		chunk []any
@@ -790,7 +770,7 @@ func TestLoadBelongsTo_ChildQueryIsCompiled(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			q, recorder := newRecordingRelQuery(t, &relBook{})
-			desc, err := resolveRelation(q.instance, &relBook{}, "Author")
+			desc, err := resolveRelation(&relBook{}, "Author")
 			assert.NoError(t, err)
 			if err != nil {
 				return
@@ -798,8 +778,6 @@ func TestLoadBelongsTo_ChildQueryIsCompiled(t *testing.T) {
 
 			assert.Equal(t, relKindBelongsTo, desc.kind)
 			assert.Equal(t, "rel_users", desc.relatedTable)
-
-			ref := desc.references[0]
 
 			// The parents carry the owner key the loader reads for a BelongsTo: the related key sits
 			// on the parent's foreign key.
@@ -816,15 +794,6 @@ func TestLoadBelongsTo_ChildQueryIsCompiled(t *testing.T) {
 			recorded := recorder.last(t)
 			assert.Equal(t, c.sql, recorded.sql)
 			assert.Equal(t, driverBindings(c.chunk), recorded.args)
-
-			// Keep the legacy-versus-compiled comparison: the statement the loader executed must
-			// render the same predicate the GORM chain it replaced produced.
-			legacy := q.freshSession().Table(desc.relatedTable).
-				Where(fmt.Sprintf("%s IN ?", q.ident(desc.relatedTable, ref.primaryColumn)), c.chunk)
-			statement := legacy.Session(&gormio.Session{DryRun: true}).Find(&[]*relUser{})
-			assert.NoError(t, statement.Error)
-			assert.Equal(t, normalize(statement.Statement.SQL.String()), normalize(recorded.sql),
-				"the loader's compiled child must render the predicate the GORM statement did")
 		})
 	}
 
@@ -832,7 +801,7 @@ func TestLoadBelongsTo_ChildQueryIsCompiled(t *testing.T) {
 	// still selects it and the dictionary can be keyed off the related rows.
 	t.Run("pruned select keeps the owner key", func(t *testing.T) {
 		q := newRelQueryWith(t, &relBook{})
-		desc, err := resolveRelation(q.instance, &relBook{}, "Author")
+		desc, err := resolveRelation(&relBook{}, "Author")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -854,7 +823,7 @@ func TestLoadBelongsTo_ChildQueryIsCompiled(t *testing.T) {
 	// compiled child carries no extra predicate.
 	t.Run("child carries no inherited conditions", func(t *testing.T) {
 		q := newRelQueryWith(t, &relBook{})
-		desc, err := resolveRelation(q.instance, &relBook{}, "Author")
+		desc, err := resolveRelation(&relBook{}, "Author")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -879,17 +848,9 @@ func TestLoadBelongsTo_ChildQueryIsCompiled(t *testing.T) {
 // relatedChild so the framework compiler renders the statement instead of GORM.
 //
 // The loader is shared by the two kinds; only the way it attaches the rows differs, so the same
-// child statement has to come out of both. Each case also renders the GORM statement the loader used
-// to hand over and compares the two after normalisation, so the conversion cannot drift from the SQL
-// it replaced. The bindings the driver received are asserted exactly: same key type, same order,
-// same arity.
+// child statement has to come out of both. The bindings the driver received are asserted exactly:
+// same key type, same order, same arity.
 func TestLoadHasOneOrMany_ChildQueryIsCompiled(t *testing.T) {
-	// Case and keyword spacing differ between the two builders; the predicate does not.
-	normalize := func(sql string) string {
-		sql = strings.Join(strings.Fields(strings.ToLower(sql)), " ")
-		return strings.ReplaceAll(sql, ", ", ",")
-	}
-
 	cases := []struct {
 		name     string
 		parent   any
@@ -928,7 +889,7 @@ func TestLoadHasOneOrMany_ChildQueryIsCompiled(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			q, recorder := newRecordingRelQuery(t, c.parent)
-			desc, err := resolveRelation(q.instance, c.parent, c.relation)
+			desc, err := resolveRelation(c.parent, c.relation)
 			assert.NoError(t, err)
 			if err != nil {
 				return
@@ -936,8 +897,6 @@ func TestLoadHasOneOrMany_ChildQueryIsCompiled(t *testing.T) {
 
 			assert.Equal(t, c.kind, desc.kind)
 			assert.Equal(t, c.table, desc.relatedTable)
-
-			ref := desc.references[0]
 
 			// The parents carry the owner key the loader reads for a HasOne/HasMany: the parent's own
 			// primary key, which the child's foreign key matches.
@@ -954,15 +913,6 @@ func TestLoadHasOneOrMany_ChildQueryIsCompiled(t *testing.T) {
 			recorded := recorder.last(t)
 			assert.Equal(t, c.sql, recorded.sql)
 			assert.Equal(t, driverBindings(c.chunk), recorded.args)
-
-			// Keep the legacy-versus-compiled comparison: the statement the loader executed must
-			// render the same predicate the GORM chain it replaced produced.
-			legacy := q.freshSession().Table(desc.relatedTable).
-				Where(fmt.Sprintf("%s IN ?", q.ident(desc.relatedTable, ref.foreignColumn)), c.chunk)
-			statement := legacy.Session(&gormio.Session{DryRun: true}).Find(c.dest)
-			assert.NoError(t, statement.Error)
-			assert.Equal(t, normalize(statement.Statement.SQL.String()), normalize(recorded.sql),
-				"the loader's compiled child must render the predicate the GORM statement did")
 		})
 	}
 
@@ -970,7 +920,7 @@ func TestLoadHasOneOrMany_ChildQueryIsCompiled(t *testing.T) {
 	// child still selects it and the dictionary can be keyed off the related rows.
 	t.Run("pruned select keeps the foreign key", func(t *testing.T) {
 		q := newRelQueryWith(t, &relUser{})
-		desc, err := resolveRelation(q.instance, &relUser{}, "Books")
+		desc, err := resolveRelation(&relUser{}, "Books")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -992,7 +942,7 @@ func TestLoadHasOneOrMany_ChildQueryIsCompiled(t *testing.T) {
 	// compiled child carries no extra predicate.
 	t.Run("child carries no inherited conditions", func(t *testing.T) {
 		q := newRelQueryWith(t, &relUser{})
-		desc, err := resolveRelation(q.instance, &relUser{}, "Books")
+		desc, err := resolveRelation(&relUser{}, "Books")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -1017,16 +967,9 @@ func TestLoadHasOneOrMany_ChildQueryIsCompiled(t *testing.T) {
 // relation's own morph value, addressed through relatedChild so the framework compiler renders the
 // statement instead of GORM.
 //
-// Each case also renders the GORM statement the loader used to hand over and compares the two after
-// normalisation, so the conversion cannot drift from the SQL it replaced. The bindings the driver
-// received are asserted exactly: the chunk's keys first, then the morph value.
+// The bindings the driver received are asserted exactly: the chunk's keys first, then the morph
+// value.
 func TestLoadMorph_ChildQueryIsCompiled(t *testing.T) {
-	// Case and keyword spacing differ between the two builders; the predicate does not.
-	normalize := func(sql string) string {
-		sql = strings.Join(strings.Fields(strings.ToLower(sql)), " ")
-		return strings.ReplaceAll(sql, ", ", ",")
-	}
-
 	cases := []struct {
 		name     string
 		parent   any
@@ -1065,7 +1008,7 @@ func TestLoadMorph_ChildQueryIsCompiled(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			q, recorder := newRecordingRelQuery(t, c.parent)
-			desc, err := resolveRelation(q.instance, c.parent, c.relation)
+			desc, err := resolveRelation(c.parent, c.relation)
 			assert.NoError(t, err)
 			if err != nil {
 				return
@@ -1074,8 +1017,6 @@ func TestLoadMorph_ChildQueryIsCompiled(t *testing.T) {
 			assert.Equal(t, c.kind, desc.kind)
 			assert.Equal(t, c.table, desc.relatedTable)
 			assert.Equal(t, c.typeCol, desc.morphTypeColumn)
-
-			ref := desc.references[0]
 
 			// The parents carry the owner key the loader reads for a morph one / many: the parent's
 			// primary key.
@@ -1092,16 +1033,6 @@ func TestLoadMorph_ChildQueryIsCompiled(t *testing.T) {
 			recorded := recorder.last(t)
 			assert.Equal(t, c.sql, recorded.sql)
 			assert.Equal(t, append(driverBindings(c.chunk), desc.morphValue), recorded.args)
-
-			// Keep the legacy-versus-compiled comparison: the statement the loader executed must
-			// render the same predicates the GORM chain it replaced produced.
-			legacy := q.freshSession().Table(desc.relatedTable).
-				Where(fmt.Sprintf("%s IN ?", q.ident(desc.relatedTable, ref.foreignColumn)), c.chunk).
-				Where(fmt.Sprintf("%s = ?", q.ident(desc.relatedTable, desc.morphTypeColumn)), desc.morphValue)
-			statement := legacy.Session(&gormio.Session{DryRun: true}).Find(c.dest)
-			assert.NoError(t, statement.Error)
-			assert.Equal(t, normalize(statement.Statement.SQL.String()), normalize(recorded.sql),
-				"the loader's compiled child must render the predicate the GORM statement did")
 		})
 	}
 
@@ -1110,7 +1041,7 @@ func TestLoadMorph_ChildQueryIsCompiled(t *testing.T) {
 	// statement.
 	t.Run("pruned select keeps the foreign key and the morph type column", func(t *testing.T) {
 		q := newRelQueryWith(t, &relUser{})
-		desc, err := resolveRelation(q.instance, &relUser{}, "Houses")
+		desc, err := resolveRelation(&relUser{}, "Houses")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -1132,7 +1063,7 @@ func TestLoadMorph_ChildQueryIsCompiled(t *testing.T) {
 	// soft-delete scope and global scopes therefore stay off the eager load.
 	t.Run("child carries no inherited conditions", func(t *testing.T) {
 		q := newRelQueryWith(t, &relUser{})
-		desc, err := resolveRelation(q.instance, &relUser{}, "Houses")
+		desc, err := resolveRelation(&relUser{}, "Houses")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -1226,12 +1157,6 @@ func TestLoadMorphTo_BucketChildQueryIsCompiled(t *testing.T) {
 		"image":     &relLogo{},
 	})
 
-	// Case and keyword spacing differ between the two builders; the predicate does not.
-	normalize := func(sql string) string {
-		sql = strings.Join(strings.Fields(strings.ToLower(sql)), " ")
-		return strings.ReplaceAll(sql, ", ", ",")
-	}
-
 	cases := []struct {
 		name     string
 		parent   any
@@ -1292,7 +1217,7 @@ func TestLoadMorphTo_BucketChildQueryIsCompiled(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			q, recorder := newRecordingRelQuery(t, c.parent)
-			desc, err := resolveRelation(q.instance, c.parent, c.relation)
+			desc, err := resolveRelation(c.parent, c.relation)
 			assert.NoError(t, err)
 			if err != nil {
 				return
@@ -1303,7 +1228,7 @@ func TestLoadMorphTo_BucketChildQueryIsCompiled(t *testing.T) {
 
 			sample := morphmap.Find(c.morph)
 			assert.NotNil(t, sample)
-			relatedTable, err := tableNameFor(q.instance, sample)
+			relatedTable, err := tableNameFor(sample)
 			assert.NoError(t, err)
 			assert.Equal(t, c.table, relatedTable)
 
@@ -1322,15 +1247,6 @@ func TestLoadMorphTo_BucketChildQueryIsCompiled(t *testing.T) {
 			recorded := recorder.last(t)
 			assert.Equal(t, c.sql, recorded.sql)
 			assert.Equal(t, driverBindings(c.chunk), recorded.args)
-
-			// Keep the legacy-versus-compiled comparison: the statement the loader executed must
-			// render the same predicate the GORM chain it replaced produced.
-			legacy := q.freshSession().Table(relatedTable).
-				Where(fmt.Sprintf("%s IN ?", q.ident(relatedTable, ownerKey)), c.chunk)
-			statement := legacy.Session(&gormio.Session{DryRun: true}).Find(c.dest)
-			assert.NoError(t, statement.Error)
-			assert.Equal(t, normalize(statement.Statement.SQL.String()), normalize(recorded.sql),
-				"the loader's compiled child must render the predicate the GORM statement did")
 		})
 	}
 
@@ -1338,7 +1254,7 @@ func TestLoadMorphTo_BucketChildQueryIsCompiled(t *testing.T) {
 	// filters each resolved type's rows without the loader restating it per bucket.
 	t.Run("bucket child receives the relation scope", func(t *testing.T) {
 		q := newRelQueryWith(t, &morphScopedImage{})
-		desc, err := resolveRelation(q.instance, &morphScopedImage{}, "Imageable")
+		desc, err := resolveRelation(&morphScopedImage{}, "Imageable")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -1421,16 +1337,9 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 	// keyed by, so quotes are dropped from both sides here. The compiled statement is asserted
 	// verbatim above, and the dots survive below, so a quoting or qualification regression still
 	// fails rather than being normalised away.
-	normalize := func(sql string) string {
-		sql = strings.Join(strings.Fields(strings.ToLower(sql)), " ")
-		sql = strings.ReplaceAll(sql, ", ", ",")
-
-		return strings.ReplaceAll(sql, `"`, "")
-	}
-
 	t.Run("pivot read without a pivot scope", func(t *testing.T) {
 		q := newRelQueryWith(t, &relUser{})
-		desc, err := resolveRelation(q.instance, &relUser{}, "Roles")
+		desc, err := resolveRelation(&relUser{}, "Roles")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -1468,7 +1377,7 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 
 	t.Run("pivot read receives the relation scope and the hydration plan's columns", func(t *testing.T) {
 		q := newRelQueryWith(t, &scopeUser{})
-		desc, err := resolveRelation(q.instance, &scopeUser{}, "Roles")
+		desc, err := resolveRelation(&scopeUser{}, "Roles")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -1499,7 +1408,7 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 
 	t.Run("pivot read keeps the hydration plan's columns, duplicates included", func(t *testing.T) {
 		q := newRelQueryWith(t, &m2mPivotParent{})
-		desc, err := resolveRelation(q.instance, &m2mPivotParent{}, "Roles")
+		desc, err := resolveRelation(&m2mPivotParent{}, "Roles")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -1541,7 +1450,7 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 
 	t.Run("related read is compiled and keeps the related key when pruned", func(t *testing.T) {
 		q := newRelQueryWith(t, &relUser{})
-		desc, err := resolveRelation(q.instance, &relUser{}, "Roles")
+		desc, err := resolveRelation(&relUser{}, "Roles")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -1553,15 +1462,6 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, `select * from "rel_roles" where "rel_roles"."id" in (?)`, compiled)
 		assert.Equal(t, chunk, bindings)
-
-		legacy := q.freshSession().
-			Table(desc.relatedTable).
-			Where(fmt.Sprintf("%s IN ?", q.ident(desc.relatedTable, desc.pivotRelatedRef.primaryColumn)), chunk)
-		statement := legacy.Session(&gormio.Session{DryRun: true}).Find(&[]*relRole{})
-		assert.NoError(t, statement.Error)
-		assert.Equal(t, normalize(statement.Statement.SQL.String()), normalize(compiled),
-			"the compiled related read must render the predicate the GORM chain did")
-		assert.Equal(t, statement.Statement.Vars, bindings)
 
 		// The loader passes the related key as a required column, so it survives column pruning and
 		// the dictionary can be keyed off the related rows.
@@ -1576,7 +1476,7 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 	// relation field is cleared rather than queried for an IN list that cannot match.
 	t.Run("no parent keys issues no statement", func(t *testing.T) {
 		q := newRelQueryWith(t, &relUser{})
-		desc, err := resolveRelation(q.instance, &relUser{}, "Roles")
+		desc, err := resolveRelation(&relUser{}, "Roles")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -1589,7 +1489,7 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 	// statements the loader built and executed rather than on children this test rebuilt by hand.
 	t.Run("loader reads the pivot table then the related table", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &relUser{})
-		desc, err := resolveRelation(q.instance, &relUser{}, "Roles")
+		desc, err := resolveRelation(&relUser{}, "Roles")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -1624,7 +1524,7 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 	// the child this test could rebuild: findMapsCompiled threads it in before compiling.
 	t.Run("loader's pivot read carries the relation scope", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &scopeUser{})
-		desc, err := resolveRelation(q.instance, &scopeUser{}, "Roles")
+		desc, err := resolveRelation(&scopeUser{}, "Roles")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -1683,7 +1583,7 @@ func (pivotUser) Relations() map[string]contractsorm.Relation {
 func TestLoadHasOneOrMany_AssignsHydratedRows(t *testing.T) {
 	t.Run("has many assigns per parent", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &relUser{})
-		desc, err := resolveRelation(q.instance, &relUser{}, "Books")
+		desc, err := resolveRelation(&relUser{}, "Books")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -1719,7 +1619,7 @@ func TestLoadHasOneOrMany_AssignsHydratedRows(t *testing.T) {
 
 	t.Run("has one keeps the first match", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &relUser{})
-		desc, err := resolveRelation(q.instance, &relUser{}, "Profile")
+		desc, err := resolveRelation(&relUser{}, "Profile")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -1744,7 +1644,7 @@ func TestLoadHasOneOrMany_AssignsHydratedRows(t *testing.T) {
 
 	t.Run("belongs to matches the foreign key and clears an unmatched parent", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &relBook{})
-		desc, err := resolveRelation(q.instance, &relBook{}, "Author")
+		desc, err := resolveRelation(&relBook{}, "Author")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -1787,7 +1687,7 @@ func TestLoadHasOneOrMany_AssignsHydratedRows(t *testing.T) {
 // own pivot row, and two parents sharing one related row get distinct instances.
 func TestLoadMany2Many_HydratesPivotThroughTheLoader(t *testing.T) {
 	q, recorder := newRecordingRelQuery(t, &pivotUser{})
-	desc, err := resolveRelation(q.instance, &pivotUser{}, "Roles")
+	desc, err := resolveRelation(&pivotUser{}, "Roles")
 	assert.NoError(t, err)
 	if err != nil {
 		return
@@ -1855,7 +1755,7 @@ func TestLoadRelatedRows_ChunkedPerChunkSize(t *testing.T) {
 	cfg.EXPECT().GetInt("database.eager_load_chunk_size", mock.Anything).Return(2)
 	q.config = cfg
 
-	desc, err := resolveRelation(q.instance, &relUser{}, "Books")
+	desc, err := resolveRelation(&relUser{}, "Books")
 	assert.NoError(t, err)
 	if err != nil {
 		return
@@ -1907,7 +1807,7 @@ func TestLoadRelatedRows_ChunkedPerChunkSize(t *testing.T) {
 func TestLoadRelatedRows_PrunesToRequestedColumns(t *testing.T) {
 	t.Run("loader's own child", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &relUser{})
-		desc, err := resolveRelation(q.instance, &relUser{}, "Books")
+		desc, err := resolveRelation(&relUser{}, "Books")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -1934,7 +1834,7 @@ func TestLoadRelatedRows_PrunesToRequestedColumns(t *testing.T) {
 
 	t.Run("required key already present under a table qualifier", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &relUser{})
-		desc, err := resolveRelation(q.instance, &relUser{}, "Books")
+		desc, err := resolveRelation(&relUser{}, "Books")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -1995,12 +1895,12 @@ func TestAssignToParents(t *testing.T) {
 	t.Run("zero key is skipped for a has-one", func(t *testing.T) {
 		// The parent's owner key is zero, but the dictionary holds a row under the zero key's
 		// spelling. A skipped parent must not take it: the loader never queried for that key.
-		desc, err := resolveRelation(q.instance, &relUser{}, "Profile")
+		desc, err := resolveRelation(&relUser{}, "Profile")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
-		schema, err := parseSchema(q.instance, &relUser{})
+		schema, err := parseSchema(&relUser{})
 		assert.NoError(t, err)
 		parentField := schema.FieldsByDBName[desc.references[0].primaryColumn]
 		assert.NotNil(t, parentField)
@@ -2016,12 +1916,12 @@ func TestAssignToParents(t *testing.T) {
 	})
 
 	t.Run("zero key is skipped for a has-many", func(t *testing.T) {
-		desc, err := resolveRelation(q.instance, &relUser{}, "Books")
+		desc, err := resolveRelation(&relUser{}, "Books")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
-		schema, err := parseSchema(q.instance, &relUser{})
+		schema, err := parseSchema(&relUser{})
 		assert.NoError(t, err)
 		parentField := schema.FieldsByDBName[desc.references[0].primaryColumn]
 
@@ -2043,12 +1943,12 @@ func TestAssignToParents(t *testing.T) {
 		// observable on: a pointer field takes the first row either way. With isMany=false the
 		// dictionary entry is cut to one row before the write, so the slice gets exactly one element
 		// instead of the two the related read returned.
-		desc, err := resolveRelation(q.instance, &relUser{}, "Books")
+		desc, err := resolveRelation(&relUser{}, "Books")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
-		schema, err := parseSchema(q.instance, &relUser{})
+		schema, err := parseSchema(&relUser{})
 		assert.NoError(t, err)
 		parentField := schema.FieldsByDBName[desc.references[0].primaryColumn]
 
@@ -2068,12 +1968,12 @@ func TestAssignToParents(t *testing.T) {
 	})
 
 	t.Run("has-many keeps every match in order", func(t *testing.T) {
-		desc, err := resolveRelation(q.instance, &relUser{}, "Books")
+		desc, err := resolveRelation(&relUser{}, "Books")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
-		schema, err := parseSchema(q.instance, &relUser{})
+		schema, err := parseSchema(&relUser{})
 		assert.NoError(t, err)
 		parentField := schema.FieldsByDBName[desc.references[0].primaryColumn]
 

@@ -154,7 +154,7 @@ func structMappingQuery(t *testing.T, transaction bool, columns []string, values
 	t.Cleanup(func() { assert.NoError(t, pool.Close()) })
 	var builder contractsdb.CommonBuilder
 	if transaction {
-		tx, err := db.NewTxBuilder(pool, "sqlite")
+		tx, err := db.NewTxBuilder(pool, "sqlite", nil)
 		require.NoError(t, err)
 		t.Cleanup(func() { assert.NoError(t, tx.Rollback()) })
 		builder = tx

@@ -44,7 +44,7 @@ func NewDB(ctx context.Context, config config.Config, driver contractsdriver.Dri
 		instrument = connection.Instrument()
 	}
 
-	tx := NewTx(ctx, driver, logger, connection, nil, &[]TxLog{}, instrument)
+	tx := NewTx(ctx, config, driver, logger, connection, nil, &[]TxLog{}, instrument)
 	if config != nil && connection != nil {
 		tx.state.sticky = config.GetBool("database.connections."+connection.Name()+".sticky", false)
 		tx.state.useUpsertAlias = config.GetBool("database.connections."+connection.Name()+".use_upsert_alias", false)
@@ -99,7 +99,7 @@ func (r *DB) BeginTransaction() (contractsdb.Tx, error) {
 		}
 	}
 	if r.state.pretend() {
-		tx := NewTx(r.ctx, r.driver, r.logger, nil, &pretendTxBuilder{}, &[]TxLog{}, nil)
+		tx := NewTx(r.ctx, r.config, r.driver, r.logger, nil, &pretendTxBuilder{}, &[]TxLog{}, nil)
 		tx.state = r.state
 		return tx, nil
 	}
@@ -120,12 +120,16 @@ func (r *DB) BeginTransaction() (contractsdb.Tx, error) {
 	_, _ = r.ServerVersion()
 
 	driverName := r.driver.Pool().Writers[0].Driver
-	txBuilder, err := NewTxBuilderWithContext(r.ctx, r.connection.Writer(), driverName)
+	options, err := databasedriver.TransactionOptions(r.config, driverName)
+	if err != nil {
+		return nil, err
+	}
+	txBuilder, err := NewTxBuilderWithContext(r.ctx, r.connection.Writer(), driverName, options)
 	if err != nil {
 		return nil, err
 	}
 
-	tx := NewTx(r.ctx, r.driver, r.logger, nil, txBuilder, &[]TxLog{}, r.instrument)
+	tx := NewTx(r.ctx, r.config, r.driver, r.logger, nil, txBuilder, &[]TxLog{}, r.instrument)
 	tx.state = r.state
 	return tx, nil
 }
@@ -186,6 +190,8 @@ type Tx struct {
 	record       *transactionRecord
 	state        *connectionState
 	ctx          context.Context
+	config       config.Config
+	driver       contractsdriver.Driver
 	grammar      contractsdriver.Grammar
 	queryGrammar querybuilder.Grammar
 	instrument   *instrumentationdatabase.Instrument
@@ -198,6 +204,7 @@ type Tx struct {
 
 func NewTx(
 	ctx context.Context,
+	config config.Config,
 	driver contractsdriver.Driver,
 	logger contractslogger.Logger,
 	connection *databasedriver.Connection,
@@ -226,6 +233,8 @@ func NewTx(
 	tx := &Tx{
 		state:        newConnectionState(poolWriter.Connection, poolWriter.Driver),
 		ctx:          ctx,
+		config:       config,
+		driver:       driver,
 		driverName:   poolWriter.Driver,
 		queryGrammar: queryGrammar,
 		connection:   connection,

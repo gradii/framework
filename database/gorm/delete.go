@@ -6,6 +6,7 @@ import (
 	contractsdb "github.com/goravel/framework/contracts/database/db"
 	querybuilder "github.com/goravel/framework/database/query"
 	"github.com/goravel/framework/database/query/core"
+	"github.com/goravel/framework/support/carbon"
 	basedatabase "github.com/goravel/framework/support/database"
 )
 
@@ -36,7 +37,7 @@ func (r *Query) deleteOrSoftDelete() (*contractsdb.Result, error) {
 // unscoped, and when the model declares GORM's own soft-delete type, whose clause interfaces still
 // decide that case.
 func (r *Query) softDeleteColumn() (string, bool) {
-	if r.conditions.withTrashed || isUnscoped(r.instance) || !r.usesFrameworkSoftDelete() {
+	if r.conditions.withTrashed || !r.usesFrameworkSoftDelete() {
 		return "", false
 	}
 
@@ -51,7 +52,7 @@ func (r *Query) softDeleteColumn() (string, bool) {
 // softDeleteValue is the value a soft delete stamps on the row: the column's own type carrying the
 // current time, so the driver writes the representation an insert would.
 func (r *Query) softDeleteValue() basedatabase.DeletedAt {
-	return basedatabase.DeletedAt{Time: r.instance.Config.NowFunc(), Valid: true}
+	return basedatabase.DeletedAt{Time: carbon.Now().StdTime(), Valid: true}
 }
 
 // execDelete compiles the query as a delete and runs it.
@@ -148,7 +149,7 @@ func (r *Query) modelKey(model any) (string, []any) {
 // valueKey reads one model value's primary key. The schema comes from the value's own type, which is
 // also how the key column is named, so the two cannot disagree.
 func (r *Query) valueKey(value reflect.Value) (string, []any) {
-	schema, err := parseSchemaWithTable(r.instance, reflect.New(value.Type()).Interface(), r.declaredTable())
+	schema, err := parseSchemaWithTable(reflect.New(value.Type()).Interface(), r.declaredTable())
 	if err != nil || len(schema.PrimaryFields) == 0 {
 		return "", nil
 	}

@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"slices"
@@ -20,7 +21,6 @@ import (
 	"github.com/goravel/framework/support/env"
 	"github.com/goravel/framework/support/str"
 	"github.com/goravel/framework/testing/utils"
-	gormio "gorm.io/gorm"
 
 	"github.com/goravel/mysql"
 	mysqlcontracts "github.com/goravel/mysql/contracts"
@@ -52,16 +52,16 @@ func NewTestQuery(ctx context.Context, driver contractsdriver.Driver, config con
 		return nil, err
 	}
 
-	var instance *gormio.DB
+	var writer *sql.DB
 	if conn != nil {
-		instance = conn.Gorm()
+		writer = conn.Writer()
 	}
 
 	testQuery := &TestQuery{
 		config: config,
 		db:     db,
 		driver: driver,
-		query:  databasegorm.NewQuery(ctx, config, pool.Writers[0], instance, driver.Grammar(), utils.NewTestLog(), nil, nil, nil),
+		query:  databasegorm.NewQuery(ctx, config, pool.Writers[0], writer, nil, driver.Grammar(), utils.NewTestLog(), nil, nil, nil),
 	}
 
 	return testQuery, nil

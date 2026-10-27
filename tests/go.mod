@@ -19,7 +19,6 @@ require (
 	github.com/microsoft/go-mssqldb v1.9.2
 	github.com/spf13/cast v1.10.0
 	github.com/stretchr/testify v1.12.1
-	gorm.io/gorm v1.31.2
 )
 
 require (
@@ -50,7 +49,6 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.16 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
 	github.com/golang-sql/sqlexp v0.1.0 // indirect
 	github.com/gookit/color v1.6.3 // indirect
@@ -116,7 +114,7 @@ require (
 	gorm.io/driver/mysql v1.6.0 // indirect
 	gorm.io/driver/postgres v1.6.0 // indirect
 	gorm.io/driver/sqlserver v1.6.3 // indirect
-	gorm.io/plugin/dbresolver v1.6.2 // indirect
+	gorm.io/gorm v1.31.2 // indirect
 )
 
 replace (

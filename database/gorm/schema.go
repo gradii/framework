@@ -6,9 +6,6 @@ import (
 	"strings"
 	"time"
 
-	gormio "gorm.io/gorm"
-	gormschema "gorm.io/gorm/schema"
-
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
 	basedatabase "github.com/goravel/framework/support/database"
 )
@@ -115,8 +112,16 @@ func softDeleteFieldType(model any) (reflect.Type, bool) {
 
 // isSoftDeleteType reports whether a field marks soft deletion: the framework's own DeletedAt, or
 // gorm.DeletedAt for models that still declare it.
+//
+// The gorm type is recognised by its package path rather than by identity so the framework does not
+// have to import gorm to keep those models working; a model that still declares the type keeps its
+// soft-delete behaviour without the framework depending on the package that defines it.
 func isSoftDeleteType(fieldType reflect.Type) bool {
-	return fieldType == reflect.TypeOf(gormio.DeletedAt{}) || fieldType == reflect.TypeOf(basedatabase.DeletedAt{})
+	if fieldType == reflect.TypeOf(basedatabase.DeletedAt{}) {
+		return true
+	}
+
+	return fieldType.PkgPath() == "gorm.io/gorm" && fieldType.Name() == "DeletedAt"
 }
 
 // findStructField locates the first exported field satisfying predicate, descending into embedded
@@ -248,18 +253,4 @@ func carriedType(fieldType reflect.Type, depth int) reflect.Type {
 	}
 
 	return nil
-}
-
-// tablePrefix reads the connection's table prefix from the naming strategy GORM is configured
-// with, which is where the prefix lives while GORM still owns the connection.
-func tablePrefix(db *gormio.DB) string {
-	if db == nil || db.Config == nil {
-		return ""
-	}
-
-	if naming, ok := db.Config.NamingStrategy.(gormschema.NamingStrategy); ok {
-		return naming.TablePrefix
-	}
-
-	return ""
 }

@@ -54,7 +54,7 @@ func TestCompileSelect_LockRendering(t *testing.T) {
 // "for share", unlike the base and MySQL grammars' "lock in share mode".
 func TestCompileSelect_SharedLockPostgres(t *testing.T) {
 	conditions := Conditions{model: &relUser{}}
-	query := NewQuery(context.Background(), nil, contractsdatabase.Config{Driver: "postgres"}, newStubGormDB(t), nil, nil, nil, &conditions, nil)
+	query := NewQuery(context.Background(), nil, contractsdatabase.Config{Driver: "postgres"}, stubWriter(t), nil, nil, nil, nil, &conditions, nil)
 	grammar, ok := querybuilder.NewGrammar("postgres", "")
 	assert.True(t, ok)
 	query = rebindGrammar(query, "postgres", grammar)

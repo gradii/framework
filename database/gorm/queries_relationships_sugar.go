@@ -100,7 +100,7 @@ func (r *Query) whereBelongsTo(related any, relation []string, or bool) contract
 		name = reflect.Indirect(reflect.ValueOf(models[0])).Type().Name()
 	}
 
-	desc, err := resolveRelation(r.instance, parent, name)
+	desc, err := resolveRelation(parent, name)
 	if err != nil {
 		return r.withError(err)
 	}

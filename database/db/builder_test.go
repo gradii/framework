@@ -73,7 +73,7 @@ func TestNewTxBuilder_UsesCanonicalDialectForBinding(t *testing.T) {
 	defer pool.Close()
 
 	for _, tc := range sqlxBindCases {
-		tx, err := NewTxBuilder(pool, tc.driver)
+		tx, err := NewTxBuilder(pool, tc.driver, nil)
 		require.NoError(t, err, "driver %q", tc.driver)
 		assert.Equal(t, tc.expected, sqlx.BindType(tx.DriverName()), "driver %q", tc.driver)
 		require.NoError(t, tx.Rollback())

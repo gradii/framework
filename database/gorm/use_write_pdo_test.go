@@ -2,7 +2,6 @@ package gorm
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 	"time"
 
@@ -24,9 +23,6 @@ func TestSelectWithLockUsesWritePdo(t *testing.T) {
 
 	writer := &recordingSQLDriver{}
 	reader := &recordingSQLDriver{}
-	writerPool := sql.OpenDB(recordingConnector{driver: writer})
-	readerPool := sql.OpenDB(recordingConnector{driver: reader})
-	require.NotSame(t, writerPool, readerPool)
 
 	config := mocksconfig.NewConfig(t)
 	config.EXPECT().GetInt("database.pool.max_idle_conns", 10).Return(10).Times(2)
@@ -34,9 +30,11 @@ func TestSelectWithLockUsesWritePdo(t *testing.T) {
 	config.EXPECT().GetDuration("database.pool.conn_max_idletime", time.Duration(3600)).Return(time.Duration(3600)).Times(2)
 	config.EXPECT().GetDuration("database.pool.conn_max_lifetime", time.Duration(3600)).Return(time.Duration(3600)).Times(2)
 
+	// The connector on each candidate connection is what opens its pool, so the framework's
+	// connection runs on the two recording pools and nothing else sees the statements.
 	pool := contractsdatabase.Pool{
-		Writers: []contractsdatabase.Config{{Driver: "mysql", Database: "app", Dialector: poolRecordingDialector{pool: writerPool}}},
-		Readers: []contractsdatabase.Config{{Driver: "mysql", Database: "replica", Dialector: poolRecordingDialector{pool: readerPool}}},
+		Writers: []contractsdatabase.Config{{Driver: "mysql", Database: "app", Connector: recordingConnector{driver: writer}}},
+		Readers: []contractsdatabase.Config{{Driver: "mysql", Database: "replica", Connector: recordingConnector{driver: reader}}},
 	}
 
 	conn, err := databasedriver.Open(config, discardQueryLogger{}, pool, "lock_write_pdo", nil)
@@ -45,7 +43,7 @@ func TestSelectWithLockUsesWritePdo(t *testing.T) {
 
 	query := NewQuery(context.Background(), config,
 		contractsdatabase.Config{Driver: "mysql", Connection: "lock_write_pdo"},
-		conn.Gorm(), nil, nil, nil, &Conditions{model: &getColumnsUser{}}, nil)
+		conn.Writer(), nil, nil, nil, nil, &Conditions{model: &getColumnsUser{}}, nil)
 
 	// A plain get() reads through the replica, so the reader pool is the one exercised.
 	var plain []getColumnsUser

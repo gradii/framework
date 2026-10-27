@@ -5,8 +5,6 @@ import (
 	"maps"
 	"reflect"
 
-	"gorm.io/gorm"
-
 	"github.com/goravel/framework/contracts/database/orm"
 	basedatabase "github.com/goravel/framework/support/database"
 	"github.com/goravel/framework/support/str"
@@ -92,11 +90,11 @@ func (e *Event) IsDirty(columns ...string) bool {
 	return false
 }
 
-// Query returns a fresh query for the handler to build on. It is seeded from the same GORM connection
-// as the query that raised the event, because a query is a wrapper around one, so this is the one place
-// the event layer still depends on the connection type.
+// Query returns a fresh query for the handler to build on. It is seeded from the same connection and
+// transaction as the query that raised the event, so anything the handler writes joins that
+// transaction rather than running beside it.
 func (e *Event) Query() orm.Query {
-	return NewQuery(e.query.ctx, e.query.config, e.query.dbConfig, e.query.instance.Session(&gorm.Session{NewDB: true}), e.query.grammar, e.query.log, e.query.modelToObserver, nil, e.query.telemetryResolver)
+	return e.query.fresh()
 }
 
 func (e *Event) SetAttribute(key string, value any) {

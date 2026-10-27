@@ -6,8 +6,6 @@ import (
 	"strings"
 	"time"
 
-	gormio "gorm.io/gorm"
-
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
 	"github.com/goravel/framework/database/orm/morphmap"
 	"github.com/goravel/framework/errors"
@@ -119,14 +117,14 @@ type relationDescriptor struct {
 // All relations are declared via the parent's Relations() method (ModelWithRelations). GORM
 // relation tags (`foreignKey`, `references`, `many2many`, `polymorphic`) are forbidden — if
 // detected the resolver returns OrmRelationTagForbidden pointing the user at Relations().
-func resolveRelation(db *gormio.DB, parent any, relation string) (*relationDescriptor, error) {
+func resolveRelation(parent any, relation string) (*relationDescriptor, error) {
 	if relation == "" {
 		return nil, errors.OrmQueryEmptyRelation
 	}
 
 	head, tail, _ := strings.Cut(relation, ".")
 
-	parentSchema, err := parseSchema(db, parent)
+	parentSchema, err := parseSchema(parent)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +137,7 @@ func resolveRelation(db *gormio.DB, parent any, relation string) (*relationDescr
 		return nil, errors.OrmRelationTagForbidden.Args(head, parentSchema.Name)
 	}
 
-	desc, err := descriptorFromRelations(db, parent, parentTable, head)
+	desc, err := descriptorFromRelations(parent, parentTable, head)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +149,7 @@ func resolveRelation(db *gormio.DB, parent any, relation string) (*relationDescr
 		if nestedParent == nil {
 			return nil, errors.OrmRelationUnsupported.Args(head, parentSchema.Name, "no related model")
 		}
-		nested, err := resolveRelation(db, nestedParent, tail)
+		nested, err := resolveRelation(nestedParent, tail)
 		if err != nil {
 			return nil, err
 		}
@@ -220,7 +218,7 @@ func typeHasRelationTag(modelType reflect.Type, name string) bool {
 // pointer receiver (`func (*Foo) Relations()`). Models often mix the two — e.g. value receivers
 // for pure-metadata methods and pointer receivers for GORM lifecycle hooks — so the framework
 // looks up the interface on whichever form is addressable.
-func descriptorFromRelations(db *gormio.DB, parent any, parentTable, name string) (*relationDescriptor, error) {
+func descriptorFromRelations(parent any, parentTable, name string) (*relationDescriptor, error) {
 	relations, ok := tryGetRelations(parent)
 	if !ok {
 		return nil, errors.OrmRelationNotFound.Args(name, reflect.TypeOf(parent).String())
@@ -237,49 +235,49 @@ func descriptorFromRelations(db *gormio.DB, parent any, parentTable, name string
 	)
 	switch r := rel.(type) {
 	case contractsorm.HasOne:
-		desc, err = descriptorFromHasOneOrMany(db, parent, parentTable, name, r.Related, r.ForeignKey, r.LocalKey, relKindHasOne)
+		desc, err = descriptorFromHasOneOrMany(parent, parentTable, name, r.Related, r.ForeignKey, r.LocalKey, relKindHasOne)
 		onQuery = r.OnQuery
 	case contractsorm.HasMany:
-		desc, err = descriptorFromHasOneOrMany(db, parent, parentTable, name, r.Related, r.ForeignKey, r.LocalKey, relKindHasMany)
+		desc, err = descriptorFromHasOneOrMany(parent, parentTable, name, r.Related, r.ForeignKey, r.LocalKey, relKindHasMany)
 		onQuery = r.OnQuery
 	case contractsorm.BelongsTo:
-		desc, err = descriptorFromBelongsTo(db, parent, parentTable, name, r)
+		desc, err = descriptorFromBelongsTo(parent, parentTable, name, r)
 		onQuery = r.OnQuery
 	case contractsorm.Many2Many:
-		desc, err = descriptorFromMany2Many(db, parent, parentTable, name, r)
+		desc, err = descriptorFromMany2Many(parent, parentTable, name, r)
 		onQuery = r.OnQuery
 		if desc != nil {
 			desc.onPivotQuery = r.OnPivotQuery
 			desc.touches = r.Touches
 		}
 	case contractsorm.MorphOne:
-		desc, err = descriptorFromMorphOneOrMany(db, parent, parentTable, name, r.Related, r.Name, r.TypeColumn, r.IDColumn, r.LocalKey, relKindMorphOne)
+		desc, err = descriptorFromMorphOneOrMany(parent, parentTable, name, r.Related, r.Name, r.TypeColumn, r.IDColumn, r.LocalKey, relKindMorphOne)
 		onQuery = r.OnQuery
 	case contractsorm.MorphMany:
-		desc, err = descriptorFromMorphOneOrMany(db, parent, parentTable, name, r.Related, r.Name, r.TypeColumn, r.IDColumn, r.LocalKey, relKindMorphMany)
+		desc, err = descriptorFromMorphOneOrMany(parent, parentTable, name, r.Related, r.Name, r.TypeColumn, r.IDColumn, r.LocalKey, relKindMorphMany)
 		onQuery = r.OnQuery
 	case contractsorm.MorphTo:
 		desc, err = descriptorFromMorphTo(parent, parentTable, name, r)
 		onQuery = r.OnQuery
 	case contractsorm.MorphToMany:
-		desc, err = descriptorFromMorphToMany(db, parent, parentTable, name, r, false)
+		desc, err = descriptorFromMorphToMany(parent, parentTable, name, r, false)
 		onQuery = r.OnQuery
 		if desc != nil {
 			desc.onPivotQuery = r.OnPivotQuery
 			desc.touches = r.Touches
 		}
 	case contractsorm.MorphedByMany:
-		desc, err = descriptorFromMorphedByMany(db, parent, parentTable, name, r)
+		desc, err = descriptorFromMorphedByMany(parent, parentTable, name, r)
 		onQuery = r.OnQuery
 		if desc != nil {
 			desc.onPivotQuery = r.OnPivotQuery
 			desc.touches = r.Touches
 		}
 	case contractsorm.HasOneThrough:
-		desc, err = descriptorFromThrough(db, parent, parentTable, name, r.Related, r.Through, r.FirstKey, r.SecondKey, r.LocalKey, r.SecondLocalKey, relKindHasOneThrough)
+		desc, err = descriptorFromThrough(parent, parentTable, name, r.Related, r.Through, r.FirstKey, r.SecondKey, r.LocalKey, r.SecondLocalKey, relKindHasOneThrough)
 		onQuery = r.OnQuery
 	case contractsorm.HasManyThrough:
-		desc, err = descriptorFromThrough(db, parent, parentTable, name, r.Related, r.Through, r.FirstKey, r.SecondKey, r.LocalKey, r.SecondLocalKey, relKindHasManyThrough)
+		desc, err = descriptorFromThrough(parent, parentTable, name, r.Related, r.Through, r.FirstKey, r.SecondKey, r.LocalKey, r.SecondLocalKey, relKindHasManyThrough)
 		onQuery = r.OnQuery
 	default:
 		return nil, errors.OrmMorphRelationKindUnknown.Args(name, reflect.TypeOf(parent).String(), reflect.TypeOf(rel).String())
@@ -296,11 +294,11 @@ func descriptorFromRelations(db *gormio.DB, parent any, parentTable, name string
 // descriptorFromHasOneOrMany handles the HasOneOrMany family's non-polymorphic members
 // (HasOne, HasMany). The polymorphic members (MorphOne, MorphMany) share the same FK-on-related
 // shape but add a type-column filter, so they go through descriptorFromMorphOneOrMany instead.
-func descriptorFromHasOneOrMany(db *gormio.DB, parent any, parentTable, name string, related any, foreignKey, localKey string, kind relationKind) (*relationDescriptor, error) {
+func descriptorFromHasOneOrMany(parent any, parentTable, name string, related any, foreignKey, localKey string, kind relationKind) (*relationDescriptor, error) {
 	if related == nil {
 		return nil, errors.OrmMorphRelationMissingField.Args(name, reflect.TypeOf(parent).String(), "Related")
 	}
-	relatedTable, err := tableNameFor(db, related)
+	relatedTable, err := tableNameFor(related)
 	if err != nil {
 		return nil, err
 	}
@@ -320,11 +318,11 @@ func descriptorFromHasOneOrMany(db *gormio.DB, parent any, parentTable, name str
 	}, nil
 }
 
-func descriptorFromBelongsTo(db *gormio.DB, parent any, parentTable, name string, rel contractsorm.BelongsTo) (*relationDescriptor, error) {
+func descriptorFromBelongsTo(parent any, parentTable, name string, rel contractsorm.BelongsTo) (*relationDescriptor, error) {
 	if rel.Related == nil {
 		return nil, errors.OrmMorphRelationMissingField.Args(name, reflect.TypeOf(parent).String(), "Related")
 	}
-	relatedTable, err := tableNameFor(db, rel.Related)
+	relatedTable, err := tableNameFor(rel.Related)
 	if err != nil {
 		return nil, err
 	}
@@ -344,11 +342,11 @@ func descriptorFromBelongsTo(db *gormio.DB, parent any, parentTable, name string
 	}, nil
 }
 
-func descriptorFromMany2Many(db *gormio.DB, parent any, parentTable, name string, rel contractsorm.Many2Many) (*relationDescriptor, error) {
+func descriptorFromMany2Many(parent any, parentTable, name string, rel contractsorm.Many2Many) (*relationDescriptor, error) {
 	if rel.Related == nil {
 		return nil, errors.OrmMorphRelationMissingField.Args(name, reflect.TypeOf(parent).String(), "Related")
 	}
-	relatedTable, err := tableNameFor(db, rel.Related)
+	relatedTable, err := tableNameFor(rel.Related)
 	if err != nil {
 		return nil, err
 	}
@@ -360,12 +358,12 @@ func descriptorFromMany2Many(db *gormio.DB, parent any, parentTable, name string
 	parentKey := cmp.Or(rel.ParentKey, "id")
 	relatedKey := cmp.Or(rel.RelatedKey, "id")
 
-	relatedKeyType, err := relatedKeyFieldType(db, rel.Related, relatedKey)
+	relatedKeyType, err := relatedKeyFieldType(rel.Related, relatedKey)
 	if err != nil {
 		return nil, err
 	}
 	pivotField := cmp.Or(rel.PivotField, "Pivot")
-	createdAtCol, updatedAtCol, err := resolvePivotTimestamps(db, rel.Related, pivotField, rel.PivotTimestamps)
+	createdAtCol, updatedAtCol, err := resolvePivotTimestamps(rel.Related, pivotField, rel.PivotTimestamps)
 	if err != nil {
 		return nil, err
 	}
@@ -395,14 +393,14 @@ func descriptorFromMany2Many(db *gormio.DB, parent any, parentTable, name string
 	}, nil
 }
 
-func descriptorFromMorphOneOrMany(db *gormio.DB, parent any, parentTable, name string, related any, morphName, typeCol, idCol, localKey string, kind relationKind) (*relationDescriptor, error) {
+func descriptorFromMorphOneOrMany(parent any, parentTable, name string, related any, morphName, typeCol, idCol, localKey string, kind relationKind) (*relationDescriptor, error) {
 	if related == nil {
 		return nil, errors.OrmMorphRelationMissingField.Args(name, reflect.TypeOf(parent).String(), "Related")
 	}
 	if morphName == "" {
 		return nil, errors.OrmMorphRelationMissingField.Args(name, reflect.TypeOf(parent).String(), "Name")
 	}
-	relatedTable, err := tableNameFor(db, related)
+	relatedTable, err := tableNameFor(related)
 	if err != nil {
 		return nil, err
 	}
@@ -443,8 +441,8 @@ func descriptorFromMorphTo(parent any, parentTable, name string, rel contractsor
 // descriptorFromMorphToMany covers MorphToMany. It's separated from MorphedByMany so the
 // morph-value derivation source can differ (parent vs. related) without re-reading the kind via
 // reflection.
-func descriptorFromMorphToMany(db *gormio.DB, parent any, parentTable, name string, rel contractsorm.MorphToMany, inverse bool) (*relationDescriptor, error) {
-	return buildMorphPivotDescriptor(db, parent, parentTable, name,
+func descriptorFromMorphToMany(parent any, parentTable, name string, rel contractsorm.MorphToMany, inverse bool) (*relationDescriptor, error) {
+	return buildMorphPivotDescriptor(parent, parentTable, name,
 		rel.Related, rel.Name, rel.Table, rel.TypeColumn,
 		rel.ForeignPivotKey, rel.RelatedPivotKey, rel.ParentKey, rel.RelatedKey,
 		rel.PivotField, rel.PivotTimestamps,
@@ -452,8 +450,8 @@ func descriptorFromMorphToMany(db *gormio.DB, parent any, parentTable, name stri
 	)
 }
 
-func descriptorFromMorphedByMany(db *gormio.DB, parent any, parentTable, name string, rel contractsorm.MorphedByMany) (*relationDescriptor, error) {
-	return buildMorphPivotDescriptor(db, parent, parentTable, name,
+func descriptorFromMorphedByMany(parent any, parentTable, name string, rel contractsorm.MorphedByMany) (*relationDescriptor, error) {
+	return buildMorphPivotDescriptor(parent, parentTable, name,
 		rel.Related, rel.Name, rel.Table, rel.TypeColumn,
 		rel.ForeignPivotKey, rel.RelatedPivotKey, rel.ParentKey, rel.RelatedKey,
 		rel.PivotField, rel.PivotTimestamps,
@@ -461,14 +459,14 @@ func descriptorFromMorphedByMany(db *gormio.DB, parent any, parentTable, name st
 	)
 }
 
-func buildMorphPivotDescriptor(db *gormio.DB, parent any, parentTable, name string, related any, morphName, table, typeCol, foreignPivot, relatedPivot, parentKey, relatedKey string, pivotField string, pivotTimestamps bool, inverse bool) (*relationDescriptor, error) {
+func buildMorphPivotDescriptor(parent any, parentTable, name string, related any, morphName, table, typeCol, foreignPivot, relatedPivot, parentKey, relatedKey string, pivotField string, pivotTimestamps bool, inverse bool) (*relationDescriptor, error) {
 	if related == nil {
 		return nil, errors.OrmMorphRelationMissingField.Args(name, reflect.TypeOf(parent).String(), "Related")
 	}
 	if morphName == "" {
 		return nil, errors.OrmMorphRelationMissingField.Args(name, reflect.TypeOf(parent).String(), "Name")
 	}
-	relatedTable, err := tableNameFor(db, related)
+	relatedTable, err := tableNameFor(related)
 	if err != nil {
 		return nil, err
 	}
@@ -485,12 +483,12 @@ func buildMorphPivotDescriptor(db *gormio.DB, parent any, parentTable, name stri
 		morphValue = resolveMorphValue(related, relatedTable)
 	}
 
-	relatedKeyType, err := relatedKeyFieldType(db, related, rk)
+	relatedKeyType, err := relatedKeyFieldType(related, rk)
 	if err != nil {
 		return nil, err
 	}
 	pivotFieldName := cmp.Or(pivotField, "Pivot")
-	createdAtCol, updatedAtCol, err := resolvePivotTimestamps(db, related, pivotFieldName, pivotTimestamps)
+	createdAtCol, updatedAtCol, err := resolvePivotTimestamps(related, pivotFieldName, pivotTimestamps)
 	if err != nil {
 		return nil, err
 	}
@@ -524,18 +522,18 @@ func buildMorphPivotDescriptor(db *gormio.DB, parent any, parentTable, name stri
 	}, nil
 }
 
-func descriptorFromThrough(db *gormio.DB, parent any, parentTable, name string, related, through any, firstKey, secondKey, localKey, secondLocalKey string, kind relationKind) (*relationDescriptor, error) {
+func descriptorFromThrough(parent any, parentTable, name string, related, through any, firstKey, secondKey, localKey, secondLocalKey string, kind relationKind) (*relationDescriptor, error) {
 	if related == nil {
 		return nil, errors.OrmRelationThroughNotConfigured.Args(name, reflect.TypeOf(parent).String())
 	}
 	if through == nil {
 		return nil, errors.OrmRelationThroughNotConfigured.Args(name, reflect.TypeOf(parent).String())
 	}
-	relatedTable, err := tableNameFor(db, related)
+	relatedTable, err := tableNameFor(related)
 	if err != nil {
 		return nil, err
 	}
-	throughTable, err := tableNameFor(db, through)
+	throughTable, err := tableNameFor(through)
 	if err != nil {
 		return nil, err
 	}
@@ -565,7 +563,7 @@ func descriptorFromThrough(db *gormio.DB, parent any, parentTable, name string, 
 // that forgot to declare its table, so a model that declares none is reported as a named error
 // naming its type and the method to add. The connection argument is kept only because every call
 // site already passes one.
-func tableNameFor(_ *gormio.DB, model any) (string, error) {
+func tableNameFor(model any) (string, error) {
 	if name := declaredTableName(model); name != "" {
 		return name, nil
 	}
@@ -598,8 +596,8 @@ func tableNameFor(_ *gormio.DB, model any) (string, error) {
 // by the pivot's RelatedPivotKey). Used by SyncResult to normalise ids back to the related model's
 // native key type via castKey. Returns nil (no error) if the column is not a recognised field on
 // the related schema — castKey then leaves ids untouched.
-func relatedKeyFieldType(db *gormio.DB, related any, columnName string) (reflect.Type, error) {
-	schema, err := parseSchema(db, related)
+func relatedKeyFieldType(related any, columnName string) (reflect.Type, error) {
+	schema, err := parseSchema(related)
 	if err != nil {
 		return nil, err
 	}
@@ -620,10 +618,10 @@ func relatedKeyFieldType(db *gormio.DB, related any, columnName string) (reflect
 //
 // Empty string for either column means "don't auto-stamp on that op". The pivot struct does not
 // need to declare both — declaring only CreatedAt is fine and disables update-side stamping.
-func resolvePivotTimestamps(db *gormio.DB, relatedModel any, pivotFieldName string, fallbackEnabled bool) (createdCol, updatedCol string, err error) {
+func resolvePivotTimestamps(relatedModel any, pivotFieldName string, fallbackEnabled bool) (createdCol, updatedCol string, err error) {
 	pivotStructType, ok := pivotFieldStructType(relatedModel, pivotFieldName)
 	if ok {
-		schema, schemaErr := parseSchema(db, reflect.New(pivotStructType).Interface())
+		schema, schemaErr := parseSchema(reflect.New(pivotStructType).Interface())
 		if schemaErr != nil {
 			return "", "", schemaErr
 		}

@@ -34,7 +34,7 @@ type SchemaPointerOuter struct {
 func (SchemaPointerOuter) TableName() string { return "schema_pointer_outers" }
 
 func TestParseModelSchema_FlattensEmbeddedFieldsInPlace(t *testing.T) {
-	schema, err := parseSchema(newStubGormDB(t), &SchemaOuter{})
+	schema, err := parseSchema(&SchemaOuter{})
 	assert.NoError(t, err)
 
 	assert.Equal(t, "SchemaOuter", schema.Name)
@@ -53,7 +53,7 @@ func TestParseModelSchema_FlattensEmbeddedFieldsInPlace(t *testing.T) {
 }
 
 func TestParseModelSchema_PointerEmbed(t *testing.T) {
-	schema, err := parseSchema(newStubGormDB(t), &SchemaPointerOuter{})
+	schema, err := parseSchema(&SchemaPointerOuter{})
 	assert.NoError(t, err)
 
 	columns := make([]string, 0, len(schema.Fields))
@@ -77,7 +77,7 @@ func TestParseModelSchema_PointerEmbed(t *testing.T) {
 }
 
 func TestSchemaField_ValueOfReportsZero(t *testing.T) {
-	schema, err := parseSchema(newStubGormDB(t), &SchemaOuter{})
+	schema, err := parseSchema(&SchemaOuter{})
 	assert.NoError(t, err)
 
 	name := schema.FieldsByDBName["name"]
@@ -91,7 +91,7 @@ func TestSchemaField_ValueOfReportsZero(t *testing.T) {
 }
 
 func TestSchemaField_SetConvertsValues(t *testing.T) {
-	schema, err := parseSchema(newStubGormDB(t), &SchemaOuter{})
+	schema, err := parseSchema(&SchemaOuter{})
 	assert.NoError(t, err)
 
 	target := &SchemaOuter{}
@@ -109,7 +109,7 @@ func TestSchemaField_SetConvertsValues(t *testing.T) {
 }
 
 func TestSchemaField_SetThroughPointerEmbed(t *testing.T) {
-	schema, err := parseSchema(newStubGormDB(t), &SchemaPointerOuter{})
+	schema, err := parseSchema(&SchemaPointerOuter{})
 	assert.NoError(t, err)
 
 	target := &SchemaPointerOuter{}
@@ -120,9 +120,9 @@ func TestSchemaField_SetThroughPointerEmbed(t *testing.T) {
 }
 
 func TestParseModelSchema_RejectsNonStructs(t *testing.T) {
-	_, err := parseSchema(newStubGormDB(t), nil)
+	_, err := parseSchema(nil)
 	assert.Error(t, err)
 
-	_, err = parseSchema(newStubGormDB(t), 123)
+	_, err = parseSchema(123)
 	assert.Error(t, err)
 }

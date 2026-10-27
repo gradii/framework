@@ -25,7 +25,7 @@ func (r *Query) newRelationQuery(parent any, relation string) contractsorm.Query
 		return r.guardedQuery(errors.OrmRelationParentNotPointer.Args(parent))
 	}
 
-	desc, err := resolveRelation(r.instance, parent, relation)
+	desc, err := resolveRelation(parent, relation)
 	if err != nil {
 		return r.guardedQuery(err)
 	}
@@ -178,25 +178,25 @@ func (r *Query) newThroughQuery(parent any, desc *relationDescriptor) contractso
 // config / context with the receiver. Subsequent unqualified Where("col", v) calls default to
 // the related table's column space.
 func (r *Query) relatedQuery(related any) contractsorm.Query {
-	q := r.wrap(r.freshSession())
+	q := r.fresh()
 	return q.Model(related)
 }
 
 // guardedQuery returns a fresh Query that reports err from whichever terminal runs on it, without a
 // database round-trip. The error travels on the query rather than on the connection handle.
 func (r *Query) guardedQuery(err error) contractsorm.Query {
-	return r.wrap(r.freshSession()).withError(err)
+	return r.fresh().withError(err)
 }
 
 // zeroRowQuery returns a Query whose Get/First yields no rows without a database round-trip —
 // the WHERE evaluates to a guaranteed-false condition.
 func (r *Query) zeroRowQuery() contractsorm.Query {
-	return r.wrap(r.freshSession()).Where("1 = 0")
+	return r.fresh().Where("1 = 0")
 }
 
 // readParentColumn reads the value of the given DB column from parent via GORM's parsed schema.
 func readParentColumn(r *Query, parent any, dbColumn string) (any, error) {
-	parentSchema, err := parseSchema(r.instance, parent)
+	parentSchema, err := parseSchema(parent)
 	if err != nil {
 		return nil, err
 	}

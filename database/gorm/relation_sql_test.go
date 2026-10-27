@@ -1,13 +1,11 @@
 package gorm
 
 import (
-	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	gormio "gorm.io/gorm"
 
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
 	basedatabase "github.com/goravel/framework/support/database"
@@ -98,7 +96,7 @@ func TestRelated_HasOneThrough_SQL(t *testing.T) {
 func runExistenceSQL(t *testing.T, model any, relation string, _ any) string {
 	t.Helper()
 	q := newRelQueryWith(t, model)
-	desc, err := resolveRelation(q.instance, model, relation)
+	desc, err := resolveRelation(model, relation)
 	assert.NoError(t, err)
 	inner, err := q.compileExistenceSubquery(desc, nil)
 	assert.NoError(t, err)
@@ -168,7 +166,7 @@ func runAggregateSQL(t *testing.T, sub selectSub) string {
 func runAggregateRelationSQL(t *testing.T, model any, relation string, sub selectSub) string {
 	t.Helper()
 	q := newRelQueryWith(t, model)
-	desc, err := resolveRelation(q.instance, model, relation)
+	desc, err := resolveRelation(model, relation)
 	assert.NoError(t, err)
 	inner, err := q.compileAggregateSubquery(desc, sub)
 	assert.NoError(t, err)
@@ -243,20 +241,12 @@ func TestWithExists_FrameworkSoftDeleteRelation(t *testing.T) {
 	assert.Equal(t, `select "rel_soft_owners".*, CASE WHEN EXISTS (select 1 from "rel_soft_books" where "rel_soft_owners"."id" = "rel_soft_books"."user_id" and "rel_soft_books"."deleted_at" IS NULL) THEN 1 ELSE 0 END AS "books_exists" from "rel_soft_owners"`, sql)
 }
 
-// A related model still declaring gorm.DeletedAt gets no predicate on the aggregate path either,
-// matching the existence path and the pre-conversion renderer.
-func TestCompileAggregateSubquery_LegacyGormSoftDeleteNotPredicated(t *testing.T) {
-	sql := runAggregateRelationSQL(t, &relSoftOwner{}, "GBooks", selectSub{relation: "GBooks", column: "*", function: "count"})
-	assert.Equal(t, `select count(*) from "rel_gorm_books" where "rel_soft_owners"."id" = "rel_gorm_books"."user_id"`, sql)
-	assert.NotContains(t, sql, "deleted_at")
-}
-
 // ---------------------------------------------------------------------------
 // Soft-delete handling inside the existence subquery
 // ---------------------------------------------------------------------------
 
-// relSoftOwner's relations exercise the two soft-delete carriers: relSoftBook declares the
-// framework's own type (basedatabase.DeletedAt), relGormBook still declares gorm.DeletedAt.
+// relSoftOwner's relations exercise the two soft-delete shapes: relSoftBook declares the framework's
+// own type (basedatabase.DeletedAt), which is the one the compiled paths add a predicate for.
 type relSoftBook struct {
 	ID        uint
 	UserID    uint
@@ -264,14 +254,6 @@ type relSoftBook struct {
 }
 
 func (relSoftBook) TableName() string { return "rel_soft_books" }
-
-type relGormBook struct {
-	ID        uint
-	UserID    uint
-	DeletedAt gormio.DeletedAt `gorm:"column:deleted_at"`
-}
-
-func (relGormBook) TableName() string { return "rel_gorm_books" }
 
 type relSoftHouse struct {
 	ID            uint
@@ -285,7 +267,6 @@ func (relSoftHouse) TableName() string { return "rel_soft_houses" }
 type relSoftOwner struct {
 	ID     uint
 	Books  []*relSoftBook  `gorm:"-"`
-	GBooks []*relGormBook  `gorm:"-"`
 	Houses []*relSoftHouse `gorm:"-"`
 }
 
@@ -294,7 +275,6 @@ func (relSoftOwner) TableName() string { return "rel_soft_owners" }
 func (relSoftOwner) Relations() map[string]contractsorm.Relation {
 	return map[string]contractsorm.Relation{
 		"Books":  contractsorm.HasMany{Related: &relSoftBook{}, ForeignKey: "user_id"},
-		"GBooks": contractsorm.HasMany{Related: &relGormBook{}, ForeignKey: "user_id"},
 		"Houses": contractsorm.MorphMany{Related: &relSoftHouse{}, Name: "houseable"},
 	}
 }
@@ -310,7 +290,7 @@ func TestCompileExistenceSubquery_FrameworkSoftDeletePredicate(t *testing.T) {
 
 func TestCompileMorphExistenceSubquery_FrameworkSoftDeletePredicate(t *testing.T) {
 	q := newRelQueryWith(t, &relSoftOwner{})
-	desc, err := resolveRelation(q.instance, &relSoftOwner{}, "Houses")
+	desc, err := resolveRelation(&relSoftOwner{}, "Houses")
 	require.NoError(t, err)
 
 	inner := q.compileMorphExistenceSubquery(desc, "rel_soft_owners", nil)
@@ -329,17 +309,6 @@ func TestRelated_FrameworkSoftDeleteReadPredicate(t *testing.T) {
 	assert.Contains(t, sql, `"rel_soft_books"."deleted_at" IS NULL`)
 }
 
-// A related model still declaring gorm.DeletedAt is left to GORM on every compiled path, so the
-// existence subquery adds no predicate for it. This is the deliberate difference from a
-// framework-soft-delete model - and it is NOT a regression: the pre-conversion GORM renderer (see the
-// differential test below) emitted no predicate here either.
-func TestCompileExistenceSubquery_LegacyGormSoftDeleteNotPredicated(t *testing.T) {
-	sql := runExistenceSQL(t, &relSoftOwner{}, "GBooks", &[]relGormBook{})
-
-	assert.Equal(t, `select 1 from "rel_gorm_books" where "rel_soft_owners"."id" = "rel_gorm_books"."user_id"`, sql)
-	assert.NotContains(t, sql, "deleted_at")
-}
-
 // ---------------------------------------------------------------------------
 // Relation callback non-where clauses inside the existence subquery
 // ---------------------------------------------------------------------------
@@ -351,7 +320,7 @@ func TestCompileExistenceSubquery_LegacyGormSoftDeleteNotPredicated(t *testing.T
 // difference. It is pinned here so it stays deliberate rather than being mistaken for parity.
 func TestCompileExistenceSubquery_CallbackOrderByNotReflected(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(q.instance, &relUser{}, "Books")
+	desc, err := resolveRelation(&relUser{}, "Books")
 	require.NoError(t, err)
 
 	callback := func(query contractsorm.Query) contractsorm.Query {
@@ -363,141 +332,4 @@ func TestCompileExistenceSubquery_CallbackOrderByNotReflected(t *testing.T) {
 
 	assert.Equal(t, `select 1 from "rel_books" where "rel_users"."id" = "rel_books"."user_id"`, sql)
 	assert.NotContains(t, strings.ToLower(sql), "order by")
-}
-
-// ---------------------------------------------------------------------------
-// Differential: the pre-conversion GORM rendering vs the framework builder
-// ---------------------------------------------------------------------------
-
-// oldExistenceSubquerySQL reproduces the pre-conversion GORM chain that built a relation existence
-// subquery - freshSession().Table(related) + the per-kind Where/Joins + Select("1") - and renders it
-// the way that path rendered it. It keeps the OLD renderer available as a fixture so the new builder
-// can be compared against real old output rather than against an assertion.
-func oldExistenceSubquerySQL(t *testing.T, r *Query, desc *relationDescriptor) string {
-	t.Helper()
-
-	inner := r.freshSession().Table(desc.relatedTable)
-	switch desc.kind {
-	case relKindHasOne, relKindHasMany:
-		for _, ref := range desc.references {
-			inner = inner.Where(r.ident(ref.foreignTable, ref.foreignColumn) + " = " + r.ident(ref.primaryTable, ref.primaryColumn))
-		}
-	case relKindBelongsTo:
-		for _, ref := range desc.references {
-			inner = inner.Where(r.ident(ref.primaryTable, ref.primaryColumn) + " = " + r.ident(ref.foreignTable, ref.foreignColumn))
-		}
-	case relKindMany2Many:
-		inner = inner.Joins("INNER JOIN " + r.ident(desc.pivotTable) + " ON " + r.ident(desc.pivotTable, desc.pivotRelatedRef.foreignColumn) + " = " + r.ident(desc.relatedTable, desc.pivotRelatedRef.primaryColumn))
-		inner = inner.Where(r.ident(desc.pivotTable, desc.pivotParentRef.foreignColumn) + " = " + r.ident(desc.pivotParentRef.primaryTable, desc.pivotParentRef.primaryColumn))
-	case relKindMorphToMany:
-		inner = inner.Joins("INNER JOIN " + r.ident(desc.pivotTable) + " ON " + r.ident(desc.pivotTable, desc.pivotRelatedRef.foreignColumn) + " = " + r.ident(desc.relatedTable, desc.pivotRelatedRef.primaryColumn))
-		inner = inner.Where(r.ident(desc.pivotTable, desc.pivotParentRef.foreignColumn) + " = " + r.ident(desc.pivotParentRef.primaryTable, desc.pivotParentRef.primaryColumn))
-		inner = inner.Where(r.ident(desc.pivotTable, desc.morphTypeColumn)+" = ?", desc.morphValue)
-	case relKindMorphOne, relKindMorphMany:
-		for _, ref := range desc.references {
-			inner = inner.Where(r.ident(ref.foreignTable, ref.foreignColumn) + " = " + r.ident(ref.primaryTable, ref.primaryColumn))
-		}
-		inner = inner.Where(r.ident(desc.relatedTable, desc.morphTypeColumn)+" = ?", desc.morphValue)
-	case relKindHasOneThrough, relKindHasManyThrough:
-		inner = inner.Joins("INNER JOIN " + r.ident(desc.throughTable) + " ON " + r.ident(desc.relatedTable, desc.secondKey) + " = " + r.ident(desc.throughTable, desc.secondLocalKey))
-		inner = inner.Where(r.ident(desc.throughTable, desc.firstKey) + " = " + r.ident(desc.parentTable, desc.localKey))
-	}
-	inner = inner.Select("1")
-
-	stmt := inner.Session(&gormio.Session{DryRun: true}).Find(&struct{ X int }{})
-	require.NoError(t, stmt.Error)
-
-	return stmt.Statement.SQL.String()
-}
-
-var existenceEqPair = regexp.MustCompile(`([a-z_][a-z0-9_.]*) = ([a-z_][a-z0-9_.]*)`)
-
-// normalizeExistenceSQL folds the two renderers' cosmetic differences - keyword case, identifier
-// quoting, and equality operand order - so the differential test compares the parts that must be
-// identical: the tables, joins and predicates. Any other difference is a real parity break and makes
-// the equality fail.
-//
-// Operand order is folded deliberately, because it cannot be compared against this fixture: the old
-// GORM chain wrote `foreign = primary` for has-one/has-many/morph and `primary = foreign` for
-// belongs-to, while the framework builder (like Laravel's whereColumn in
-// Relation::getRelationExistenceQuery) always writes the parent key first. Equality is symmetric in
-// SQL, so either rendering is correct, but a direction swap would fail the differential test for
-// reasons that are not parity breaks. Operand order is therefore pinned where it is meaningful: the
-// exact-SQL tests above assert the full string, direction included, for every relation kind. The fold
-// only ever touches `identifier = identifier` pairs, so a missing, extra or changed predicate still
-// makes the differential test fail.
-func normalizeExistenceSQL(sql string) string {
-	sql = strings.ToLower(sql)
-	sql = strings.NewReplacer(`"`, "", "`", "").Replace(sql)
-	sql = existenceEqPair.ReplaceAllStringFunc(sql, func(match string) string {
-		sides := strings.Split(match, " = ")
-		if sides[0] <= sides[1] {
-			return match
-		}
-		return sides[1] + " = " + sides[0]
-	})
-
-	return strings.Join(strings.Fields(sql), " ")
-}
-
-// normalizeExistenceSQL's contract, stated as a test: it folds case, quoting and equality operand
-// order; it does NOT fold a predicate. This is what lets the differential test below stay sensitive
-// to a missing or extra predicate while tolerating the fixture's reversed operand order.
-func TestNormalizeExistenceSQL_FoldsOnlyCosmetics(t *testing.T) {
-	const newSQL = `select 1 from "rel_books" where "rel_users"."id" = "rel_books"."user_id" and "rel_books"."deleted_at" IS NULL`
-
-	assert.Equal(t,
-		normalizeExistenceSQL(newSQL),
-		normalizeExistenceSQL(`SELECT 1 FROM rel_books WHERE rel_books.user_id = rel_users.id AND rel_books.deleted_at IS NULL`),
-		"case, quoting and operand order are cosmetic")
-
-	assert.NotEqual(t,
-		normalizeExistenceSQL(newSQL),
-		normalizeExistenceSQL(`select 1 from "rel_books" where "rel_users"."id" = "rel_books"."user_id"`),
-		"a missing predicate must survive normalisation")
-
-	assert.NotEqual(t,
-		normalizeExistenceSQL(newSQL),
-		normalizeExistenceSQL(`select 1 from "rel_books" where "rel_users"."id" = "rel_books"."user_id" and "rel_books"."deleted_at" IS NULL and "rel_books"."x" = ?`),
-		"an extra predicate must survive normalisation")
-}
-
-// For every relation kind the pre-conversion GORM rendering and the framework-builder rendering must
-// be the same subquery once keyword case, identifier quoting and equality operand order are folded
-// away. This turns the "same text modulo case" parity claim into something the suite checks instead of
-// something a report asserts.
-func TestCompileExistenceSubquery_MatchesOldGormRendering(t *testing.T) {
-	cases := []struct {
-		name     string
-		model    any
-		relation string
-	}{
-		{"has one", &relUser{}, "Profile"},
-		{"has many", &relUser{}, "Books"},
-		{"belongs to", &relBook{}, "Author"},
-		{"many to many", &relUser{}, "Roles"},
-		{"morph one", &relUser{}, "Logo"},
-		{"morph many", &relUser{}, "Houses"},
-		{"morph to many", &morphPost{}, "Tags"},
-		{"morphed by many", &morphTag{}, "Posts"},
-		{"has many through", &relCountry{}, "Posts"},
-		{"has one through", &relCountry{}, "FirstPost"},
-	}
-
-	for _, test := range cases {
-		t.Run(test.name, func(t *testing.T) {
-			query := newRelQueryWith(t, test.model)
-
-			desc, err := resolveRelation(query.instance, test.model, test.relation)
-			require.NoError(t, err)
-
-			builder, err := query.compileExistenceSubquery(desc, nil)
-			require.NoError(t, err)
-			newSQL, _ := builder.ToSelectSQL()
-
-			oldSQL := oldExistenceSubquerySQL(t, query, desc)
-
-			assert.Equal(t, normalizeExistenceSQL(oldSQL), normalizeExistenceSQL(newSQL))
-		})
-	}
 }

@@ -166,6 +166,27 @@ func baseAttributes(pool contractsdatabase.Pool, connection string) []telemetry.
 	return attrs
 }
 
+// Active reports whether this instrument can record anything: telemetry is enabled and a resolver is
+// configured. A nil instrument is never active, so callers may test one they obtained without a
+// separate nil check.
+func (r *Instrument) Active() bool {
+	return r.active()
+}
+
+// StartSpan opens a statement span for a query the framework is about to run. It is the exported form
+// of startSpan, for the ORM's own executor: statements are compiled and run by the framework now, so
+// there is no driver callback left to hang the span on.
+func (r *Instrument) StartSpan(ctx context.Context, name string) (context.Context, trace.Span) {
+	return r.startSpan(ctx, name)
+}
+
+// EndSpan closes a span StartSpan opened, recording the statement, its table, the rows it returned
+// and the error it raised. A nil receiver records nothing, which is what a connection with telemetry
+// disabled carries.
+func (r *Instrument) EndSpan(ctx context.Context, span trace.Span, start time.Time, query, table string, rows int64, err error, resolverMode string) {
+	r.endSpan(ctx, span, start, query, table, rows, err, resolverMode)
+}
+
 func (r *Instrument) startSpan(ctx context.Context, name string) (context.Context, trace.Span) {
 	return r.tracer.Start(ctx, name, telemetry.WithSpanKind(telemetry.SpanKindClient))
 }

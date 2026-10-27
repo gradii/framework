@@ -28,7 +28,7 @@ func (r *Query) SaveRelation(parent any, relation string, child any) error {
 	if !isValidParent(child) {
 		return errors.OrmRelationParentNotPointer.Args(child)
 	}
-	desc, err := resolveRelation(r.instance, parent, relation)
+	desc, err := resolveRelation(parent, relation)
 	if err != nil {
 		return err
 	}
@@ -37,10 +37,10 @@ func (r *Query) SaveRelation(parent any, relation string, child any) error {
 		if err := r.setRelationFKOnChild(parent, child, desc); err != nil {
 			return err
 		}
-		return r.wrap(r.freshSession()).Save(child)
+		return r.fresh().Save(child)
 	case relKindMany2Many, relKindMorphToMany:
 		// Persist child first, then attach via pivot.
-		if err := r.wrap(r.freshSession()).Save(child); err != nil {
+		if err := r.fresh().Save(child); err != nil {
 			return err
 		}
 		childPK, err := readParentColumn(r, child, desc.pivotRelatedRef.primaryColumn)
@@ -96,7 +96,7 @@ func (r *Query) SaveRelationWithPivot(parent any, relation string, child any, at
 	if !isValidParent(child) {
 		return errors.OrmRelationParentNotPointer.Args(child)
 	}
-	desc, err := resolveRelation(r.instance, parent, relation)
+	desc, err := resolveRelation(parent, relation)
 	if err != nil {
 		return err
 	}
@@ -106,7 +106,7 @@ func (r *Query) SaveRelationWithPivot(parent any, relation string, child any, at
 		return r.SaveRelation(parent, relation, child)
 	case relKindMany2Many, relKindMorphToMany:
 		// Persist child first, then attach via pivot with attrs.
-		if err := r.wrap(r.freshSession()).Save(child); err != nil {
+		if err := r.fresh().Save(child); err != nil {
 			return err
 		}
 		childPK, err := readParentColumn(r, child, desc.pivotRelatedRef.primaryColumn)
@@ -129,7 +129,7 @@ func (r *Query) SaveManyRelationWithPivot(parent any, relation string, children 
 	if rv.Kind() != reflect.Slice {
 		return errors.OrmRelationKindNotSupported.Args("SaveManyWithPivot", relation, fmt.Sprintf("children=%T (must be slice)", children))
 	}
-	desc, err := resolveRelation(r.instance, parent, relation)
+	desc, err := resolveRelation(parent, relation)
 	if err != nil {
 		return err
 	}
@@ -175,7 +175,7 @@ func (r *Query) AssociateRelation(parent any, relation string, owner any) error 
 	if !isValidParent(owner) {
 		return errors.OrmRelationParentNotPointer.Args(owner)
 	}
-	desc, err := resolveRelation(r.instance, parent, relation)
+	desc, err := resolveRelation(parent, relation)
 	if err != nil {
 		return err
 	}
@@ -195,7 +195,7 @@ func (r *Query) DissociateRelation(parent any, relation string) error {
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
-	desc, err := resolveRelation(r.instance, parent, relation)
+	desc, err := resolveRelation(parent, relation)
 	if err != nil {
 		return err
 	}
@@ -215,13 +215,13 @@ func (r *Query) applyAssociate(parent, owner any, desc *relationDescriptor, isMo
 	if err := r.mutateAssociate(parent, owner, desc, isMorph); err != nil {
 		return err
 	}
-	return r.wrap(r.freshSession()).Save(parent)
+	return r.fresh().Save(parent)
 }
 
 // mutateAssociate is the pure-mutation half of applyAssociate. Writes owner's PK into parent's
 // FK column (and the morph_type column for MorphTo). No persistence.
 func (r *Query) mutateAssociate(parent, owner any, desc *relationDescriptor, isMorph bool) error {
-	parentSchema, err := parseSchema(r.instance, parent)
+	parentSchema, err := parseSchema(parent)
 	if err != nil {
 		return err
 	}
@@ -262,7 +262,7 @@ func (r *Query) mutateAssociate(parent, owner any, desc *relationDescriptor, isM
 		}
 		alias, ok := resolveMorphAlias(owner)
 		if !ok {
-			tbl, terr := tableNameFor(r.instance, owner)
+			tbl, terr := tableNameFor(owner)
 			if terr != nil {
 				return terr
 			}
@@ -281,12 +281,12 @@ func (r *Query) applyDissociate(parent any, desc *relationDescriptor, isMorph bo
 	if err := r.mutateDissociate(parent, desc, isMorph); err != nil {
 		return err
 	}
-	return r.wrap(r.freshSession()).Save(parent)
+	return r.fresh().Save(parent)
 }
 
 // mutateDissociate is the pure-mutation half of applyDissociate.
 func (r *Query) mutateDissociate(parent any, desc *relationDescriptor, isMorph bool) error {
-	parentSchema, err := parseSchema(r.instance, parent)
+	parentSchema, err := parseSchema(parent)
 	if err != nil {
 		return err
 	}
@@ -335,7 +335,7 @@ func (r *Query) CreateRelation(parent any, relation string, dest any) error {
 	if !isValidParent(dest) {
 		return errors.OrmRelationParentNotPointer.Args(dest)
 	}
-	desc, err := resolveRelation(r.instance, parent, relation)
+	desc, err := resolveRelation(parent, relation)
 	if err != nil {
 		return err
 	}
@@ -344,10 +344,10 @@ func (r *Query) CreateRelation(parent any, relation string, dest any) error {
 		if err := r.setRelationFKOnChild(parent, dest, desc); err != nil {
 			return err
 		}
-		return r.wrap(r.freshSession()).Create(dest)
+		return r.fresh().Create(dest)
 	case relKindMany2Many, relKindMorphToMany:
 		// Create dest first, then attach via pivot.
-		if err := r.wrap(r.freshSession()).Create(dest); err != nil {
+		if err := r.fresh().Create(dest); err != nil {
 			return err
 		}
 		childPK, err := readParentColumn(r, dest, desc.pivotRelatedRef.primaryColumn)
@@ -392,7 +392,7 @@ func (r *Query) FindOrNewRelation(parent any, relation string, id any, dest any)
 	if !isValidParent(dest) {
 		return errors.OrmRelationParentNotPointer.Args(dest)
 	}
-	desc, err := resolveRelation(r.instance, parent, relation)
+	desc, err := resolveRelation(parent, relation)
 	if err != nil {
 		return err
 	}
@@ -403,7 +403,7 @@ func (r *Query) FindOrNewRelation(parent any, relation string, id any, dest any)
 			return err
 		}
 		// Check if Find actually populated dest by inspecting the PK field.
-		schema, err := parseSchema(r.instance, dest)
+		schema, err := parseSchema(dest)
 		if err != nil {
 			return err
 		}
@@ -433,7 +433,7 @@ func (r *Query) FirstOrNewRelation(parent any, relation string, attrs map[string
 	if !isValidParent(dest) {
 		return errors.OrmRelationParentNotPointer.Args(dest)
 	}
-	desc, err := resolveRelation(r.instance, parent, relation)
+	desc, err := resolveRelation(parent, relation)
 	if err != nil {
 		return err
 	}
@@ -467,7 +467,7 @@ func (r *Query) FirstOrCreateRelation(parent any, relation string, attrs map[str
 	if !isValidParent(dest) {
 		return errors.OrmRelationParentNotPointer.Args(dest)
 	}
-	desc, err := resolveRelation(r.instance, parent, relation)
+	desc, err := resolveRelation(parent, relation)
 	if err != nil {
 		return err
 	}
@@ -488,7 +488,7 @@ func (r *Query) FirstOrCreateRelation(parent any, relation string, attrs map[str
 			if err := r.setRelationFKOnChild(parent, dest, desc); err != nil {
 				return err
 			}
-			return r.wrap(r.freshSession()).Create(dest)
+			return r.fresh().Create(dest)
 		}
 		return nil
 	case relKindMany2Many, relKindMorphToMany:
@@ -505,7 +505,7 @@ func (r *Query) FirstOrCreateRelation(parent any, relation string, attrs map[str
 			if err := r.applyAttrMap(dest, values); err != nil {
 				return err
 			}
-			if err := r.wrap(r.freshSession()).Create(dest); err != nil {
+			if err := r.fresh().Create(dest); err != nil {
 				return err
 			}
 			childPK, err := readParentColumn(r, dest, desc.pivotRelatedRef.primaryColumn)
@@ -529,7 +529,7 @@ func (r *Query) UpdateOrCreateRelation(parent any, relation string, attrs map[st
 	if !isValidParent(dest) {
 		return errors.OrmRelationParentNotPointer.Args(dest)
 	}
-	desc, err := resolveRelation(r.instance, parent, relation)
+	desc, err := resolveRelation(parent, relation)
 	if err != nil {
 		return err
 	}
@@ -557,7 +557,7 @@ func (r *Query) UpdateOrCreateRelation(parent any, relation string, attrs map[st
 				return err
 			}
 		}
-		return r.wrap(r.freshSession()).Save(dest)
+		return r.fresh().Save(dest)
 	case relKindMany2Many, relKindMorphToMany:
 		// For m2m: search the related table directly, create+attach if missing, otherwise update.
 		q := r.relatedQuery(desc.relatedModel)
@@ -573,7 +573,7 @@ func (r *Query) UpdateOrCreateRelation(parent any, relation string, attrs map[st
 			if err := r.applyAttrMap(dest, values); err != nil {
 				return err
 			}
-			if err := r.wrap(r.freshSession()).Create(dest); err != nil {
+			if err := r.fresh().Create(dest); err != nil {
 				return err
 			}
 			freshlyCreated = true
@@ -582,7 +582,7 @@ func (r *Query) UpdateOrCreateRelation(parent any, relation string, attrs map[st
 			if err := r.applyAttrMap(dest, values); err != nil {
 				return err
 			}
-			if err := r.wrap(r.freshSession()).Save(dest); err != nil {
+			if err := r.fresh().Save(dest); err != nil {
 				return err
 			}
 		}
@@ -640,7 +640,7 @@ func (r *Query) AttachWithPivotRelation(parent any, relation string, idsWithAttr
 // GORM. The name is bare, like every table name the ORM holds, so the grammar applies the connection
 // prefix once when the statement is rendered.
 func (r *Query) pivotTableQuery(table string) *Query {
-	child := r.wrap(r.freshSession())
+	child := r.fresh()
 	conditions := child.conditions
 	conditions.table = &Table{name: table}
 
@@ -799,7 +799,7 @@ func (r *Query) resolvePivot(parent any, relation, op string) (*relationDescript
 	if !isValidParent(parent) {
 		return nil, nil, errors.OrmRelationParentNotPointer.Args(parent)
 	}
-	desc, err := resolveRelation(r.instance, parent, relation)
+	desc, err := resolveRelation(parent, relation)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1185,7 +1185,7 @@ func (r *Query) setRelationFKOnChild(parent, child any, desc *relationDescriptor
 	if err != nil {
 		return err
 	}
-	childSchema, err := parseSchema(r.instance, child)
+	childSchema, err := parseSchema(child)
 	if err != nil {
 		return err
 	}
@@ -1215,7 +1215,7 @@ func (r *Query) applyAttrMap(dest any, attrs map[string]any) error {
 	if len(attrs) == 0 {
 		return nil
 	}
-	schema, err := parseSchema(r.instance, dest)
+	schema, err := parseSchema(dest)
 	if err != nil {
 		return err
 	}
@@ -1245,7 +1245,7 @@ func (r *Query) touchIfTouching(desc *relationDescriptor, parent any, parentVal 
 	if !desc.touches {
 		return nil
 	}
-	parentSchema, err := parseSchema(r.instance, parent)
+	parentSchema, err := parseSchema(parent)
 	if err != nil {
 		return err
 	}

@@ -68,7 +68,7 @@ func (r *Query) primaryKeyColumnName() string {
 		return ""
 	}
 
-	schema, err := parseSchema(r.instance, model)
+	schema, err := parseSchema(model)
 	if err != nil || len(schema.PrimaryFields) == 0 {
 		return ""
 	}
@@ -84,7 +84,7 @@ func (r *Query) primaryKeyColumn() string {
 		return ""
 	}
 
-	schema, err := parseSchema(r.instance, model)
+	schema, err := parseSchema(model)
 	if err != nil || len(schema.PrimaryFields) == 0 {
 		return ""
 	}
@@ -201,7 +201,7 @@ func (r *Query) applySelectSubAggregates(builder *querybuilder.Builder) error {
 	}
 
 	for _, sub := range r.conditions.selectSubs {
-		desc, err := resolveRelation(r.instance, parent, sub.relation)
+		desc, err := resolveRelation(parent, sub.relation)
 		if err != nil {
 			return err
 		}
@@ -251,13 +251,10 @@ func (r *Query) newBuilder() (*querybuilder.Builder, error) {
 		return scoped.newBuilder()
 	}
 
-	// A condition the ORM could not accept is carried on the query rather than returned outright, and
-	// so is anything GORM queued while the conditions were built. Both are reported from here.
+	// A condition the ORM could not accept is carried on the query rather than returned outright, so
+	// it is reported from here.
 	if r.conditions.err != nil {
 		return nil, r.conditions.err
-	}
-	if r.instance != nil && r.instance.Error != nil {
-		return nil, r.instance.Error
 	}
 
 	// Clone the persistent builder so compiling multiple statements from the same query doesn't
@@ -303,7 +300,7 @@ func (r *Query) newBuilder() (*querybuilder.Builder, error) {
 // when OnlyTrashed asked for the trashed rows alone. WithTrashed drops the predicate entirely, so it
 // is only ignored here when OnlyTrashed has not overridden it.
 func (r *Query) applySoftDelete(builder *querybuilder.Builder) error {
-	if (r.conditions.withTrashed && !r.conditions.onlyTrashed) || isUnscoped(r.instance) || !r.usesFrameworkSoftDelete() {
+	if (r.conditions.withTrashed && !r.conditions.onlyTrashed) || !r.usesFrameworkSoftDelete() {
 		return nil
 	}
 
@@ -317,7 +314,7 @@ func (r *Query) applySoftDelete(builder *querybuilder.Builder) error {
 		return nil
 	}
 
-	table, err := tableNameFor(r.instance, model)
+	table, err := tableNameFor(model)
 	if err != nil || table == "" {
 		return err
 	}
@@ -346,7 +343,7 @@ func (r *Query) applyTable(builder *querybuilder.Builder) error {
 		return nil
 	}
 
-	table, err := tableNameFor(r.instance, model)
+	table, err := tableNameFor(model)
 	if err != nil {
 		return err
 	}
@@ -453,7 +450,7 @@ func applySimpleWhere(builder *querybuilder.Builder, query any, args []any, bool
 // applyNestedWhere runs a callback against a child builder, so an `or` group the caller wrote keeps
 // its own grouping.
 func (r *Query) applyNestedWhere(callback func(contractsorm.Query) contractsorm.Query, builder *querybuilder.Builder) *querybuilder.Builder {
-	child := NewQuery(r.ctx, r.config, r.dbConfig, r.instance, r.grammar, r.log, r.modelToObserver, nil, r.telemetryResolver)
+	child := NewQuery(r.ctx, r.config, r.dbConfig, r.writer, r.tx, r.grammar, r.log, r.modelToObserver, nil, r.telemetryResolver)
 	child.queryGrammar = r.queryGrammar
 	child.conditions = r.conditions
 	child.conditions.where = nil

@@ -5,7 +5,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	gormio "gorm.io/gorm"
 
 	"github.com/goravel/framework/errors"
 	basedatabase "github.com/goravel/framework/support/database"
@@ -20,14 +19,6 @@ type softDeleteUser struct {
 }
 
 func (softDeleteUser) TableName() string { return "soft_users" }
-
-// gormSoftDeleteUser still declares GORM's type, so GORM's own clause stays in charge of it.
-type gormSoftDeleteUser struct {
-	ID        uint
-	DeletedAt gormio.DeletedAt `gorm:"column:deleted_at"`
-}
-
-func (gormSoftDeleteUser) TableName() string { return "gorm_soft_users" }
 
 func softDeleteSQL(t *testing.T, q *Query, dest any) string {
 	t.Helper()
@@ -66,16 +57,6 @@ func TestSoftDeletePredicate_OnlyTrashedOverridesWithTrashed(t *testing.T) {
 	q := newRelQueryWith(t, &softDeleteUser{}).WithTrashed().(*Query).OnlyTrashed().(*Query)
 
 	assert.Contains(t, softDeleteSQL(t, q, &softDeleteUser{}), `"soft_users"."deleted_at" IS NOT NULL`)
-}
-
-func TestSoftDeletePredicate_LeavesGormTypeAlone(t *testing.T) {
-	q := newRelQueryWith(t, &gormSoftDeleteUser{})
-
-	// The compiled statement carries no predicate: the framework only adds one for its own
-	// soft-delete type, and a model still declaring GORM's type is left to GORM.
-	sql := softDeleteSQL(t, q, &gormSoftDeleteUser{})
-
-	assert.NotContains(t, sql, "deleted_at")
 }
 
 // A model carrying the framework's own type has its delete rewritten into an update that stamps

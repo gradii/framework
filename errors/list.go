@@ -105,6 +105,8 @@ var (
 	CryptMissingValueKey     = New("decrypt payload error: missing value key")
 
 	DatabaseConfigNotFound              = New("not found database configuration")
+	DatabaseDialectNotSupported         = New("unsupported database driver %q: expected mysql, postgres, sqlite or sqlserver")
+	DatabaseIsolationLevelInvalid       = New("unsupported transaction isolation level %q: expected default, read uncommitted, read committed, repeatable read or serializable")
 	DatabaseMultipleColumnsSelected     = New("Multiple columns were selected.")
 	DatabaseEscapeNonFinite             = New("Cannot escape non-finite numbers.")
 	DatabaseEscapeInvalidUTF8           = New("Strings with invalid UTF-8 byte sequences cannot be escaped.")
@@ -261,6 +263,7 @@ var (
 	OrmMultipleRecordsFound         = New("%d records were found")
 	OrmQueryIncrementNonNumeric     = New("non-numeric value %v passed to %s method")
 	OrmQueryTimestampColumnNotFound = New("model %s declares no %s column")
+	OrmQueryTransactionNotStarted   = New("no transaction has been started on this query")
 	OrmQueryPrimaryKeyNotFound      = New("model %s declares no primary key")
 	OrmWhereBelongsToEmpty          = New("WhereBelongsTo requires at least one related model")
 	OrmWhereBelongsToNotBelongsTo   = New("relation %q on model %s is not a BelongsTo relation")

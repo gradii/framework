@@ -1,6 +1,6 @@
 package database
 
-import "gorm.io/gorm"
+import "database/sql/driver"
 
 type Pool struct {
 	Readers []Config
@@ -8,7 +8,10 @@ type Pool struct {
 }
 
 type Config struct {
-	Dialector    gorm.Dialector
+	// Connector opens the pool for this connection when it is set. A driver module may supply one when
+	// it targets a database the framework does not have a dialect for; otherwise the framework builds
+	// the connection itself from the fields below.
+	Connector    driver.Connector
 	NameReplacer Replacer
 	Charset      string
 	Connection   string

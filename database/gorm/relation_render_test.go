@@ -92,7 +92,7 @@ func TestCompileExistenceSubquery_MatchesTheRelationSQL(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			query := newRelQueryWith(t, test.model)
 
-			desc, err := resolveRelation(query.instance, test.model, test.relation)
+			desc, err := resolveRelation(test.model, test.relation)
 			require.NoError(t, err)
 			require.NotNil(t, desc.relatedModel, "the descriptor must carry a sample of the related model")
 

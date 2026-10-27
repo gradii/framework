@@ -12,6 +12,7 @@ import (
 	contractsdatabase "github.com/goravel/framework/contracts/database"
 	contractsdb "github.com/goravel/framework/contracts/database/db"
 	"github.com/goravel/framework/errors"
+	mocksconfig "github.com/goravel/framework/mocks/config"
 	mocksdb "github.com/goravel/framework/mocks/database/db"
 	mocksdriver "github.com/goravel/framework/mocks/database/driver"
 	mockslogger "github.com/goravel/framework/mocks/database/logger"
@@ -64,7 +65,8 @@ func TestNewTx_UsesSharedInstrument(t *testing.T) {
 	driver.EXPECT().Grammar().Return(nil).Once()
 
 	mockTxBuilder := mocksdb.NewTxBuilder(t)
-	tx := NewTx(context.Background(), driver, mockslogger.NewLogger(t), nil, mockTxBuilder, &[]TxLog{}, instrument)
+	mockConfig := mocksconfig.NewConfig(t)
+	tx := NewTx(context.Background(), mockConfig, driver, mockslogger.NewLogger(t), nil, mockTxBuilder, &[]TxLog{}, instrument)
 
 	assert.Equal(t, instrument, tx.instrument)
 	assert.NotEqual(t, contractsdb.TxBuilder(mockTxBuilder), tx.txBuilder)
@@ -170,7 +172,8 @@ func TestNewTx_UnrecognisedDriverWarning(t *testing.T) {
 		mockDriver.EXPECT().Grammar().Return(mockGrammar).Once()
 		mockLogger.EXPECT().Warningf(ctx, "%s", mock.AnythingOfType("*errors.errorString")).Once()
 
-		tx := NewTx(ctx, mockDriver, mockLogger, nil, nil, &[]TxLog{}, nil)
+		mockConfig := mocksconfig.NewConfig(t)
+		tx := NewTx(ctx, mockConfig, mockDriver, mockLogger, nil, nil, &[]TxLog{}, nil)
 
 		assert.NotNil(t, tx)
 		assert.NotNil(t, tx.queryGrammar)
@@ -188,7 +191,8 @@ func TestNewTx_UnrecognisedDriverWarning(t *testing.T) {
 		mockDriver.EXPECT().Pool().Return(mockPool).Once()
 		mockDriver.EXPECT().Grammar().Return(mockGrammar).Once()
 
-		tx := NewTx(ctx, mockDriver, nil, nil, nil, &[]TxLog{}, nil)
+		mockConfig := mocksconfig.NewConfig(t)
+		tx := NewTx(ctx, mockConfig, mockDriver, nil, nil, nil, &[]TxLog{}, nil)
 
 		assert.NotNil(t, tx)
 		assert.NotNil(t, tx.queryGrammar)
@@ -207,7 +211,8 @@ func TestNewTx_UnrecognisedDriverWarning(t *testing.T) {
 		mockDriver.EXPECT().Pool().Return(mockPool).Once()
 		mockDriver.EXPECT().Grammar().Return(mockGrammar).Once()
 
-		tx := NewTx(ctx, mockDriver, mockLogger, nil, nil, &[]TxLog{}, nil)
+		mockConfig := mocksconfig.NewConfig(t)
+		tx := NewTx(ctx, mockConfig, mockDriver, mockLogger, nil, nil, &[]TxLog{}, nil)
 
 		assert.NotNil(t, tx)
 		assert.NotNil(t, tx.queryGrammar)

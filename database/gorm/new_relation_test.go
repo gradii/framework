@@ -197,7 +197,7 @@ func TestRelated_OnQuery_AppliedToReturnedQuery(t *testing.T) {
 
 func TestCompileExistenceSubquery_OnQuery_AppliedInExistenceCheck(t *testing.T) {
 	q := newRelQueryWith(t, &scopedUser{})
-	desc, err := resolveRelation(q.instance, &scopedUser{}, "Books")
+	desc, err := resolveRelation(&scopedUser{}, "Books")
 	assert.NoError(t, err)
 	inner, err := q.compileExistenceSubquery(desc, nil)
 	assert.NoError(t, err)

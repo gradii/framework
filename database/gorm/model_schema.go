@@ -5,8 +5,6 @@ import (
 	"reflect"
 	"time"
 
-	gormio "gorm.io/gorm"
-
 	"github.com/goravel/framework/errors"
 	basedatabase "github.com/goravel/framework/support/database"
 	"github.com/goravel/framework/support/str"
@@ -59,8 +57,8 @@ type schemaField struct {
 
 // parseSchema builds a model's schema. The table comes from the model's own declaration,
 // exactly as the ORM resolves it elsewhere.
-func parseSchema(db *gormio.DB, model any) (*modelSchema, error) {
-	return parseSchemaWithTable(db, model, "")
+func parseSchema(model any) (*modelSchema, error) {
+	return parseSchemaWithTable(model, "")
 }
 
 // parseSchemaWithTable builds a model's schema, using table when the caller has already resolved
@@ -68,7 +66,7 @@ func parseSchema(db *gormio.DB, model any) (*modelSchema, error) {
 // query, so the model does not have to declare TableName() as well — the same exemption the read
 // path already gives through applyTable's short-circuit. With an empty table the model's own
 // declaration is required, exactly as before.
-func parseSchemaWithTable(db *gormio.DB, model any, table string) (*modelSchema, error) {
+func parseSchemaWithTable(model any, table string) (*modelSchema, error) {
 	// reflect.TypeOf(nil) is nil, so a nil model has to be rejected before its type is described.
 	if model == nil {
 		return nil, errors.OrmQueryInvalidModel.Args("nil")
@@ -83,7 +81,7 @@ func parseSchemaWithTable(db *gormio.DB, model any, table string) (*modelSchema,
 	// TableName() fails with the same named error the queries report — unless the caller already
 	// named the table, in which case there is nothing to resolve.
 	if table == "" {
-		resolved, err := tableNameFor(db, model)
+		resolved, err := tableNameFor(model)
 		if err != nil {
 			return nil, err
 		}

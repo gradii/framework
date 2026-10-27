@@ -113,7 +113,7 @@ func TestCapture_RelationSQL(t *testing.T) {
 	}
 	for _, c := range existence {
 		q := newRelQueryWith(t, c.model)
-		desc, err := resolveRelation(q.instance, c.model, c.relation)
+		desc, err := resolveRelation(c.model, c.relation)
 		if err != nil {
 			if _, err := fmt.Fprintf(f, "[%s] ERROR: %v\n\n", c.name, err); err != nil {
 				t.Fatal(err)
@@ -150,7 +150,7 @@ func TestCapture_RelationSQL(t *testing.T) {
 	}
 	for _, c := range aggregates {
 		q := newRelQueryWith(t, &relUser{})
-		desc, err := resolveRelation(q.instance, &relUser{}, "Books")
+		desc, err := resolveRelation(&relUser{}, "Books")
 		if err != nil {
 			if _, err := fmt.Fprintf(f, "[%s] ERROR: %v\n\n", c.name, err); err != nil {
 				t.Fatal(err)

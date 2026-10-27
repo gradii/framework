@@ -77,11 +77,11 @@ type TxBuilder struct {
 }
 
 // NewTxBuilder opens a transaction on the given pool.
-func NewTxBuilder(pool *sql.DB, driver string) (*TxBuilder, error) {
-	return NewTxBuilderWithContext(context.Background(), pool, driver)
+func NewTxBuilder(pool *sql.DB, driver string, options *sql.TxOptions) (*TxBuilder, error) {
+	return NewTxBuilderWithContext(context.Background(), pool, driver, options)
 }
 
-func NewTxBuilderWithContext(ctx context.Context, pool *sql.DB, driver string) (*TxBuilder, error) {
+func NewTxBuilderWithContext(ctx context.Context, pool *sql.DB, driver string, options *sql.TxOptions) (*TxBuilder, error) {
 	if pool == nil {
 		return nil, errors.DatabaseConnectionIsNil
 	}
@@ -89,7 +89,7 @@ func NewTxBuilderWithContext(ctx context.Context, pool *sql.DB, driver string) (
 	dbx := sqlx.NewDb(pool, sqlxDriverName(driver))
 	dbx.MapperFunc(NameMapper)
 
-	tx, err := dbx.BeginTxx(ctx, nil)
+	tx, err := dbx.BeginTxx(ctx, options)
 	if err != nil {
 		return nil, err
 	}

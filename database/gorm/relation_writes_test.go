@@ -17,7 +17,7 @@ import (
 
 func TestSetRelationFKOnChild_HasMany(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(q.instance, &relUser{}, "Books")
+	desc, err := resolveRelation(&relUser{}, "Books")
 	assert.NoError(t, err)
 
 	parent := &relUser{ID: 7}
@@ -29,7 +29,7 @@ func TestSetRelationFKOnChild_HasMany(t *testing.T) {
 
 func TestSetRelationFKOnChild_MorphMany(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(q.instance, &relUser{}, "Houses")
+	desc, err := resolveRelation(&relUser{}, "Houses")
 	assert.NoError(t, err)
 
 	parent := &relUser{ID: 9}
@@ -42,7 +42,7 @@ func TestSetRelationFKOnChild_MorphMany(t *testing.T) {
 
 func TestSetRelationFKOnChild_MorphOne(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(q.instance, &relUser{}, "Logo")
+	desc, err := resolveRelation(&relUser{}, "Logo")
 	assert.NoError(t, err)
 
 	parent := &relUser{ID: 11}
@@ -149,7 +149,7 @@ func TestUpdateExistingPivotRelation_EmptyAttrs_NoOp(t *testing.T) {
 
 func TestBasePivotRow_Many2Many(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(q.instance, &relUser{}, "Roles")
+	desc, err := resolveRelation(&relUser{}, "Roles")
 	assert.NoError(t, err)
 
 	row := q.basePivotRow(desc, uint(7), uint(99), nil)
@@ -161,7 +161,7 @@ func TestBasePivotRow_Many2Many(t *testing.T) {
 
 func TestBasePivotRow_MorphToMany_IncludesType(t *testing.T) {
 	q := newRelQueryWith(t, &morphPost{})
-	desc, err := resolveRelation(q.instance, &morphPost{}, "Tags")
+	desc, err := resolveRelation(&morphPost{}, "Tags")
 	assert.NoError(t, err)
 
 	row := q.basePivotRow(desc, uint(3), uint(11), nil)
@@ -172,7 +172,7 @@ func TestBasePivotRow_MorphToMany_IncludesType(t *testing.T) {
 
 func TestBasePivotRow_AttrsOverlay(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(q.instance, &relUser{}, "Roles")
+	desc, err := resolveRelation(&relUser{}, "Roles")
 	assert.NoError(t, err)
 
 	row := q.basePivotRow(desc, uint(7), uint(99), map[string]any{
@@ -228,7 +228,7 @@ func TestDetachRelation_NotPointerParent(t *testing.T) {
 
 func TestMutateAssociate_BelongsTo_SetsFK(t *testing.T) {
 	q := newRelQueryWith(t, &relBook{})
-	desc, err := resolveRelation(q.instance, &relBook{}, "Author")
+	desc, err := resolveRelation(&relBook{}, "Author")
 	assert.NoError(t, err)
 
 	parent := &relBook{Title: "x", AuthorID: 0}
@@ -240,7 +240,7 @@ func TestMutateAssociate_BelongsTo_SetsFK(t *testing.T) {
 
 func TestMutateDissociate_BelongsTo_ClearsFK(t *testing.T) {
 	q := newRelQueryWith(t, &relBook{})
-	desc, err := resolveRelation(q.instance, &relBook{}, "Author")
+	desc, err := resolveRelation(&relBook{}, "Author")
 	assert.NoError(t, err)
 
 	parent := &relBook{Title: "x", AuthorID: 99}
@@ -278,7 +278,7 @@ func TestDissociateRelation_UnsupportedKind_HasMany(t *testing.T) {
 
 func TestMutateAssociate_MorphTo_SetsFKAndType(t *testing.T) {
 	q := newRelQueryWith(t, &morphImage{})
-	desc, err := resolveRelation(q.instance, &morphImage{}, "Imageable")
+	desc, err := resolveRelation(&morphImage{}, "Imageable")
 	assert.NoError(t, err)
 
 	parent := &morphImage{}
@@ -291,7 +291,7 @@ func TestMutateAssociate_MorphTo_SetsFKAndType(t *testing.T) {
 
 func TestMutateDissociate_MorphTo_ClearsFKAndType(t *testing.T) {
 	q := newRelQueryWith(t, &morphImage{})
-	desc, err := resolveRelation(q.instance, &morphImage{}, "Imageable")
+	desc, err := resolveRelation(&morphImage{}, "Imageable")
 	assert.NoError(t, err)
 
 	parent := &morphImage{ImageableID: 5, ImageableType: "post"}
@@ -347,7 +347,7 @@ func TestUpdateOrCreateRelation_UnsupportedKind_Through(t *testing.T) {
 
 func TestBasePivotRow_Timestamps_IncludesCreatedUpdatedAt(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(q.instance, &relUser{}, "Roles")
+	desc, err := resolveRelation(&relUser{}, "Roles")
 	assert.NoError(t, err)
 
 	// Enable timestamps by setting the resolved column names directly.
@@ -367,7 +367,7 @@ func TestBasePivotRow_Timestamps_IncludesCreatedUpdatedAt(t *testing.T) {
 
 func TestBasePivotRow_Timestamps_AttrsCanOverride(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(q.instance, &relUser{}, "Roles")
+	desc, err := resolveRelation(&relUser{}, "Roles")
 	assert.NoError(t, err)
 
 	desc.pivotCreatedAtColumn = "created_at"
@@ -385,7 +385,7 @@ func TestBasePivotRow_Timestamps_AttrsCanOverride(t *testing.T) {
 
 func TestBasePivotRow_NoTimestamps_OmitsBoth(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(q.instance, &relUser{}, "Roles")
+	desc, err := resolveRelation(&relUser{}, "Roles")
 	assert.NoError(t, err)
 
 	// Empty resolved columns mean "don't auto-stamp".
@@ -398,7 +398,7 @@ func TestBasePivotRow_NoTimestamps_OmitsBoth(t *testing.T) {
 
 func TestBasePivotRow_OnlyUpdatedAt_OmitsCreatedAt(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(q.instance, &relUser{}, "Roles")
+	desc, err := resolveRelation(&relUser{}, "Roles")
 	assert.NoError(t, err)
 
 	// Pivot struct may declare only UpdatedAt (e.g. ledger-style writes); only stamp updated_at.
@@ -498,15 +498,13 @@ func TestCastKeys(t *testing.T) {
 
 // relatedKeyType wiring: descriptor must carry the related model's PK type so castKey can use it.
 func TestDescriptor_RelatedKeyType_Many2Many(t *testing.T) {
-	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(q.instance, &relUser{}, "Roles")
+	desc, err := resolveRelation(&relUser{}, "Roles")
 	assert.NoError(t, err)
 	assert.Equal(t, reflect.TypeFor[uint](), desc.relatedKeyType)
 }
 
 func TestDescriptor_RelatedKeyType_MorphToMany(t *testing.T) {
-	q := newRelQueryWith(t, &morphPost{})
-	desc, err := resolveRelation(q.instance, &morphPost{}, "Tags")
+	desc, err := resolveRelation(&morphPost{}, "Tags")
 	assert.NoError(t, err)
 	assert.Equal(t, reflect.TypeFor[uint](), desc.relatedKeyType)
 }
@@ -581,58 +579,51 @@ type tsCustomColumnRole struct {
 func (tsCustomColumnRole) TableName() string { return "ts_custom_column_roles" }
 
 func TestResolvePivotTimestamps_AutoCreateTimeTag(t *testing.T) {
-	db := newStubGormDB(t)
-	created, updated, err := resolvePivotTimestamps(db, &tsTaggedRole{}, "Pivot", false)
+	created, updated, err := resolvePivotTimestamps(&tsTaggedRole{}, "Pivot", false)
 	assert.NoError(t, err)
 	assert.Equal(t, "stamped", created)
 	assert.Equal(t, "edited", updated)
 }
 
 func TestResolvePivotTimestamps_Convention(t *testing.T) {
-	db := newStubGormDB(t)
-	created, updated, err := resolvePivotTimestamps(db, &tsConventionRole{}, "Pivot", false)
+	created, updated, err := resolvePivotTimestamps(&tsConventionRole{}, "Pivot", false)
 	assert.NoError(t, err)
 	assert.Equal(t, "created_at", created)
 	assert.Equal(t, "updated_at", updated)
 }
 
 func TestResolvePivotTimestamps_OnlyCreatedAt(t *testing.T) {
-	db := newStubGormDB(t)
-	created, updated, err := resolvePivotTimestamps(db, &tsCreatedOnlyRole{}, "Pivot", false)
+	created, updated, err := resolvePivotTimestamps(&tsCreatedOnlyRole{}, "Pivot", false)
 	assert.NoError(t, err)
 	assert.Equal(t, "created_at", created)
 	assert.Equal(t, "", updated, "no UpdatedAt field means don't auto-stamp on update")
 }
 
 func TestResolvePivotTimestamps_CustomColumnTag(t *testing.T) {
-	db := newStubGormDB(t)
-	created, updated, err := resolvePivotTimestamps(db, &tsCustomColumnRole{}, "Pivot", false)
+	created, updated, err := resolvePivotTimestamps(&tsCustomColumnRole{}, "Pivot", false)
 	assert.NoError(t, err)
 	assert.Equal(t, "made_on", created)
 	assert.Equal(t, "edited_at", updated)
 }
 
 func TestResolvePivotTimestamps_NoStruct_FallbackEnabled(t *testing.T) {
-	db := newStubGormDB(t)
 	// roleWithoutPivot has no Pivot field — falls through to relation-level PivotTimestamps.
-	created, updated, err := resolvePivotTimestamps(db, &roleWithoutPivot{}, "Pivot", true)
+	created, updated, err := resolvePivotTimestamps(&roleWithoutPivot{}, "Pivot", true)
 	assert.NoError(t, err)
 	assert.Equal(t, "created_at", created)
 	assert.Equal(t, "updated_at", updated)
 }
 
 func TestResolvePivotTimestamps_NoStruct_FallbackDisabled(t *testing.T) {
-	db := newStubGormDB(t)
-	created, updated, err := resolvePivotTimestamps(db, &roleWithoutPivot{}, "Pivot", false)
+	created, updated, err := resolvePivotTimestamps(&roleWithoutPivot{}, "Pivot", false)
 	assert.NoError(t, err)
 	assert.Equal(t, "", created)
 	assert.Equal(t, "", updated)
 }
 
 func TestResolvePivotTimestamps_StructHasOneCol_FallbackFillsOther(t *testing.T) {
-	db := newStubGormDB(t)
 	// Struct provides only CreatedAt; PivotTimestamps: true fills updated_at default.
-	created, updated, err := resolvePivotTimestamps(db, &tsCreatedOnlyRole{}, "Pivot", true)
+	created, updated, err := resolvePivotTimestamps(&tsCreatedOnlyRole{}, "Pivot", true)
 	assert.NoError(t, err)
 	assert.Equal(t, "created_at", created, "struct-provided column wins")
 	assert.Equal(t, "updated_at", updated, "fallback fills the column the struct didn't provide")

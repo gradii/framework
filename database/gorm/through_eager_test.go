@@ -2,13 +2,10 @@ package gorm
 
 import (
 	"database/sql/driver"
-	"fmt"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	gormio "gorm.io/gorm"
 
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
 )
@@ -60,27 +57,11 @@ func (throughScopeCountry) Relations() map[string]contractsorm.Relation {
 // builders, so the framework compiler renders the statement instead of GORM. The loader is driven with parent keys
 // too, so a change to either half of its body fails the test.
 //
-// Each case renders the *gormio.DB chain the loader used to hand over and compares the two after
-// normalisation, so the conversion cannot drift from the SQL it replaced; the binding slices are
-// asserted exactly, since their order and arity carry the chunk keys.
+// The binding slices are asserted exactly, since their order and arity carry the chunk keys.
 func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
-	// Case, keyword spacing and identifier quoting differ between the two builders; the predicate does
-	// not. The legacy through read selects its columns bare — GORM reads a bare Select string as an
-	// expression — where the compiled statement quotes each identifier. Those are the same identifiers,
-	// and the driver reports the same column labels back, which is what the through map is keyed by, so
-	// quotes are dropped from both sides here. The compiled statement is asserted verbatim above, and
-	// the dots survive below, so a quoting or qualification regression still fails rather than being
-	// normalised away.
-	normalize := func(sql string) string {
-		sql = strings.Join(strings.Fields(strings.ToLower(sql)), " ")
-		sql = strings.ReplaceAll(sql, ", ", ",")
-
-		return strings.ReplaceAll(sql, `"`, "")
-	}
-
 	t.Run("through read collects the second keys", func(t *testing.T) {
 		q := newRelQueryWith(t, &relCountry{})
-		desc, err := resolveRelation(q.instance, &relCountry{}, "Posts")
+		desc, err := resolveRelation(&relCountry{}, "Posts")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -108,16 +89,6 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 			compiled)
 		assert.Equal(t, chunk, bindings)
 
-		legacy := q.freshSession().
-			Table(desc.throughTable).
-			Select(desc.firstKey, desc.secondLocalKey).
-			Where(fmt.Sprintf("%s IN ?", q.ident(desc.throughTable, desc.firstKey)), chunk)
-		statement := legacy.Session(&gormio.Session{DryRun: true}).Find(&[]map[string]any{})
-		assert.NoError(t, statement.Error)
-		assert.Equal(t, normalize(statement.Statement.SQL.String()), normalize(compiled),
-			"the compiled through read must render the predicate the GORM chain did")
-		assert.Equal(t, statement.Statement.Vars, bindings)
-
 		// No model is attached, so the child starts from the through table alone and inherits none of
 		// the parent query's state — the same shape the fresh GORM session had.
 		assert.Nil(t, child.conditions.model)
@@ -131,7 +102,7 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 
 	t.Run("related read is compiled and keeps the related key when pruned", func(t *testing.T) {
 		q := newRelQueryWith(t, &relCountry{})
-		desc, err := resolveRelation(q.instance, &relCountry{}, "Posts")
+		desc, err := resolveRelation(&relCountry{}, "Posts")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -144,15 +115,6 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 		assert.Equal(t, `select * from "rel_posts" where "rel_posts"."rel_user_id" in (?)`, compiled)
 		assert.Equal(t, chunk, bindings)
 
-		legacy := q.freshSession().
-			Table(desc.relatedTable).
-			Where(fmt.Sprintf("%s IN ?", q.ident(desc.relatedTable, desc.secondKey)), chunk)
-		statement := legacy.Session(&gormio.Session{DryRun: true}).Find(&[]*relPost{})
-		assert.NoError(t, statement.Error)
-		assert.Equal(t, normalize(statement.Statement.SQL.String()), normalize(compiled),
-			"the compiled related read must render the predicate the GORM chain did")
-		assert.Equal(t, statement.Statement.Vars, bindings)
-
 		// The loader passes the related key as a required column, so it survives column pruning and
 		// the dictionary can be keyed off the related rows.
 		child.builder.SetSelects([]any{"title", desc.secondKey})
@@ -164,7 +126,7 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 
 	t.Run("related read receives the relation scope", func(t *testing.T) {
 		q := newRelQueryWith(t, &throughScopeCountry{})
-		desc, err := resolveRelation(q.instance, &throughScopeCountry{}, "Posts")
+		desc, err := resolveRelation(&throughScopeCountry{}, "Posts")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -192,7 +154,7 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 	// relation field is cleared rather than queried for an IN list that cannot match.
 	t.Run("no parent keys issues no statement", func(t *testing.T) {
 		q := newRelQueryWith(t, &relCountry{})
-		desc, err := resolveRelation(q.instance, &relCountry{}, "Posts")
+		desc, err := resolveRelation(&relCountry{}, "Posts")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -206,7 +168,7 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 	// related read. A change to either half of the loader's body fails the test.
 	t.Run("loader reads the through table then the related table", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &relCountry{})
-		desc, err := resolveRelation(q.instance, &relCountry{}, "Posts")
+		desc, err := resolveRelation(&relCountry{}, "Posts")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -241,7 +203,7 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 	// on top of the second-key IN clause the loader builds.
 	t.Run("loader's related read carries the relation scope", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &throughScopeCountry{})
-		desc, err := resolveRelation(q.instance, &throughScopeCountry{}, "Posts")
+		desc, err := resolveRelation(&throughScopeCountry{}, "Posts")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -275,7 +237,7 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 func TestLoadThrough_HasOneBranch(t *testing.T) {
 	t.Run("assigns the single related row", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &relCountry{})
-		desc, err := resolveRelation(q.instance, &relCountry{}, "FirstPost")
+		desc, err := resolveRelation(&relCountry{}, "FirstPost")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -307,7 +269,7 @@ func TestLoadThrough_HasOneBranch(t *testing.T) {
 
 	t.Run("keeps the first of several related rows", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &relCountry{})
-		desc, err := resolveRelation(q.instance, &relCountry{}, "FirstPost")
+		desc, err := resolveRelation(&relCountry{}, "FirstPost")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -338,7 +300,7 @@ func TestLoadThrough_HasOneBranch(t *testing.T) {
 
 	t.Run("unmatched parent is cleared", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &relCountry{})
-		desc, err := resolveRelation(q.instance, &relCountry{}, "FirstPost")
+		desc, err := resolveRelation(&relCountry{}, "FirstPost")
 		assert.NoError(t, err)
 		if err != nil {
 			return

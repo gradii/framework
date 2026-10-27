@@ -6,9 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
-	"gorm.io/gorm"
 
-	querybuilder "github.com/goravel/framework/database/query"
 	"github.com/goravel/framework/support/carbon"
 	"github.com/goravel/framework/support/convert"
 )
@@ -52,14 +50,13 @@ var testEventModel = TestEventModel{
 	high:     1,
 }
 
-var testQuery = &Query{
-	instance: &gorm.DB{
-		Statement: &gorm.Statement{
-			Selects: []string{},
-			Omits:   []string{},
-		},
-	},
-	builder: querybuilder.NewBuilder(nil),
+// newTestQuery builds a query over the fixture model with no selection filter of its own, so an
+// observer sees every column. The filter an observer consults lives on the query's builder and
+// conditions, which is what compiledQuery builds.
+func newTestQuery(t *testing.T) *Query {
+	t.Helper()
+
+	return compiledQuery(t, &testEventModel, Conditions{})
 }
 
 type EventTestSuite struct {
@@ -73,9 +70,9 @@ func TestEventTestSuite(t *testing.T) {
 
 func (s *EventTestSuite) SetupTest() {
 	s.events = []*Event{
-		NewEvent(testQuery, &testEventModel, map[string]any{"id": 1, "created_at": carbon.NewDateTime(carbon.FromStdTime(testNow)), "updated_at": carbon.NewDateTime(carbon.FromStdTime(testNow)), "avatar": "avatar1", "is_admin": false, "manage": 1, "admin_at": time.Now(), "manage_at": testNow}),
-		NewEvent(testQuery, &testEventModel, map[string]any{"ID": 1, "CreatedAt": carbon.NewDateTime(carbon.FromStdTime(testNow)), "UpdatedAt": carbon.NewDateTime(carbon.FromStdTime(testNow)), "Avatar": "avatar1", "IsAdmin": false, "IsManage": 1, "AdminAt": time.Now(), "ManageAt": testNow}),
-		NewEvent(testQuery, &testEventModel, TestEventModel{
+		NewEvent(newTestQuery(s.T()), &testEventModel, map[string]any{"id": 1, "created_at": carbon.NewDateTime(carbon.FromStdTime(testNow)), "updated_at": carbon.NewDateTime(carbon.FromStdTime(testNow)), "avatar": "avatar1", "is_admin": false, "manage": 1, "admin_at": time.Now(), "manage_at": testNow}),
+		NewEvent(newTestQuery(s.T()), &testEventModel, map[string]any{"ID": 1, "CreatedAt": carbon.NewDateTime(carbon.FromStdTime(testNow)), "UpdatedAt": carbon.NewDateTime(carbon.FromStdTime(testNow)), "Avatar": "avatar1", "IsAdmin": false, "IsManage": 1, "AdminAt": time.Now(), "ManageAt": testNow}),
+		NewEvent(newTestQuery(s.T()), &testEventModel, TestEventModel{
 			Model: Model{
 				ID: 1,
 				Timestamps: Timestamps{
@@ -84,7 +81,7 @@ func (s *EventTestSuite) SetupTest() {
 				},
 			},
 			Avatar: "avatar1", IsAdmin: false, IsManage: 1, AdminAt: time.Now(), ManageAt: testNow}),
-		NewEvent(testQuery, &testEventModel, &TestEventModel{
+		NewEvent(newTestQuery(s.T()), &testEventModel, &TestEventModel{
 			Model: Model{
 				ID: 1,
 				Timestamps: Timestamps{
@@ -99,15 +96,7 @@ func (s *EventTestSuite) SetupTest() {
 func (s *EventTestSuite) TestSetAttribute() {
 	// dest is map
 	dest := map[string]any{"avatar": "avatar1"}
-	query := &Query{builder: querybuilder.NewBuilder(nil),
-		instance: &gorm.DB{
-			Statement: &gorm.Statement{
-				Selects: []string{},
-				Omits:   []string{},
-				Dest:    dest,
-			},
-		},
-	}
+	query := compiledQuery(s.T(), &testEventModel, Conditions{})
 
 	event := NewEvent(query, &testEventModel, dest)
 
@@ -127,15 +116,7 @@ func (s *EventTestSuite) TestSetAttribute() {
 	dest1 := &TestEventModel{
 		Avatar: "avatar1",
 	}
-	query1 := &Query{builder: querybuilder.NewBuilder(nil),
-		instance: &gorm.DB{
-			Statement: &gorm.Statement{
-				Selects: []string{},
-				Omits:   []string{},
-				Dest:    dest1,
-			},
-		},
-	}
+	query1 := compiledQuery(s.T(), &testEventModel, Conditions{})
 
 	event = NewEvent(query1, &testEventModel, dest1)
 
@@ -156,12 +137,12 @@ func (s *EventTestSuite) TestGetAttribute() {
 	// Get value from attribute
 	now := carbon.Now()
 	events := []*Event{
-		NewEvent(testQuery, &testEventModel, map[string]any{
+		NewEvent(newTestQuery(s.T()), &testEventModel, map[string]any{
 			"ID":        2,
 			"CreatedAt": carbon.NewDateTime(now),
 			"Avatar":    "avatar1",
 		}),
-		NewEvent(testQuery, &testEventModel, TestEventModel{
+		NewEvent(newTestQuery(s.T()), &testEventModel, TestEventModel{
 			Model: Model{
 				ID: 2,
 				Timestamps: Timestamps{
@@ -180,8 +161,8 @@ func (s *EventTestSuite) TestGetAttribute() {
 
 	// Get value from original
 	events = []*Event{
-		NewEvent(testQuery, &testEventModel, map[string]any{}),
-		NewEvent(testQuery, &testEventModel, TestEventModel{}),
+		NewEvent(newTestQuery(s.T()), &testEventModel, map[string]any{}),
+		NewEvent(newTestQuery(s.T()), &testEventModel, TestEventModel{}),
 	}
 
 	for _, event := range events {
@@ -192,7 +173,7 @@ func (s *EventTestSuite) TestGetAttribute() {
 }
 
 func (s *EventTestSuite) TestGetOriginal() {
-	event := NewEvent(testQuery, &testEventModel, map[string]any{"avatar": "avatar1"})
+	event := NewEvent(newTestQuery(s.T()), &testEventModel, map[string]any{"avatar": "avatar1"})
 
 	s.EqualValues(1, event.GetOriginal("ID"))
 	s.Equal(carbon.NewDateTime(carbon.FromStdTime(testNow)), event.GetOriginal("CreatedAt"))
@@ -226,7 +207,7 @@ func (s *EventTestSuite) TestIsDirty() {
 	}
 
 	// Set zero value when use model update
-	event := NewEvent(testQuery, &testEventModel, &TestEventModel{Avatar: "avatar1", IsAdmin: true, IsManage: 0, AdminAt: time.Now(), ManageAt: testNow})
+	event := NewEvent(newTestQuery(s.T()), &testEventModel, &TestEventModel{Avatar: "avatar1", IsAdmin: true, IsManage: 0, AdminAt: time.Now(), ManageAt: testNow})
 	s.True(event.IsDirty())
 	s.False(event.IsDirty("Name"))
 	s.False(event.IsDirty("name"))
@@ -258,14 +239,14 @@ func (s *EventTestSuite) TestValidColumn() {
 
 		// The filter an observer sees is the query's own, which is the one the statement being built
 		// writes by.
-		event.query = &Query{builder: querybuilder.NewBuilder(nil)}
+		event.query = compiledQuery(s.T(), &testEventModel, Conditions{})
 		event.query.builder.Select("name")
 		s.True(event.validColumn("Name"))
 		s.True(event.validColumn("name"))
 		s.False(event.validColumn("avatar"))
 		s.False(event.validColumn("Avatar"))
 
-		event.query = &Query{builder: querybuilder.NewBuilder(nil)}
+		event.query = compiledQuery(s.T(), &testEventModel, Conditions{})
 		event.query.conditions.omit = []string{"name"}
 		s.False(event.validColumn("Name"))
 		s.False(event.validColumn("name"))
@@ -280,7 +261,7 @@ func (s *EventTestSuite) TestRawSelectDoesNotMakeZeroValuesValid() {
 		&TestEventModel{},
 		map[string]any{"name": "", "is_admin": false, "manage": 0},
 	} {
-		query := (&Query{builder: querybuilder.NewBuilder(nil)}).SelectRaw("count(*) as total").(*Query)
+		query := compiledQuery(s.T(), &testEventModel, Conditions{}).SelectRaw("count(*) as total").(*Query)
 		event := NewEvent(query, &testEventModel, dest)
 
 		s.False(event.validValue("name", ""))

@@ -43,10 +43,7 @@ func PurgeConnection(name string) error {
 		connection := cached.(cachedConnection)
 		connection.instrument.Shutdown()
 		if connection.db != nil {
-			pool, err := connection.db.DB()
-			if err != nil {
-				failures = append(failures, err)
-			} else if err = pool.Close(); err != nil {
+			if err := connection.db.Close(); err != nil {
 				failures = append(failures, err)
 			}
 		}

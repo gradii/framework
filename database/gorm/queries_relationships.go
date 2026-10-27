@@ -19,7 +19,6 @@ import (
 	"github.com/goravel/framework/errors"
 	"github.com/goravel/framework/support/deep"
 	"github.com/goravel/framework/support/str"
-	gormio "gorm.io/gorm"
 )
 
 // ---------------------------------------------------------------------------
@@ -465,7 +464,7 @@ func (r *Query) applyRelations(builder *querybuilder.Builder) error {
 			continue
 		}
 
-		desc, err := resolveRelation(r.instance, parent, item.relation)
+		desc, err := resolveRelation(parent, item.relation)
 		if err != nil {
 			return err
 		}
@@ -488,7 +487,7 @@ func (r *Query) applyRelations(builder *querybuilder.Builder) error {
 // so the types contribute one clause each to a single group, which the condition's conjunction then
 // attaches to the query.
 func (r *Query) applyMorphRelation(builder *querybuilder.Builder, parent any, item relationExistence, boolean string) error {
-	desc, err := resolveRelation(r.instance, parent, item.relation)
+	desc, err := resolveRelation(parent, item.relation)
 	if err != nil {
 		return err
 	}
@@ -521,7 +520,7 @@ func (r *Query) applyMorphRelation(builder *querybuilder.Builder, parent any, it
 // way the type and its subquery are ANDed inside the group, so the group reads as one alternative per
 // type.
 func (r *Query) applyMorphTypeClause(builder *querybuilder.Builder, desc *relationDescriptor, typeModel any, item relationExistence) error {
-	relatedTable, err := tableNameFor(r.instance, typeModel)
+	relatedTable, err := tableNameFor(typeModel)
 	if err != nil {
 		return err
 	}
@@ -618,7 +617,7 @@ func (r *Query) relatedChild(table string, column string, values []any) *Query {
 	// The child starts from no conditions of its own, as the fresh session it replaced did. Inheriting
 	// the receiver's would carry the parent query's where clause into the child and narrow it to the
 	// rows the parent matched.
-	child := r.wrap(r.freshSession())
+	child := r.fresh()
 
 	conditions := child.conditions
 	conditions.table = &Table{name: table}
@@ -672,7 +671,7 @@ func (r *Query) applyRelationScope(builder *querybuilder.Builder, callback contr
 		return
 	}
 
-	child := r.wrap(r.freshSession())
+	child := r.fresh()
 
 	if scoped, ok := callback(child).(*Query); ok {
 		scoped.applyWhere(builder)
@@ -681,16 +680,6 @@ func (r *Query) applyRelationScope(builder *querybuilder.Builder, callback contr
 	}
 
 	child.applyWhere(builder)
-}
-
-func (r *Query) freshSession() *gormio.DB {
-	return r.instance.Session(&gormio.Session{NewDB: true, Initialized: true})
-}
-
-// wrap turns a fresh GORM DB into a Goravel Query wrapper so user callbacks can use the
-// familiar Where/OrWhere/etc. surface.
-func (r *Query) wrap(db *gormio.DB) *Query {
-	return NewQuery(r.ctx, r.config, r.dbConfig, db, r.grammar, r.log, r.modelToObserver, nil, r.telemetryResolver)
 }
 
 func (r *Query) parentModel() any {
@@ -708,7 +697,7 @@ func (r *Query) parentModel() any {
 }
 
 func (r *Query) parentTable(parent any) string {
-	if t, err := tableNameFor(r.instance, parent); err == nil {
+	if t, err := tableNameFor(parent); err == nil {
 		return t
 	}
 	return ""

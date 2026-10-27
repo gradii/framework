@@ -1,46 +1,22 @@
 package gorm
 
 import (
+	"database/sql"
 	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	gormio "gorm.io/gorm"
-	"gorm.io/gorm/callbacks"
-	"gorm.io/gorm/clause"
-	gormschema "gorm.io/gorm/schema"
 
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
 	"github.com/goravel/framework/errors"
 )
 
-// stubDialector is a no-op dialector that lets us spin up a *gormio.DB without an actual
-// connection. It registers the standard callbacks so DryRun-mode SQL can still be built.
-type stubDialector struct{}
-
-func (stubDialector) Name() string { return "stub" }
-func (stubDialector) Initialize(db *gormio.DB) error {
-	callbacks.RegisterDefaultCallbacks(db, &callbacks.Config{})
-	return nil
-}
-func (stubDialector) Migrator(db *gormio.DB) gormio.Migrator             { return nil }
-func (stubDialector) DataTypeOf(*gormschema.Field) string                { return "TEXT" }
-func (stubDialector) DefaultValueOf(*gormschema.Field) clause.Expression { return clause.Expr{} }
-func (stubDialector) BindVarTo(writer clause.Writer, _ *gormio.Statement, _ any) {
-	_ = writer.WriteByte('?')
-}
-func (stubDialector) QuoteTo(writer clause.Writer, str string) {
-	_, _ = writer.WriteString(`"` + str + `"`)
-}
-func (stubDialector) Explain(sql string, _ ...any) string { return sql }
-
-func newStubGormDB(t *testing.T) *gormio.DB {
+// stubWriter is the connection a test that only compiles statement gets: compiling reads a model and
+// a grammar, never the pool, so no database has to stand behind it.
+func stubWriter(t *testing.T) *sql.DB {
 	t.Helper()
-	db, err := gormio.Open(stubDialector{}, &gormio.Config{})
-	if err != nil {
-		t.Fatalf("open stub gorm: %v", err)
-	}
-	return db
+
+	return nil
 }
 
 // --- Test fixtures ---------------------------------------------------------
@@ -170,16 +146,14 @@ func (relPost) TableName() string { return "rel_posts" }
 // --- Schema-dependent helpers ---------------------------------------------
 
 func TestTableNameFor(t *testing.T) {
-	db := newStubGormDB(t)
-
 	// A model that declares no table is a named error naming its type and the method to add: there
 	// is no naming-strategy fallback left to name it silently.
-	_, err := tableNameFor(db, &undeclaredTableModel{})
+	_, err := tableNameFor(&undeclaredTableModel{})
 	assert.True(t, errors.Is(err, errors.OrmQueryTableNotSet))
 	assert.EqualError(t, err, "*gorm.undeclaredTableModel: Table not set, please add a TableName() method returning the table name")
 
 	// A non-struct value is rejected with the same named error, naming the type it was handed.
-	_, err = tableNameFor(db, "not-a-model")
+	_, err = tableNameFor("not-a-model")
 	assert.True(t, errors.Is(err, errors.OrmQueryTableNotSet))
 }
 
@@ -210,53 +184,41 @@ func (*pointerReceiverTableModel) TableName() string { return "pointer_receiver_
 // Without that unwrapping the count that Paginate runs first fails with "Table not set" for a model
 // that declares its table.
 func TestTableNameFor_SliceDestination(t *testing.T) {
-	db := newStubGormDB(t)
-
-	name, err := tableNameFor(db, &[]declaredTableModel{})
+	name, err := tableNameFor(&[]declaredTableModel{})
 	assert.NoError(t, err)
 	assert.Equal(t, "declared_things", name)
 
-	name, err = tableNameFor(db, []declaredTableModel{})
+	name, err = tableNameFor([]declaredTableModel{})
 	assert.NoError(t, err)
 	assert.Equal(t, "declared_things", name)
 
 	// The enforcement still holds for a slice of a model that declares no table: the error names
 	// the model type, not the slice.
-	_, err = tableNameFor(db, &[]undeclaredTableModel{})
+	_, err = tableNameFor(&[]undeclaredTableModel{})
 	assert.True(t, errors.Is(err, errors.OrmQueryTableNotSet))
 	assert.EqualError(t, err, "*gorm.undeclaredTableModel: Table not set, please add a TableName() method returning the table name")
 }
 
 func TestTableNameFor_DeclaredNameWins(t *testing.T) {
-	db := newStubGormDB(t)
-
 	// A model that declares TableName() resolves to exactly that name, with no pluralization
 	// applied to it.
-	name, err := tableNameFor(db, &declaredTableModel{})
+	name, err := tableNameFor(&declaredTableModel{})
 	assert.NoError(t, err)
 	assert.Equal(t, "declared_things", name)
 
-	// The declared name is returned bare even when the connection carries a prefix: applying the
-	// prefix belongs to the renderer, which applies it exactly once (see TestTablePrefixAppliedOnce).
-	prefixed, err := gormio.Open(stubDialector{}, &gormio.Config{
-		NamingStrategy: gormschema.NamingStrategy{TablePrefix: "app_"},
-	})
-	assert.NoError(t, err)
-
-	name, err = tableNameFor(prefixed, &declaredTableModel{})
-	assert.NoError(t, err)
-	assert.Equal(t, "declared_things", name)
+	// The name is returned bare, with no connection prefix applied: tableNameFor takes no connection
+	// at all, and applying the prefix belongs to the renderer, exactly once (see
+	// TestTablePrefixAppliedOnce).
+	assert.NotContains(t, name, "app_")
 }
 
 func TestTableNameFor_PointerReceiver(t *testing.T) {
-	db := newStubGormDB(t)
-
-	name, err := tableNameFor(db, &pointerReceiverTableModel{})
+	name, err := tableNameFor(&pointerReceiverTableModel{})
 	assert.NoError(t, err)
 	assert.Equal(t, "pointer_receiver_things", name)
 
 	// A value argument reaches the pointer-receiver method through an addressable copy.
-	name, err = tableNameFor(db, pointerReceiverTableModel{})
+	name, err = tableNameFor(pointerReceiverTableModel{})
 	assert.NoError(t, err)
 	assert.Equal(t, "pointer_receiver_things", name)
 }
@@ -264,20 +226,17 @@ func TestTableNameFor_PointerReceiver(t *testing.T) {
 // --- resolveRelation across all kinds -------------------------------------
 
 func TestResolveRelation_Empty(t *testing.T) {
-	db := newStubGormDB(t)
-	_, err := resolveRelation(db, &relUser{}, "")
+	_, err := resolveRelation(&relUser{}, "")
 	assert.True(t, errors.Is(err, errors.OrmQueryEmptyRelation))
 }
 
 func TestResolveRelation_NotFound(t *testing.T) {
-	db := newStubGormDB(t)
-	_, err := resolveRelation(db, &relUser{}, "Missing")
+	_, err := resolveRelation(&relUser{}, "Missing")
 	assert.True(t, errors.Is(err, errors.OrmRelationNotFound))
 }
 
 func TestResolveRelation_HasMany(t *testing.T) {
-	db := newStubGormDB(t)
-	desc, err := resolveRelation(db, &relUser{}, "Books")
+	desc, err := resolveRelation(&relUser{}, "Books")
 	assert.NoError(t, err)
 	assert.Equal(t, relKindHasMany, desc.kind)
 	assert.Equal(t, "rel_users", desc.parentTable)
@@ -286,24 +245,21 @@ func TestResolveRelation_HasMany(t *testing.T) {
 }
 
 func TestResolveRelation_HasOne(t *testing.T) {
-	db := newStubGormDB(t)
-	desc, err := resolveRelation(db, &relUser{}, "Profile")
+	desc, err := resolveRelation(&relUser{}, "Profile")
 	assert.NoError(t, err)
 	assert.Equal(t, relKindHasOne, desc.kind)
 	assert.Equal(t, "rel_profiles", desc.relatedTable)
 }
 
 func TestResolveRelation_BelongsTo(t *testing.T) {
-	db := newStubGormDB(t)
-	desc, err := resolveRelation(db, &relBook{}, "Author")
+	desc, err := resolveRelation(&relBook{}, "Author")
 	assert.NoError(t, err)
 	assert.Equal(t, relKindBelongsTo, desc.kind)
 	assert.Equal(t, "rel_users", desc.relatedTable)
 }
 
 func TestResolveRelation_Many2Many(t *testing.T) {
-	db := newStubGormDB(t)
-	desc, err := resolveRelation(db, &relUser{}, "Roles")
+	desc, err := resolveRelation(&relUser{}, "Roles")
 	assert.NoError(t, err)
 	assert.Equal(t, relKindMany2Many, desc.kind)
 	assert.Equal(t, "rel_user_roles", desc.pivotTable)
@@ -312,8 +268,7 @@ func TestResolveRelation_Many2Many(t *testing.T) {
 }
 
 func TestResolveRelation_MorphMany(t *testing.T) {
-	db := newStubGormDB(t)
-	desc, err := resolveRelation(db, &relUser{}, "Houses")
+	desc, err := resolveRelation(&relUser{}, "Houses")
 	assert.NoError(t, err)
 	assert.Equal(t, relKindMorphMany, desc.kind)
 	assert.Equal(t, "houseable_type", desc.morphTypeColumn)
@@ -322,16 +277,14 @@ func TestResolveRelation_MorphMany(t *testing.T) {
 }
 
 func TestResolveRelation_MorphOne(t *testing.T) {
-	db := newStubGormDB(t)
-	desc, err := resolveRelation(db, &relUser{}, "Logo")
+	desc, err := resolveRelation(&relUser{}, "Logo")
 	assert.NoError(t, err)
 	assert.Equal(t, relKindMorphOne, desc.kind)
 	assert.Equal(t, "logoable_type", desc.morphTypeColumn)
 }
 
 func TestResolveRelation_Nested(t *testing.T) {
-	db := newStubGormDB(t)
-	desc, err := resolveRelation(db, &relUser{}, "Books.Author")
+	desc, err := resolveRelation(&relUser{}, "Books.Author")
 	assert.NoError(t, err)
 	assert.Equal(t, "Books", desc.name)
 	assert.NotNil(t, desc.nested)
@@ -340,8 +293,7 @@ func TestResolveRelation_Nested(t *testing.T) {
 }
 
 func TestResolveRelation_HasManyThrough(t *testing.T) {
-	db := newStubGormDB(t)
-	desc, err := resolveRelation(db, &relCountry{}, "Posts")
+	desc, err := resolveRelation(&relCountry{}, "Posts")
 	assert.NoError(t, err)
 	assert.Equal(t, relKindHasManyThrough, desc.kind)
 	assert.Equal(t, "rel_posts", desc.relatedTable)
@@ -357,35 +309,30 @@ func TestResolveRelation_HasManyThrough(t *testing.T) {
 }
 
 func TestResolveRelation_HasOneThrough(t *testing.T) {
-	db := newStubGormDB(t)
-	desc, err := resolveRelation(db, &relCountry{}, "FirstPost")
+	desc, err := resolveRelation(&relCountry{}, "FirstPost")
 	assert.NoError(t, err)
 	assert.Equal(t, relKindHasOneThrough, desc.kind)
 }
 
 func TestResolveRelation_ThroughNotConfigured(t *testing.T) {
-	db := newStubGormDB(t)
-	_, err := resolveRelation(db, &relCountry{}, "NoRelated")
+	_, err := resolveRelation(&relCountry{}, "NoRelated")
 	assert.True(t, errors.Is(err, errors.OrmRelationThroughNotConfigured))
 }
 
 func TestResolveRelation_ThroughBadKind(t *testing.T) {
-	db := newStubGormDB(t)
-	_, err := resolveRelation(db, &relCountry{}, "BadKind")
+	_, err := resolveRelation(&relCountry{}, "BadKind")
 	assert.True(t, errors.Is(err, errors.OrmMorphRelationKindUnknown))
 }
 
 func TestResolveRelation_ThroughNotImplemented(t *testing.T) {
-	db := newStubGormDB(t)
 	// relUser does NOT implement ModelWithThroughRelations.
-	_, err := resolveRelation(db, &relUser{}, "Anything")
+	_, err := resolveRelation(&relUser{}, "Anything")
 	assert.True(t, errors.Is(err, errors.OrmRelationNotFound))
 }
 
 // Sanity: relatedModel is a fresh pointer to the related struct type.
 func TestResolveRelation_RelatedModelType(t *testing.T) {
-	db := newStubGormDB(t)
-	desc, err := resolveRelation(db, &relUser{}, "Books")
+	desc, err := resolveRelation(&relUser{}, "Books")
 	assert.NoError(t, err)
 	rt := reflect.TypeOf(desc.relatedModel)
 	assert.Equal(t, reflect.Pointer, rt.Kind())
@@ -461,8 +408,7 @@ func (morphMissingRelated) Relations() map[string]contractsorm.Relation {
 // --- Morph relation resolution tests ---
 
 func TestResolveRelation_MorphTo(t *testing.T) {
-	db := newStubGormDB(t)
-	desc, err := resolveRelation(db, &morphImage{}, "Imageable")
+	desc, err := resolveRelation(&morphImage{}, "Imageable")
 	assert.NoError(t, err)
 	assert.Equal(t, relKindMorphTo, desc.kind)
 	assert.Equal(t, "imageable_type", desc.morphTypeColumn)
@@ -473,8 +419,7 @@ func TestResolveRelation_MorphTo(t *testing.T) {
 }
 
 func TestResolveRelation_MorphToMany(t *testing.T) {
-	db := newStubGormDB(t)
-	desc, err := resolveRelation(db, &morphPost{}, "Tags")
+	desc, err := resolveRelation(&morphPost{}, "Tags")
 	assert.NoError(t, err)
 	assert.Equal(t, relKindMorphToMany, desc.kind)
 	assert.Equal(t, "taggables", desc.pivotTable)
@@ -486,8 +431,7 @@ func TestResolveRelation_MorphToMany(t *testing.T) {
 }
 
 func TestResolveRelation_MorphedByMany(t *testing.T) {
-	db := newStubGormDB(t)
-	desc, err := resolveRelation(db, &morphTag{}, "Posts")
+	desc, err := resolveRelation(&morphTag{}, "Posts")
 	assert.NoError(t, err)
 	assert.Equal(t, relKindMorphToMany, desc.kind)
 	assert.True(t, desc.morphInverse)
@@ -496,14 +440,12 @@ func TestResolveRelation_MorphedByMany(t *testing.T) {
 }
 
 func TestResolveRelation_MorphBadKind(t *testing.T) {
-	db := newStubGormDB(t)
-	_, err := resolveRelation(db, &morphBadKind{}, "X")
+	_, err := resolveRelation(&morphBadKind{}, "X")
 	assert.True(t, errors.Is(err, errors.OrmMorphRelationKindUnknown))
 }
 
 func TestResolveRelation_MorphMissingRelated(t *testing.T) {
-	db := newStubGormDB(t)
-	_, err := resolveRelation(db, &morphMissingRelated{}, "X")
+	_, err := resolveRelation(&morphMissingRelated{}, "X")
 	assert.True(t, errors.Is(err, errors.OrmMorphRelationMissingField))
 }
 
@@ -552,19 +494,16 @@ type forbiddenMany2ManyChild struct {
 func (forbiddenMany2ManyChild) TableName() string { return "forbidden_many_2_many_children" }
 
 func TestResolveRelation_ForbidsPolymorphicTag(t *testing.T) {
-	db := newStubGormDB(t)
-	_, err := resolveRelation(db, &forbiddenPolymorphicParent{}, "Houses")
+	_, err := resolveRelation(&forbiddenPolymorphicParent{}, "Houses")
 	assert.True(t, errors.Is(err, errors.OrmRelationTagForbidden))
 }
 
 func TestResolveRelation_ForbidsForeignKeyTag(t *testing.T) {
-	db := newStubGormDB(t)
-	_, err := resolveRelation(db, &forbiddenForeignKeyParent{}, "Books")
+	_, err := resolveRelation(&forbiddenForeignKeyParent{}, "Books")
 	assert.True(t, errors.Is(err, errors.OrmRelationTagForbidden))
 }
 
 func TestResolveRelation_ForbidsMany2ManyTag(t *testing.T) {
-	db := newStubGormDB(t)
-	_, err := resolveRelation(db, &forbiddenMany2ManyParent{}, "Roles")
+	_, err := resolveRelation(&forbiddenMany2ManyParent{}, "Roles")
 	assert.True(t, errors.Is(err, errors.OrmRelationTagForbidden))
 }

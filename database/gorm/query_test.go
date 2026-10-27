@@ -9,7 +9,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	gormio "gorm.io/gorm"
 
 	contractsdatabase "github.com/goravel/framework/contracts/database"
 	contractsdriver "github.com/goravel/framework/contracts/database/driver"
@@ -22,6 +21,7 @@ import (
 	mocksconfig "github.com/goravel/framework/mocks/config"
 	"github.com/goravel/framework/support/carbon"
 	"github.com/goravel/framework/support/convert"
+	basedatabase "github.com/goravel/framework/support/database"
 )
 
 func TestAddGlobalScopes(t *testing.T) {
@@ -37,7 +37,7 @@ func TestAddGlobalScopes(t *testing.T) {
 			setupQuery: func() *Query {
 				conditions := Conditions{}
 				conditions.model = &ModelWithGlobalScopes{}
-				query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, &conditions, nil)
+				query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
 				return query
 			},
 			expectedScopesApplied: true,
@@ -48,7 +48,7 @@ func TestAddGlobalScopes(t *testing.T) {
 			setupQuery: func() *Query {
 				conditions := Conditions{}
 				conditions.model = &ModelWithoutGlobalScopes{}
-				query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, &conditions, nil)
+				query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
 				return query
 			},
 			expectedScopesApplied: false,
@@ -60,7 +60,7 @@ func TestAddGlobalScopes(t *testing.T) {
 				conditions := Conditions{}
 				conditions.model = &ModelWithGlobalScopes{}
 				conditions.withoutGlobalScopes = []string{"*"}
-				query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, &conditions, nil)
+				query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
 				return query
 			},
 			expectedScopesApplied: false,
@@ -72,7 +72,7 @@ func TestAddGlobalScopes(t *testing.T) {
 				conditions := Conditions{}
 				conditions.model = &ModelWithGlobalScopes{}
 				conditions.withoutGlobalScopes = []string{"active"}
-				query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, &conditions, nil)
+				query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
 				return query
 			},
 			expectedScopesApplied: true,
@@ -82,7 +82,7 @@ func TestAddGlobalScopes(t *testing.T) {
 			name: "should not apply scopes when model is nil",
 			setupQuery: func() *Query {
 				conditions := Conditions{}
-				query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, &conditions, nil)
+				query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
 				return query
 			},
 			expectedScopesApplied: false,
@@ -93,7 +93,7 @@ func TestAddGlobalScopes(t *testing.T) {
 			setupQuery: func() *Query {
 				conditions := Conditions{}
 				conditions.dest = &ModelWithGlobalScopes{}
-				query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, &conditions, nil)
+				query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
 				return query
 			},
 			expectedScopesApplied: true,
@@ -104,7 +104,7 @@ func TestAddGlobalScopes(t *testing.T) {
 			setupQuery: func() *Query {
 				conditions := Conditions{}
 				conditions.model = &ModelWithEmptyGlobalScopes{}
-				query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, &conditions, nil)
+				query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
 				return query
 			},
 			expectedScopesApplied: false,
@@ -115,7 +115,7 @@ func TestAddGlobalScopes(t *testing.T) {
 			setupQuery: func() *Query {
 				conditions := Conditions{}
 				conditions.model = &ModelWithGlobalScopes{}
-				query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, &conditions, nil)
+				query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
 				return query
 			},
 			expectedScopesApplied: true,
@@ -127,7 +127,7 @@ func TestAddGlobalScopes(t *testing.T) {
 				conditions := Conditions{}
 				conditions.model = &ModelWithGlobalScopes{}
 				conditions.withoutGlobalScopes = []string{"active", "verified"}
-				query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, &conditions, nil)
+				query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
 				return query
 			},
 			expectedScopesApplied: false,
@@ -180,7 +180,7 @@ func TestAddGlobalScopesWithPointerTypes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			conditions := Conditions{}
 			conditions.model = tt.model
-			query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, &conditions, nil)
+			query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
 
 			result := query.addGlobalScopes()
 
@@ -216,7 +216,7 @@ func TestAddGlobalScopesWithSliceAndArray(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			conditions := Conditions{}
 			conditions.model = tt.model
-			query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, &conditions, nil)
+			query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
 
 			result := query.addGlobalScopes()
 
@@ -323,7 +323,7 @@ func TestFilterFindConditions(t *testing.T) {
 
 func TestGetDeletedAtColumnName(t *testing.T) {
 	type Test1 struct {
-		Deleted gormio.DeletedAt
+		Deleted basedatabase.DeletedAt
 	}
 
 	// The result is the database column, not the Go field name, because callers feed it straight
@@ -340,7 +340,7 @@ func TestGetDeletedAtColumnName(t *testing.T) {
 
 	// An explicit column tag wins over the snake_cased field name.
 	type Tagged struct {
-		DeletedAt gormio.DeletedAt `gorm:"column:removed_at"`
+		DeletedAt basedatabase.DeletedAt `gorm:"column:removed_at"`
 	}
 
 	assert.Equal(t, "removed_at", getDeletedAtColumn(Tagged{}))
@@ -1134,17 +1134,11 @@ func newGetColumnsQuery(t *testing.T) (*Query, *recordingSQLDriver) {
 	sqlDB := sql.OpenDB(recordingConnector{driver: recorder})
 	t.Cleanup(func() { _ = sqlDB.Close() })
 
-	db, err := gormio.Open(stubDialector{}, &gormio.Config{
-		ConnPool:             sqlDB,
-		DisableAutomaticPing: true,
-	})
-	if err != nil {
-		t.Fatalf("open recording gorm: %v", err)
-	}
-
 	conditions := Conditions{model: &getColumnsUser{}}
 
-	return NewQuery(context.Background(), nil, contractsdatabase.Config{}, db, nil, nil, nil, &conditions, nil), recorder
+	// The recording pool is the query's writer directly: the ORM compiles its own statements now, so
+	// there is no ORM session between the query and the pool.
+	return NewQuery(context.Background(), nil, contractsdatabase.Config{}, sqlDB, nil, nil, nil, nil, &conditions, nil), recorder
 }
 
 // TestBasicSelectWithGetColumns ports Laravel's testBasicSelectWithGetColumns. A column list passed
@@ -1209,9 +1203,6 @@ func TestBasicSelectUseWritePdo(t *testing.T) {
 
 	writer := &recordingSQLDriver{}
 	reader := &recordingSQLDriver{}
-	writerPool := sql.OpenDB(recordingConnector{driver: writer})
-	readerPool := sql.OpenDB(recordingConnector{driver: reader})
-	require.NotSame(t, writerPool, readerPool)
 
 	config := mocksconfig.NewConfig(t)
 	config.EXPECT().GetInt("database.pool.max_idle_conns", 10).Return(10).Times(2)
@@ -1219,9 +1210,11 @@ func TestBasicSelectUseWritePdo(t *testing.T) {
 	config.EXPECT().GetDuration("database.pool.conn_max_idletime", time.Duration(3600)).Return(time.Duration(3600)).Times(2)
 	config.EXPECT().GetDuration("database.pool.conn_max_lifetime", time.Duration(3600)).Return(time.Duration(3600)).Times(2)
 
+	// Each candidate connection supplies the connector that opens its pool, so the connection the
+	// framework builds runs on the two recording pools and records nothing else.
 	pool := contractsdatabase.Pool{
-		Writers: []contractsdatabase.Config{{Driver: "mysql", Database: "app", Dialector: poolRecordingDialector{pool: writerPool}}},
-		Readers: []contractsdatabase.Config{{Driver: "mysql", Database: "replica", Dialector: poolRecordingDialector{pool: readerPool}}},
+		Writers: []contractsdatabase.Config{{Driver: "mysql", Database: "app", Connector: recordingConnector{driver: writer}}},
+		Readers: []contractsdatabase.Config{{Driver: "mysql", Database: "replica", Connector: recordingConnector{driver: reader}}},
 	}
 
 	conn, err := databasedriver.Open(config, discardQueryLogger{}, pool, "read_write_pdo", nil)
@@ -1230,7 +1223,7 @@ func TestBasicSelectUseWritePdo(t *testing.T) {
 
 	query := NewQuery(context.Background(), config,
 		contractsdatabase.Config{Driver: "mysql", Connection: "read_write_pdo"},
-		conn.Gorm(), nil, nil, nil, &Conditions{model: &getColumnsUser{}}, nil)
+		conn.Writer(), nil, nil, nil, nil, &Conditions{model: &getColumnsUser{}}, nil)
 
 	// get() reads through the replica.
 	var first []getColumnsUser
@@ -1243,23 +1236,6 @@ func TestBasicSelectUseWritePdo(t *testing.T) {
 	assert.NoError(t, query.UseWritePdo().Get(&second))
 	assert.Equal(t, "select * from `users`", writer.last(t).sql)
 	assert.Equal(t, 1, reader.count())
-}
-
-// poolRecordingDialector is stubDialector with a real *sql.DB behind it, so a gorm.DB opened with it
-// can resolve its base pool (the connection's writer pool) rather than having none.
-type poolRecordingDialector struct {
-	stubDialector
-	pool *sql.DB
-}
-
-func (d poolRecordingDialector) Initialize(db *gormio.DB) error {
-	if err := d.stubDialector.Initialize(db); err != nil {
-		return err
-	}
-
-	db.ConnPool = d.pool
-
-	return nil
 }
 
 // discardQueryLogger satisfies the framework's database logger without recording anything; this test

@@ -7,10 +7,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"gorm.io/gorm"
 
 	"github.com/goravel/framework/database/orm"
 	"github.com/goravel/framework/errors"
+	basedatabase "github.com/goravel/framework/support/database"
 )
 
 type User struct {
@@ -389,7 +389,7 @@ func TestIsSQLNullType(t *testing.T) {
 		{"sql.NullInt64", sql.NullInt64{}, true},
 		{"sql.NullBool", sql.NullBool{}, true},
 		{"sql.NullFloat64", sql.NullFloat64{}, true},
-		{"gorm.DeletedAt", gorm.DeletedAt{}, true},
+		{"database.DeletedAt", basedatabase.DeletedAt{}, true},
 		{"Regular string", "", false},
 		{"Pointer", (*string)(nil), false},
 		{"Struct", struct{ Name string }{}, false},

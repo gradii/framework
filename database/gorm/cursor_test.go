@@ -7,7 +7,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	gormio "gorm.io/gorm"
 
 	contractsdatabase "github.com/goravel/framework/contracts/database"
 	querybuilder "github.com/goravel/framework/database/query"
@@ -24,15 +23,7 @@ func newCursorQuery(t *testing.T, conditions Conditions) (*Query, *recordingSQLD
 	sqlDB := sql.OpenDB(recordingConnector{driver: recorder})
 	t.Cleanup(func() { _ = sqlDB.Close() })
 
-	db, err := gormio.Open(stubDialector{}, &gormio.Config{
-		ConnPool:             sqlDB,
-		DisableAutomaticPing: true,
-	})
-	if err != nil {
-		t.Fatalf("open recording gorm: %v", err)
-	}
-
-	return NewQuery(context.Background(), nil, contractsdatabase.Config{Driver: "mysql"}, db, nil, nil, nil, &conditions, nil), recorder
+	return NewQuery(context.Background(), nil, contractsdatabase.Config{Driver: "mysql"}, sqlDB, nil, nil, nil, nil, &conditions, nil), recorder
 }
 
 // TestCursorPaginateFirstPage pins the statement a first page compiles to: the query's ORDER BY, and

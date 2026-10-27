@@ -97,7 +97,7 @@ func (r *Query) structRecord(value any) (map[string]any, error) {
 		return nil, errors.DatabaseUnsupportedType.Args(reflect.TypeOf(value).String(), "struct")
 	}
 
-	schema, err := parseSchemaWithTable(r.instance, value, r.declaredTable())
+	schema, err := parseSchemaWithTable(value, r.declaredTable())
 	if err != nil {
 		return nil, err
 	}
@@ -227,7 +227,7 @@ func (r *Query) insertSchema() *modelSchema {
 		return nil
 	}
 
-	schema, err := parseSchemaWithTable(r.instance, model, r.declaredTable())
+	schema, err := parseSchemaWithTable(model, r.declaredTable())
 	if err != nil {
 		return nil
 	}
@@ -473,7 +473,7 @@ func (r *Query) assignInsertedKey(dest any, key any) {
 		model = dest
 	}
 
-	schema, err := parseSchemaWithTable(r.instance, model, r.declaredTable())
+	schema, err := parseSchemaWithTable(model, r.declaredTable())
 	if err != nil || len(schema.PrimaryFields) == 0 {
 		return
 	}

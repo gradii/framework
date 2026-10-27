@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"reflect"
+	"time"
 
 	contractsdb "github.com/goravel/framework/contracts/database/db"
 	databasedriver "github.com/goravel/framework/database/driver"
@@ -19,6 +20,13 @@ import (
 // in this package, so execution needs its own path: a statement goes to the connection's pool, and
 // rows are decoded using the ORM's field-name mapping.
 
+// The pool a statement ran on, reported on its span. The names are the ones the read/write
+// resolver used to report through its context value, so a dashboard does not have to change.
+const (
+	resolverModeRead  = "read"
+	resolverModeWrite = "write"
+)
+
 // statementPool is what a compiled statement runs on. A connection's writer or reader is a
 // *sql.DB; a query bound to a transaction has to run on that transaction's *sql.Tx instead, so both
 // are used through the small interface of methods they share.
@@ -30,19 +38,12 @@ type statementPool interface {
 // transaction returns the *sql.Tx a compiled statement has to run on when the query is bound to a
 // transaction, and whether it is.
 //
-// The handle is read from the statement's own connection pool because gorm's (*DB).DB() — which the
-// pool helpers used to call — unwraps a *sql.Tx back to the *sql.DB underneath it. A statement run
-// through that base pool executes in auto-commit, so a Rollback rolls nothing back and a FOR UPDATE
-// takes no lock; the transaction would exist on paper only. GORM swaps the statement's ConnPool for
-// the *sql.Tx when Begin runs, so that is where the real handle lives.
+// The handle is the query's own tx field and nothing else. A statement run through the connection's
+// base pool instead executes in auto-commit, so a Rollback rolls nothing back and a FOR UPDATE
+// takes no lock; the transaction would exist on paper only. Every path that spawns a query carries
+// tx across, which is what keeps a statement inside its transaction.
 func (r *Query) transaction() (*sql.Tx, bool) {
-	if r.instance == nil || r.instance.Statement == nil {
-		return nil, false
-	}
-
-	tx, ok := r.instance.Statement.ConnPool.(*sql.Tx)
-
-	return tx, ok
+	return r.tx, r.tx != nil
 }
 
 // queryPool returns the pool statements execute through: the transaction's own pool when the query
@@ -52,12 +53,11 @@ func (r *Query) queryPool() (statementPool, error) {
 		return tx, nil
 	}
 
-	pool, err := r.instance.DB()
-	if err != nil {
-		return nil, err
+	if r.writer == nil {
+		return nil, errors.DatabaseConnectionIsNil
 	}
 
-	return pool, nil
+	return r.writer, nil
 }
 
 // readPool returns the pool compiled reads execute through: the replica the connection was
@@ -103,6 +103,59 @@ func (r *Query) inTransaction() bool {
 	return ok
 }
 
+// startStatementSpan opens the telemetry span for one statement and returns the context to run it in
+// plus the function that closes the span. When telemetry is off — or the connection was never opened,
+// as in the package's own unit tests — the context is the query's own and the closer does nothing, so
+// callers need no branch of their own.
+func (r *Query) startStatementSpan(resolverMode string) (context.Context, func(statement, table string, rows int64, err error)) {
+	ctx := r.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	instrument := databasedriver.Instrument(r.dbConfig.Connection)
+	if !instrument.Active() {
+		return ctx, func(string, string, int64, error) {}
+	}
+
+	ctx, span := instrument.StartSpan(ctx, "db")
+	start := time.Now()
+
+	return ctx, func(statement, table string, rows int64, err error) {
+		instrument.EndSpan(ctx, span, start, statement, table, rows, err, resolverMode)
+	}
+}
+
+// statementTable names the table a statement addresses, for the span and the query log: the table the
+// caller named on the query, or the model's own when they named none.
+func (r *Query) statementTable() string {
+	if table := r.declaredTable(); table != "" {
+		return table
+	}
+
+	model := r.parentModel()
+	if model == nil {
+		return ""
+	}
+
+	table, err := tableNameFor(model)
+	if err != nil {
+		return ""
+	}
+
+	return table
+}
+
+// poolResolverMode reports which pool a statement ran on, for the span: a replica when the pool is the
+// connection's reader, the writer otherwise. A transaction always runs on the writer.
+func (r *Query) poolResolverMode(pool statementPool) string {
+	if reader := databasedriver.Reader(r.dbConfig.Connection); reader != nil && statementPool(reader) == pool {
+		return resolverModeRead
+	}
+
+	return resolverModeWrite
+}
+
 // queryRows runs a compiled read and returns the result set. Callers own the rows.
 func (r *Query) queryRows(statement string, bindings []any) (*sql.Rows, error) {
 	pool, err := r.readPool()
@@ -110,9 +163,11 @@ func (r *Query) queryRows(statement string, bindings []any) (*sql.Rows, error) {
 		return nil, err
 	}
 
+	ctx, end := r.startStatementSpan(resolverModeRead)
 	begin := carbon.Now()
-	rows, err := pool.QueryContext(r.ctx, querybuilder.ReplacePlaceholders(statement, r.dbConfig.Driver), bindings...)
+	rows, err := pool.QueryContext(ctx, querybuilder.ReplacePlaceholders(statement, r.dbConfig.Driver), bindings...)
 	r.trace(begin, statement, bindings, -1, err)
+	end(statement, r.statementTable(), -1, err)
 
 	return rows, err
 }
@@ -141,10 +196,12 @@ func (r *Query) writerScalar(dest any, statement string, bindings []any) error {
 // scanScalar runs a statement expected to yield one row on the given pool and scans its single
 // column into dest.
 func (r *Query) scanScalar(pool statementPool, dest any, statement string, bindings []any) error {
+	ctx, end := r.startStatementSpan(r.poolResolverMode(pool))
 	begin := carbon.Now()
-	rows, err := pool.QueryContext(r.ctx, querybuilder.ReplacePlaceholders(statement, r.dbConfig.Driver), bindings...)
+	rows, err := pool.QueryContext(ctx, querybuilder.ReplacePlaceholders(statement, r.dbConfig.Driver), bindings...)
 	if err != nil {
 		r.trace(begin, statement, bindings, -1, err)
+		end(statement, r.statementTable(), -1, err)
 
 		return err
 	}
@@ -155,22 +212,26 @@ func (r *Query) scanScalar(pool statementPool, dest any, statement string, bindi
 	if !rows.Next() {
 		if err := rows.Err(); err != nil {
 			r.trace(begin, statement, bindings, -1, err)
+			end(statement, r.statementTable(), -1, err)
 
 			return err
 		}
 
 		r.trace(begin, statement, bindings, 0, nil)
+		end(statement, r.statementTable(), 0, nil)
 
 		return sql.ErrNoRows
 	}
 
 	if err := rows.Scan(dest); err != nil {
 		r.trace(begin, statement, bindings, -1, err)
+		end(statement, r.statementTable(), -1, err)
 
 		return err
 	}
 
 	r.trace(begin, statement, bindings, 1, nil)
+	end(statement, r.statementTable(), 1, nil)
 
 	return nil
 }
@@ -187,10 +248,12 @@ func (r *Query) execStatement(statement string, bindings []any) (*contractsdb.Re
 		return nil, err
 	}
 
+	ctx, end := r.startStatementSpan(resolverModeWrite)
 	begin := carbon.Now()
-	result, err := pool.ExecContext(r.ctx, querybuilder.ReplacePlaceholders(statement, r.dbConfig.Driver), bindings...)
+	result, err := pool.ExecContext(ctx, querybuilder.ReplacePlaceholders(statement, r.dbConfig.Driver), bindings...)
 	if err != nil {
 		r.trace(begin, statement, bindings, -1, err)
+		end(statement, r.statementTable(), -1, err)
 
 		return nil, err
 	}
@@ -198,11 +261,13 @@ func (r *Query) execStatement(statement string, bindings []any) (*contractsdb.Re
 	affected, err := result.RowsAffected()
 	if err != nil {
 		r.trace(begin, statement, bindings, -1, err)
+		end(statement, r.statementTable(), -1, err)
 
 		return nil, err
 	}
 
 	r.trace(begin, statement, bindings, affected, nil)
+	end(statement, r.statementTable(), affected, nil)
 
 	return &contractsdb.Result{RowsAffected: affected}, nil
 }

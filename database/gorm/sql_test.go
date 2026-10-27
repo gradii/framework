@@ -33,7 +33,7 @@ func compiledQuery(t *testing.T, model any, conditions Conditions) *Query {
 
 	conditions.model = model
 
-	return NewQuery(context.Background(), nil, contractsdatabase.Config{}, newStubGormDB(t), nil, nil, nil, &conditions, nil)
+	return NewQuery(context.Background(), nil, contractsdatabase.Config{}, stubWriter(t), nil, nil, nil, nil, &conditions, nil)
 }
 
 func TestCompileSelect_WhereOrderLimit(t *testing.T) {
@@ -155,7 +155,7 @@ func TestCompileSelect_OrConnectorSurvivesEveryDispatchBranch(t *testing.T) {
 				{Query: "tags", Args: []any{2}, Or: true, Type: contractsdriver.WhereTypeJsonLength},
 			},
 		}
-		query := NewQuery(context.Background(), nil, contractsdatabase.Config{Driver: "postgres"}, newStubGormDB(t), nil, nil, nil, &conditions, nil)
+		query := NewQuery(context.Background(), nil, contractsdatabase.Config{Driver: "postgres"}, stubWriter(t), nil, nil, nil, nil, &conditions, nil)
 		query.queryGrammar, _ = querybuilder.NewGrammar("postgres", "")
 
 		sql, _, err := query.compileSelect()

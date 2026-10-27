@@ -34,7 +34,7 @@ func compileInsertForDriver(t *testing.T, driver string, model any) string {
 
 	conditions := Conditions{model: model}
 	query := NewQuery(context.Background(), nil, contractsdatabase.Config{Driver: driver},
-		newStubGormDB(t), nil, nil, nil, &conditions, nil)
+		stubWriter(t), nil, nil, nil, nil, &conditions, nil)
 
 	sql, _, err := query.compileInsertAll([]map[string]any{{"name": "x"}})
 	require.NoError(t, err)
@@ -72,7 +72,7 @@ func TestCompileInsertReportsTheModelsPrimaryKeyColumn(t *testing.T) {
 	t.Run("a query naming no model keeps the default key", func(t *testing.T) {
 		conditions := Conditions{}
 		query := NewQuery(context.Background(), nil, contractsdatabase.Config{Driver: "PostgreSQL"},
-			newStubGormDB(t), nil, nil, nil, &conditions, nil)
+			stubWriter(t), nil, nil, nil, nil, &conditions, nil)
 
 		sql, _, err := query.compileInsertAll([]map[string]any{{"name": "x"}})
 		require.NoError(t, err)

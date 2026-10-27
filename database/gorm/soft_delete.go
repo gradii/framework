@@ -3,8 +3,6 @@ package gorm
 import (
 	"reflect"
 
-	gormio "gorm.io/gorm"
-
 	basedatabase "github.com/goravel/framework/support/database"
 )
 
@@ -16,12 +14,6 @@ import (
 // support/database.DeletedAt, which implements none of the clause interfaces GORM recognises. Both
 // helpers below are gated on the model actually declaring that type, which keeps GORM's behaviour
 // untouched for models that have not been migrated yet.
-
-// isUnscoped reports whether a statement has been marked unscoped, which is how WithTrashed and
-// ForceDelete disable soft deletion.
-func isUnscoped(db *gormio.DB) bool {
-	return db == nil || db.Statement == nil || db.Statement.Unscoped
-}
 
 // usesFrameworkSoftDelete reports whether the model's soft-delete field is the framework's own
 // type, and therefore needs the predicate built by the compiled path rather than by GORM.

@@ -9,7 +9,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	gormio "gorm.io/gorm"
 
 	contractsdatabase "github.com/goravel/framework/contracts/database"
 	querybuilder "github.com/goravel/framework/database/query"
@@ -113,10 +112,7 @@ func newPostgresKeyQuery(t *testing.T, model any) (*Query, *recordingSQLDriver) 
 	sqlDB := sql.OpenDB(recordingConnector{driver: recordDriver})
 	t.Cleanup(func() { _ = sqlDB.Close() })
 
-	db, err := gormio.Open(stubDialector{}, &gormio.Config{ConnPool: sqlDB, DisableAutomaticPing: true})
-	require.NoError(t, err)
-
 	conditions := Conditions{model: model}
 
-	return NewQuery(context.Background(), nil, contractsdatabase.Config{Driver: "PostgreSQL"}, db, nil, nil, nil, &conditions, nil), recordDriver
+	return NewQuery(context.Background(), nil, contractsdatabase.Config{Driver: "PostgreSQL"}, sqlDB, nil, nil, nil, nil, &conditions, nil), recordDriver
 }
