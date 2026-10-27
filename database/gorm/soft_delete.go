@@ -3,7 +3,7 @@ package gorm
 import (
 	"reflect"
 
-	basedatabase "github.com/goravel/framework/support/database"
+	databaseorm "github.com/goravel/framework/database/orm"
 )
 
 // Soft-delete decisions shared by the delete path (delete.go) and the compiled read path (sql.go).
@@ -11,7 +11,7 @@ import (
 // The predicates themselves are built by the compiled twins — applySoftDelete (sql.go) for reads and
 // compileSoftDeleteUpdate (delete.go) for writes — so nothing here touches a GORM statement. GORM's
 // own soft-delete clause deliberately does not apply: the framework models carry
-// support/database.DeletedAt, which implements none of the clause interfaces GORM recognises. Both
+// orm.DeletedAt, which implements none of the clause interfaces GORM recognises. Both
 // helpers below are gated on the model actually declaring that type, which keeps GORM's behaviour
 // untouched for models that have not been migrated yet.
 
@@ -32,5 +32,5 @@ func usesFrameworkSoftDeleteModel(model any) bool {
 
 	fieldType, ok := softDeleteFieldType(model)
 
-	return ok && fieldType == reflect.TypeOf(basedatabase.DeletedAt{})
+	return ok && fieldType == reflect.TypeOf(databaseorm.DeletedAt{})
 }

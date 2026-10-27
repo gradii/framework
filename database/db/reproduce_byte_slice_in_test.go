@@ -36,10 +36,10 @@ func TestIsByteSlice(t *testing.T) {
 // identifies slices but excludes byte slices.
 func TestIsSliceExcludesByteSlice(t *testing.T) {
 	tests := []struct {
-		name               string
-		value              any
-		shouldExpandToIN   bool
-		shouldBindAsValue  bool
+		name              string
+		value             any
+		shouldExpandToIN  bool
+		shouldBindAsValue bool
 	}{
 		{
 			name:              "byte slice should NOT expand to IN",
@@ -96,5 +96,3 @@ func TestByteSliceFaultIsFixed(t *testing.T) {
 	// Verify isByteSlice correctly identifies it:
 	assert.True(t, isByteSlice(byteSlice), "isByteSlice([]byte) should return true")
 }
-
-

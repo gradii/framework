@@ -9,7 +9,7 @@ const (
 	MorphKeyTypeUlid MorphKeyType = "ulid"
 )
 
-var defaultMorphKeyType MorphKeyType = MorphKeyTypeInt
+var defaultMorphKeyType = MorphKeyTypeInt
 
 // SetDefaultMorphKeyType sets the default morph key type
 func SetDefaultMorphKeyType(keyType MorphKeyType) {

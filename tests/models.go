@@ -7,8 +7,8 @@ import (
 	"github.com/brianvoe/gofakeit/v7"
 	"github.com/goravel/framework/contracts/database/factory"
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
+	"github.com/goravel/framework/database/orm"
 	"github.com/goravel/framework/support/carbon"
-	basedatabase "github.com/goravel/framework/support/database"
 )
 
 type contextKey int
@@ -21,7 +21,7 @@ type Model struct {
 }
 
 type SoftDeletes struct {
-	DeletedAt basedatabase.DeletedAt `gorm:"column:deleted_at" json:"deleted_at" db:"deleted_at"`
+	DeletedAt orm.DeletedAt `gorm:"column:deleted_at" json:"deleted_at" db:"deleted_at"`
 }
 
 type Timestamps struct {
@@ -626,7 +626,7 @@ type GlobalScope struct {
 	Model
 	Name      string
 	Avatar    string
-	DeletedAt basedatabase.DeletedAt `gorm:"column:deleted_at" json:"deleted_at" db:"deleted_at"`
+	DeletedAt orm.DeletedAt `gorm:"column:deleted_at" json:"deleted_at" db:"deleted_at"`
 }
 
 func (GlobalScope) TableName() string { return "global_scopes" }

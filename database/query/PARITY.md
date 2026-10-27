@@ -6,12 +6,12 @@
 
 **Source of truth** (Laravel checkout at `/Users/dog/OpenSource/framework`):
 
-| Upstream component | Go implementation |
-|---|---|
-| `Query/Builder.php`, `Query/JoinClause.php` | `database/query`, public adapter `database/db` |
-| `Grammar.php`, `Query/Grammars/*Grammar.php` | `database/query/grammars` |
-| `Query/Processors/*Processor.php` | `database/query/processors` |
-| `Connection.php`, `Concerns/ManagesTransactions.php` | `database/db`, `database/driver` |
+| Upstream component                                                           | Go implementation                                 |
+|------------------------------------------------------------------------------|---------------------------------------------------|
+| `Query/Builder.php`, `Query/JoinClause.php`                                  | `database/query`, public adapter `database/db`    |
+| `Grammar.php`, `Query/Grammars/*Grammar.php`                                 | `database/query/grammars`                         |
+| `Query/Processors/*Processor.php`                                            | `database/query/processors`                       |
+| `Connection.php`, `Concerns/ManagesTransactions.php`                         | `database/db`, `database/driver`                  |
 | `Schema/Builder.php`, `Schema/Blueprint.php`, `Schema/Grammars/*Grammar.php` | `database/schema`, existing v1.18 driver grammars |
 
 The fluent builder lives in `database/query`, shared query types and value utilities in
@@ -63,39 +63,39 @@ Dispatch is `$where['boolean'] . ' ' . $this->{"where{$where['type']}"}($query, 
 the leading boolean stripped by `removeLeadingBoolean` (`preg_replace('/and |or /i', $value, 1)`).
 `concatenateWhereClauses` prefixes `on ` for a `JoinClause` and `where ` otherwise.
 
-| Type | Builder entry | Stored fields | Compiler |
-|---|---|---|---|
-| Basic | where | type, column, operator, value, boolean | whereBasic |
-| Bitwise | where | type, column, operator, value, boolean | whereBitwise |
-| JsonBoolean | where on a `->` path with bool value | type, column, operator, value, boolean | whereJsonBoolean |
-| Column | whereColumn | type, first, operator, second, boolean | whereColumn |
-| raw | whereRaw | type, sql, boolean | whereRaw |
-| In | whereIn | type, column, values, boolean | whereIn |
-| NotIn | whereNotIn | type, column, values, boolean | whereNotIn |
-| InRaw | whereIntegerInRaw | type, column, values, boolean | whereInRaw |
-| NotInRaw | whereIntegerNotInRaw | type, column, values, boolean | whereNotInRaw |
-| Null | whereNull | type, column, boolean | whereNull |
-| NotNull | whereNotNull | type, column, boolean | whereNotNull |
-| between | whereBetween | type, column, values, boolean, not | whereBetween |
-| betweenColumns | whereBetweenColumns | type, column, values, boolean, not | whereBetweenColumns |
-| valueBetween | whereValueBetween | type, value, columns, boolean, not | whereValueBetween |
-| Nested | whereNested | type, query (child Builder), boolean | whereNested |
-| Sub | whereSub | type, column, operator, query, boolean | whereSub |
-| Exists | whereExists | type, query, boolean | whereExists |
-| NotExists | whereNotExists | type, query, boolean | whereNotExists |
-| RowValues | whereRowValues | type, columns, operator, values, boolean | whereRowValues |
-| JsonContains | whereJsonContains | type, column, value, boolean, not | whereJsonContains |
-| JsonContainsKey | whereJsonContainsKey | type, column, boolean, not | whereJsonContainsKey |
-| JsonLength | whereJsonLength | type, column, operator, value, boolean | whereJsonLength |
-| JsonOverlaps | whereJsonOverlaps | type, column, value, boolean, not | whereJsonOverlaps |
-| Fulltext | whereFullText | type, columns, value, options, boolean | whereFullText |
-| Date | whereDate | column, type, boolean, operator, value | whereDate |
-| Time | whereTime | column, type, boolean, operator, value | whereTime |
-| Day | whereDay | column, type, boolean, operator, value | whereDay |
-| Month | whereMonth | column, type, boolean, operator, value | whereMonth |
-| Year | whereYear | column, type, boolean, operator, value | whereYear |
-| Like | whereLike | type, column, value, caseSensitive, boolean, not | whereLike |
-| Expression | where(Expression) | type, column, boolean | whereExpression |
+| Type            | Builder entry                        | Stored fields                                    | Compiler             |
+|-----------------|--------------------------------------|--------------------------------------------------|----------------------|
+| Basic           | where                                | type, column, operator, value, boolean           | whereBasic           |
+| Bitwise         | where                                | type, column, operator, value, boolean           | whereBitwise         |
+| JsonBoolean     | where on a `->` path with bool value | type, column, operator, value, boolean           | whereJsonBoolean     |
+| Column          | whereColumn                          | type, first, operator, second, boolean           | whereColumn          |
+| raw             | whereRaw                             | type, sql, boolean                               | whereRaw             |
+| In              | whereIn                              | type, column, values, boolean                    | whereIn              |
+| NotIn           | whereNotIn                           | type, column, values, boolean                    | whereNotIn           |
+| InRaw           | whereIntegerInRaw                    | type, column, values, boolean                    | whereInRaw           |
+| NotInRaw        | whereIntegerNotInRaw                 | type, column, values, boolean                    | whereNotInRaw        |
+| Null            | whereNull                            | type, column, boolean                            | whereNull            |
+| NotNull         | whereNotNull                         | type, column, boolean                            | whereNotNull         |
+| between         | whereBetween                         | type, column, values, boolean, not               | whereBetween         |
+| betweenColumns  | whereBetweenColumns                  | type, column, values, boolean, not               | whereBetweenColumns  |
+| valueBetween    | whereValueBetween                    | type, value, columns, boolean, not               | whereValueBetween    |
+| Nested          | whereNested                          | type, query (child Builder), boolean             | whereNested          |
+| Sub             | whereSub                             | type, column, operator, query, boolean           | whereSub             |
+| Exists          | whereExists                          | type, query, boolean                             | whereExists          |
+| NotExists       | whereNotExists                       | type, query, boolean                             | whereNotExists       |
+| RowValues       | whereRowValues                       | type, columns, operator, values, boolean         | whereRowValues       |
+| JsonContains    | whereJsonContains                    | type, column, value, boolean, not                | whereJsonContains    |
+| JsonContainsKey | whereJsonContainsKey                 | type, column, boolean, not                       | whereJsonContainsKey |
+| JsonLength      | whereJsonLength                      | type, column, operator, value, boolean           | whereJsonLength      |
+| JsonOverlaps    | whereJsonOverlaps                    | type, column, value, boolean, not                | whereJsonOverlaps    |
+| Fulltext        | whereFullText                        | type, columns, value, options, boolean           | whereFullText        |
+| Date            | whereDate                            | column, type, boolean, operator, value           | whereDate            |
+| Time            | whereTime                            | column, type, boolean, operator, value           | whereTime            |
+| Day             | whereDay                             | column, type, boolean, operator, value           | whereDay             |
+| Month           | whereMonth                           | column, type, boolean, operator, value           | whereMonth           |
+| Year            | whereYear                            | column, type, boolean, operator, value           | whereYear            |
+| Like            | whereLike                            | type, column, value, caseSensitive, boolean, not | whereLike            |
+| Expression      | where(Expression)                    | type, column, boolean                            | whereExpression      |
 
 Negation lives in the `boolean` connector as `and not` / `or not`, never as a separate flag.
 
@@ -201,18 +201,18 @@ The public contract is `contracts/database/db/db.go`. Read and write execution b
 `database/db`; it does not need duplicate execution methods on the SQL-only `query.Builder`.
 The following groups have public entry points, compiler wiring and behavior tests:
 
-| Group | Public API / behavior | Implementation and tests |
-|---|---|---|
-| Mutable fluent queries | Where/Select/From/Join/Order/Limit mutate and return the same object; independent branches use explicit `Clone` | `db/query.go`, `query_clauses.go`, `query_mutability_test.go` |
-| Subqueries and joins | SelectSub, FromSub, AddSelect, WhereIn, WhereExists, JoinSub, lateral and cross joins, JoinClause | `query_clauses.go`, `join_clause.go`, `query_laravel_api_test.go`, `query_preview_test.go` |
-| Predicates | OR/negated variants; case-sensitive LIKE; integer IN; column/value ranges; dates; row values; JSON overlaps; full text | `query.go`, `query_clauses.go`; existing upstream query corpus |
-| Query state | Union/UnionAll, grouping/having, raw components, index hints, GroupLimit, ReorderDesc, random seed, page/keyset positioning, bindings/getters | `query_clauses.go`, `query/laravel_api.go` |
-| Reads | First/Find, Sole/SoleValue, Value/RawValue, Pluck/Implode, Exists, aggregates and Explain | `query.go`, `query_results.go`, `aggregate.go` |
-| Traversal | Chunk/ChunkById/ChunkByIdDesc, ChunkMap, EachById, Lazy/LazyById/LazyByIdDesc | `query.go`, `query_results.go`; lazy iteration stops without fetching another chunk |
-| Writes | Insert, InsertGetID with optional key, InsertOrIgnore, InsertUsing, InsertOrIgnoreUsing, UpdateFrom, UpdateOrInsert callbacks, Upsert, IncrementEach/DecrementEach, Truncate | `query_writes.go`, `query.go`, `tests/db_laravel_builder_test.go` |
-| SQL previews | Existing previews plus all new write methods; connection escaping, binary values, prepared booleans/dates and native placeholders | `to_sql.go`, `to_sql_writes.go`, `query_preview_test.go` |
-| Query lifecycle | BeforeQuery is consumed at the upstream execution point; AfterQuery can transform results | `query_clauses.go`, `query_results.go`, `query_laravel_api_test.go` |
-| Basic pagination | Paginate, SimplePaginate and existing CursorPaginate | `query.go`, `query_results.go`; no URL or presentation state |
+| Group                  | Public API / behavior                                                                                                                                                        | Implementation and tests                                                                   |
+|------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------|
+| Mutable fluent queries | Where/Select/From/Join/Order/Limit mutate and return the same object; independent branches use explicit `Clone`                                                              | `db/query.go`, `query_clauses.go`, `query_mutability_test.go`                              |
+| Subqueries and joins   | SelectSub, FromSub, AddSelect, WhereIn, WhereExists, JoinSub, lateral and cross joins, JoinClause                                                                            | `query_clauses.go`, `join_clause.go`, `query_laravel_api_test.go`, `query_preview_test.go` |
+| Predicates             | OR/negated variants; case-sensitive LIKE; integer IN; column/value ranges; dates; row values; JSON overlaps; full text                                                       | `query.go`, `query_clauses.go`; existing upstream query corpus                             |
+| Query state            | Union/UnionAll, grouping/having, raw components, index hints, GroupLimit, ReorderDesc, random seed, page/keyset positioning, bindings/getters                                | `query_clauses.go`, `query/laravel_api.go`                                                 |
+| Reads                  | First/Find, Sole/SoleValue, Value/RawValue, Pluck/Implode, Exists, aggregates and Explain                                                                                    | `query.go`, `query_results.go`, `aggregate.go`                                             |
+| Traversal              | Chunk/ChunkById/ChunkByIdDesc, ChunkMap, EachById, Lazy/LazyById/LazyByIdDesc                                                                                                | `query.go`, `query_results.go`; lazy iteration stops without fetching another chunk        |
+| Writes                 | Insert, InsertGetID with optional key, InsertOrIgnore, InsertUsing, InsertOrIgnoreUsing, UpdateFrom, UpdateOrInsert callbacks, Upsert, IncrementEach/DecrementEach, Truncate | `query_writes.go`, `query.go`, `tests/db_laravel_builder_test.go`                          |
+| SQL previews           | Existing previews plus all new write methods; connection escaping, binary values, prepared booleans/dates and native placeholders                                            | `to_sql.go`, `to_sql_writes.go`, `query_preview_test.go`                                   |
+| Query lifecycle        | BeforeQuery is consumed at the upstream execution point; AfterQuery can transform results                                                                                    | `query_clauses.go`, `query_results.go`, `query_laravel_api_test.go`                        |
+| Basic pagination       | Paginate, SimplePaginate and existing CursorPaginate                                                                                                                         | `query.go`, `query_results.go`; no URL or presentation state                               |
 
 Nested, subquery and BeforeQuery callbacks use the supplied builder and ignore replacement
 return values, matching Laravel. When/Unless/Pipe retain their own return semantics.
@@ -225,16 +225,16 @@ surface through the compiler before the requested statement executes.
 
 ## 8. Connections, processors, Schema and DDL
 
-| Layer | Connected behavior |
-|---|---|
-| Connection | Named handles, purge/reconnect, writer metadata reads, sticky and explicit writer routing, query hooks/logs, duration thresholds, Pretend, server versions and escaping |
-| Pool selection | Reader candidates are shuffled and tried until a connection opens; unusable empty reader entries retain the writer fallback. A configured set of unreachable readers returns its connection error |
-| Recovery | `database/sql` manages physical connections. An ordinary read can retry once after connection loss, before returning rows; writes, pinned connections and transactions are not transparently replayed |
-| Transactions | Nested savepoints on one connection; transaction levels; rollback to a level; retryable conflicts; ordered commit/rollback callbacks; no retry after a successful commit |
-| Processor | Select, InsertGetID and normalized schemas/tables/views/types/columns/indexes/foreign keys; nullable metadata and generated expressions are preserved |
-| Schema | Runtime metadata uses the new processor and writer; qualified table listings by default, explicit short-name mode, schema selectors and case-aware existence checks |
-| DDL | Conditional schema operations, database creation/drop, table/column options, generated/computed columns, dialect types and indexes, temporary tables, constraint scopes and SQLite rebuilds |
-| Cleanup | Pinned scopes close leases and roll back unfinished transactions; constraint restoration runs with a cleanup context even when the request is cancelled |
+| Layer          | Connected behavior                                                                                                                                                                                    |
+|----------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Connection     | Named handles, purge/reconnect, writer metadata reads, sticky and explicit writer routing, query hooks/logs, duration thresholds, Pretend, server versions and escaping                               |
+| Pool selection | Reader candidates are shuffled and tried until a connection opens; unusable empty reader entries retain the writer fallback. A configured set of unreachable readers returns its connection error     |
+| Recovery       | `database/sql` manages physical connections. An ordinary read can retry once after connection loss, before returning rows; writes, pinned connections and transactions are not transparently replayed |
+| Transactions   | Nested savepoints on one connection; transaction levels; rollback to a level; retryable conflicts; ordered commit/rollback callbacks; no retry after a successful commit                              |
+| Processor      | Select, InsertGetID and normalized schemas/tables/views/types/columns/indexes/foreign keys; nullable metadata and generated expressions are preserved                                                 |
+| Schema         | Runtime metadata uses the new processor and writer; qualified table listings by default, explicit short-name mode, schema selectors and case-aware existence checks                                   |
+| DDL            | Conditional schema operations, database creation/drop, table/column options, generated/computed columns, dialect types and indexes, temporary tables, constraint scopes and SQLite rebuilds           |
+| Cleanup        | Pinned scopes close leases and roll back unfinished transactions; constraint restoration runs with a cleanup context even when the request is cancelled                                               |
 
 SQLite rebuilds copy data and preserve applicable indexes, foreign keys, checks and triggers.
 Missing source columns fail explicitly. Identifiers are tokenized as UTF-8; quoted text and
@@ -247,20 +247,20 @@ required. The ORM receives only the shared connection compatibility changes in t
 
 ## 9. Go adaptations and scope boundaries
 
-| Laravel | Go adaptation |
-|---|---|
-| Optional parameters and overloads | Variadics or `any` at documented polymorphic entry points; old ordinary calls remain valid |
-| Query results / Collection | Explicit `dest` arguments, slices/maps, channels and error-aware `RowIterator` |
-| `paginate` | `Paginate(page, limit, dest, total *int64)`; defaults 1/15, supplied nonzero total skips COUNT, zero total skips the data query |
-| `simplePaginate` | `SimplePaginate(page, limit, dest) (hasMore, error)`; limit+1 probe without COUNT, probe row removed |
-| Cursor pagination | Existing data/cursor/has-more value, without total or HTTP metadata |
-| Pagination display features | Excluded: URLs, paths, links, query parameters, fragments, rendering, HTTP lookup and the Paginator class hierarchy |
-| SQL-only compiler | `To*SQL` returns SQL and bindings; facade previews use native database/sql placeholders; Truncate previews return a statement list |
-| PDO connection handles | `database/sql` pools and explicit leases; reconnect returns the refreshed DB handle; existing transactions retain their leased connection |
-| PDO InsertGetId | MySQL/SQLite use LastInsertId; PostgreSQL reads RETURNING; SQL Server reads OUTPUT inserted on the writer |
-| SQL Server JSON updates | Existing JSON_MODIFY support is retained for framework compatibility |
-| Introspection / debugging | Builder grammar/processor accessors, DB connection methods, ToSql/ToRawSql and query logs replace PHP runtime/debug helpers |
-| Dynamic PHP extensions, Eloquent / model features | Outside this database port; no ORM feature work |
+| Laravel                                           | Go adaptation                                                                                                                             |
+|---------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------|
+| Optional parameters and overloads                 | Variadics or `any` at documented polymorphic entry points; old ordinary calls remain valid                                                |
+| Query results / Collection                        | Explicit `dest` arguments, slices/maps, channels and error-aware `RowIterator`                                                            |
+| `paginate`                                        | `Paginate(page, limit, dest, total *int64)`; defaults 1/15, supplied nonzero total skips COUNT, zero total skips the data query           |
+| `simplePaginate`                                  | `SimplePaginate(page, limit, dest) (hasMore, error)`; limit+1 probe without COUNT, probe row removed                                      |
+| Cursor pagination                                 | Existing data/cursor/has-more value, without total or HTTP metadata                                                                       |
+| Pagination display features                       | Excluded: URLs, paths, links, query parameters, fragments, rendering, HTTP lookup and the Paginator class hierarchy                       |
+| SQL-only compiler                                 | `To*SQL` returns SQL and bindings; facade previews use native database/sql placeholders; Truncate previews return a statement list        |
+| PDO connection handles                            | `database/sql` pools and explicit leases; reconnect returns the refreshed DB handle; existing transactions retain their leased connection |
+| PDO InsertGetId                                   | MySQL/SQLite use LastInsertId; PostgreSQL reads RETURNING; SQL Server reads OUTPUT inserted on the writer                                 |
+| SQL Server JSON updates                           | Existing JSON_MODIFY support is retained for framework compatibility                                                                      |
+| Introspection / debugging                         | Builder grammar/processor accessors, DB connection methods, ToSql/ToRawSql and query logs replace PHP runtime/debug helpers               |
+| Dynamic PHP extensions, Eloquent / model features | Outside this database port; no ORM feature work                                                                                           |
 
 A mutable Builder is not safe for simultaneous mutation. Use `Clone()` for independent query
 branches, and obtain request-local connection state with `WithContext`.

@@ -13,8 +13,8 @@ import (
 	consolemigration "github.com/goravel/framework/database/console/migration"
 	"github.com/goravel/framework/database/db"
 	databasedriver "github.com/goravel/framework/database/driver"
+	"github.com/goravel/framework/database/internal"
 	"github.com/goravel/framework/database/migration"
-	databaseorm "github.com/goravel/framework/database/orm"
 	databaseschema "github.com/goravel/framework/database/schema"
 	databaseseeder "github.com/goravel/framework/database/seeder"
 	"github.com/goravel/framework/errors"
@@ -63,7 +63,7 @@ func (r *ServiceProvider) Register(app foundation.Application) {
 			return nil, nil
 		}
 
-		orm, err := databaseorm.BuildOrm(ctx, config, connection, log, app.Fresh, telemetryResolver)
+		orm, err := internal.BuildOrm(ctx, config, connection, log, app.Fresh, telemetryResolver)
 		if err != nil {
 			color.Warningln(errors.OrmInitConnection.Args(connection, err).SetModule(errors.ModuleOrm))
 

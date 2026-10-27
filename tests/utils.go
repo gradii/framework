@@ -1,14 +1,16 @@
 package tests
 
 import (
-	"context"
 	"os"
+	"strings"
 
-	contractsdatabase "github.com/goravel/framework/contracts/database"
+	"github.com/goravel/framework/contracts/config"
 	contractsdb "github.com/goravel/framework/contracts/database/db"
+	"github.com/goravel/framework/contracts/database/driver"
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
-	databaseorm "github.com/goravel/framework/database/orm"
+	"github.com/goravel/framework/contracts/foundation"
 	"github.com/goravel/framework/database/schema"
+	mocksfoundation "github.com/goravel/framework/mocks/foundation"
 	"github.com/goravel/framework/testing/utils"
 	"github.com/goravel/mysql"
 )
@@ -81,17 +83,61 @@ const (
 	testSqlserverImageTag = "2022-latest"
 )
 
-func newSchema(testQuery *TestQuery, connectionToTestQuery map[string]*TestQuery, connections ...contractsdb.DB) *schema.Schema {
-	queries := make(map[string]contractsorm.Query)
-	dbConfigs := make(map[string]contractsdatabase.Config)
-	for connection, testQuery := range connectionToTestQuery {
-		queries[connection] = testQuery.Query()
-		dbConfigs[connection] = testQuery.Driver().Pool().Writers[0]
-	}
+var ormFactory func(foundation.Application) (any, error)
 
+// ormConfig resolves the fixture's connection aliases without depending on the internal ORM cache.
+type ormConfig struct {
+	config.Config
+	connection string
+	queries    map[string]*TestQuery
+}
+
+func (r ormConfig) Get(path string, defaultValue ...any) any {
+	if name, ok := strings.CutPrefix(path, "database.connections."); ok {
+		if name, ok = strings.CutSuffix(name, ".via"); ok {
+			if query := r.queries[name]; query != nil {
+				return func() (driver.Driver, error) { return query.Driver(), nil }
+			}
+		}
+	}
+	return r.Config.Get(path, defaultValue...)
+}
+
+func (r ormConfig) GetString(path string, defaultValue ...string) string {
+	if path == "database.default" {
+		return r.connection
+	}
+	return r.Config.GetString(path, defaultValue...)
+}
+
+func (r ormConfig) GetBool(path string, defaultValue ...bool) bool {
+	if path == "telemetry.instrumentation.database.enabled" {
+		return false
+	}
+	return r.Config.GetBool(path, defaultValue...)
+}
+
+func newOrm(testQuery *TestQuery, queries map[string]*TestQuery) contractsorm.Orm {
+	app := &mocksfoundation.Application{}
+	app.EXPECT().MakeConfig().Return(ormConfig{
+		Config: testQuery.Config(), connection: testQuery.Driver().Pool().Writers[0].Connection, queries: queries,
+	})
+	app.EXPECT().MakeLog().Return(utils.NewTestLog())
+	app.EXPECT().MakeTelemetry().Return(nil)
+	instance, err := ormFactory(app)
+	if err != nil {
+		panic(err)
+	}
+	orm := instance.(contractsorm.Orm)
+	for connection := range queries {
+		orm.Connection(connection)
+	}
+	return orm
+}
+
+func newSchema(testQuery *TestQuery, connectionToTestQuery map[string]*TestQuery, connections ...contractsdb.DB) *schema.Schema {
 	log := utils.NewTestLog()
-	dbConfig := testQuery.Driver().Pool().Writers[0]
-	orm := databaseorm.NewOrm(context.Background(), testQuery.Config(), dbConfig.Connection, dbConfig, testQuery.Query(), databaseorm.NewQueriesCache(queries, dbConfigs), log, nil, nil, nil)
+	orm := newOrm(testQuery, connectionToTestQuery)
 
 	connection := testQuery.DB()
 	if len(connections) > 0 {

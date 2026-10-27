@@ -2,7 +2,6 @@ package orm
 
 import (
 	"github.com/goravel/framework/support/carbon"
-	basedatabase "github.com/goravel/framework/support/database"
 )
 
 // Model is the base model for all models in the application.
@@ -16,7 +15,7 @@ type Model struct {
 // The field carries the framework's own type, so the ORM builds the soft-delete predicate and the
 // delete rewrite itself instead of asking GORM to.
 type SoftDeletes struct {
-	DeletedAt basedatabase.DeletedAt `gorm:"column:deleted_at" json:"deleted_at"`
+	DeletedAt DeletedAt `gorm:"column:deleted_at" json:"deleted_at"`
 }
 
 // Timestamps is used to add created_at and updated_at timestamps to a model.

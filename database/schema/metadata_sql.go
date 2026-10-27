@@ -2,8 +2,9 @@ package schema
 
 import (
 	"fmt"
-	"github.com/goravel/framework/errors"
 	"strings"
+
+	"github.com/goravel/framework/errors"
 )
 
 func schemaPredicate(column string, schemas []string, fallback string) (string, []any) {

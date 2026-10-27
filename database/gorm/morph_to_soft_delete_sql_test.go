@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goravel/framework/support/database" // framework's own soft-delete type
+	databaseorm "github.com/goravel/framework/database/orm"
 )
 
 // These tests pin the soft-delete predicate the inverse polymorphic existence subquery must add per
@@ -17,7 +17,7 @@ import (
 // relSoftMorphPost is a morph type carrying the framework's own soft-delete type.
 type relSoftMorphPost struct {
 	ID        uint
-	DeletedAt database.DeletedAt `gorm:"column:deleted_at"`
+	DeletedAt databaseorm.DeletedAt `gorm:"column:deleted_at"`
 }
 
 func (relSoftMorphPost) TableName() string { return "rel_soft_morph_posts" }

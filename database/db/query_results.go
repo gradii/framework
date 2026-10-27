@@ -2,11 +2,12 @@ package db
 
 import (
 	"fmt"
+	"reflect"
+
 	"github.com/goravel/framework/contracts/database/db"
 	querybuilder "github.com/goravel/framework/database/query"
 	"github.com/goravel/framework/errors"
 	"github.com/goravel/framework/support/carbon"
-	"reflect"
 )
 
 func (r *Query) resolveReader() {

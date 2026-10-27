@@ -7,9 +7,9 @@ import (
 	"time"
 
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
+	"github.com/goravel/framework/database/internal/annotation"
 	"github.com/goravel/framework/database/orm/morphmap"
 	"github.com/goravel/framework/errors"
-	basedatabase "github.com/goravel/framework/support/database"
 	"github.com/goravel/framework/support/str"
 )
 
@@ -189,7 +189,7 @@ func typeHasRelationTag(modelType reflect.Type, name string) bool {
 		}
 
 		if field.Name == name {
-			return basedatabase.ParseAnnotation(field.Tag.Get("gorm")).Relation
+			return annotation.ParseAnnotation(field.Tag.Get("gorm")).Relation
 		}
 	}
 

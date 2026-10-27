@@ -12,8 +12,9 @@ import (
 
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
 	contractsschema "github.com/goravel/framework/contracts/database/schema"
+	"github.com/goravel/framework/database/internal/annotation"
+	"github.com/goravel/framework/database/orm"
 	"github.com/goravel/framework/errors"
-	basedatabase "github.com/goravel/framework/support/database"
 	"github.com/goravel/framework/support/str"
 )
 
@@ -59,7 +60,7 @@ var dataTypeKeys = func() []string {
 
 // Generate creates migration schema lines from a model struct.
 //
-// The model is read through the framework's own field annotations (support/database.ParseAnnotation)
+// The model is read through the framework's own field annotations (database/internal/annotation.ParseAnnotation)
 // and Go's type system, not through GORM's schema parser: the column name comes from `column:` or
 // the snake_cased field name, the column type from the Go type with `type:` and `migration:`
 // overriding it, and primary keys, indexes and the automatic timestamps from their annotations.
@@ -112,7 +113,7 @@ func Generate(model any) (string, []string, error) {
 type modelField struct {
 	field      reflect.StructField
 	column     string
-	annotation basedatabase.Annotation
+	annotation annotation.Annotation
 
 	// primaryKey and autoIncrement are decided across the whole model, not from a single field, so
 	// they are filled in by primaryKeys once every field is known.
@@ -164,7 +165,7 @@ func parseModelFields(modelType reflect.Type) []modelField {
 			continue
 		}
 
-		annotation := basedatabase.ParseAnnotation(structField.Tag.Get("gorm"))
+		annotation := annotation.ParseAnnotation(structField.Tag.Get("gorm"))
 		if annotation.Skip {
 			continue
 		}
@@ -185,7 +186,7 @@ func parseModelFields(modelType reflect.Type) []modelField {
 }
 
 // columnName resolves a field's database column.
-func columnName(structField reflect.StructField, annotation basedatabase.Annotation) string {
+func columnName(structField reflect.StructField, annotation annotation.Annotation) string {
 	if annotation.Column != "" {
 		return annotation.Column
 	}
@@ -702,7 +703,7 @@ func parseTypeSize(s string) int {
 // isSQLNullType checks whether a type is one designed for a nullable column:
 //
 //   - database/sql.Null* (e.g. sql.NullString, sql.NullInt64, sql.NullTime)
-//   - the framework's soft-delete type (support/database.DeletedAt)
+//   - the framework's soft-delete type (orm.DeletedAt)
 //
 // For any other type, nullability is expressed with a pointer.
 func isSQLNullType(fieldType reflect.Type) bool {
@@ -715,8 +716,7 @@ func isSQLNullType(fieldType reflect.Type) bool {
 	}
 
 	// The framework's DeletedAt type.
-	return fieldType.Name() == "DeletedAt" &&
-		strings.HasSuffix(fieldType.PkgPath(), "goravel/framework/support/database")
+	return fieldType == reflect.TypeFor[orm.DeletedAt]()
 }
 
 // atom is a string builder wrapper for generating Blueprint method chains.

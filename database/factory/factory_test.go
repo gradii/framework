@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/goravel/framework/contracts/database/factory"
+	databaseorm "github.com/goravel/framework/database/orm"
 	"github.com/goravel/framework/support/carbon"
-	basedatabase "github.com/goravel/framework/support/database"
 )
 
 type Model struct {
@@ -19,7 +19,7 @@ type Model struct {
 }
 
 type SoftDeletes struct {
-	DeletedAt basedatabase.DeletedAt `gorm:"column:deleted_at" json:"deleted_at"`
+	DeletedAt databaseorm.DeletedAt `gorm:"column:deleted_at" json:"deleted_at"`
 }
 
 type Timestamps struct {
@@ -48,7 +48,7 @@ func (u *UserFactory) Definition() map[string]any {
 		"Avatar":    faker.Email(),
 		"CreatedAt": carbon.NewDateTime(carbon.Now()),
 		"UpdatedAt": carbon.NewDateTime(carbon.Now()),
-		"DeletedAt": basedatabase.DeletedAt{Time: time.Now(), Valid: true},
+		"DeletedAt": databaseorm.DeletedAt{Time: time.Now(), Valid: true},
 	}
 }
 

@@ -4,6 +4,11 @@ import (
 	"os"
 	"testing"
 
+	"github.com/stretchr/testify/mock"
+
+	"github.com/goravel/framework/contracts/binding"
+	"github.com/goravel/framework/contracts/foundation"
+	"github.com/goravel/framework/database"
 	"github.com/goravel/framework/foundation/json"
 	mocksfoundation "github.com/goravel/framework/mocks/foundation"
 	"github.com/goravel/mysql"
@@ -15,6 +20,13 @@ import (
 func TestMain(m *testing.M) {
 	mockApp := &mocksfoundation.Application{}
 	mockApp.EXPECT().GetJson().Return(json.New())
+	// Register once before opening any pools: registration closes existing connections.
+	mockApp.EXPECT().Singleton(mock.Anything, mock.Anything).Run(func(key any, callback func(foundation.Application) (any, error)) {
+		if key == binding.Orm {
+			ormFactory = callback
+		}
+	})
+	(&database.ServiceProvider{}).Register(mockApp)
 	postgres.App = mockApp
 	mysql.App = mockApp
 	sqlite.App = mockApp

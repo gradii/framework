@@ -1,16 +1,16 @@
 package gorm
 
 import (
+	"github.com/goravel/framework/database/internal/annotation"
 	"github.com/goravel/framework/database/internal/reflectx"
 	rowscan "github.com/goravel/framework/database/internal/scan"
-	basedatabase "github.com/goravel/framework/support/database"
 	"github.com/goravel/framework/support/str"
 )
 
 var rowMapper = reflectx.NewMapperTagFunc("gorm", func(name string) string {
 	return str.Of(name).Snake().String()
 }, func(tag string) string {
-	annotation := basedatabase.ParseAnnotation(tag)
+	annotation := annotation.ParseAnnotation(tag)
 	if annotation.Skip {
 		return "-"
 	}

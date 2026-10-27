@@ -4,19 +4,19 @@ Reference: `~/OpenSource/framework`, Laravel `12.x` at `0fc645c673`.
 This bounded corpus contains all 16 test methods in the five `Database*ProcessorTest.php` files and six
 `Database*QueryGrammarTest.php` files are covered below.
 
-| Upstream file in `tests/Database/` | Methods | Go coverage |
-|---|---:|---|
-| `DatabaseProcessorTest.php` | 1 | `processors/laravel_port_test.go`: `TestDatabaseProcessor_InsertGetIdProcessing` |
-| `DatabaseMySqlProcessorTest.php` | 1 | `processors/laravel_port_test.go`: `TestDatabaseMySqlProcessor_ProcessColumns` |
-| `DatabaseMariaDbProcessorTest.php` | 1 | `processors/laravel_port_test.go`: `TestDatabaseMariaDbProcessor_ProcessColumns` |
-| `DatabasePostgresProcessorTest.php` | 1 | `processors/laravel_port_test.go`: `TestDatabasePostgresProcessor_ProcessColumns` |
-| `DatabaseSQLiteProcessorTest.php` | 1 | `processors/laravel_port_test.go`: `TestDatabaseSQLiteProcessor_ProcessColumns` |
-| `DatabaseQueryGrammarTest.php` | 4 | `grammars/laravel_port_test.go`: `TestDatabaseQueryGrammar_*` |
-| `DatabaseMySqlQueryGrammarTest.php` | 1 | `grammars/laravel_port_test.go`: `TestDatabaseMySqlQueryGrammar_ToRawSql` |
-| `DatabaseMariaDbQueryGrammarTest.php` | 1 | `grammars/laravel_port_test.go`: `TestDatabaseMariaDbQueryGrammar_ToRawSql` |
-| `DatabasePostgresQueryGrammarTest.php` | 3 | `grammars/laravel_port_test.go`: `TestDatabasePostgresQueryGrammar_*` |
-| `DatabaseSQLiteQueryGrammarTest.php` | 1 | `grammars/laravel_port_test.go`: `TestDatabaseSQLiteQueryGrammar_ToRawSql` |
-| `DatabaseSqlServerQueryGrammarTest.php` | 1 | `grammars/laravel_port_test.go`: `TestDatabaseSqlServerQueryGrammar_ToRawSql` |
+| Upstream file in `tests/Database/`      | Methods | Go coverage                                                                       |
+|-----------------------------------------|--------:|-----------------------------------------------------------------------------------|
+| `DatabaseProcessorTest.php`             |       1 | `processors/laravel_port_test.go`: `TestDatabaseProcessor_InsertGetIdProcessing`  |
+| `DatabaseMySqlProcessorTest.php`        |       1 | `processors/laravel_port_test.go`: `TestDatabaseMySqlProcessor_ProcessColumns`    |
+| `DatabaseMariaDbProcessorTest.php`      |       1 | `processors/laravel_port_test.go`: `TestDatabaseMariaDbProcessor_ProcessColumns`  |
+| `DatabasePostgresProcessorTest.php`     |       1 | `processors/laravel_port_test.go`: `TestDatabasePostgresProcessor_ProcessColumns` |
+| `DatabaseSQLiteProcessorTest.php`       |       1 | `processors/laravel_port_test.go`: `TestDatabaseSQLiteProcessor_ProcessColumns`   |
+| `DatabaseQueryGrammarTest.php`          |       4 | `grammars/laravel_port_test.go`: `TestDatabaseQueryGrammar_*`                     |
+| `DatabaseMySqlQueryGrammarTest.php`     |       1 | `grammars/laravel_port_test.go`: `TestDatabaseMySqlQueryGrammar_ToRawSql`         |
+| `DatabaseMariaDbQueryGrammarTest.php`   |       1 | `grammars/laravel_port_test.go`: `TestDatabaseMariaDbQueryGrammar_ToRawSql`       |
+| `DatabasePostgresQueryGrammarTest.php`  |       3 | `grammars/laravel_port_test.go`: `TestDatabasePostgresQueryGrammar_*`             |
+| `DatabaseSQLiteQueryGrammarTest.php`    |       1 | `grammars/laravel_port_test.go`: `TestDatabaseSQLiteQueryGrammar_ToRawSql`        |
+| `DatabaseSqlServerQueryGrammarTest.php` |       1 | `grammars/laravel_port_test.go`: `TestDatabaseSqlServerQueryGrammar_ToRawSql`     |
 
 The column fixtures in `processors/testdata` were extracted from the upstream
 `$listing` and `$expected` literals. Each fixture records its source method.

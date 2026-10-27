@@ -1,4 +1,4 @@
-package database
+package orm
 
 import (
 	"reflect"
@@ -10,12 +10,12 @@ import (
 	"github.com/goravel/framework/support/carbon"
 )
 
-type Model struct {
-	Timestamps
+type TestModel struct {
+	TestTimestamps
 	ID uint `gorm:"primaryKey" json:"id"`
 }
 
-type Timestamps struct {
+type TestTimestamps struct {
 	CreatedAt *carbon.DateTime `gorm:"autoCreateTime;column:created_at" json:"created_at"`
 	UpdatedAt *carbon.DateTime `gorm:"autoUpdateTime;column:updated_at" json:"updated_at"`
 }
@@ -62,7 +62,7 @@ func TestGetID(t *testing.T) {
 			description: "return value when struct has primaryKey in Model",
 			setup: func(description string) {
 				type User struct {
-					Model
+					TestModel
 					Name   string
 					Avatar string
 				}
@@ -107,8 +107,8 @@ func TestGetID(t *testing.T) {
 			// accept reach their insert branch.
 			description: "return nil when the destination is a slice",
 			setup: func(description string) {
-				assert.Nil(t, GetID([]Model{{ID: 1}}), description)
-				assert.Nil(t, GetID(&[]Model{{ID: 1}}), description)
+				assert.Nil(t, GetID([]TestModel{{ID: 1}}), description)
+				assert.Nil(t, GetID(&[]TestModel{{ID: 1}}), description)
 				assert.Nil(t, GetID([]map[string]any{{"id": 1}}), description)
 			},
 		},

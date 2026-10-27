@@ -1,9 +1,10 @@
 package grammars
 
 import (
+	"sync"
+
 	"github.com/goravel/framework/database/query/core"
 	"github.com/goravel/framework/errors"
-	"sync"
 )
 
 // NewGrammar returns the grammar for a driver name. The second result reports whether the driver

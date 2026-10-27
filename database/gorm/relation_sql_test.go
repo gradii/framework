@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
-	basedatabase "github.com/goravel/framework/support/database"
+	databaseorm "github.com/goravel/framework/database/orm"
 )
 
 // This file tests the exact SQL emitted by Goravel's relation system for every relation kind.
@@ -246,11 +246,11 @@ func TestWithExists_FrameworkSoftDeleteRelation(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // relSoftOwner's relations exercise the two soft-delete shapes: relSoftBook declares the framework's
-// own type (basedatabase.DeletedAt), which is the one the compiled paths add a predicate for.
+// own type (databaseorm.DeletedAt), which is the one the compiled paths add a predicate for.
 type relSoftBook struct {
 	ID        uint
 	UserID    uint
-	DeletedAt basedatabase.DeletedAt `gorm:"column:deleted_at"`
+	DeletedAt databaseorm.DeletedAt `gorm:"column:deleted_at"`
 }
 
 func (relSoftBook) TableName() string { return "rel_soft_books" }
@@ -259,7 +259,7 @@ type relSoftHouse struct {
 	ID            uint
 	HouseableID   uint
 	HouseableType string
-	DeletedAt     basedatabase.DeletedAt `gorm:"column:deleted_at"`
+	DeletedAt     databaseorm.DeletedAt `gorm:"column:deleted_at"`
 }
 
 func (relSoftHouse) TableName() string { return "rel_soft_houses" }

@@ -3,8 +3,8 @@ package gorm
 import (
 	"github.com/goravel/framework/contracts/log"
 	basedb "github.com/goravel/framework/database/db"
+	databaseorm "github.com/goravel/framework/database/orm"
 	querybuilder "github.com/goravel/framework/database/query"
-	"github.com/goravel/framework/support/database"
 )
 
 // ToSql reports the statement a query would run, without running it.
@@ -138,7 +138,7 @@ func (r *ToSql) Pluck(column string, dest any) string {
 }
 
 func (r *ToSql) Save(dest any) string {
-	if database.GetID(dest) == nil {
+	if databaseorm.GetID(dest) == nil {
 		// Same resolution as Create: the insert branch of Save needs the model to name the table and
 		// to recognise the auto-increment column.
 		query := r.query.dest(dest).buildConditions()

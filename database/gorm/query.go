@@ -20,12 +20,12 @@ import (
 	contractstelemetry "github.com/goravel/framework/contracts/telemetry"
 	"github.com/goravel/framework/database/db"
 	databasedriver "github.com/goravel/framework/database/driver"
+	databaseorm "github.com/goravel/framework/database/orm"
 	querybuilder "github.com/goravel/framework/database/query"
 	"github.com/goravel/framework/database/query/core"
 	"github.com/goravel/framework/database/utils"
 	"github.com/goravel/framework/errors"
 	"github.com/goravel/framework/support/carbon"
-	"github.com/goravel/framework/support/database"
 	"github.com/goravel/framework/support/deep"
 	"github.com/goravel/framework/support/str"
 	"github.com/spf13/cast"
@@ -728,7 +728,7 @@ func (r *Query) Load(model any, relation string, args ...any) error {
 		return errors.OrmQueryModelNotPointer
 	}
 
-	if id := database.GetID(model); id == nil {
+	if id := databaseorm.GetID(model); id == nil {
 		return errors.OrmQueryEmptyId
 	}
 
@@ -763,14 +763,14 @@ func (r *Query) LoadMissing(model any, relation string, args ...any) error {
 			var id any
 			if v.Field(i).Kind() == reflect.Pointer {
 				if !v.Field(i).IsNil() {
-					id = database.GetIDByReflect(v.Field(i).Type().Elem(), v.Field(i).Elem())
+					id = databaseorm.GetIDByReflect(v.Field(i).Type().Elem(), v.Field(i).Elem())
 				}
 			} else if v.Field(i).Kind() == reflect.Slice {
 				if v.Field(i).Len() > 0 {
 					return nil
 				}
 			} else {
-				id = database.GetIDByReflect(v.Field(i).Type(), v.Field(i))
+				id = databaseorm.GetIDByReflect(v.Field(i).Type(), v.Field(i))
 			}
 			if cast.ToString(id) != "" {
 				return nil
@@ -1294,7 +1294,7 @@ func (r *Query) Save(dest any) error {
 		return errors.OrmQuerySelectAndOmitsConflict
 	}
 
-	id := database.GetID(dest)
+	id := databaseorm.GetID(dest)
 	update := id != nil
 
 	var query *Query
@@ -1486,7 +1486,7 @@ func (r *Query) Update(column any, value ...any) (*contractsdb.Result, error) {
 	// be reading the same value through GORM.
 	var singleUpdate bool
 	if model := query.conditions.model; model != nil {
-		if id := database.GetID(model); id != nil {
+		if id := databaseorm.GetID(model); id != nil {
 			singleUpdate = true
 		}
 	}
@@ -2422,7 +2422,7 @@ func (r *Query) retrieved(dest any) error {
 // creating a row is what Create and FirstOrCreate are for. A save whose key matches nothing writes
 // nothing.
 func (r *Query) save(value any) error {
-	if database.GetID(value) == nil {
+	if databaseorm.GetID(value) == nil {
 		return r.execInsert(value)
 	}
 
@@ -2762,7 +2762,7 @@ func isSlice(dest any) bool {
 }
 
 func hasID(dest any) bool {
-	return database.GetID(dest) != nil
+	return databaseorm.GetID(dest) != nil
 }
 
 // hasSelectColumns reports whether conditions has any selections (either column names or raw expressions).

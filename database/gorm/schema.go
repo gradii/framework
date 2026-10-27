@@ -7,7 +7,7 @@ import (
 	"time"
 
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
-	basedatabase "github.com/goravel/framework/support/database"
+	databaseorm "github.com/goravel/framework/database/orm"
 )
 
 // This file holds the framework's own model metadata resolution. It replaces the parts of
@@ -112,7 +112,7 @@ func softDeleteFieldType(model any) (reflect.Type, bool) {
 
 // isSoftDeleteType reports whether a field marks soft deletion: the framework's DeletedAt type.
 func isSoftDeleteType(fieldType reflect.Type) bool {
-	return fieldType == reflect.TypeOf(basedatabase.DeletedAt{})
+	return fieldType == reflect.TypeOf(databaseorm.DeletedAt{})
 }
 
 // findStructField locates the first exported field satisfying predicate, descending into embedded

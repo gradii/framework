@@ -6,8 +6,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	databaseorm "github.com/goravel/framework/database/orm"
 	"github.com/goravel/framework/errors"
-	basedatabase "github.com/goravel/framework/support/database"
 )
 
 // softDeleteUser carries the framework's own soft-delete type, which is what makes this package
@@ -15,7 +15,7 @@ import (
 type softDeleteUser struct {
 	ID        uint
 	Name      string
-	DeletedAt basedatabase.DeletedAt `gorm:"column:deleted_at"`
+	DeletedAt databaseorm.DeletedAt `gorm:"column:deleted_at"`
 }
 
 func (softDeleteUser) TableName() string { return "soft_users" }

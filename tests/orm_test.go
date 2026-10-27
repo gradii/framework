@@ -10,17 +10,15 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/framework/contracts/database"
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
 	databasedb "github.com/goravel/framework/database/db"
-	"github.com/goravel/framework/database/orm"
 	"github.com/goravel/postgres"
 	"github.com/goravel/sqlite"
 )
 
 type OrmSuite struct {
 	suite.Suite
-	orm               *orm.Orm
+	orm               contractsorm.Orm
 	defaultConnection string
 	queries           map[string]*TestQuery
 }
@@ -38,17 +36,11 @@ func (s *OrmSuite) SetupSuite() {
 }
 
 func (s *OrmSuite) SetupTest() {
-	queries := make(map[string]contractsorm.Query)
-	dbConfigs := make(map[string]database.Config)
-
-	for driver, query := range s.queries {
+	for _, query := range s.queries {
 		query.CreateTable(TestTableRoles)
-		queries[driver] = query.Query()
-		dbConfigs[driver] = query.Driver().Pool().Writers[0]
 	}
 
-	dbConfig := s.queries[s.defaultConnection].Driver().Pool().Writers[0]
-	s.orm = orm.NewOrm(context.Background(), nil, dbConfig.Connection, dbConfig, queries[s.defaultConnection], orm.NewQueriesCache(queries, dbConfigs), nil, nil, nil, nil)
+	s.orm = newOrm(s.queries[s.defaultConnection], s.queries)
 }
 
 func (s *OrmSuite) TearDownSuite() {

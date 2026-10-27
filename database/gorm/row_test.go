@@ -11,10 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/goravel/framework/database/db"
+	databaseorm "github.com/goravel/framework/database/orm"
 	querybuilder "github.com/goravel/framework/database/query"
 	"github.com/goravel/framework/errors"
 	"github.com/goravel/framework/support/carbon"
-	basedatabase "github.com/goravel/framework/support/database"
 )
 
 // TestRow_Err returns the stored error from the Row.
@@ -136,7 +136,7 @@ func TestRowScanEmbeddedFieldsAndNulls(t *testing.T) {
 		*Timestamps
 		Name      string
 		Nickname  sql.NullString
-		DeletedAt basedatabase.DeletedAt
+		DeletedAt databaseorm.DeletedAt
 	}
 	var user *User
 	now := time.Date(2026, 10, 25, 8, 0, 0, 0, time.UTC)

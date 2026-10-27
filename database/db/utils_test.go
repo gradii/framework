@@ -6,9 +6,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	databaseorm "github.com/goravel/framework/database/orm"
 	"github.com/goravel/framework/support/carbon"
 	"github.com/goravel/framework/support/convert"
-	basedatabase "github.com/goravel/framework/support/database"
 )
 
 type Body struct {
@@ -45,7 +45,7 @@ type User struct {
 }
 
 type TestSoftDeletes struct {
-	DeletedAt basedatabase.DeletedAt `gorm:"column:deleted_at" db:"deleted_at"`
+	DeletedAt databaseorm.DeletedAt `gorm:"column:deleted_at" db:"deleted_at"`
 }
 
 type TestTimestamps struct {
@@ -55,7 +55,7 @@ type TestTimestamps struct {
 
 func TestConvertToSliceMap(t *testing.T) {
 	testNow := time.Now()
-	deletedAt := basedatabase.DeletedAt{Time: testNow, Valid: true}
+	deletedAt := databaseorm.DeletedAt{Time: testNow, Valid: true}
 	dateTime := carbon.NewDateTime(carbon.FromStdTime(testNow))
 	head := "head"
 

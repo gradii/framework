@@ -1,8 +1,9 @@
 package processors
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestLaravelSchemaTableAndViewProcessing(t *testing.T) {

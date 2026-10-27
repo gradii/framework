@@ -4,17 +4,17 @@ import (
 	"reflect"
 
 	contractsdb "github.com/goravel/framework/contracts/database/db"
+	databaseorm "github.com/goravel/framework/database/orm"
 	querybuilder "github.com/goravel/framework/database/query"
 	"github.com/goravel/framework/database/query/core"
 	"github.com/goravel/framework/support/carbon"
-	basedatabase "github.com/goravel/framework/support/database"
 )
 
 // This file removes rows through the framework's own compiler.
 //
 // GORM used to run the statement and, before that, decide whether a delete was really an update:
 // it recognised its own DeletedAt type and rewrote the statement for it. The framework's models
-// carry support/database.DeletedAt, which implements none of those clause interfaces, so the
+// carry orm.DeletedAt, which implements none of those clause interfaces, so the
 // decision is made here and the statement is compiled by database/query.
 
 // deleteOrSoftDelete removes rows, rewriting the statement into a soft-delete update when the model
@@ -51,8 +51,8 @@ func (r *Query) softDeleteColumn() (string, bool) {
 
 // softDeleteValue is the value a soft delete stamps on the row: the column's own type carrying the
 // current time, so the driver writes the representation an insert would.
-func (r *Query) softDeleteValue() basedatabase.DeletedAt {
-	return basedatabase.DeletedAt{Time: carbon.Now().StdTime(), Valid: true}
+func (r *Query) softDeleteValue() databaseorm.DeletedAt {
+	return databaseorm.DeletedAt{Time: carbon.Now().StdTime(), Valid: true}
 }
 
 // execDelete compiles the query as a delete and runs it.

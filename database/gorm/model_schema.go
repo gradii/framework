@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/goravel/framework/database/internal/annotation"
 	"github.com/goravel/framework/errors"
-	basedatabase "github.com/goravel/framework/support/database"
 	"github.com/goravel/framework/support/str"
 )
 
@@ -110,7 +110,7 @@ func collectSchemaFields(schema *modelSchema, modelType reflect.Type, prefix []i
 			continue
 		}
 
-		annotation := basedatabase.ParseAnnotation(field.Tag.Get("gorm"))
+		annotation := annotation.ParseAnnotation(field.Tag.Get("gorm"))
 		if annotation.Skip {
 			continue
 		}

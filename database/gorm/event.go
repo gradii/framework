@@ -6,7 +6,7 @@ import (
 	"reflect"
 
 	"github.com/goravel/framework/contracts/database/orm"
-	basedatabase "github.com/goravel/framework/support/database"
+	"github.com/goravel/framework/database/internal/annotation"
 	"github.com/goravel/framework/support/str"
 )
 
@@ -374,7 +374,7 @@ func structToMap(data any) map[string]any {
 // Column naming has a single implementation, support/database.ParseAnnotation, so the ORM, the
 // event helpers and support/database.GetID can never disagree about a model's columns.
 func structNameToDbColumnName(structName, tag string) string {
-	if column := basedatabase.ParseAnnotation(tag).Column; column != "" {
+	if column := annotation.ParseAnnotation(tag).Column; column != "" {
 		return column
 	}
 

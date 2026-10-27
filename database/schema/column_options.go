@@ -1,9 +1,10 @@
 package schema
 
 import (
+	"sync/atomic"
+
 	"github.com/goravel/framework/contracts/database/driver"
 	"github.com/goravel/framework/errors"
-	"sync/atomic"
 )
 
 var configuredStringLength atomic.Int64

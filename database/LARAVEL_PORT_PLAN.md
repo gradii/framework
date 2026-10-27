@@ -9,7 +9,8 @@
 - P4 已实现基于事务句柄的 savepoint、回调记录和事务重试；已验证子事务回调排序、回滚清理及提交后错误不重试。
 - P3 元数据处理链已接通；按上游保留 schema 范围、限定名称和 SQL Server precision 展示语义。
 - P5 的 DDL、生成列、临时表、SQLite 重建和外键约束作用域已实现；已验证 Unicode 列、缺失列、数据/约束保留及取消恢复。
-- P6 已完成：Go 1.26/1.27、数据库 race、Linux amd64 四驱动全量集成、MariaDB 11.8 全量集成及增量 lint 均通过。可选扩展实例的验证边界见 [测试映射](LARAVEL_DB_TESTS.md)。
+- P6 已完成：Go 1.26/1.27、数据库 race、Linux amd64 四驱动全量集成、MariaDB 11.8 全量集成及增量 lint
+  均通过。可选扩展实例的验证边界见 [测试映射](LARAVEL_DB_TESTS.md)。
 - 实现、自动生成 mocks、测试和文档一并提交。分页不包含 URL 的约束继续适用于所有后续改动。
 
 基线：Goravel framework `17ce480b`；本地 Laravel `12.x`，提交 `0fc645c673`。
@@ -31,11 +32,11 @@ ORM 功能不在本次移植范围。共享连接、驱动合约发生变化时�
 保留现有 `Paginate`，新增轻量 `SimplePaginate`。已有 `CursorPaginate` 保留兼容和回归覆盖，
 本轮不扩展为完整 Laravel Pagination 子系统。
 
-| API | 数据与状态 | 数据库行为 |
-|---|---|---|
-| `Paginate(page, limit int, dest any, total *int64) error` | 当前页数据通过 `dest` 返回，总条数通过 `total` 返回 | 保留现有总数解析规则，再执行 offset/limit 查询 |
-| `SimplePaginate(page, limit int, dest any) (hasMore bool, err error)` | 当前页数据通过 `dest` 返回，返回值表示是否还有下一页 | 查询 `limit + 1` 条，裁掉探测行；不执行 COUNT |
-| 现有 `CursorPaginate` | 当前页数据、页大小、游标和是否还有后续数据 | 保留现有 keyset 查询与游标行为 |
+| API                                                                   | 数据与状态                              | 数据库行为                            |
+|-----------------------------------------------------------------------|------------------------------------|----------------------------------|
+| `Paginate(page, limit int, dest any, total *int64) error`             | 当前页数据通过 `dest` 返回，总条数通过 `total` 返回 | 保留现有总数解析规则，再执行 offset/limit 查询   |
+| `SimplePaginate(page, limit int, dest any) (hasMore bool, err error)` | 当前页数据通过 `dest` 返回，返回值表示是否还有下一页     | 查询 `limit + 1` 条，裁掉探测行；不执行 COUNT |
+| 现有 `CursorPaginate`                                                   | 当前页数据、页大小、游标和是否还有后续数据              | 保留现有 keyset 查询与游标行为              |
 
 分页约束：
 
@@ -69,15 +70,15 @@ ORM 功能不在本次移植范围。共享连接、驱动合约发生变化时�
 
 ## 4. 实施阶段与依赖
 
-| 阶段 | 交付内容 | 前置依赖 |
-|---|---|---|
-| P0 | 差异矩阵、接口和兼容设计 | 当前源码盘点 |
-| P1 | DB 查询入口、Builder API、基础分页 | P0 |
-| P2 | Connection 执行与会话能力 | P0、P1 的执行接口 |
-| P3 | Processor 和 Schema 元数据完整接通 | P2 |
-| P4 | 事务状态机、重试和回调 | P2 |
-| P5 | Schema/Blueprint/DDL 补全 | P3、P4 |
-| P6 | 跨驱动验收、文档和兼容收尾 | P1–P5 |
+| 阶段 | 交付内容                       | 前置依赖        |
+|----|----------------------------|-------------|
+| P0 | 差异矩阵、接口和兼容设计               | 当前源码盘点      |
+| P1 | DB 查询入口、Builder API、基础分页   | P0          |
+| P2 | Connection 执行与会话能力         | P0、P1 的执行接口 |
+| P3 | Processor 和 Schema 元数据完整接通 | P2          |
+| P4 | 事务状态机、重试和回调                | P2          |
+| P5 | Schema/Blueprint/DDL 补全    | P3、P4       |
+| P6 | 跨驱动验收、文档和兼容收尾              | P1–P5       |
 
 每阶段拆分为可独立验证的提交，测试随功能交付，不集中留到 P6。
 
@@ -96,14 +97,14 @@ ORM 功能不在本次移植范围。共享连接、驱动合约发生变化时�
 
 按以下批次完成公开合约、Builder 接线、执行和 SQL 预览：
 
-| 批次 | 工作内容 |
-|---|---|
-| 写入 | `InsertOrIgnore`、`InsertUsing`、`InsertOrIgnoreUsing`、`UpdateFrom`、`Upsert`、`Truncate`、`IncrementEach/DecrementEach`；保留 InsertGetID 并核对 sequence/主键列参数传递 |
-| 查询组合 | Select/From 子查询及 raw 入口、AddSelect、索引提示、JoinSub/JoinLateral 及左右连接变体、Union/UnionAll、GroupLimit、重排和分页定位辅助方法 |
-| 条件与聚合条件 | 整数 IN、日期/时间及相对日期方法、列/值区间、行值比较、JSON overlaps、FullText、嵌套条件，以及缺少的 OR/否定/Having 便利入口 |
-| 执行生命周期 | 公开 BeforeQuery；补 AfterQuery/ApplyAfterQueryCallbacks；克隆和回调消费行为按对应上游执行路径验证 |
-| 读取与遍历 | Sole/SoleValue、ChunkMap、EachById、Lazy/LazyById/LazyByIdDesc、必要的聚合结果处理、实际执行查询计划的 Explain |
-| 基础分页 | 按第 2 节保留 Paginate，增加只返回 hasMore 的 SimplePaginate；回归现有 CursorPaginate |
+| 批次      | 工作内容                                                                                                                                                    |
+|---------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 写入      | `InsertOrIgnore`、`InsertUsing`、`InsertOrIgnoreUsing`、`UpdateFrom`、`Upsert`、`Truncate`、`IncrementEach/DecrementEach`；保留 InsertGetID 并核对 sequence/主键列参数传递 |
+| 查询组合    | Select/From 子查询及 raw 入口、AddSelect、索引提示、JoinSub/JoinLateral 及左右连接变体、Union/UnionAll、GroupLimit、重排和分页定位辅助方法                                                |
+| 条件与聚合条件 | 整数 IN、日期/时间及相对日期方法、列/值区间、行值比较、JSON overlaps、FullText、嵌套条件，以及缺少的 OR/否定/Having 便利入口                                                                       |
+| 执行生命周期  | 公开 BeforeQuery；补 AfterQuery/ApplyAfterQueryCallbacks；克隆和回调消费行为按对应上游执行路径验证                                                                               |
+| 读取与遍历   | Sole/SoleValue、ChunkMap、EachById、Lazy/LazyById/LazyByIdDesc、必要的聚合结果处理、实际执行查询计划的 Explain                                                                 |
+| 基础分页    | 按第 2 节保留 Paginate，增加只返回 hasMore 的 SimplePaginate；回归现有 CursorPaginate                                                                                    |
 
 实现要求：
 
@@ -176,7 +177,8 @@ ORM 功能不在本次移植范围。共享连接、驱动合约发生变化时�
 ### P6：验收与文档收尾
 
 - 每个功能从上游用例提取可观察行为，检查 SQL、绑定、结果、错误、回调和资源释放，而非只对齐方法名。
-- 更新 [query/PARITY.md](query/PARITY.md) 及 [query/LARAVEL_TESTS.md](query/LARAVEL_TESTS.md)，为连接、事务、Schema/DDL 补充各自的测试映射。
+- 更新 [query/PARITY.md](query/PARITY.md) 及 [query/LARAVEL_TESTS.md](query/LARAVEL_TESTS.md)，为连接、事务、Schema/DDL
+  补充各自的测试映射。
   明确现有“16 个 Processor/Grammar 上游方法”不代表整个数据库抽象层的覆盖率。
 - 保留已有 CursorPaginate、InsertGetID、PostgreSQL 自定义运算符及 ORM 共用连接适配的回归。
 - 每项只有在公开入口、运行时接线、相关驱动实现、行为测试和文档均完成后，才能标记为完成。

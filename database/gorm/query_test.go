@@ -16,12 +16,12 @@ import (
 	contractsorm "github.com/goravel/framework/contracts/database/orm"
 	"github.com/goravel/framework/contracts/log"
 	databasedriver "github.com/goravel/framework/database/driver"
+	databaseorm "github.com/goravel/framework/database/orm"
 	querybuilder "github.com/goravel/framework/database/query"
 	"github.com/goravel/framework/errors"
 	mocksconfig "github.com/goravel/framework/mocks/config"
 	"github.com/goravel/framework/support/carbon"
 	"github.com/goravel/framework/support/convert"
-	basedatabase "github.com/goravel/framework/support/database"
 )
 
 func TestAddGlobalScopes(t *testing.T) {
@@ -323,7 +323,7 @@ func TestFilterFindConditions(t *testing.T) {
 
 func TestGetDeletedAtColumnName(t *testing.T) {
 	type Test1 struct {
-		Deleted basedatabase.DeletedAt
+		Deleted databaseorm.DeletedAt
 	}
 
 	// The result is the database column, not the Go field name, because callers feed it straight
@@ -340,7 +340,7 @@ func TestGetDeletedAtColumnName(t *testing.T) {
 
 	// An explicit column tag wins over the snake_cased field name.
 	type Tagged struct {
-		DeletedAt basedatabase.DeletedAt `gorm:"column:removed_at"`
+		DeletedAt databaseorm.DeletedAt `gorm:"column:removed_at"`
 	}
 
 	assert.Equal(t, "removed_at", getDeletedAtColumn(Tagged{}))

@@ -9,8 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	databaseorm "github.com/goravel/framework/database/orm"
 	"github.com/goravel/framework/support/carbon"
-	basedatabase "github.com/goravel/framework/support/database"
 )
 
 type Json struct {
@@ -778,13 +778,13 @@ func TestScan_ToDeletedAt(t *testing.T) {
 		name      string
 		rowData   map[string]any
 		wantValid bool
-		assertion func(t *testing.T, result basedatabase.DeletedAt)
+		assertion func(t *testing.T, result databaseorm.DeletedAt)
 	}{
 		{
 			name:      "convert time.Time to a soft-delete value",
 			rowData:   map[string]any{"deleted_at": now},
 			wantValid: true,
-			assertion: func(t *testing.T, result basedatabase.DeletedAt) {
+			assertion: func(t *testing.T, result databaseorm.DeletedAt) {
 				assert.True(t, result.Valid)
 				assert.False(t, result.Time.IsZero())
 			},
@@ -793,7 +793,7 @@ func TestScan_ToDeletedAt(t *testing.T) {
 			name:      "convert string to a soft-delete value",
 			rowData:   map[string]any{"deleted_at": nowStr},
 			wantValid: true,
-			assertion: func(t *testing.T, result basedatabase.DeletedAt) {
+			assertion: func(t *testing.T, result databaseorm.DeletedAt) {
 				assert.True(t, result.Valid)
 				assert.False(t, result.Time.IsZero())
 			},
@@ -803,7 +803,7 @@ func TestScan_ToDeletedAt(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			type TestStruct struct {
-				DeletedAt basedatabase.DeletedAt
+				DeletedAt databaseorm.DeletedAt
 			}
 			row := NewRow(tt.rowData, nil)
 			var result TestStruct
@@ -1245,13 +1245,13 @@ func TestScan_ToScanner(t *testing.T) {
 		{
 			name: "scan a soft-delete value with nil",
 			target: &struct {
-				DeletedAt basedatabase.DeletedAt
+				DeletedAt databaseorm.DeletedAt
 			}{},
 			rowData: map[string]any{"deleted_at": nil},
 			wantErr: false,
 			assertion: func(t *testing.T, target any) {
 				result := target.(*struct {
-					DeletedAt basedatabase.DeletedAt
+					DeletedAt databaseorm.DeletedAt
 				})
 				assert.False(t, result.DeletedAt.Valid)
 			},
@@ -1391,13 +1391,13 @@ func TestScan_ToScanner(t *testing.T) {
 		{
 			name: "soft-delete values accept RFC3339 text",
 			target: &struct {
-				DeletedAt basedatabase.DeletedAt
+				DeletedAt databaseorm.DeletedAt
 			}{},
 			rowData: map[string]any{"deleted_at": now.Format(time.RFC3339)},
 			wantErr: false,
 			assertion: func(t *testing.T, target any) {
 				result := target.(*struct {
-					DeletedAt basedatabase.DeletedAt
+					DeletedAt databaseorm.DeletedAt
 				})
 				// Soft-delete timestamps preserve validity when scanned from text.
 				assert.True(t, result.DeletedAt.Valid)

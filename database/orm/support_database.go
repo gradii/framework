@@ -1,7 +1,9 @@
-package database
+package orm
 
 import (
 	"reflect"
+
+	"github.com/goravel/framework/database/internal/annotation"
 )
 
 func GetID(dest any) any {
@@ -33,7 +35,7 @@ func GetIDByReflect(t reflect.Type, v reflect.Value) any {
 		if !t.Field(i).IsExported() {
 			continue
 		}
-		if ParseAnnotation(t.Field(i).Tag.Get("gorm")).PrimaryKey {
+		if annotation.ParseAnnotation(t.Field(i).Tag.Get("gorm")).PrimaryKey {
 			if v.Field(i).IsZero() {
 				return nil
 			}
