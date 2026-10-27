@@ -110,18 +110,9 @@ func softDeleteFieldType(model any) (reflect.Type, bool) {
 	return field.Type, true
 }
 
-// isSoftDeleteType reports whether a field marks soft deletion: the framework's own DeletedAt, or
-// gorm.DeletedAt for models that still declare it.
-//
-// The gorm type is recognised by its package path rather than by identity so the framework does not
-// have to import gorm to keep those models working; a model that still declares the type keeps its
-// soft-delete behaviour without the framework depending on the package that defines it.
+// isSoftDeleteType reports whether a field marks soft deletion: the framework's DeletedAt type.
 func isSoftDeleteType(fieldType reflect.Type) bool {
-	if fieldType == reflect.TypeOf(basedatabase.DeletedAt{}) {
-		return true
-	}
-
-	return fieldType.PkgPath() == "gorm.io/gorm" && fieldType.Name() == "DeletedAt"
+	return fieldType == reflect.TypeOf(basedatabase.DeletedAt{})
 }
 
 // findStructField locates the first exported field satisfying predicate, descending into embedded

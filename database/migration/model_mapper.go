@@ -702,7 +702,7 @@ func parseTypeSize(s string) int {
 // isSQLNullType checks whether a type is one designed for a nullable column:
 //
 //   - database/sql.Null* (e.g. sql.NullString, sql.NullInt64, sql.NullTime)
-//   - the framework's soft-delete type, and the GORM one it replaces
+//   - the framework's soft-delete type (support/database.DeletedAt)
 //
 // For any other type, nullability is expressed with a pointer.
 func isSQLNullType(fieldType reflect.Type) bool {
@@ -714,10 +714,9 @@ func isSQLNullType(fieldType reflect.Type) bool {
 		return true
 	}
 
-	// The framework's DeletedAt, and gorm.DeletedAt for models that still use it.
+	// The framework's DeletedAt type.
 	return fieldType.Name() == "DeletedAt" &&
-		(strings.HasSuffix(fieldType.PkgPath(), "goravel/framework/support/database") ||
-			strings.HasSuffix(fieldType.PkgPath(), "gorm.io/gorm"))
+		strings.HasSuffix(fieldType.PkgPath(), "goravel/framework/support/database")
 }
 
 // atom is a string builder wrapper for generating Blueprint method chains.
