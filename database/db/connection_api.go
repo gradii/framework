@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gradii/framework/contracts/database/db"
+	contractsdriver "github.com/gradii/framework/contracts/database/driver"
 	databasedriver "github.com/gradii/framework/database/driver"
 	querybuilder "github.com/gradii/framework/database/query"
 	"github.com/gradii/framework/errors"
@@ -124,17 +125,17 @@ func (r *DB) Escape(value any, binary ...bool) (string, error) {
 	return databasedriver.EscapeWithDialect(dialect, r.DriverName(), value, isBinary)
 }
 func (r *DB) Purge(connection ...string) error {
-	name := firstString(connection, r.Name())
-	err := databasedriver.PurgeConnection(name)
+	name := r.lifecycleName(connection)
 	r.queries.mu.Lock()
-	delete(r.queries.m, name)
-	r.queries.mu.Unlock()
-	return err
+	defer r.queries.mu.Unlock()
+	return r.purgeLocked(name)
 }
 func (r *DB) Disconnect(connection ...string) error { return r.Purge(connection...) }
 func (r *DB) Reconnect(connection ...string) (db.DB, error) {
-	name := firstString(connection, r.Name())
-	if err := r.Purge(name); err != nil {
+	name := r.lifecycleName(connection)
+	r.queries.mu.Lock()
+	defer r.queries.mu.Unlock()
+	if err := r.purgeLocked(name); err != nil {
 		return nil, err
 	}
 	fresh, err := BuildDB(r.ctx, r.config, r.logger.Log(), name, r.telemetryResolver)
@@ -143,10 +144,42 @@ func (r *DB) Reconnect(connection ...string) (db.DB, error) {
 	}
 	fresh.queries = r.queries
 	fresh.state.hooks = r.state.hooks
-	r.queries.mu.Lock()
 	r.queries.m[name] = fresh
-	r.queries.mu.Unlock()
 	return fresh, nil
+}
+
+func (r *DB) lifecycleName(connection []string) string {
+	name := firstString(connection, r.Name())
+	if name == "" {
+		name = r.config.GetString("database.default")
+	}
+	return name
+}
+
+// purgeLocked uses the identity of the cached handle, even when its configuration changed since
+// opening. When only the ORM opened the target, resolve the configured source without opening it.
+// The queries lock serializes this removal with Connection and Reconnect publication.
+func (r *DB) purgeLocked(name string) error {
+	if cached, ok := r.queries.m[name].(*DB); ok && cached.connection != nil {
+		delete(r.queries.m, name)
+		return cached.connection.Purge()
+	}
+	delete(r.queries.m, name)
+	if r.connection != nil && r.Name() == name {
+		return r.connection.Purge()
+	}
+	if r.config == nil {
+		return nil
+	}
+	callback, ok := r.config.Get("database.connections." + name + ".via").(func() (contractsdriver.Driver, error))
+	if !ok {
+		return nil
+	}
+	driver, err := callback()
+	if err != nil {
+		return err
+	}
+	return databasedriver.PurgeConnection(name, driver.Pool())
 }
 
 func (r *Tx) Query() db.Query {

@@ -167,9 +167,23 @@ func TestOpenScopesSharedAliasesToConfiguredConnections(t *testing.T) {
 	second, err := Open(stubConfig(t), discardLogger{}, secondPool, "shared_alias", nil)
 	require.NoError(t, err)
 	assert.NotSame(t, first.Writer(), second.Writer())
-	alias, err := Open(mocksconfig.NewConfig(t), discardLogger{}, firstPool, "another_alias", nil)
+	alias, err := Open(stubConfig(t), discardLogger{}, firstPool, "another_alias", nil)
 	require.NoError(t, err)
-	assert.Same(t, first.Writer(), alias.Writer())
+	assert.NotSame(t, first.Writer(), alias.Writer())
+	sameAlias, err := Open(mocksconfig.NewConfig(t), discardLogger{}, firstPool, "shared_alias", nil)
+	require.NoError(t, err)
+	assert.Same(t, first.Writer(), sameAlias.Writer())
+
+	require.NoError(t, first.Purge())
+	assert.ErrorContains(t, first.Writer().Ping(), "database is closed")
+	assert.False(t, sameAlias.IsCurrent())
+	require.NoError(t, alias.Writer().Ping())
+	require.NoError(t, second.Writer().Ping())
+
+	fresh, err := Open(stubConfig(t), discardLogger{}, firstPool, "shared_alias", nil)
+	require.NoError(t, err)
+	assert.NotSame(t, first.Writer(), fresh.Writer())
+	assert.True(t, fresh.IsCurrent())
 }
 
 // stubConfig answers only what opening a pool reads, with telemetry off.

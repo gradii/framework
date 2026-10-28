@@ -272,6 +272,11 @@ func (b *Builder) ToUpdateFromSQL(values any) (string, []any) {
 		return "", nil
 	}
 	b.ApplyBeforeQueryCallbacks()
-	ordered := updateValuesFrom(values)
-	return grammar.CompileUpdateFrom(b, ordered), CleanBindings(grammar.PrepareBindingsForUpdateFrom(b.Bindings(), ordered))
+	ordered, err := b.prepareUpdateValues(values)
+	if err != nil {
+		b.setError(err)
+		return "", nil
+	}
+	compiled, contributions := b.resolveUpdateValues(ordered)
+	return grammar.CompileUpdateFrom(b, compiled), CleanBindings(grammar.PrepareBindingsForUpdateFrom(b.Bindings(), contributions))
 }

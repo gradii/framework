@@ -729,7 +729,9 @@ func (r *Blueprint) addAttributeCommands(grammar driver.Grammar) {
 					Name:   CommandComment,
 				})
 			}
-			if command == CommandDefault && column.def != nil {
+			// A type compiler can supply the default (for example UseCurrent).
+			// Let the grammar decide after the column has been compiled.
+			if command == CommandDefault {
 				r.addCommand(&driver.Command{
 					Column: column,
 					Name:   CommandDefault,

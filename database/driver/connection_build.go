@@ -18,10 +18,36 @@ import (
 	instrumentationdatabase "github.com/gradii/framework/telemetry/instrumentation/database"
 )
 
-// cachedConnection holds an opened writer pool and the telemetry instrument bound to it.
+// connectionIdentity separates the requested name from the driver's configured source. Two aliases
+// have independent lifecycles, while DB and ORM openings of the same alias share its resources.
+type connectionIdentity struct {
+	configured string
+	logical    string
+}
+
+func poolConnectionIdentity(pool database.Pool, logical string) connectionIdentity {
+	configured := logical
+	if len(pool.Writers) > 0 && pool.Writers[0].Connection != "" {
+		configured = pool.Writers[0].Connection
+	}
+	return connectionIdentity{configured: configured, logical: logical}
+}
+
+func namedConnectionIdentity(logical string, pools []database.Pool) connectionIdentity {
+	if len(pools) > 0 {
+		return poolConnectionIdentity(pools[0], logical)
+	}
+	return poolConnectionIdentity(database.Pool{}, logical)
+}
+
+// cachedConnection is one generation of a logical connection. Its writer, reader, telemetry and
+// version cache are published together so a concurrent purge cannot mix generations during Open.
 type cachedConnection struct {
 	db         *sql.DB
+	reader     *sql.DB
 	instrument *instrumentationdatabase.Instrument
+	versionMu  sync.Mutex
+	version    string
 }
 
 var (
@@ -45,34 +71,38 @@ type cachedReader struct {
 // (nil, nil, nil): that is a fresh application before any credentials exist, and callers read it as
 // "no database" rather than as a failure.
 func BuildConnection(config config.Config, logger contractslogger.Logger, pool database.Pool, connection string, telemetryResolver contractstelemetry.Resolver, dialects ...contractsdriver.Dialect) (*sql.DB, *instrumentationdatabase.Instrument, error) {
-	connection = poolConnectionName(pool, connection)
-	if cached, ok := connectionToDB.Load(connection); ok {
-		c := cached.(cachedConnection)
-		return c.db, c.instrument, nil
+	cached, err := buildConnection(config, logger, pool, connection, telemetryResolver, dialects...)
+	if err != nil || cached == nil {
+		return nil, nil, err
+	}
+	return cached.db, cached.instrument, nil
+}
+
+func buildConnection(config config.Config, _ contractslogger.Logger, pool database.Pool, connection string, telemetryResolver contractstelemetry.Resolver, dialects ...contractsdriver.Dialect) (*cachedConnection, error) {
+	identity := poolConnectionIdentity(pool, connection)
+	if cached, ok := connectionToDB.Load(identity); ok {
+		return cached.(*cachedConnection), nil
+	}
+	connectionToDBLock.Lock()
+	defer connectionToDBLock.Unlock()
+	if cached, ok := connectionToDB.Load(identity); ok {
+		return cached.(*cachedConnection), nil
 	}
 
 	if len(pool.Writers) == 0 {
-		return nil, nil, errors.DatabaseConfigNotFound
+		return nil, errors.DatabaseConfigNotFound
 	}
 
 	if pool.Writers[0].Database == "" && pool.Writers[0].Dsn == "" && pool.Writers[0].Connector == nil {
-		return nil, nil, nil
-	}
-
-	connectionToDBLock.Lock()
-	defer connectionToDBLock.Unlock()
-
-	if cached, ok := connectionToDB.Load(connection); ok {
-		c := cached.(cachedConnection)
-		return c.db, c.instrument, nil
+		return nil, nil
 	}
 
 	writer, err := openPool(pool.Writers[0], dialects...)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if writer == nil {
-		return nil, nil, nil
+		return nil, nil
 	}
 
 	// A pool that cannot answer a ping is still returned: the connection is opened lazily on first
@@ -98,37 +128,28 @@ func BuildConnection(config config.Config, logger contractslogger.Logger, pool d
 
 	// The reader pool is opened next to the writer's, so the facades and the ORM resolve the same one
 	// whichever entry point built this connection.
-	if _, err := openReader(config, pool, connection, dialects...); err != nil {
+	reader, err := openReaderForIdentity(config, pool, identity, dialects...)
+	if err != nil {
 		_ = writer.Close()
 		instrument.Shutdown()
 
-		return nil, nil, err
+		return nil, err
 	}
 
-	connectionToDB.Store(connection, cachedConnection{db: writer, instrument: instrument})
-
-	return writer, instrument, nil
+	cached := &cachedConnection{db: writer, reader: reader, instrument: instrument}
+	connectionToDB.Store(identity, cached)
+	return cached, nil
 }
 
-// A driver can expose a logical alias for an existing configured connection.
-// Cache its pools under the driver's connection identity, not a caller-local alias.
-func poolConnectionName(pool database.Pool, fallback string) string {
-	if len(pool.Writers) > 0 && pool.Writers[0].Connection != "" {
-		return pool.Writers[0].Connection
-	}
-	return fallback
-}
-
-// Instrument returns the telemetry instrument cached for a connection, or nil when telemetry is
-// disabled or the connection has not been opened yet. The ORM's executor reads it while running a
-// compiled statement, so it does not have to carry the instrument through every query it spawns.
-func Instrument(connection string) *instrumentationdatabase.Instrument {
-	cached, ok := connectionToDB.Load(connection)
+// Instrument returns the telemetry instrument cached for a logical connection. Supply its pool
+// when the driver's configured source has a different name. Managed callers use Connection.Instrument.
+func Instrument(connection string, pools ...database.Pool) *instrumentationdatabase.Instrument {
+	cached, ok := connectionToDB.Load(namedConnectionIdentity(connection, pools))
 	if !ok {
 		return nil
 	}
 
-	return cached.(cachedConnection).instrument
+	return cached.(*cachedConnection).instrument
 }
 
 // openPool builds one connection's pool: the connector the driver supplied when there is one, and
@@ -162,11 +183,18 @@ func openPool(connection database.Config, dialects ...contractsdriver.Dialect) (
 // application boot. Laravel is equally lenient, inheriting the connection's own settings for an
 // incomplete read block rather than raising.
 func openReader(config config.Config, pool database.Pool, connection string, dialects ...contractsdriver.Dialect) (*sql.DB, error) {
+	connectionToDBLock.Lock()
+	defer connectionToDBLock.Unlock()
+	return openReaderForIdentity(config, pool, poolConnectionIdentity(pool, connection), dialects...)
+}
+
+// The caller holds connectionToDBLock until the writer and its reader are published together.
+func openReaderForIdentity(config config.Config, pool database.Pool, identity connectionIdentity, dialects ...contractsdriver.Dialect) (*sql.DB, error) {
 	if len(pool.Readers) == 0 {
 		return nil, nil
 	}
 
-	if cached, ok := readPools.Load(connection); ok {
+	if cached, ok := readPools.Load(identity); ok {
 		return cached.(cachedReader).pool, nil
 	}
 
@@ -185,7 +213,7 @@ func openReader(config config.Config, pool database.Pool, connection string, dia
 			continue
 		}
 		if reader == nil {
-			color.Warningln(fmt.Sprintf("database: read connection %s entry %d cannot serve reads because it carries no host and no dsn; skipping it", connection, index))
+			color.Warningln(fmt.Sprintf("database: read connection %s entry %d cannot serve reads because it carries no host and no dsn; skipping it", identity.logical, index))
 
 			continue
 		}
@@ -204,7 +232,7 @@ func openReader(config config.Config, pool database.Pool, connection string, dia
 		reader.SetMaxOpenConns(config.GetInt("database.pool.max_open_conns", 100))
 		reader.SetConnMaxIdleTime(config.GetDuration("database.pool.conn_max_idletime", 3600) * time.Second)
 		reader.SetConnMaxLifetime(config.GetDuration("database.pool.conn_max_lifetime", 3600) * time.Second)
-		readPools.Store(connection, cachedReader{pool: reader})
+		readPools.Store(identity, cachedReader{pool: reader})
 
 		return reader, nil
 	}
@@ -212,13 +240,13 @@ func openReader(config config.Config, pool database.Pool, connection string, dia
 	return nil, errors.Join(failures...)
 }
 
-func drainConnections() []cachedConnection {
+func drainConnections() ([]*cachedConnection, []*sql.DB) {
 	connectionToDBLock.Lock()
 	defer connectionToDBLock.Unlock()
 
-	var stale []cachedConnection
+	var stale []*cachedConnection
 	connectionToDB.Range(func(key, value any) bool {
-		if cached, ok := value.(cachedConnection); ok {
+		if cached, ok := value.(*cachedConnection); ok {
 			stale = append(stale, cached)
 		}
 		connectionToDB.Delete(key)
@@ -226,24 +254,30 @@ func drainConnections() []cachedConnection {
 		return true
 	})
 
-	return stale
+	var readers []*sql.DB
+	readPools.Range(func(key, value any) bool {
+		readers = append(readers, value.(cachedReader).pool)
+		readPools.Delete(key)
+		return true
+	})
+	return stale, readers
 }
 
 // ResetConnections drops the cached connections and unregisters their telemetry, leaving the pools
 // open for callers that may still hold them. Reader pools are dropped from the cache as well, and
 // likewise left open.
 func ResetConnections() {
-	for _, cached := range drainConnections() {
+	connections, _ := drainConnections()
+	for _, cached := range connections {
 		cached.instrument.Shutdown()
 	}
-
-	resetReaders()
 }
 
 // CloseConnections drops the cached connections, unregisters their telemetry and closes the pools,
 // the reader pools included. Call it only when the connections are idle.
 func CloseConnections() {
-	for _, cached := range drainConnections() {
+	connections, readers := drainConnections()
+	for _, cached := range connections {
 		cached.instrument.Shutdown()
 		if cached.db == nil {
 			continue
@@ -253,5 +287,7 @@ func CloseConnections() {
 		}
 	}
 
-	closeReaders()
+	for _, reader := range readers {
+		_ = reader.Close()
+	}
 }

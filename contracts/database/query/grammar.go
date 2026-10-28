@@ -2,6 +2,12 @@ package query
 
 import "github.com/gradii/framework/database/query/core"
 
+// JsonContainsPreparer lets a dialect validate the shapes it supports before
+// storing clauses or bindings. normalized drives SQL; binding drives execution.
+type JsonContainsPreparer interface {
+	PrepareJsonContains(value any) (normalized any, binding any, err error)
+}
+
 // Grammar compiles builder state into SQL. It is the Go counterpart of
 // Illuminate\Database\Query\Grammars\Grammar composed with Illuminate\Database\Grammar.
 //

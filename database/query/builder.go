@@ -1,7 +1,6 @@
 package query
 
 import (
-	"reflect"
 	"strings"
 
 	"github.com/gradii/framework/database/query/core"
@@ -287,16 +286,12 @@ func (b *Builder) MergeWheres(wheres []core.Where, bindings []any) *Builder {
 // UnitEnum is implemented by an enum type whose cases are identified by name: the Go counterpart of a
 // PHP pure enum (UnitEnum). Go has no enum construct, so a type opts in by implementing EnumName, and
 // CastBinding then binds a case as its name.
-type UnitEnum interface {
-	EnumName() string
-}
+type UnitEnum = core.UnitEnum
 
 // BackedEnum is implemented by an enum type whose cases carry a scalar backing value: the Go
 // counterpart of PHP's BackedEnum. CastBinding binds a case as that value. A type implementing both
 // interfaces binds its value, because PHP's BackedEnum extends UnitEnum and enum_value() tests it first.
-type BackedEnum interface {
-	EnumValue() any
-}
+type BackedEnum = core.BackedEnum
 
 // CastBinding mirrors Builder::castBinding(), which passes an enum case through enum_value(): a
 // BackedEnum binds as its backing value and a UnitEnum as its name. Any other value is returned
@@ -305,27 +300,7 @@ type BackedEnum interface {
 // A nil pointer is also returned unchanged, even when its type is an enum. Calling a value-receiver
 // method through a nil pointer panics, and database/sql binds a nil pointer as NULL, which matches
 // castBinding(null) returning null.
-func CastBinding(value any) any {
-	switch enum := value.(type) {
-	case BackedEnum:
-		if !isNilPointer(enum) {
-			return enum.EnumValue()
-		}
-	case UnitEnum:
-		if !isNilPointer(enum) {
-			return enum.EnumName()
-		}
-	}
-
-	return value
-}
-
-// isNilPointer reports whether value holds a nil pointer.
-func isNilPointer(value any) bool {
-	rv := reflect.ValueOf(value)
-
-	return rv.Kind() == reflect.Pointer && rv.IsNil()
-}
+func CastBinding(value any) any { return core.CastBinding(value) }
 
 // CleanBindings drops expressions and casts the rest. Mirrors Builder::cleanBindings().
 func CleanBindings(values []any) []any {

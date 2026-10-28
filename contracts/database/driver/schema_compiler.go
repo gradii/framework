@@ -4,6 +4,8 @@ package driver
 type SchemaStatement struct {
 	SQL      string
 	Bindings []any
+	// ReadOnly statements validate schema objects without executing a write.
+	ReadOnly bool
 }
 
 // SchemaCompiler extends the legacy grammar without changing existing drivers.
@@ -78,8 +80,18 @@ type SchemaCatalog interface {
 
 type SchemaExecutionPolicy struct {
 	Transactional                 bool
+	NestedTransaction             bool
 	DisableForeignKeys            bool
 	ForeignKeysOutsideTransaction bool
+	SessionSettings               []SchemaSessionSetting
+}
+
+// SchemaSessionSetting describes a reversible setting on the leased writer.
+// The framework reads its original value and restores it even after cancellation.
+type SchemaSessionSetting struct {
+	Read    SchemaStatement
+	Value   any
+	Compile func(any) SchemaStatement
 }
 
 type SchemaBlueprintPlanner interface {

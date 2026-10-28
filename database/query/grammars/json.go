@@ -12,6 +12,9 @@ import (
 // what the grammars bind for a json-encoded update value: SQLite and Postgres array values, and every
 // non-expression Postgres json-selector value, scalar or not.
 func EncodeJSON(value any) any {
+	if _, ok := value.(json.Marshaler); ok {
+		return encodeJSONStandard(value)
+	}
 	switch v := value.(type) {
 	case nil:
 		return "null"
@@ -40,11 +43,23 @@ func EncodeJSON(value any) any {
 		return EncodeJSON(rv.Elem().Interface())
 	}
 
-	if core.IsArrayValue(value) {
+	if kind := reflect.ValueOf(value).Kind(); kind == reflect.Array || (kind == reflect.Slice && core.IsArrayValue(value)) {
 		return encodeJSONArray(core.ToAnySlice(value))
 	}
 
-	return core.AsString(value)
+	// Named maps/scalars and json.Marshaler values retain their JSON contract.
+	// Builder preparation has already checked encoding errors.
+	return encodeJSONStandard(value)
+}
+
+func encodeJSONStandard(value any) any {
+	var encoded strings.Builder
+	encoder := json.NewEncoder(&encoded)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(value); err != nil {
+		return nil
+	}
+	return strings.TrimSuffix(encoded.String(), "\n")
 }
 
 // encodeJSONArray renders a slice as a JSON array.

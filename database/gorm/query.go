@@ -37,6 +37,7 @@ type Query struct {
 	grammar      contractsdriver.Grammar
 	queryGrammar querybuilder.Grammar
 	components   databasedriver.QueryComponents
+	connection   *databasedriver.Connection
 	log          log.Log
 	logger       contractslogger.Logger
 	// writer is the connection's writer pool, and tx is the transaction the query runs inside when it
@@ -131,6 +132,9 @@ func (r *Query) trace(begin *carbon.Carbon, statement string, bindings []any, ro
 }
 
 func BuildQuery(ctx context.Context, config config.Config, connection string, log log.Log, modelToObserver []contractsorm.ModelToObserver, telemetryResolver contractstelemetry.Resolver) (*Query, contractsdatabase.Config, error) {
+	if connection == "" {
+		connection = config.GetString("database.default")
+	}
 	driverCallback, exist := config.Get(fmt.Sprintf("database.connections.%s.via", connection)).(func() (contractsdriver.Driver, error))
 	if !exist {
 		return nil, contractsdatabase.Config{}, errors.DatabaseConfigNotFound
@@ -145,14 +149,18 @@ func BuildQuery(ctx context.Context, config config.Config, connection string, lo
 	if len(pool.Writers) == 0 {
 		return nil, contractsdatabase.Config{}, errors.DatabaseConfigNotFound
 	}
+	// The driver's source name selects its endpoint; ORM policy and model connection selection use
+	// the requested logical name. Pool identity stays on the handle instead of leaking into Config.
+	dbConfig := pool.Writers[0]
+	dbConfig.Connection = connection
 	dialect, err := databasedriver.ResolveDialect(driver)
 	if err != nil {
-		return nil, pool.Writers[0], err
+		return nil, dbConfig, err
 	}
 	logger := db.NewLogger(config, log)
 	connectionHandle, err := databasedriver.Open(config, logger, pool, connection, telemetryResolver, dialect)
 	if err != nil {
-		return nil, pool.Writers[0], err
+		return nil, dbConfig, err
 	}
 	var writer *sql.DB
 	options := contractsdriver.GrammarOptions{Driver: pool.Writers[0].Driver, Prefix: pool.Writers[0].Prefix}
@@ -167,12 +175,20 @@ func BuildQuery(ctx context.Context, config config.Config, connection string, lo
 	}
 	components, err := databasedriver.ResolveQueryComponents(dialect, options)
 	if err != nil {
-		return nil, pool.Writers[0], err
+		return nil, dbConfig, err
 	}
 	if connectionHandle != nil && connectionHandle.SupportsServerVersion() {
 		components.VersionSource = connectionHandle.ServerVersion
 	}
-	return NewQuery(ctx, config, pool.Writers[0], writer, nil, driver.Grammar(), log, modelToObserver, nil, telemetryResolver, components), pool.Writers[0], nil
+	query := NewQuery(ctx, config, dbConfig, writer, nil, driver.Grammar(), log, modelToObserver, nil, telemetryResolver, components)
+	query.connection = connectionHandle
+	return query, dbConfig, nil
+}
+
+// ConnectionIsCurrent lets the ORM facade evict a cached query after its logical connection was
+// purged through another facade. Queries constructed directly without a managed handle are valid.
+func (r *Query) ConnectionIsCurrent() bool {
+	return r.connection == nil || r.connection.IsCurrent()
 }
 
 // DEPRECATED Use BeginTransaction instead.
@@ -2388,7 +2404,9 @@ func (r *Query) new(tx *sql.Tx) *Query {
 // point for a query that addresses a different table or exists only to carry one piece of state, such
 // as the per-row eager load the cursor path builds.
 func (r *Query) fresh() *Query {
-	return NewQuery(r.ctx, r.config, r.dbConfig, r.writer, r.tx, r.grammar, r.log, r.modelToObserver, nil, r.telemetryResolver, r.components)
+	query := NewQuery(r.ctx, r.config, r.dbConfig, r.writer, r.tx, r.grammar, r.log, r.modelToObserver, nil, r.telemetryResolver, r.components)
+	query.connection = r.connection
+	return query
 }
 
 func (r *Query) refreshConnection() (*Query, error) {
@@ -2398,7 +2416,7 @@ func (r *Query) refreshConnection() (*Query, error) {
 	}
 
 	query, ok := r.queries[connection]
-	if !ok {
+	if !ok || !query.ConnectionIsCurrent() {
 		var err error
 		query, _, err = BuildQuery(r.ctx, r.config, connection, r.log, r.modelToObserver, r.telemetryResolver)
 		if err != nil {

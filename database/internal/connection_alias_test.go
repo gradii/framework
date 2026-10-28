@@ -1,0 +1,221 @@
+package internal_test
+
+import (
+	"context"
+	"database/sql"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/gradii/framework/contracts/config"
+	"github.com/gradii/framework/contracts/database"
+	contractsdriver "github.com/gradii/framework/contracts/database/driver"
+	contractstelemetry "github.com/gradii/framework/contracts/telemetry"
+	"github.com/gradii/framework/database/db"
+	databasedriver "github.com/gradii/framework/database/driver"
+	"github.com/gradii/framework/database/internal"
+	"github.com/gradii/framework/database/schema"
+	"github.com/gradii/sqlite"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestConnectionAliasesShareResourcesAcrossFacadesAndRefreshIndependently(t *testing.T) {
+	t.Cleanup(databasedriver.CloseConnections)
+	ctx := context.Background()
+	pool := aliasSQLitePool(t)
+	configuration := aliasConfig{sources: map[string]database.Pool{
+		"primary_alias": pool, "sibling_alias": pool, "orm_only_alias": pool,
+	}}
+	resolver := func() contractstelemetry.Telemetry { return nil }
+	connection, err := db.BuildDB(ctx, configuration, nil, "", resolver)
+	require.NoError(t, err)
+	assert.Equal(t, "primary_alias", connection.Name())
+	orm, err := internal.BuildOrm(ctx, configuration, "", nil, nil, resolver)
+	require.NoError(t, err)
+	assert.Equal(t, "primary_alias", orm.Name())
+	assert.Equal(t, "primary_alias", orm.Config().Connection)
+	oldWriter, err := orm.DB()
+	require.NoError(t, err)
+	handle, err := databasedriver.Open(configuration, nil, pool, "primary_alias", resolver, sqlite.NewDialect())
+	require.NoError(t, err)
+	assert.Same(t, oldWriter, handle.Writer())
+	require.NotNil(t, handle.Instrument())
+	assert.Same(t, handle.Instrument(), databasedriver.Instrument("primary_alias", pool))
+
+	var marker aliasMarker
+	require.NoError(t, connection.SelectOne(&marker, "select marker from markers"))
+	assert.Equal(t, "reader", marker.Marker)
+	require.NoError(t, orm.Query().Raw("select marker from markers").Scan(&marker))
+	assert.Equal(t, "reader", marker.Marker)
+	require.NoError(t, orm.Query().UseWritePdo().Raw("select marker from markers").Scan(&marker))
+	assert.Equal(t, "writer", marker.Marker)
+	require.NoError(t, connection.SelectFromWriteConnection(&marker, "select marker from markers"))
+	assert.Equal(t, "writer", marker.Marker)
+
+	schemaFacade, err := schema.NewSchema(configuration, nil, orm, aliasDriver{pool: pool}, nil, connection)
+	require.NoError(t, err)
+	assert.True(t, schemaFacade.Connection("primary_alias").HasTable("only_writer"))
+	assert.False(t, schemaFacade.Connection("primary_alias").HasTable("only_reader"))
+
+	sibling, err := databasedriver.Open(configuration, nil, pool, "sibling_alias", resolver, sqlite.NewDialect())
+	require.NoError(t, err)
+	assert.NotSame(t, oldWriter, sibling.Writer())
+	assert.NotSame(t, handle.Reader(), sibling.Reader())
+	require.NoError(t, connection.Purge())
+	assert.ErrorContains(t, oldWriter.Ping(), "database is closed")
+	assert.ErrorContains(t, handle.Reader().Ping(), "database is closed")
+	require.NoError(t, sibling.Writer().Ping())
+	require.NoError(t, sibling.Reader().Ping())
+
+	// The ORM registry must notice a purge performed through the DB facade.
+	refreshedORM := orm.Connection("primary_alias")
+	freshWriter, err := refreshedORM.DB()
+	require.NoError(t, err)
+	assert.NotSame(t, oldWriter, freshWriter)
+	require.NoError(t, refreshedORM.Query().Raw("select marker from markers").Scan(&marker))
+	assert.Equal(t, "reader", marker.Marker)
+	refreshedDB := connection.Connection("primary_alias")
+	require.NoError(t, refreshedDB.SelectFromWriteConnection(&marker, "select marker from markers"))
+	assert.Equal(t, "writer", marker.Marker)
+	current, err := databasedriver.Open(configuration, nil, pool, "primary_alias", resolver, sqlite.NewDialect())
+	require.NoError(t, err)
+	assert.Same(t, freshWriter, current.Writer())
+	assert.NotSame(t, handle.Instrument(), current.Instrument())
+
+	reconnected, err := refreshedDB.Reconnect()
+	require.NoError(t, err)
+	assert.Equal(t, "primary_alias", reconnected.Name())
+	assert.Same(t, reconnected, connection.Connection("primary_alias"))
+	assert.ErrorContains(t, freshWriter.Ping(), "database is closed")
+	reconnectedWriter, err := orm.Connection("primary_alias").DB()
+	require.NoError(t, err)
+	assert.NotSame(t, freshWriter, reconnectedWriter)
+	require.NoError(t, reconnectedWriter.Ping())
+	require.NoError(t, sibling.Writer().Ping())
+	assert.True(t, schemaFacade.Connection("primary_alias").HasTable("only_writer"))
+
+	// Purge can also resolve the identity of an alias opened only through ORM.
+	ormOnly := orm.Connection("orm_only_alias")
+	ormOnlyWriter, err := ormOnly.DB()
+	require.NoError(t, err)
+	require.NoError(t, connection.Purge("orm_only_alias"))
+	assert.ErrorContains(t, ormOnlyWriter.Ping(), "database is closed")
+}
+
+func TestConnectionAliasConcurrentFacadeLifecycle(t *testing.T) {
+	t.Cleanup(databasedriver.CloseConnections)
+	configuration := aliasConfig{sources: map[string]database.Pool{"primary_alias": aliasSQLitePool(t)}}
+	connection, err := db.BuildDB(context.Background(), configuration, nil, "primary_alias", nil)
+	require.NoError(t, err)
+	var workers sync.WaitGroup
+	for worker := 0; worker < 3; worker++ {
+		workers.Go(func() {
+			for iteration := 0; iteration < 8; iteration++ {
+				switch worker {
+				case 0:
+					assert.NoError(t, connection.Purge("primary_alias"))
+				case 1:
+					_, err := connection.Reconnect("primary_alias")
+					assert.NoError(t, err)
+				default:
+					assert.Equal(t, "primary_alias", connection.Connection("primary_alias").Name())
+				}
+			}
+		})
+	}
+	workers.Wait()
+	fresh := connection.Connection("primary_alias")
+	var marker aliasMarker
+	require.NoError(t, fresh.SelectOne(&marker, "select marker from markers"))
+	assert.Equal(t, "reader", marker.Marker)
+	require.NoError(t, fresh.SelectFromWriteConnection(&marker, "select marker from markers"))
+	assert.Equal(t, "writer", marker.Marker)
+}
+
+type aliasMarker struct {
+	Marker string `db:"marker" gorm:"column:marker"`
+}
+
+func (aliasMarker) TableName() string { return "markers" }
+
+func aliasSQLitePool(t *testing.T) database.Pool {
+	t.Helper()
+	directory := t.TempDir()
+	endpoints := make([]database.Config, 0, 2)
+	for _, role := range []string{"writer", "reader"} {
+		endpoint := database.Config{Connection: "configured_source", Driver: "sqlite", Dsn: filepath.Join(directory, role+".sqlite")}
+		connector, err := sqlite.NewConnector(endpoint)
+		require.NoError(t, err)
+		database := sql.OpenDB(connector)
+		_, err = database.Exec("create table markers (marker text)")
+		require.NoError(t, err)
+		_, err = database.Exec("insert into markers values (?)", role)
+		require.NoError(t, err)
+		_, err = database.Exec("create table only_" + role + " (id integer)")
+		require.NoError(t, err)
+		require.NoError(t, database.Close())
+		endpoints = append(endpoints, endpoint)
+	}
+	return database.Pool{Writers: endpoints[:1], Readers: endpoints[1:]}
+}
+
+type aliasDriver struct {
+	contractsdriver.Driver
+	pool database.Pool
+}
+
+func (d aliasDriver) Pool() database.Pool                { return d.pool }
+func (aliasDriver) Dialect() contractsdriver.Dialect     { return sqlite.NewDialect() }
+func (aliasDriver) Grammar() contractsdriver.Grammar     { return sqlite.NewSchemaGrammar(nil, "") }
+func (aliasDriver) Processor() contractsdriver.Processor { return sqlite.NewProcessor() }
+
+type aliasConfig struct {
+	config.Config
+	sources map[string]database.Pool
+}
+
+func (c aliasConfig) Get(key string, fallback ...any) any {
+	if strings.HasPrefix(key, "database.connections.") && strings.HasSuffix(key, ".via") {
+		name := strings.TrimSuffix(strings.TrimPrefix(key, "database.connections."), ".via")
+		if pool, ok := c.sources[name]; ok {
+			return func() (contractsdriver.Driver, error) { return aliasDriver{pool: pool}, nil }
+		}
+	}
+	if len(fallback) > 0 {
+		return fallback[0]
+	}
+	return nil
+}
+func (aliasConfig) GetString(key string, fallback ...string) string {
+	if key == "database.default" {
+		return "primary_alias"
+	}
+	if len(fallback) > 0 {
+		return fallback[0]
+	}
+	return ""
+}
+func (aliasConfig) GetInt(key string, fallback ...int) int {
+	if key == "database.slow_threshold" {
+		return 60000
+	}
+	if key == "database.pool.max_open_conns" || key == "database.pool.max_idle_conns" {
+		return 1
+	}
+	if len(fallback) > 0 {
+		return fallback[0]
+	}
+	return 0
+}
+func (aliasConfig) GetBool(_ string, fallback ...bool) bool {
+	return len(fallback) > 0 && fallback[0]
+}
+func (aliasConfig) GetDuration(_ string, fallback ...time.Duration) time.Duration {
+	if len(fallback) > 0 {
+		return fallback[0]
+	}
+	return 0
+}

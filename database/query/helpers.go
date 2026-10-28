@@ -93,7 +93,9 @@ func flatten(values []any, depth int) []any {
 			continue
 		}
 
-		if _, ok := value.([]byte); ok {
+		// A SQL Valuer (including named slices) is one parameter. Binary strings likewise retain
+		// their bytes instead of being recursively expanded like an ordinary Go value list.
+		if !core.IsArrayValue(value) {
 			out = append(out, value)
 
 			continue

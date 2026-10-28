@@ -12,6 +12,7 @@ import (
 	querybuilder "github.com/gradii/framework/database/query"
 	"github.com/gradii/framework/errors"
 	"github.com/gradii/framework/support/carbon"
+	instrumentationdatabase "github.com/gradii/framework/telemetry/instrumentation/database"
 )
 
 // This file executes SQL the framework compiles itself.
@@ -87,6 +88,10 @@ func (r *Query) readPool() (statementPool, error) {
 		return r.queryPool()
 	}
 
+	if r.connection != nil {
+		return r.connection.Reader(), nil
+	}
+	// NewQuery also supports an explicitly supplied pool without a managed handle.
 	if reader := databasedriver.Reader(r.dbConfig.Connection); reader != nil {
 		return reader, nil
 	}
@@ -113,7 +118,12 @@ func (r *Query) startStatementSpan(resolverMode string) (context.Context, func(s
 		ctx = context.Background()
 	}
 
-	instrument := databasedriver.Instrument(r.dbConfig.Connection)
+	var instrument *instrumentationdatabase.Instrument
+	if r.connection != nil {
+		instrument = r.connection.Instrument()
+	} else {
+		instrument = databasedriver.Instrument(r.dbConfig.Connection)
+	}
 	if !instrument.Active() {
 		return ctx, func(string, string, int64, error) {}
 	}
@@ -149,8 +159,13 @@ func (r *Query) statementTable() string {
 // poolResolverMode reports which pool a statement ran on, for the span: a replica when the pool is the
 // connection's reader, the writer otherwise. A transaction always runs on the writer.
 func (r *Query) poolResolverMode(pool statementPool) string {
-	if reader := databasedriver.Reader(r.dbConfig.Connection); reader != nil && statementPool(reader) == pool {
+	if r.connection != nil && r.connection.Reader() != r.connection.Writer() && statementPool(r.connection.Reader()) == pool {
 		return resolverModeRead
+	}
+	if r.connection == nil {
+		if reader := databasedriver.Reader(r.dbConfig.Connection); reader != nil && statementPool(reader) == pool {
+			return resolverModeRead
+		}
 	}
 
 	return resolverModeWrite

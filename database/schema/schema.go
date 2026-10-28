@@ -129,7 +129,7 @@ func (r *Schema) Create(table string, callback func(table contractsschema.Bluepr
 	callback(blueprint)
 
 	if err := r.build(blueprint); err != nil {
-		return errors.SchemaFailedToCreateTable.Args(table, err)
+		return withSchemaCause(errors.SchemaFailedToCreateTable.Args(table, err), err)
 	}
 
 	return nil
@@ -140,13 +140,16 @@ func (r *Schema) Drop(table string) error {
 	blueprint.Drop()
 
 	if err := r.build(blueprint); err != nil {
-		return errors.SchemaFailedToDropTable.Args(table, err)
+		return withSchemaCause(errors.SchemaFailedToDropTable.Args(table, err), err)
 	}
 
 	return nil
 }
 
 func (r *Schema) DropAllTables() error {
+	if _, ok := r.grammar.(driver.SchemaOperationsGrammar); ok {
+		return r.dropAllScoped("dropAllTables")
+	}
 	schemas, err := r.GetCurrentSchemaListing()
 	if err != nil {
 		return err
@@ -176,6 +179,9 @@ func (r *Schema) DropAllTables() error {
 }
 
 func (r *Schema) DropAllTypes() error {
+	if _, ok := r.grammar.(driver.SchemaOperationsGrammar); ok {
+		return r.dropAllScoped("dropAllTypes")
+	}
 	schemas, err := r.GetCurrentSchemaListing()
 	if err != nil {
 		return err
@@ -200,6 +206,9 @@ func (r *Schema) DropAllTypes() error {
 }
 
 func (r *Schema) DropAllViews() error {
+	if _, ok := r.grammar.(driver.SchemaOperationsGrammar); ok {
+		return r.dropAllScoped("dropAllViews")
+	}
 	schemas, err := r.GetCurrentSchemaListing()
 	if err != nil {
 		return err
@@ -233,7 +242,7 @@ func (r *Schema) DropColumns(table string, columns []string) error {
 	blueprint.DropColumn(columns...)
 
 	if err := r.build(blueprint); err != nil {
-		return errors.SchemaFailedToDropColumns.Args(table, err)
+		return withSchemaCause(errors.SchemaFailedToDropColumns.Args(table, err), err)
 	}
 
 	return nil
@@ -244,7 +253,7 @@ func (r *Schema) DropIfExists(table string) error {
 	blueprint.DropIfExists()
 
 	if err := r.build(blueprint); err != nil {
-		return errors.SchemaFailedToDropTable.Args(table, err)
+		return withSchemaCause(errors.SchemaFailedToDropTable.Args(table, err), err)
 	}
 
 	return nil
@@ -518,7 +527,7 @@ func (r *Schema) Rename(from, to string) error {
 	blueprint.Rename(to)
 
 	if err := r.build(blueprint); err != nil {
-		return errors.SchemaFailedToRenameTable.Args(from, err)
+		return withSchemaCause(errors.SchemaFailedToRenameTable.Args(from, err), err)
 	}
 
 	return nil
@@ -614,7 +623,7 @@ func (r *Schema) Table(table string, callback func(table contractsschema.Bluepri
 	callback(blueprint)
 
 	if err := r.build(blueprint); err != nil {
-		return errors.SchemaFailedToChangeTable.Args(table, err)
+		return withSchemaCause(errors.SchemaFailedToChangeTable.Args(table, err), err)
 	}
 
 	return nil

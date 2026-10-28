@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	sqldriver "database/sql/driver"
 	"sync"
 
 	"github.com/gradii/framework/contracts/database/db"
@@ -57,6 +58,22 @@ func (r *DB) WithWriteConnection(callback func(db.Tx) error) (err error) {
 	return callback(connection)
 }
 func (r *writeConnection) Close() error {
+	return r.close(false)
+}
+
+// CanDiscard reports whether this handle owns a removable physical connection.
+func (r *Tx) CanDiscard() bool { return r.pinned != nil }
+
+// Discard rolls back work and removes a leased physical connection from its pool.
+// It is optional for db.Tx implementations and used when session cleanup fails.
+func (r *Tx) Discard() error {
+	if r.pinned == nil {
+		return errors.SchemaSessionDiscardNotSupported
+	}
+	return (&writeConnection{Tx: r, lease: r.pinned}).close(true)
+}
+
+func (r *writeConnection) close(discard bool) error {
 	r.lease.mu.Lock()
 	if r.lease.closed {
 		r.lease.mu.Unlock()
@@ -79,8 +96,15 @@ func (r *writeConnection) Close() error {
 		}
 	}
 	if r.lease.connection != nil {
+		if discard {
+			if err := r.lease.connection.Raw(func(any) error { return sqldriver.ErrBadConn }); err != nil && !errors.Is(err, sqldriver.ErrBadConn) && !errors.Is(err, sql.ErrConnDone) {
+				failures = append(failures, err)
+			}
+		}
 		if err := r.lease.connection.Close(); err != nil {
-			failures = append(failures, err)
+			if !discard || !errors.Is(err, sql.ErrConnDone) {
+				failures = append(failures, err)
+			}
 		}
 	}
 	return errors.Join(failures...)

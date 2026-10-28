@@ -27,7 +27,7 @@ func (r *Query) updateAssignments(values any) (map[string]any, error) {
 	filter, restricted := r.selectAndOmitColumns(schema)
 
 	raw := values
-	if mapping, ok := values.(map[string]any); ok && r.grammar != nil {
+	if mapping, ok := values.(map[string]any); ok && r.grammar != nil && r.components.Dialect == nil {
 		compiled, err := r.grammar.CompileJsonColumnsUpdate(mapping)
 		if err != nil {
 			return nil, errors.OrmJsonColumnUpdateInvalid.Args(err)
@@ -57,7 +57,7 @@ func (r *Query) updateAssignments(values any) (map[string]any, error) {
 				continue
 			}
 
-			assignments[column] = value
+			assignments[column] = modelColumnBinding(schema, column, value)
 		}
 	case reflect.Struct:
 		assignFromStruct(r.ctx, assignments, filter, restricted, schema, reflected)
@@ -88,7 +88,7 @@ func (r *Query) saveAssignments(value any) (map[string]any, error) {
 				continue
 			}
 
-			assignments[column] = item
+			assignments[column] = modelColumnBinding(schema, column, item)
 		}
 
 		addAutoUpdateTime(assignments, filter, restricted, schema)
@@ -111,7 +111,7 @@ func (r *Query) saveAssignments(value any) (map[string]any, error) {
 				continue
 			}
 
-			fieldValue, _ := field.ValueOf(r.ctx, reflected)
+			fieldValue, _ := field.BindingValueOf(r.ctx, reflected)
 			assignments[field.DBName] = fieldValue
 		}
 	}
@@ -229,7 +229,7 @@ func assignFromStruct(ctx context.Context, assignments map[string]any, filter ma
 			continue
 		}
 
-		fieldValue, zero := field.ValueOf(ctx, value)
+		fieldValue, zero := field.BindingValueOf(ctx, value)
 
 		// A column the caller named outright is written even when it holds the zero value, which is how
 		// Select("name").Update(model) clears a column; every other column is written only when it

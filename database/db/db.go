@@ -73,6 +73,9 @@ func NewDB(ctx context.Context, config config.Config, driver contractsdriver.Dri
 }
 
 func BuildDB(ctx context.Context, config config.Config, log log.Log, connection string, telemetryResolver contractstelemetry.Resolver) (*DB, error) {
+	if connection == "" {
+		connection = config.GetString("database.default")
+	}
 	driverCallback, exist := config.Get(fmt.Sprintf("database.connections.%s.via", connection)).(func() (contractsdriver.Driver, error))
 	if !exist {
 		return nil, errors.DatabaseConfigNotFound
@@ -150,7 +153,7 @@ func (r *DB) Connection(name string) contractsdb.DB {
 	}
 
 	r.queries.mu.RLock()
-	if db, ok := r.queries.m[name]; ok {
+	if db, ok := r.queries.m[name]; ok && connectionIsCurrent(db) {
 		r.queries.mu.RUnlock()
 		return db
 	}
@@ -158,7 +161,7 @@ func (r *DB) Connection(name string) contractsdb.DB {
 
 	r.queries.mu.Lock()
 	defer r.queries.mu.Unlock()
-	if db, ok := r.queries.m[name]; ok {
+	if db, ok := r.queries.m[name]; ok && connectionIsCurrent(db) {
 		return db
 	}
 
@@ -175,6 +178,11 @@ func (r *DB) Connection(name string) contractsdb.DB {
 	}
 
 	return db
+}
+
+func connectionIsCurrent(connection contractsdb.DB) bool {
+	db, ok := connection.(*DB)
+	return !ok || db.connection == nil || db.connection.IsCurrent()
 }
 
 func (r *DB) Transaction(callback func(contractsdb.Tx) error, attempts ...int) error {
@@ -246,9 +254,13 @@ func NewTx(
 			logger.Warningf(ctx, "%s", err)
 		}
 	}
+	connectionName := poolWriter.Connection
+	if connection != nil {
+		connectionName = connection.Name()
+	}
 
 	tx := &Tx{
-		state:        newConnectionState(poolWriter.Connection, poolWriter.Driver),
+		state:        newConnectionState(connectionName, poolWriter.Driver),
 		ctx:          ctx,
 		config:       config,
 		driver:       driver,

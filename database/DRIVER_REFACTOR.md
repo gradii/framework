@@ -20,6 +20,29 @@ refactor does not restore automatic table naming from Go type names. Existing
 GORM dependency. Complete obfuscation of relationship field access is a separate
 mapping concern.
 
+Custom values use the standard `driver.Valuer` and `sql.Scanner` interfaces.
+The framework's [JSON types and migration guide](types/README.md) describe NULL,
+pointer receivers, and the supported serializer-tag boundary. Field traversal
+uses the shared `internal/reflectx` helpers; JSON codecs are independent of the
+driver packages.
+
+Each logical connection alias has its own pool lifecycle. DB and ORM calls using
+the same configured identity and logical name share resources; purging one alias
+does not close another alias's pool. `DropAll*` resolves and validates namespaces
+on the same leased writer session that performs the deletion.
+
+DB/Schema nested transactions share one SQL transaction and physical connection,
+using savepoints for nested rollback. Contexts carry cancellation and deadlines;
+they do not identify or automatically propagate a transaction. Pass the returned
+transaction handle to nested operations and execute nested scopes sequentially.
+The manager's state mutex does not isolate concurrent goroutines sharing a
+savepoint tree. ORM `BeginTransaction` currently reuses an existing transaction
+without a savepoint, so its nested Commit is not an independent inner commit.
+Unifying that ORM behavior and enforcing parallel-scope ownership require a
+separate transaction change; the schema fixes use the DB/Tx implementation. See
+the [transaction follow-up plan](TRANSACTION_FOLLOWUP_PLAN.md), which also records
+the current stale-child rollback limitation.
+
 ## Tests
 
 All original framework test files and test functions remain in the framework
@@ -59,6 +82,11 @@ CNB explicitly checks out compatible revisions and generates its own workspace.
 The `unit` mode runs all five root modules; `database` runs framework database tests;
 `integration` runs the independent framework test module, including the ported
 database-fixture cases. There are no old-code compatibility modules or legacy jobs.
+
+The independent module also runs the driver review regressions for namespace
+scope, SQLite rebuilds, generated/default/enum changes, and standard JSON values.
+These execute through the CNB integration job rather than relying only on
+environment-gated tests in the driver repositories.
 
 Companion repository URLs and refs must be configured in CNB while the forks are
 unpublished. A pipeline cannot fetch uncommitted changes from a developer's machine.

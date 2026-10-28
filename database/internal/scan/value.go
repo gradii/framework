@@ -68,17 +68,23 @@ func Assign(target reflect.Value, source any) error {
 	}
 
 	if scanner, ok := target.Addr().Interface().(sql.Scanner); ok {
-		// Existing JSON scanners accept text columns as bytes. Soft-delete
-		// timestamps also accept the textual dates handled by earlier reads.
-		if value, ok := source.(string); ok {
-			source = []byte(value)
-		}
-		if value, ok := source.([]byte); ok && target.Type().ConvertibleTo(reflect.TypeFor[sql.NullTime]()) {
-			parsed := carbon.Parse(string(value))
-			if parsed.Error != nil {
-				return parsed.Error
+		// Text-to-time compatibility is local to nullable timestamp types. Other
+		// scanners receive exactly the source type supplied by the SQL driver.
+		if target.Type().ConvertibleTo(reflect.TypeFor[sql.NullTime]()) {
+			var text string
+			switch value := source.(type) {
+			case string:
+				text = value
+			case []byte:
+				text = string(value)
 			}
-			source = parsed.StdTime()
+			if text != "" {
+				parsed := carbon.Parse(text)
+				if parsed.Error != nil {
+					return parsed.Error
+				}
+				source = parsed.StdTime()
+			}
 		}
 
 		return scanner.Scan(source)

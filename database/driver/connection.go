@@ -2,7 +2,6 @@ package driver
 
 import (
 	"database/sql"
-	"sync"
 
 	"github.com/gradii/framework/contracts/config"
 	"github.com/gradii/framework/contracts/database"
@@ -20,14 +19,14 @@ import (
 // other one on the writer. The pools are opened by this package from the connection's own fields, so
 // no ORM session sits between the framework and the database.
 type Connection struct {
-	versionMu     sync.Mutex
-	serverVersion string
-	name          string
-	driver        string
-	dialect       contractsdriver.Dialect
-	writer        *sql.DB
-	reader        *sql.DB
-	instrument    *instrumentationdatabase.Instrument
+	identity   connectionIdentity
+	resources  *cachedConnection
+	name       string
+	driver     string
+	dialect    contractsdriver.Dialect
+	writer     *sql.DB
+	reader     *sql.DB
+	instrument *instrumentationdatabase.Instrument
 }
 
 // Open returns the connection for a configured pool, building and caching it on first use.
@@ -36,11 +35,11 @@ type Connection struct {
 // that is the state of a fresh application before any credentials exist, and callers treat it as
 // "no database" rather than as a failure.
 func Open(config config.Config, logger contractslogger.Logger, pool database.Pool, connection string, telemetryResolver contractstelemetry.Resolver, dialects ...contractsdriver.Dialect) (*Connection, error) {
-	writer, instrument, err := BuildConnection(config, logger, pool, connection, telemetryResolver, dialects...)
+	resources, err := buildConnection(config, logger, pool, connection, telemetryResolver, dialects...)
 	if err != nil {
 		return nil, err
 	}
-	if writer == nil {
+	if resources == nil {
 		return nil, nil
 	}
 
@@ -54,12 +53,14 @@ func Open(config config.Config, logger contractslogger.Logger, pool database.Poo
 	}
 
 	return &Connection{
+		identity:   poolConnectionIdentity(pool, connection),
+		resources:  resources,
 		name:       connection,
 		driver:     driverName,
 		dialect:    dialect,
-		writer:     writer,
-		reader:     Reader(poolConnectionName(pool, connection)),
-		instrument: instrument,
+		writer:     resources.db,
+		reader:     resources.reader,
+		instrument: resources.instrument,
 	}, nil
 }
 
@@ -67,6 +68,16 @@ func Open(config config.Config, logger contractslogger.Logger, pool database.Poo
 func (r *Connection) Name() string {
 	return r.name
 }
+
+// IsCurrent reports whether this handle still belongs to the cached generation. Facade registries
+// use it to discard handles invalidated through another DB or ORM entry point.
+func (r *Connection) IsCurrent() bool {
+	current, ok := connectionToDB.Load(r.identity)
+	return ok && current == r.resources
+}
+
+// Purge closes this logical connection's current resources, leaving other aliases untouched.
+func (r *Connection) Purge() error { return purgeConnection(r.identity) }
 
 // Driver returns the driver name the connection is configured with.
 func (r *Connection) Driver() string {
@@ -99,37 +110,12 @@ func (r *Connection) Instrument() *instrumentationdatabase.Instrument {
 	return r.instrument
 }
 
-// Reader returns the reader pool cached for a connection name, or nil when the connection has no
-// usable replica — either none configured or none openable. It exists so the ORM, which holds only
-// the connection name, can resolve the pool the facades execute their reads on; callers fall back to
-// the writer on nil.
-func Reader(connection string) *sql.DB {
-	if cached, ok := readPools.Load(connection); ok {
+// Reader returns a logical connection's cached replica, or nil when it has none. Supply its pool
+// when the driver's configured source has a different name. Managed callers use Connection.Reader.
+func Reader(connection string, pools ...database.Pool) *sql.DB {
+	if cached, ok := readPools.Load(namedConnectionIdentity(connection, pools)); ok {
 		return cached.(cachedReader).pool
 	}
 
 	return nil
-}
-
-// resetReaders drops the cached reader pools without closing them, leaving any pool a caller
-// still holds open, which mirrors what ResetConnections does for the writer.
-func resetReaders() {
-	readPools.Range(func(key, _ any) bool {
-		readPools.Delete(key)
-
-		return true
-	})
-}
-
-// closeReaders drops the cached reader pools and closes them.
-func closeReaders() {
-	readPools.Range(func(key, value any) bool {
-		readPools.Delete(key)
-
-		if reader, ok := value.(cachedReader); ok {
-			_ = reader.pool.Close()
-		}
-
-		return true
-	})
 }

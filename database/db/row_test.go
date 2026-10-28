@@ -4,6 +4,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
+	databasetypes "github.com/gradii/framework/database/types"
 	"testing"
 	"time"
 
@@ -25,11 +26,19 @@ func (r *Json) Value() (driver.Value, error) {
 	return string(bytes), err
 }
 
-func (r *Json) Scan(value any) (err error) {
-	if data, ok := value.([]byte); ok && len(data) > 0 {
-		err = json.Unmarshal(data, &r)
+func (r *Json) Scan(value any) error {
+	var document databasetypes.JSON
+	if err := document.Scan(value); err != nil {
+		return err
 	}
-	return
+	var decoded Json
+	if document != nil {
+		if err := json.Unmarshal(document, &decoded); err != nil {
+			return err
+		}
+	}
+	*r = decoded
+	return nil
 }
 
 func TestNewRow(t *testing.T) {
@@ -1299,7 +1308,7 @@ func TestScan_ToScanner(t *testing.T) {
 				Data Json
 			}{},
 			rowData: map[string]any{"data": ""},
-			wantErr: false,
+			wantErr: true, // Empty text is invalid JSON; SQL NULL has its own case.
 			assertion: func(t *testing.T, target any) {
 				result := target.(*struct {
 					Data Json
@@ -1471,7 +1480,7 @@ func TestScan_ToScanner(t *testing.T) {
 				Data Json
 			}{},
 			rowData: map[string]any{"data": ""},
-			wantErr: false,
+			wantErr: true, // Empty text is invalid JSON; SQL NULL has its own case.
 			assertion: func(t *testing.T, target any) {
 				result := target.(*struct {
 					Data Json

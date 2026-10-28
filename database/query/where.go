@@ -1,12 +1,12 @@
 package query
 
 import (
-	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
 	"time"
 
+	contractsquery "github.com/gradii/framework/contracts/database/query"
 	"github.com/gradii/framework/database/query/core"
 	"github.com/gradii/framework/errors"
 	"github.com/gradii/framework/support/carbon"
@@ -615,8 +615,18 @@ func (b *Builder) OrWhereRowValues(columns []any, operator string, values []any)
 
 // WhereJsonContains adds a JSON contains clause. Mirrors Builder::whereJsonContains().
 func (b *Builder) WhereJsonContains(column string, value any, boolean string, not bool) *Builder {
+	var binding any
 	if !IsExpression(value) {
-		if _, err := json.Marshal(value); err != nil {
+		var err error
+		if preparer, ok := b.grammar.(contractsquery.JsonContainsPreparer); ok {
+			value, binding, err = preparer.PrepareJsonContains(CastBinding(value))
+		} else {
+			value, err = core.NormalizeJSONValue(CastBinding(value))
+			if err == nil && b.grammar != nil {
+				binding = b.grammar.PrepareBindingForJsonContains(value)
+			}
+		}
+		if err != nil {
 			b.setError(err)
 			return b
 		}
@@ -624,7 +634,7 @@ func (b *Builder) WhereJsonContains(column string, value any, boolean string, no
 	b.State().Wheres = append(b.State().Wheres, core.Where{Type: core.WhereJsonContainsType, Column: column, Value: value, Boolean: boolean, Not: not})
 
 	if !IsExpression(value) && b.grammar != nil {
-		_ = b.AddBinding(b.grammar.PrepareBindingForJsonContains(value), "where")
+		_ = b.AddBinding(binding, "where")
 	}
 
 	return b
@@ -650,7 +660,9 @@ func (b *Builder) OrWhereJsonDoesntContain(column string, value any) *Builder {
 // WhereJsonOverlaps adds a JSON overlaps clause. Mirrors Builder::whereJsonOverlaps().
 func (b *Builder) WhereJsonOverlaps(column string, value any, boolean string, not bool) *Builder {
 	if !IsExpression(value) {
-		if _, err := json.Marshal(value); err != nil {
+		var err error
+		value, err = core.NormalizeJSONValue(CastBinding(value))
+		if err != nil {
 			b.setError(err)
 			return b
 		}

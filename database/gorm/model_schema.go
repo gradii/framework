@@ -2,10 +2,13 @@ package gorm
 
 import (
 	"context"
+	"database/sql"
 	"reflect"
-	"time"
+	"strings"
 
 	"github.com/gradii/framework/database/internal/annotation"
+	"github.com/gradii/framework/database/internal/reflectx"
+	"github.com/gradii/framework/database/internal/scan"
 	"github.com/gradii/framework/errors"
 	"github.com/gradii/framework/support/str"
 )
@@ -38,6 +41,7 @@ type modelSchema struct {
 type schemaField struct {
 	// primaryKey is filled in by collectPrimaryFields once every field is known.
 	primaryKey bool
+	jsonColumn bool
 	// Name is the Go field name.
 	Name string
 	// DBName is the column the field maps to.
@@ -95,7 +99,9 @@ func parseSchemaWithTable(model any, table string) (*modelSchema, error) {
 		FieldsByName:   make(map[string]*schemaField),
 	}
 
-	collectSchemaFields(schema, modelType, nil)
+	if err := collectSchemaFields(schema, modelType, nil); err != nil {
+		return nil, err
+	}
 	collectPrimaryFields(schema)
 
 	return schema, nil
@@ -103,7 +109,7 @@ func parseSchemaWithTable(model any, table string) (*modelSchema, error) {
 
 // collectSchemaFields walks a struct, appending its columns. prefix carries the path already
 // travelled, so an embedded struct's columns resolve against the outer value.
-func collectSchemaFields(schema *modelSchema, modelType reflect.Type, prefix []int) {
+func collectSchemaFields(schema *modelSchema, modelType reflect.Type, prefix []int) error {
 	for position := 0; position < modelType.NumField(); position++ {
 		field := modelType.Field(position)
 		if !field.IsExported() {
@@ -115,17 +121,36 @@ func collectSchemaFields(schema *modelSchema, modelType reflect.Type, prefix []i
 			continue
 		}
 
+		jsonColumn := false
+		for _, setting := range strings.Split(field.Tag.Get("gorm"), ";") {
+			key, serializer, ok := strings.Cut(setting, ":")
+			if ok && strings.EqualFold(strings.TrimSpace(key), "type") {
+				typ := strings.TrimSpace(serializer)
+				jsonColumn = strings.EqualFold(typ, "json") || strings.EqualFold(typ, "jsonb")
+			}
+			if ok && strings.EqualFold(strings.TrimSpace(key), "serializer") {
+				typ := indirectType(field.Type)
+				if (!typ.Implements(valuerInterface) && !reflect.PointerTo(typ).Implements(valuerInterface)) || !reflect.PointerTo(typ).Implements(reflect.TypeFor[sql.Scanner]()) {
+					return errors.OrmSerializerRequiresInterfaces.Args(serializer, field.Name)
+				}
+			}
+		}
+
 		primaryKey := annotation.PrimaryKey
 
-		// A pointer embed is reached by dereferencing, which the negative index records.
+		// Keep ordinary field indexes; reflectx traverses embedded pointer chains.
 		if field.Type.Kind() == reflect.Pointer {
 			if embedded := indirectStructType(field.Type); field.Anonymous && embedded != nil && !isColumnType(field.Type) {
-				collectSchemaFields(schema, embedded, append(append([]int(nil), prefix...), -position-1))
+				if err := collectSchemaFields(schema, embedded, append(append([]int(nil), prefix...), position)); err != nil {
+					return err
+				}
 
 				continue
 			}
 		} else if field.Anonymous && !isColumnType(field.Type) {
-			collectSchemaFields(schema, field.Type, append(append([]int(nil), prefix...), position))
+			if err := collectSchemaFields(schema, field.Type, append(append([]int(nil), prefix...), position)); err != nil {
+				return err
+			}
 
 			continue
 		}
@@ -137,6 +162,7 @@ func collectSchemaFields(schema *modelSchema, modelType reflect.Type, prefix []i
 
 		schemaField := &schemaField{
 			primaryKey: primaryKey,
+			jsonColumn: jsonColumn,
 			Name:       field.Name,
 			DBName:     column,
 			FieldType:  field.Type,
@@ -153,6 +179,7 @@ func collectSchemaFields(schema *modelSchema, modelType reflect.Type, prefix []i
 		schema.FieldsByDBName[column] = schemaField
 		schema.FieldsByName[field.Name] = schemaField
 	}
+	return nil
 }
 
 // stampedField marks a field the ORM stamps automatically. Only its non-zero-ness is read.
@@ -191,66 +218,28 @@ func isColumnType(fieldType reflect.Type) bool {
 
 // ValueOf reads the field's value from a model value, reporting whether it holds the zero value.
 func (f *schemaField) ValueOf(_ context.Context, value reflect.Value) (any, bool) {
-	value = indirectValue(value)
-
-	for place, index := range f.index {
-		if index >= 0 {
-			value = value.Field(index)
-
-			continue
-		}
-
-		value = value.Field(-index - 1)
-		if value.IsNil() {
-			return nil, true
-		}
-		if place < len(f.index)-1 {
-			value = value.Elem()
-		}
+	field := reflectx.FieldByIndexesReadOnly(value, f.index)
+	if !field.IsValid() {
+		return nil, true
 	}
-
-	return value.Interface(), value.IsZero()
+	return field.Interface(), field.IsZero()
 }
 
-// ReflectValueOf returns the settable field on a model value, allocating any pointer it has to pass
-// through. A pointer that ends the path is allocated but not dereferenced, so setting through it
-// writes to the pointer field itself.
+// ReflectValueOf returns the settable field on a model value, allocating pointer
+// embeds along the path while preserving a nil pointer or map at the leaf.
 func (f *schemaField) ReflectValueOf(value reflect.Value) reflect.Value {
 	value = indirectValue(value)
-	if !value.IsValid() || value.Kind() != reflect.Struct {
-		// A nil or unrecognised destination cannot be written to; Set treats the invalid value as
-		// "not settable" and returns without touching anything.
+	if !value.IsValid() || value.Kind() != reflect.Struct || len(f.index) == 0 {
 		return reflect.Value{}
 	}
-
-	for place, index := range f.index {
-		if index >= 0 {
-			value = value.Field(index)
-
-			continue
-		}
-
-		value = value.Field(-index - 1)
-		if value.IsNil() {
-			value.Set(reflect.New(value.Type().Elem()))
-		}
-		if place < len(f.index)-1 {
-			value = value.Elem()
-		}
+	// Allocate only intermediate embeds. A leaf pointer/map retains its nil
+	// state until assignment succeeds, as required by Scanner error handling.
+	parent := reflectx.FieldByIndexes(value, f.index[:len(f.index)-1])
+	parent = indirectValue(parent)
+	if !parent.IsValid() {
+		return reflect.Value{}
 	}
-
-	return value
-}
-
-// scanSourceInto loads source into target through target's own Scan method, reporting whether
-// the target carried one and accepted the value.
-func scanSourceInto(target reflect.Value, source any) bool {
-	scanner, ok := target.Interface().(interface{ Scan(any) error })
-	if !ok {
-		return false
-	}
-
-	return scanner.Scan(source) == nil
+	return parent.Field(f.index[len(f.index)-1])
 }
 
 // Set writes a value into the field, converting it when the Go types differ.
@@ -258,6 +247,11 @@ func (f *schemaField) Set(_ context.Context, value reflect.Value, source any) er
 	target := f.ReflectValueOf(value)
 	if !target.CanSet() {
 		return nil
+	}
+
+	base := indirectType(target.Type())
+	if reflect.PointerTo(base).Implements(reflect.TypeFor[sql.Scanner]()) {
+		return scan.Assign(target, source)
 	}
 
 	if source == nil {
@@ -294,12 +288,6 @@ func (f *schemaField) Set(_ context.Context, value reflect.Value, source any) er
 			pointer.Elem().Set(sourceValue)
 		case sourceType.ConvertibleTo(elementType):
 			pointer.Elem().Set(sourceValue.Convert(elementType))
-		case sourceType == reflect.TypeOf(time.Time{}) && scanSourceInto(pointer, source):
-			// A column type that carries its own database representation — the framework's
-			// carbon timestamps (*carbon.DateTime and its siblings) — loads a plain time.Time
-			// through its own Scan, exactly as the driver loads such a column. time.Time is
-			// neither assignable nor convertible to that type, so without this the pointer
-			// branch would fall through to the mismatch error.
 		default:
 			return errors.OrmFieldTypeMismatch.Args(sourceType.String(), f.Name, target.Type().String())
 		}

@@ -106,7 +106,7 @@ func (r *Query) structRecord(value any) (map[string]any, error) {
 
 	record := make(map[string]any, len(schema.Fields))
 	for _, field := range schema.Fields {
-		fieldValue, _ := field.ValueOf(r.ctx, reflected)
+		fieldValue, _ := field.BindingValueOf(r.ctx, reflected)
 		record[field.DBName] = fieldValue
 	}
 
@@ -123,7 +123,7 @@ func (r *Query) applyInsertTimestamps(value reflect.Value, schema *modelSchema) 
 			continue
 		}
 
-		if _, zero := field.ValueOf(r.ctx, value); !zero {
+		if _, zero := field.BindingValueOf(r.ctx, value); !zero {
 			continue
 		}
 
@@ -188,7 +188,8 @@ func (r *Query) resolveRecordColumns(record map[string]any) map[string]any {
 
 	resolved := make(map[string]any, len(record))
 	for key, value := range record {
-		resolved[resolveInsertColumn(schema, key)] = value
+		column := resolveInsertColumn(schema, key)
+		resolved[column] = modelColumnBinding(schema, column, value)
 	}
 
 	return resolved

@@ -1440,7 +1440,7 @@ func (s *SchemaSuite) TestColumnTypes_Sqlserver() {
 			s.False(column.Autoincrement)
 			s.Equal("SQL_Latin1_General_CP1_CI_AS", column.Collation)
 			s.Equal("This is a string_default column", column.Comment)
-			s.Equal("('goravel')", column.Default)
+			s.Equal("(N'goravel')", column.Default)
 			s.False(column.Nullable)
 			s.Equal("nvarchar(255)", column.Type)
 			s.Equal("nvarchar", column.TypeName)
@@ -1572,7 +1572,8 @@ func (s *SchemaSuite) TestEnum_Postgres() {
 		Str: "a",
 		Int: "4",
 	}
-	s.ErrorContains(testQuery.Query().Table(table).Create(postgresEnum), `new row for relation "goravel_postgres_enum" violates check constraint "goravel_postgres_enum_int_check"`)
+	// Enum constraints now have stable framework-owned names for safe changes.
+	s.ErrorContains(testQuery.Query().Table(table).Create(postgresEnum), `new row for relation "goravel_postgres_enum" violates check constraint "gradii_enum_`)
 
 	postgresEnum = &PostgresEnum{
 		Str: "a",

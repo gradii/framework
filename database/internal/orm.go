@@ -92,6 +92,9 @@ func NewOrm(
 }
 
 func BuildOrm(ctx context.Context, config config.Config, connection string, log log.Log, fresh func(key ...any), telemetryResolver contractstelemetry.Resolver) (*Orm, error) {
+	if connection == "" {
+		connection = config.GetString("database.default")
+	}
 	query, dbConfig, err := gorm.BuildQuery(ctx, config, connection, log, nil, telemetryResolver)
 	if err != nil {
 		return NewOrm(ctx, config, connection, dbConfig, nil, NewQueriesCache(nil, nil), log, nil, fresh, telemetryResolver), err
@@ -112,10 +115,15 @@ func (r *Orm) Connection(name string) contractsorm.Orm {
 	r.queries.mu.RLock()
 	instance, exist := r.queries.connections[name]
 	r.queries.mu.RUnlock()
-	if exist {
+	if exist && queryConnectionIsCurrent(instance.query) {
 		return NewOrm(r.ctx, r.config, name, instance.dbConfig, instance.query, r.queries, r.log, r.modelToObserver, r.fresh, r.telemetryResolver)
 	}
 
+	r.queries.mu.Lock()
+	defer r.queries.mu.Unlock()
+	if instance, exist := r.queries.connections[name]; exist && queryConnectionIsCurrent(instance.query) {
+		return NewOrm(r.ctx, r.config, name, instance.dbConfig, instance.query, r.queries, r.log, r.modelToObserver, r.fresh, r.telemetryResolver)
+	}
 	query, dbConfig, err := gorm.BuildQuery(r.ctx, r.config, name, r.log, r.modelToObserver, r.telemetryResolver)
 	if err != nil || query == nil {
 		r.log.Errorf("[Orm] Init %s connection error: %v", name, err)
@@ -123,16 +131,14 @@ func (r *Orm) Connection(name string) contractsorm.Orm {
 		return NewOrm(r.ctx, r.config, name, dbConfig, nil, r.queries, r.log, r.modelToObserver, r.fresh, r.telemetryResolver)
 	}
 
-	r.queries.mu.Lock()
-	defer r.queries.mu.Unlock()
-	// Double-check: another goroutine may have built this connection first.
-	if instance, exist := r.queries.connections[name]; exist {
-		return NewOrm(r.ctx, r.config, name, instance.dbConfig, instance.query, r.queries, r.log, r.modelToObserver, r.fresh, r.telemetryResolver)
-	}
-
 	r.queries.connections[name] = cachedConnection{query: query, dbConfig: dbConfig}
 
 	return NewOrm(r.ctx, r.config, name, dbConfig, query, r.queries, r.log, r.modelToObserver, r.fresh, r.telemetryResolver)
+}
+
+func queryConnectionIsCurrent(query contractsorm.Query) bool {
+	managed, ok := query.(interface{ ConnectionIsCurrent() bool })
+	return !ok || managed.ConnectionIsCurrent()
 }
 
 func (r *Orm) DB() (*sql.DB, error) {

@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/gradii/framework/contracts/database"
 	contractsdriver "github.com/gradii/framework/contracts/database/driver"
 	querybuilder "github.com/gradii/framework/database/query"
 	"github.com/gradii/framework/errors"
@@ -32,16 +33,21 @@ func driverDialect(name string) string {
 	}
 }
 
-// PurgeConnection removes one cached connection. database/sql lets already leased
-// connections finish their transactions while refusing new work on the closed pool.
-func PurgeConnection(name string) error {
+// PurgeConnection removes one logical connection. Supply the driver's pool when its configured
+// connection name differs from name; handles can call Connection.Purge without resolving it again.
+// database/sql lets already leased connections finish their transactions while refusing new work.
+func PurgeConnection(name string, pools ...database.Pool) error {
+	return purgeConnection(namedConnectionIdentity(name, pools))
+}
+
+func purgeConnection(identity connectionIdentity) error {
 	connectionToDBLock.Lock()
-	cached, found := connectionToDB.LoadAndDelete(name)
-	reader, hasReader := readPools.LoadAndDelete(name)
+	cached, found := connectionToDB.LoadAndDelete(identity)
+	reader, hasReader := readPools.LoadAndDelete(identity)
 	connectionToDBLock.Unlock()
 	var failures []error
 	if found {
-		connection := cached.(cachedConnection)
+		connection := cached.(*cachedConnection)
 		connection.instrument.Shutdown()
 		if connection.db != nil {
 			if err := connection.db.Close(); err != nil {
@@ -58,13 +64,13 @@ func PurgeConnection(name string) error {
 }
 
 func (r *Connection) ServerVersion(ctx context.Context) (string, error) {
-	r.versionMu.Lock()
-	defer r.versionMu.Unlock()
-	if r.serverVersion != "" {
-		return r.serverVersion, nil
-	}
-	if r.writer == nil {
+	if r.writer == nil || r.resources == nil {
 		return "", errors.DatabaseConnectionIsNil
+	}
+	r.resources.versionMu.Lock()
+	defer r.resources.versionMu.Unlock()
+	if r.resources.version != "" {
+		return r.resources.version, nil
 	}
 	var statement string
 	if dialect, ok := r.dialect.(contractsdriver.DialectWithServerVersion); ok {
@@ -73,10 +79,10 @@ func (r *Connection) ServerVersion(ctx context.Context) (string, error) {
 	if statement == "" {
 		return "", errors.DatabaseDialectRequired.Args(r.driver)
 	}
-	if err := r.writer.QueryRowContext(ctx, statement).Scan(&r.serverVersion); err != nil {
+	if err := r.writer.QueryRowContext(ctx, statement).Scan(&r.resources.version); err != nil {
 		return "", err
 	}
-	return r.serverVersion, nil
+	return r.resources.version, nil
 }
 
 // Escape produces a scalar SQL literal. Bound execution continues to use driver parameters.

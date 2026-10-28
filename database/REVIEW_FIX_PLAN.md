@@ -1,10 +1,10 @@
-# 数据库重构审查修复计划（待 review）
+# 数据库重构审查修复计划与执行记录
 
-日期：2026-10-28。本文只提出后续实现与验收方案，本轮没有修改运行时代码或测试。保留五个仓库现有改动及暂存区。
+日期：2026-10-28。用户已批准先提交五个仓库的基线改动，再执行本计划。第 1–9 节保留审批时的基线观察与设计说明；实际实现与验证记录见第 10 节。本次检查点保存修复、审查记录和时间戳回归测试；待修问题见 [DEEP_REVIEW.md](DEEP_REVIEW.md)。
 
 Laravel 参考：`/Users/dog/OpenSource/framework`，12.x，提交 `0fc645c673`。下面区分 Laravel 已有行为、本项目保留的扩展，以及 Laravel 同样存在问题、需要按原生数据库规则修正的行为。已通过的旧测试不代表这些边界已经覆盖。
 
-## 1. JSON：当前到底有没有调用 Value / Scan
+## 1. JSON：审查时的 Value / Scan 支持情况
 
 有。它们来自 Go 标准库，与 GORM 无关，继续使用这两个接口即可，不需要定义泛型驱动接口：
 
@@ -212,4 +212,27 @@ Enum 约束识别是这一组中最复杂的部分：通过 catalog 获得约束
 
 本计划建议采用：标准 Value / Scan 优先；新增非泛型 JSON/JSONMap；本轮不实现 serializer 注册系统；Scanner 恢复标准输入类型并在迁移文档说明兼容影响；SQL Server 不支持的 JSON 结构提前报错；DropAll 以真实 writer session 为准；复杂旧 Enum 约束识别不明时拒绝自动修改。
 
-Alias 建议采用独立逻辑生命周期：同逻辑名的 DB/ORM 共用池，不同 alias 分别建池；这是相对当前共享策略的明确调整。以上均为待 review 的方案，尚未实施。
+Alias 采用独立逻辑生命周期：同逻辑名的 DB/ORM 共用池，不同 alias 分别建池；这是相对原共享策略的明确调整。
+
+## 10. 执行记录
+
+已先提交基线：framework `cb1be4fb`、MySQL `3aa6460`、PostgreSQL `a4e59d5`、SQLite `bb7ba31`、SQL Server `ace134d`。这些提交包含此前的 driver 外移、测试迁移、CNB 配置及本计划；没有 push。
+
+本计划中的 JSON 标准接口/类型、清库范围、SQL Server contains、连接 alias、SQLite 四项重建，以及 PostgreSQL/SQL Server schema 修复均已落地。实现时有以下补充：
+
+- ORM 读写字段遍历复用 `database/internal/reflectx`；保留显式的表名、列名及 JSON 字段映射。
+- 四库实测发现 `Value()` 的 JSON 字节结果需要区分文本与二进制。显式 `type:json/jsonb` 模型字段在调用标准 Valuer 后将有效 JSON 绑定为文本，覆盖 Create/Save/模型更新。没有恢复任意 struct 的 serializer。PostgreSQL 保留原 simple protocol，避免改变既有参数转换行为；直接 DB 参数继续遵循原生 driver 约定。
+- JSON 路径操作对 Valuer 返回的有效 JSON 文本按文档处理，普通 SQL 文本按字符串处理；自有 JSON 类型仍负责报告无效文档。修复 JSON 数字精度/类型、调用方有序更新与 map 被修改、Valuer 被当作列表展开等相邻问题。
+- SQL Server 不兼容的 Enum 收窄可能使服务器撤销整个事务，因此在同一事务中持锁预检查目标值、NULL 和长度，在 DDL 前报告不兼容数据；最终约束仍由数据库验证。
+- SQLite session 恢复失败时废弃实际租借的物理连接；普通未租借的 active Tx 在任何 session 设置或 DDL 前明确拒绝。没有扩大到隐式 context 事务或并发嵌套分支支持。
+- Schema 错误保留公开上下文消息，同时通过 Unwrap 保留底层错误，支持 errors.Is。
+
+新增真实数据库回归位于独立 tests 模块的 `driver_scope_review_test.go`、`driver_sqlite_review_test.go`、`driver_schema_review_test.go`、`json_values_review_test.go`。现有 CNB integration job 的 `go test ./...` 会运行它们，无需另建模块或依靠未设置 DSN 时会 skip 的 driver 根模块测试。原测试保留；SQL Server Unicode 默认值、JSON 浮点文本等断言已按实际语义 port。
+
+深审新增时间戳测试前的验证：framework 全量单元测试、四个 driver 全量测试、framework database 与四个 driver 的 race、相关 vet 均通过。`GOARCH=amd64 go test -count=1 -timeout 25m ./...` 在独立 tests 模块全量通过（336.633 秒），包含 SQL Server。原有旧版本 SQL 分支测试保留并通过，未逐个旧版服务器进行实库验证。
+
+随后新增的四种时间类型测试暴露了未修兼容缺口：单元 20 项中 10 项失败，四库实测 144 项中 56 项失败。当前检查点保留这些失败用例，不能将上述早先验证结果解释为当前全部测试通过；详情见深审报告。
+
+基线保留检查通过：framework 的 478 个测试文件、4,195 个测试/基准/示例函数，以及四个 driver 的基线测试均未删除。主要验证日志为 `/tmp/gradii-review-framework-unit-confirmed.log`、`/tmp/gradii-review-race-confirmed.log`、`/tmp/gradii-review-vet-confirmed.log`、`/tmp/gradii-review-integration-confirmed.log`。
+
+新调查到的事务句柄/并发限制单独记录在 [TRANSACTION_FOLLOWUP_PLAN.md](TRANSACTION_FOLLOWUP_PLAN.md)，尚未实施其行为调整。另发现原 MySQL `json_overlaps` selector 分支沿用三参数形式，Laravel 参考版本也有此断言；这不在已批准修复项中，后续应改为对 `json_extract(field,path)` 执行双参数 overlaps，并保留相应测试。

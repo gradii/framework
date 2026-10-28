@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	databasetypes "github.com/gradii/framework/database/types"
 	"strconv"
 	"testing"
 	"time"
@@ -763,11 +764,19 @@ type ResultData struct {
 	}
 }
 
-func (r *ResultData) Scan(value any) (err error) {
-	if data, ok := value.([]byte); ok && len(data) > 0 {
-		err = json.Unmarshal(data, &r)
+func (r *ResultData) Scan(value any) error {
+	var document databasetypes.JSON
+	if err := document.Scan(value); err != nil {
+		return err
 	}
-	return
+	var decoded ResultData
+	if document != nil {
+		if err := json.Unmarshal(document, &decoded); err != nil {
+			return err
+		}
+	}
+	*r = decoded
+	return nil
 }
 
 func (s *QueryTestSuite) TestCursor_WithJson_ScanStruct() {
@@ -4992,8 +5001,13 @@ func (s *QueryTestSuite) TestJsonColumnsUpdate() {
 					name:   "update float(pointer)",
 					update: map[string]any{"data->float": convert.Pointer(456.789)},
 					assert: func(before JsonData, after JsonData) {
-						s.NotContains(before.Data, "456.789")
-						s.Contains(after.Data, "456.789")
+						// SQL Server may render a float using exponent notation. Check
+						// the JSON number, not its equivalent textual spelling.
+						var oldValue, newValue map[string]any
+						s.Require().NoError(json.Unmarshal([]byte(before.Data), &oldValue))
+						s.Require().NoError(json.Unmarshal([]byte(after.Data), &newValue))
+						s.NotEqual(456.789, oldValue["float"])
+						s.Equal(456.789, newValue["float"])
 					},
 				},
 				{

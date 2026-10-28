@@ -157,6 +157,11 @@ func (r *Schema) restoreForeignKeyConstraints(original bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	err := connection.StatementContext(ctx, restore)
+	if err != nil {
+		if discarder, ok := connection.(interface{ Discard() error }); ok {
+			err = errors.Join(err, discarder.Discard())
+		}
+	}
 	r.constraints.mu.Lock()
 	if r.constraints.connection == connection {
 		r.constraints.connection = nil
@@ -241,15 +246,30 @@ func (r *Schema) foreignKeysOutsideTransaction() bool {
 	return false
 }
 
-// Session changes surround the transaction; compilation and catalog reads happen
-// inside it so a rebuild observes the same connection and schema state it alters.
+// Foreign-key settings surround the transaction. Other settings are restored
+// before commit, so a cleanup failure can still roll back the schema change.
 func (r *Schema) withSchemaExecutionPolicy(policy driver.SchemaExecutionPolicy, callback func(*Schema) error) error {
+	if len(policy.SessionSettings) > 0 {
+		settings := policy.SessionSettings
+		policy.SessionSettings = nil
+		return r.WithWriteConnection(func(connection contractsschema.Schema) error {
+			scoped := connection.(*Schema)
+			if _, err := scoped.sessionDiscarder(); err != nil {
+				return err
+			}
+			return scoped.withSchemaExecutionPolicy(policy, func(transactional *Schema) error {
+				return scoped.withSchemaSessionSettings(settings, func() error {
+					return callback(transactional)
+				})
+			})
+		})
+	}
 	execute := func(scoped *Schema) error {
 		executor := scoped.executionConnection()
 		if executor == nil {
 			return callback(scoped)
 		}
-		if !policy.Transactional || executor.TransactionLevel() > 0 {
+		if !policy.Transactional || executor.TransactionLevel() > 0 && !policy.NestedTransaction {
 			return callback(scoped)
 		}
 		return executor.Transaction(func(tx db.Tx) error {
@@ -277,6 +297,60 @@ func (r *Schema) withSchemaExecutionPolicy(policy driver.SchemaExecutionPolicy, 
 		return execute(r)
 	}
 	return r.WithoutForeignKeyConstraints(func(scoped contractsschema.Schema) error { return execute(scoped.(*Schema)) })
+}
+
+type schemaSessionDiscarder interface {
+	CanDiscard() bool
+	Discard() error
+}
+
+func (r *Schema) sessionDiscarder() (schemaSessionDiscarder, error) {
+	discarder, ok := r.executionConnection().(schemaSessionDiscarder)
+	if !ok || !discarder.CanDiscard() {
+		return nil, errors.SchemaSessionDiscardNotSupported
+	}
+	return discarder, nil
+}
+
+func (r *Schema) withSchemaSessionSettings(settings []driver.SchemaSessionSetting, callback func() error) (err error) {
+	connection := r.executionConnection()
+	discarder, err := r.sessionDiscarder()
+	if err != nil {
+		return err
+	}
+	var restore []driver.SchemaStatement
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		var failures []error
+		for i := len(restore) - 1; i >= 0; i-- {
+			statement := restore[i]
+			if failure := connection.StatementContext(ctx, statement.SQL, statement.Bindings...); failure != nil {
+				failures = append(failures, failure)
+			}
+		}
+		if len(failures) > 0 {
+			// A connection with unknown session state must never re-enter its pool.
+			failures = append(failures, discarder.Discard())
+		}
+		err = errors.Join(append([]error{err}, failures...)...)
+	}()
+	for _, setting := range settings {
+		value, failure := connection.Scalar(setting.Read.SQL, setting.Read.Bindings...)
+		if failure != nil {
+			return failure
+		}
+		if value == nil || setting.Compile == nil {
+			return errors.SchemaSessionStateUnknown
+		}
+		// Register cleanup before setup, including setup statements that fail.
+		restore = append(restore, setting.Compile(value))
+		statement := setting.Compile(setting.Value)
+		if failure := connection.Statement(statement.SQL, statement.Bindings...); failure != nil {
+			return failure
+		}
+	}
+	return callback()
 }
 
 func (r *Schema) executeSchemaOperation(operation driver.SchemaOperation) error {
@@ -311,11 +385,19 @@ func (r *Schema) runDDL(blueprint *Blueprint, connection db.Tx) error {
 		if statement.SQL == "" {
 			continue
 		}
-		if err := connection.Statement(statement.SQL, statement.Bindings...); err != nil {
+		if err := executeSchemaStatement(connection, statement); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func executeSchemaStatement(connection db.Tx, statement driver.SchemaStatement) error {
+	if statement.ReadOnly {
+		var rows []map[string]any
+		return connection.SelectFromWriteConnection(&rows, statement.SQL, statement.Bindings...)
+	}
+	return connection.Statement(statement.SQL, statement.Bindings...)
 }
 
 func (r *Schema) executeSchemaStatements(statements []driver.SchemaStatement) error {
@@ -324,7 +406,7 @@ func (r *Schema) executeSchemaStatements(statements []driver.SchemaStatement) er
 			continue
 		}
 		if connection := r.executionConnection(); connection != nil {
-			if err := connection.Statement(statement.SQL, statement.Bindings...); err != nil {
+			if err := executeSchemaStatement(connection, statement); err != nil {
 				return err
 			}
 		} else if r.orm != nil {

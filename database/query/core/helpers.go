@@ -1,6 +1,7 @@
 package core
 
 import (
+	"database/sql/driver"
 	"fmt"
 	"reflect"
 	"sort"
@@ -78,6 +79,9 @@ func GetValueString(value any) string {
 // map. A []byte is a PHP binary string rather than an array, so it is left out. It decides which
 // update values the grammars json-encode before binding.
 func IsArrayValue(value any) bool {
+	if _, ok := value.(driver.Valuer); ok {
+		return false
+	}
 	switch value.(type) {
 	case []any, map[string]any:
 		return true
@@ -89,9 +93,13 @@ func IsArrayValue(value any) bool {
 		return false
 	}
 
-	kind := reflect.ValueOf(value).Kind()
+	typ := reflect.TypeOf(value)
+	kind := typ.Kind()
+	if kind == reflect.Slice && typ.Elem().Kind() == reflect.Uint8 {
+		return false
+	}
 
-	return kind == reflect.Slice || kind == reflect.Array
+	return kind == reflect.Slice || kind == reflect.Array || kind == reflect.Map
 }
 
 // ToAnySlice normalises any slice or array to []any. Go callers pass []int, []string and other

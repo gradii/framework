@@ -115,24 +115,39 @@ func (b *Builder) ToUpdateSQL(values any) (string, []any) {
 
 	b.ApplyBeforeQueryCallbacks()
 
-	ordered := updateValuesFrom(values)
-	for _, value := range ordered {
+	ordered, err := b.prepareUpdateValues(values)
+	if err != nil {
+		b.setError(err)
+		return "", nil
+	}
+	compiled, contributions := b.resolveUpdateValues(ordered)
+
+	return b.grammar.CompileUpdate(b, compiled), CleanBindings(b.grammar.PrepareBindingsForUpdate(b.State().Bindings, contributions))
+}
+
+func (b *Builder) prepareUpdateValues(values any) (core.UpdateValues, error) {
+	// Ordered updates belong to the caller. Normalizing a Valuer must not replace its entries in place.
+	ordered := append(core.UpdateValues(nil), updateValuesFrom(values)...)
+	for i, value := range ordered {
 		if IsExpression(value.Value) {
 			continue
 		}
 		if _, query := value.Value.(*Builder); query {
 			continue
 		}
-		if b.grammar.IsJsonSelector(value.Column) || core.IsArrayValue(value.Value) {
+		if b.grammar.IsJsonSelector(value.Column) {
+			normalized, err := core.NormalizeJSONValue(CastBinding(value.Value))
+			if err != nil {
+				return nil, err
+			}
+			ordered[i].Value = normalized
+		} else if core.IsArrayValue(value.Value) {
 			if _, err := json.Marshal(value.Value); err != nil {
-				b.setError(err)
-				return "", nil
+				return nil, err
 			}
 		}
 	}
-	compiled, contributions := b.resolveUpdateValues(ordered)
-
-	return b.grammar.CompileUpdate(b, compiled), CleanBindings(b.grammar.PrepareBindingsForUpdate(b.State().Bindings, contributions))
+	return ordered, nil
 }
 
 // resolveUpdateValues splits the update assignments so a query-valued assignment compiles as a
