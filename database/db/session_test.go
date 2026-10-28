@@ -60,7 +60,7 @@ func TestConnectionPretendUsesAnIsolatedSession(t *testing.T) {
 	driver.EXPECT().Grammar().Return(nil)
 	logger := mockslogger.NewLogger(t)
 	logger.On("Trace", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
-	connection, err := NewDB(context.Background(), nil, driver, logger, nil, nil)
+	connection, err := NewDB(context.Background(), nil, mysqlTestDriver{driver}, logger, nil, nil)
 	require.NoError(t, err)
 	var observed []db.QueryExecuted
 	connection.Listen(func(event db.QueryExecuted) { observed = append(observed, event) })
@@ -90,7 +90,7 @@ func TestPretendResolvesServerCapabilitiesBeforeTheCallback(t *testing.T) {
 	driver.EXPECT().Grammar().Return(nil)
 	logger := mockslogger.NewLogger(t)
 	logger.On("Trace", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
-	connection, err := NewDB(context.Background(), nil, driver, logger, nil, nil)
+	connection, err := NewDB(context.Background(), nil, mysqlTestDriver{driver}, logger, nil, nil)
 	require.NoError(t, err)
 	inside, calls := false, 0
 	connection.state.serverVersion = func(context.Context) (string, error) {

@@ -6,6 +6,9 @@
 # CNB has no matrix, so every Go version is its own pipeline, and the pipelines
 # of an event run in parallel. The windows job of Test is not ported, the hosted
 # CNB runners are Linux only.
+#
+# Cross-repository URLs and compatible refs are configured through the
+# GRADII_*_URL / GRADII_*_REF variables documented in .cnb/README.md.
 
 # The counterpart of the actions/setup-go cache. Pushes to master update it,
 # pull requests only read it, so untrusted PR code can't poison it.
@@ -35,23 +38,19 @@
 .test: &test
   <<: *go
   stages:
-    - name: install dependencies
-      # `go mod tidy` rewrites go.mod/go.sum, so a retry is safe (it is
-      # idempotent) and it rescues the build from a one-off network hiccup.
-      script: go mod tidy || (sleep 5 && go mod tidy)
-    - name: run tests
-      script: go test -timeout 10m ./...
+    - name: checkout compatible modules and run all root tests
+      timeout: 30m
+      script: bash .cnb/ci.sh unit
 
 .test-database: &test-database
   <<: *go
   stages:
-    - name: install dependencies
-      script: go mod tidy || (sleep 5 && go mod tidy)
-    - name: run database tests
+    - name: checkout compatible modules and run database tests
       # Every package under database/ is stub-backed: no database, no Docker, no
       # services block. That is why this can be its own pipeline rather than a
       # step of Test External, and why it is safe on the Linux-only CNB runners.
-      script: go test -timeout 10m ./database/...
+      timeout: 30m
+      script: bash .cnb/ci.sh database
 
 .test-external: &test-external
   <<: *go
@@ -63,17 +62,13 @@
     # like on the GitHub runners.
     - docker
   stages:
-    - name: install dependencies
-      # Idempotent and retried, same reason as the `Test` pipeline above.
-      script: (go mod tidy && cd tests && go mod tidy) || (sleep 5 && go mod tidy && cd tests && go mod tidy)
-    - name: run tests
+    - name: checkout compatible modules and run framework tests module
       # Container startup and fixture creation across four databases count
       # toward the test package's timeout. Allow 25m for the tests within the
       # 30m stage budget, leaving time for compilation and cleanup. Verbose
       # output reports progress while the integration package is running.
       timeout: 30m
-      script:
-        - cd tests && go test -v -timeout 25m ./...
+      script: bash .cnb/ci.sh integration
 
 master:
   push:
@@ -102,7 +97,6 @@ master:
       docker:
         image: golang:1.27
         volumes: *go-cache
-
 # Pull requests into any branch, like the unfiltered pull_request of GitHub.
 "**":
   pull_request:

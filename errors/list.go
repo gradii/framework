@@ -105,6 +105,8 @@ var (
 	CryptMissingValueKey     = New("decrypt payload error: missing value key")
 
 	DatabaseConfigNotFound              = New("not found database configuration")
+	DatabaseDialectRequired             = New("database driver %q must provide a dialect")
+	DatabaseDialectComponentsMissing    = New("database driver must provide a query grammar and processor")
 	DatabaseDialectNotSupported         = New("unsupported database driver %q: expected mysql, postgres, sqlite or sqlserver")
 	DatabaseIsolationLevelInvalid       = New("unsupported transaction isolation level %q: expected default, read uncommitted, read committed, repeatable read or serializable")
 	DatabaseMultipleColumnsSelected     = New("Multiple columns were selected.")
@@ -354,6 +356,8 @@ var (
 
 	SchemaConnectionNotFound             = New("connection %s not found")
 	SchemaDriverNotSupported             = New("driver %s is not supported")
+	SchemaBindingsRequireExecution       = New("schema statements with bindings require execution through the schema builder")
+	SchemaForeignKeysInTransaction       = New("foreign key constraints cannot be changed inside an active transaction")
 	SchemaInvalidLength                  = New("default string length must be greater than zero")
 	SchemaInvalidPrecision               = New("default time precision must not be negative")
 	SchemaFeatureNotSupported            = New("database driver %s does not support %s")
@@ -505,4 +509,13 @@ var (
 // Query grammar selection errors.
 var (
 	QueryGrammarDriverNotRecognised = New("driver %s is not recognised, only mysql, postgres, sqlite and sqlserver have a dedicated grammar; the base grammar will be used")
+)
+
+// Errors reported by the database integration fixtures.
+var (
+	DatabaseFixtureInvalidDriver = New("unsupported test database driver: %s")
+	DatabaseFixtureInvalidName   = New("invalid test database identifier: %q")
+	DatabaseFixtureUnowned       = New("database fixture does not own database %q")
+	DatabaseFixtureEmptyPool     = New("test database driver has no writer")
+	DatabaseFixtureInvalidPort   = New("invalid test database port: %d")
 )

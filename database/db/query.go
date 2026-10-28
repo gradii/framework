@@ -11,6 +11,7 @@ import (
 
 	"github.com/gradii/framework/contracts/database/db"
 	"github.com/gradii/framework/contracts/database/logger"
+	databasedriver "github.com/gradii/framework/database/driver"
 	querybuilder "github.com/gradii/framework/database/query"
 	"github.com/gradii/framework/database/query/core"
 	"github.com/gradii/framework/database/utils"
@@ -36,13 +37,24 @@ type Query struct {
 	writeBuilder        db.CommonBuilder
 	txLogs              *[]TxLog
 	builder             *querybuilder.Builder
+	components          databasedriver.QueryComponents
 }
 
 // NewQuery creates a query bound to a table. grammar selects the dialect and driver is its name,
 // used to convert placeholders at execution time.
-func NewQuery(ctx context.Context, readBuilder db.CommonBuilder, writeBuilder db.CommonBuilder, grammar querybuilder.Grammar, driver string, logger logger.Logger, table string, txLogs *[]TxLog) *Query {
-	builder := querybuilder.NewBuilder(grammar, querybuilder.NewProcessor(driver))
+func NewQuery(ctx context.Context, readBuilder db.CommonBuilder, writeBuilder db.CommonBuilder, grammar querybuilder.Grammar, driver string, logger logger.Logger, table string, txLogs *[]TxLog, supplied ...databasedriver.QueryComponents) *Query {
+	components := databasedriver.QueryComponents{Grammar: grammar, Processor: querybuilder.NewProcessor(driver)}
+	if len(supplied) > 0 {
+		components = supplied[0]
+	}
+	initErr := components.Validate()
+	if initErr != nil {
+		components.Grammar = querybuilder.NewBaseGrammar("")
+		components.Processor = querybuilder.NewProcessor("")
+	}
+	builder := querybuilder.NewBuilder(components.Grammar, components.Processor)
 	builder.SetDriver(driver)
+	builder.SetError(initErr)
 	if observed, ok := writeBuilder.(*observedBuilder); ok {
 		observed.state.mu.Lock()
 		builder.SetUseUpsertAlias(observed.state.useUpsertAlias)
@@ -58,6 +70,8 @@ func NewQuery(ctx context.Context, readBuilder db.CommonBuilder, writeBuilder db
 
 	return &Query{
 		ctx:                 ctx,
+		err:                 initErr,
+		components:          components,
 		grammar:             grammar,
 		driver:              driver,
 		logger:              logger,
@@ -165,6 +179,7 @@ func (r *Query) addSimpleWhere(query any, args []any, boolean string) {
 func (r *Query) nested(callback func(db.Query) db.Query, b *querybuilder.Builder) *querybuilder.Builder {
 	child := &Query{
 		ctx:          r.ctx,
+		components:   r.components,
 		grammar:      r.grammar,
 		driver:       r.driver,
 		logger:       r.logger,

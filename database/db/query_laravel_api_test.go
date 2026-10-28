@@ -2,10 +2,10 @@ package db
 
 import (
 	"context"
+	mysqldialect "github.com/gradii/mysql"
 	"testing"
 
 	"github.com/gradii/framework/contracts/database/db"
-	querybuilder "github.com/gradii/framework/database/query"
 	"github.com/gradii/framework/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -13,7 +13,7 @@ import (
 )
 
 func TestPublicLaravelClausesMutateAndExplicitCloneIsolates(t *testing.T) {
-	var query db.Query = NewQuery(context.Background(), nil, nil, querybuilder.NewMySqlGrammar(""), "mysql", nil, "users", nil)
+	var query db.Query = newDialectTestQuery(context.Background(), nil, nil, mysqldialect.NewQueryGrammar(""), "mysql", nil, "users", nil)
 	snapshot := query.Clone()
 	subquery := query.NewQuery().From("posts").Select("user_id").Where("published", true)
 	joined := query.Select("users.id").JoinSub(subquery, "p", "users.id", "=", "p.user_id").
@@ -33,7 +33,7 @@ func TestPublicLaravelClausesMutateAndExplicitCloneIsolates(t *testing.T) {
 }
 
 func TestPublicBeforeQueryAndSubqueryCallbacks(t *testing.T) {
-	query := NewQuery(context.Background(), nil, nil, querybuilder.NewMySqlGrammar(""), "mysql", nil, "users", nil)
+	query := newDialectTestQuery(context.Background(), nil, nil, mysqldialect.NewQueryGrammar(""), "mysql", nil, "users", nil)
 	calls := 0
 	callback := query.BeforeQuery(func(q db.Query) db.Query { calls++; return q.Where("active", true) })
 	assert.Equal(t, "select * from `users` where `active` = ?", callback.ToSql().Get())

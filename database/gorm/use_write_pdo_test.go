@@ -41,9 +41,9 @@ func TestSelectWithLockUsesWritePdo(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, conn)
 
-	query := NewQuery(context.Background(), config,
+	query := newDialectQuery(context.Background(), config,
 		contractsdatabase.Config{Driver: "mysql", Connection: "lock_write_pdo"},
-		conn.Writer(), nil, nil, nil, nil, &Conditions{model: &getColumnsUser{}}, nil)
+		conn.Writer(), nil, nil, nil, nil, &Conditions{model: &getColumnsUser{}}, nil, mysqlTestComponents())
 
 	// A plain get() reads through the replica, so the reader pool is the one exercised.
 	var plain []getColumnsUser

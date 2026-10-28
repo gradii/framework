@@ -89,6 +89,10 @@ type ColumnDefinition interface {
 }
 
 type Column struct {
+	// DefaultValue preserves SQL NULL versus an empty string for DDL reconstruction.
+	// DefaultKnown distinguishes rich metadata from the legacy string-only contract.
+	DefaultValue  any
+	DefaultKnown  bool
 	Generation    *ColumnGeneration
 	Collation     string
 	Comment       string

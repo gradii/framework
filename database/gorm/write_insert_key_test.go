@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	mysqldialect "github.com/gradii/mysql"
 	"reflect"
 	"testing"
 
@@ -80,7 +81,7 @@ func TestInsertRowReadsAnIntegerKeyByItsColumnType(t *testing.T) {
 
 func TestInsertRowIgnoresSQLKeywordsInValues(t *testing.T) {
 	query, recorder := newPostgresKeyQuery(t, &insertKeyEntity{})
-	query = rebindGrammar(query, "MySQL", querybuilder.NewMySqlGrammar(""))
+	query = rebindGrammar(query, "MySQL", mysqldialect.NewQueryGrammar(""))
 
 	key, err := query.insertRow(map[string]any{
 		"id":   "01AN4Z07BY79KA1307SR9X4MV3",
@@ -114,5 +115,5 @@ func newPostgresKeyQuery(t *testing.T, model any) (*Query, *recordingSQLDriver) 
 
 	conditions := Conditions{model: model}
 
-	return NewQuery(context.Background(), nil, contractsdatabase.Config{Driver: "PostgreSQL"}, sqlDB, nil, nil, nil, nil, &conditions, nil), recordDriver
+	return newDialectQuery(context.Background(), nil, contractsdatabase.Config{Driver: "PostgreSQL"}, sqlDB, nil, nil, nil, nil, &conditions, nil), recordDriver
 }

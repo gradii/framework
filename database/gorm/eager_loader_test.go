@@ -122,7 +122,7 @@ func TestExtractKeysDeduplicatesAndSkipsZero(t *testing.T) {
 	idField := s.FieldsByDBName["id"]
 	assert.NotNil(t, idField)
 
-	q := NewQuery(context.Background(), nil, contractsdatabase.Config{}, db, nil, nil, nil, nil, &Conditions{}, nil)
+	q := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, db, nil, nil, nil, nil, &Conditions{}, nil)
 
 	parents := []reflect.Value{
 		reflect.ValueOf(relUser{ID: 1}),
@@ -513,7 +513,7 @@ func TestExtractKeys_EmptyInput(t *testing.T) {
 	assert.NoError(t, err)
 	idField := s.FieldsByDBName["id"]
 
-	q := NewQuery(context.Background(), nil, contractsdatabase.Config{}, db, nil, nil, nil, nil, &Conditions{}, nil)
+	q := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, db, nil, nil, nil, nil, &Conditions{}, nil)
 	keys := extractKeys(q, []reflect.Value{}, idField)
 	assert.Empty(t, keys)
 }
@@ -717,7 +717,7 @@ func newRecordingRelQuery(t *testing.T, model any) (*Query, *recordingSQLDriver)
 	t.Cleanup(func() { _ = sqlDB.Close() })
 
 	conditions := Conditions{model: model}
-	return NewQuery(context.Background(), nil, contractsdatabase.Config{}, sqlDB, nil, nil, nil, nil, &conditions, nil), recordDriver
+	return newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, sqlDB, nil, nil, nil, nil, &conditions, nil), recordDriver
 }
 
 // driverBindings maps a chunk of keys to the driver.Value slice database/sql hands the driver: an

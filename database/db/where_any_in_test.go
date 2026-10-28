@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	mysqldialect "github.com/gradii/mysql"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,9 +14,9 @@ import (
 // newWhereAnyQuery builds a bare facade query over "users" the tests below can extend. It needs no
 // connection: ToSql compiles the statement without executing it.
 func newWhereAnyQuery() *Query {
-	return NewQuery(
+	return newDialectTestQuery(
 		context.Background(), nil, nil,
-		querybuilder.NewMySqlGrammar(""), querybuilder.DialectMySQL,
+		mysqldialect.NewQueryGrammar(""), querybuilder.DialectMySQL,
 		nil, "users", nil,
 	)
 }

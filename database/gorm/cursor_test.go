@@ -23,7 +23,7 @@ func newCursorQuery(t *testing.T, conditions Conditions) (*Query, *recordingSQLD
 	sqlDB := sql.OpenDB(recordingConnector{driver: recorder})
 	t.Cleanup(func() { _ = sqlDB.Close() })
 
-	return NewQuery(context.Background(), nil, contractsdatabase.Config{Driver: "mysql"}, sqlDB, nil, nil, nil, nil, &conditions, nil), recorder
+	return newDialectQuery(context.Background(), nil, contractsdatabase.Config{Driver: "mysql"}, sqlDB, nil, nil, nil, nil, &conditions, nil, mysqlTestComponents()), recorder
 }
 
 // TestCursorPaginateFirstPage pins the statement a first page compiles to: the query's ORDER BY, and

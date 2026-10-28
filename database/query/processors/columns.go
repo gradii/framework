@@ -35,9 +35,21 @@ func columnInt(value any) int {
 	return integer
 }
 
+// MetadataInt normalizes a scalar catalog value for external processors.
+func MetadataInt(value any) int { return columnInt(value) }
+
 func nullableComment(value any) any {
 	if columnBool(value) {
 		return value
 	}
 	return nil
 }
+
+// MetadataString converts a database metadata scalar to text, including byte slices.
+func MetadataString(value any) string { return columnString(value) }
+
+// MetadataBool preserves the truthiness of scalar values returned by metadata queries.
+func MetadataBool(value any) bool { return columnBool(value) }
+
+// NullableComment normalizes absent or empty metadata comments.
+func NullableComment(value any) any { return nullableComment(value) }

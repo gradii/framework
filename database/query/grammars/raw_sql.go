@@ -46,14 +46,3 @@ func (g *BaseGrammar) SubstituteBindingsIntoRawSQL(sql string, bindings []any) s
 	}
 	return output.String()
 }
-
-// SubstituteBindingsIntoRawSQL restores PostgreSQL's escaped ? operators after substitution.
-func (g *PostgresGrammar) SubstituteBindingsIntoRawSQL(sql string, bindings []any) string {
-	result := g.BaseGrammar.SubstituteBindingsIntoRawSQL(sql, bindings)
-	for _, operator := range postgresOperators {
-		if strings.Contains(operator, "?") {
-			result = strings.ReplaceAll(result, strings.ReplaceAll(operator, "?", "??"), operator)
-		}
-	}
-	return result
-}

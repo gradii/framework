@@ -90,7 +90,7 @@ func (r *ToSql) Update(column any, value ...any) string {
 
 func (r *ToSql) generate(sql string, args []any, err error) string {
 	if err == nil && r.raw {
-		sql, err = explainWithDriver(sql, args, r.query.driver)
+		sql, err = explainWithDriver(sql, args, r.query.driver, r.query.components.Dialect)
 	}
 	if err != nil {
 		if r.query.logger != nil {

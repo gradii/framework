@@ -11,6 +11,11 @@ func (g *BaseGrammar) CompileInsert(b core.Query, values []map[string]any) strin
 	return g.compileInsert(b, values, "")
 }
 
+// CompileInsertWithOutput places a dialect's OUTPUT clause before inserted values.
+func (g *BaseGrammar) CompileInsertWithOutput(b core.Query, values []map[string]any, output string) string {
+	return g.compileInsert(b, values, output)
+}
+
 // compileInsert places a dialect's OUTPUT clause structurally, without searching the rendered SQL.
 func (g *BaseGrammar) compileInsert(b core.Query, values []map[string]any, output string) string {
 	table := g.dialect().WrapTable(b.State().From)

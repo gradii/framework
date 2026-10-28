@@ -2,11 +2,11 @@ package schema
 
 import (
 	"context"
-	"os"
 	"sync"
 	"time"
 
 	"github.com/gradii/framework/contracts/database/db"
+	"github.com/gradii/framework/contracts/database/driver"
 	contractsschema "github.com/gradii/framework/contracts/database/schema"
 	"github.com/gradii/framework/errors"
 )
@@ -56,31 +56,19 @@ func (r *Schema) executionConnection() db.Tx {
 	return r.db
 }
 func (r *Schema) foreignKeySQL(enabled bool) (string, error) {
-	switch r.metadataDialect() {
-	case "mysql":
-		if enabled {
-			return "SET FOREIGN_KEY_CHECKS=1", nil
+	if grammar, ok := r.grammar.(driver.SchemaOperationsGrammar); ok {
+		statements, err := grammar.CompileSchemaOperation(driver.SchemaOperation{Kind: "foreignKeys", Enabled: enabled})
+		if err != nil {
+			return "", err
 		}
-		return "SET FOREIGN_KEY_CHECKS=0", nil
-	case "sqlite":
-		if enabled {
-			return "PRAGMA foreign_keys = ON", nil
+		if len(statements) > 0 {
+			return statements[0].SQL, nil
 		}
-		return "PRAGMA foreign_keys = OFF", nil
-	case "postgres":
-		if enabled {
-			return "SET CONSTRAINTS ALL IMMEDIATE", nil
-		}
-		return "SET CONSTRAINTS ALL DEFERRED", nil
-	case "sqlserver":
-		if enabled {
-			return "EXEC sp_msforeachtable 'ALTER TABLE ? WITH CHECK CHECK CONSTRAINT all'", nil
-		}
-		return "EXEC sp_msforeachtable 'ALTER TABLE ? NOCHECK CONSTRAINT all'", nil
-	default:
-		return "", errors.SchemaFeatureNotSupported.Args(r.driverName, "foreign key constraint control")
+		return "", nil
 	}
+	return "", errors.SchemaFeatureNotSupported.Args(r.driverName, "foreign key constraint control")
 }
+
 func (r *Schema) DisableForeignKeyConstraints() error {
 	if r.db == nil {
 		return errors.DatabaseConnectionIsNil
@@ -111,23 +99,26 @@ func (r *Schema) DisableForeignKeyConstraints() error {
 		_ = close()
 		return err
 	}
-	switch r.metadataDialect() {
-	case "mysql", "sqlite":
-		query := "select @@foreign_key_checks"
-		if r.metadataDialect() == "sqlite" {
-			query = "pragma foreign_keys"
-		}
+	disable, err := r.foreignKeySQL(false)
+	if err != nil {
+		return errors.Join(err, close())
+	}
+	query := ""
+	if grammar, ok := r.grammar.(driver.SchemaOperationsGrammar); ok {
+		query = grammar.ForeignKeyStateQuery()
+	}
+	if query != "" {
 		value, err := connection.Scalar(query)
 		if err != nil {
 			_ = close()
 			return err
 		}
-		if r.metadataDialect() == "sqlite" && connection.TransactionLevel() > 0 && metadataBool(value) {
+		if r.foreignKeysOutsideTransaction() && connection.TransactionLevel() > 0 && metadataBool(value) {
 			_ = close()
-			return errors.SchemaSQLiteForeignKeysInTransaction
+			return errors.SchemaForeignKeysInTransaction
 		}
 		if !metadataBool(value) {
-			restore, _ = r.foreignKeySQL(false)
+			restore = disable
 		}
 	}
 	r.constraints.mu.Lock()
@@ -137,8 +128,7 @@ func (r *Schema) DisableForeignKeyConstraints() error {
 	}
 	r.constraints.connection, r.constraints.restore, r.constraints.close = connection, restore, closeConnection
 	r.constraints.mu.Unlock()
-	statement, _ := r.foreignKeySQL(false)
-	if err := connection.Statement(statement); err != nil {
+	if err := connection.Statement(disable); err != nil {
 		r.constraints.mu.Lock()
 		r.constraints.connection = nil
 		r.constraints.mu.Unlock()
@@ -196,31 +186,19 @@ func (r *Schema) WithoutForeignKeyConstraints(callback func(contractsschema.Sche
 	return callback(&scoped)
 }
 func (r *Schema) CreateDatabase(name string) error {
-	if r.metadataDialect() == "sqlite" {
-		file, err := os.OpenFile(name, os.O_CREATE|os.O_RDWR, 0o666)
-		if err != nil {
-			return err
-		}
-		return file.Close()
+	if grammar, ok := r.grammar.(driver.SchemaDatabaseFiles); ok {
+		return grammar.CreateDatabase(name)
 	}
-	statement := "create database " + r.ddlWrap().Value(name)
-	if r.metadataDialect() == "mysql" && r.charset != "" {
-		statement += " default character set " + r.ddlWrap().Value(r.charset)
-	}
-	if r.metadataDialect() == "postgres" && r.charset != "" {
-		statement += " encoding " + r.ddlWrap().Value(r.charset)
-	}
-	return r.Sql(statement)
+	return r.executeSchemaOperation(driver.SchemaOperation{Kind: "createDatabase", Name: name, Charset: r.charset})
 }
+
 func (r *Schema) DropDatabaseIfExists(name string) error {
-	if r.metadataDialect() == "sqlite" {
-		if err := os.Remove(name); err != nil && !os.IsNotExist(err) {
-			return err
-		}
-		return nil
+	if grammar, ok := r.grammar.(driver.SchemaDatabaseFiles); ok {
+		return grammar.DropDatabaseIfExists(name)
 	}
-	return r.Sql("drop database if exists " + r.ddlWrap().Value(name))
+	return r.executeSchemaOperation(driver.SchemaOperation{Kind: "dropDatabase", Name: name})
 }
+
 func (r *Schema) WhenTableHasColumn(table, column string, callback func(contractsschema.Blueprint)) error {
 	if r.HasColumn(table, column) {
 		return r.Table(table, callback)
@@ -247,33 +225,77 @@ func (r *Schema) WhenTableDoesntHaveIndex(table string, index any, callback func
 }
 
 func (r *Schema) buildNative(blueprint *Blueprint) error {
-	executor := r.executionConnection()
-	run := func(connection db.Tx) error { return r.runDDL(blueprint, connection) }
-	if r.metadataDialect() == "sqlite" && blueprint.sqliteRebuild() {
-		if executor.TransactionLevel() > 0 {
-			value, err := executor.Scalar("pragma foreign_keys")
-			if err != nil {
-				return err
-			}
-			if metadataBool(value) {
-				return errors.SchemaSQLiteForeignKeysInTransaction
-			}
-			return run(executor)
+	var policy driver.SchemaExecutionPolicy
+	if planner, ok := r.grammar.(driver.SchemaBlueprintPlanner); ok {
+		policy = planner.SchemaExecutionPolicy(blueprint)
+	}
+	return r.withSchemaExecutionPolicy(policy, func(scoped *Schema) error {
+		return scoped.runDDL(blueprint, scoped.executionConnection())
+	})
+}
+
+func (r *Schema) foreignKeysOutsideTransaction() bool {
+	if planner, ok := r.grammar.(driver.SchemaOperationPlanner); ok {
+		return planner.SchemaOperationPolicy(driver.SchemaOperation{Kind: "foreignKeys"}).ForeignKeysOutsideTransaction
+	}
+	return false
+}
+
+// Session changes surround the transaction; compilation and catalog reads happen
+// inside it so a rebuild observes the same connection and schema state it alters.
+func (r *Schema) withSchemaExecutionPolicy(policy driver.SchemaExecutionPolicy, callback func(*Schema) error) error {
+	execute := func(scoped *Schema) error {
+		executor := scoped.executionConnection()
+		if executor == nil {
+			return callback(scoped)
 		}
-		return r.WithoutForeignKeyConstraints(func(schema contractsschema.Schema) error {
-			scoped := schema.(*Schema)
-			return scoped.executionConnection().Transaction(func(tx db.Tx) error { return scoped.runDDL(blueprint, tx) })
+		if !policy.Transactional || executor.TransactionLevel() > 0 {
+			return callback(scoped)
+		}
+		return executor.Transaction(func(tx db.Tx) error {
+			transactional := *scoped
+			transactional.executor = tx
+			return callback(&transactional)
 		})
 	}
-	if executor.TransactionLevel() > 0 {
-		return run(executor)
+	if !policy.DisableForeignKeys {
+		return execute(r)
 	}
-	switch r.metadataDialect() {
-	case "postgres", "sqlserver":
-		return executor.Transaction(run)
-	default:
-		return run(executor)
+	executor := r.executionConnection()
+	if executor != nil && executor.TransactionLevel() > 0 && policy.ForeignKeysOutsideTransaction {
+		grammar, ok := r.grammar.(driver.SchemaOperationsGrammar)
+		if !ok || grammar.ForeignKeyStateQuery() == "" {
+			return errors.SchemaForeignKeysInTransaction
+		}
+		enabled, err := executor.Scalar(grammar.ForeignKeyStateQuery())
+		if err != nil {
+			return err
+		}
+		if metadataBool(enabled) {
+			return errors.SchemaForeignKeysInTransaction
+		}
+		return execute(r)
 	}
+	return r.WithoutForeignKeyConstraints(func(scoped contractsschema.Schema) error { return execute(scoped.(*Schema)) })
+}
+
+func (r *Schema) executeSchemaOperation(operation driver.SchemaOperation) error {
+	grammar, ok := r.grammar.(driver.SchemaOperationsGrammar)
+	if !ok {
+		return errors.SchemaFeatureNotSupported.Args(r.driverName, operation.Kind)
+	}
+	statements, err := grammar.CompileSchemaOperation(operation)
+	if err != nil {
+		return err
+	}
+	if len(statements) == 0 {
+		return nil
+	}
+	var policy driver.SchemaExecutionPolicy
+	if planner, ok := r.grammar.(driver.SchemaOperationPlanner); ok {
+		policy = planner.SchemaOperationPolicy(operation)
+	}
+	return r.withSchemaExecutionPolicy(policy, func(scoped *Schema) error { return scoped.executeSchemaStatements(statements) })
 }
 
 func (r *Schema) runDDL(blueprint *Blueprint, connection db.Tx) error {
@@ -281,16 +303,36 @@ func (r *Schema) runDDL(blueprint *Blueprint, connection db.Tx) error {
 	scoped.executor = connection
 	prepared := *blueprint
 	prepared.schema = &scoped
-	statements, err := prepared.ToSql(r.grammar)
+	statements, err := prepared.CompileStatements(r.grammar)
 	if err != nil {
 		return err
 	}
 	for _, statement := range statements {
-		if statement == "" {
+		if statement.SQL == "" {
 			continue
 		}
-		if err := connection.Statement(statement); err != nil {
+		if err := connection.Statement(statement.SQL, statement.Bindings...); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func (r *Schema) executeSchemaStatements(statements []driver.SchemaStatement) error {
+	for _, statement := range statements {
+		if statement.SQL == "" {
+			continue
+		}
+		if connection := r.executionConnection(); connection != nil {
+			if err := connection.Statement(statement.SQL, statement.Bindings...); err != nil {
+				return err
+			}
+		} else if r.orm != nil {
+			if _, err := r.orm.Query().UseWritePdo().Exec(statement.SQL, statement.Bindings...); err != nil {
+				return err
+			}
+		} else {
+			return errors.DatabaseConnectionIsNil
 		}
 	}
 	return nil

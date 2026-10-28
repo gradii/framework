@@ -6,10 +6,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/goravel/sqlite"
 	contractsmigration "github.com/gradii/framework/contracts/database/migration"
 	contractsschema "github.com/gradii/framework/contracts/database/schema"
 	"github.com/gradii/framework/database/migration"
+	"github.com/gradii/sqlite"
 )
 
 type DefaultMigratorWithDBSuite struct {

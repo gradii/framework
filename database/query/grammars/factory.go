@@ -10,28 +10,9 @@ import (
 // NewGrammar returns the grammar for a driver name. The second result reports whether the driver
 // is recognised; an unrecognised driver yields the base grammar and false.
 //
-// The dialect is identified by the connection's driver string rather than by the driver module,
-// because the four driver modules are separate repositories and must not change for this port.
-func NewGrammar(driver string, prefix string) (Grammar, bool) {
-	// MariaDB ships its own grammar in Laravel (MariaDbGrammar), which extends the MySQL grammar but
-	// refuses lateral joins. CanonicalDialect deliberately folds "mariadb" onto core.DialectMySQL for the
-	// quoting, placeholder and locking consumers, so the grammar is selected from the driver name here.
-	if core.NormalizeDriver(driver) == "mariadb" {
-		return NewMariaDbGrammar(prefix), true
-	}
-
-	switch core.CanonicalDialect(driver) {
-	case core.DialectMySQL:
-		return NewMySqlGrammar(prefix), true
-	case core.DialectPostgres:
-		return NewPostgresGrammar(prefix), true
-	case core.DialectSqlite:
-		return NewSqliteGrammar(prefix), true
-	case core.DialectSqlServer:
-		return NewSqlServerGrammar(prefix), true
-	default:
-		return NewBaseGrammar(prefix), false
-	}
+// External dialects are supplied by their configured driver.
+func NewGrammar(_ string, prefix string) (Grammar, bool) {
+	return NewBaseGrammar(prefix), false
 }
 
 // unrecognisedDrivers remembers the driver names already reported through

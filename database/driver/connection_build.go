@@ -10,6 +10,7 @@ import (
 
 	"github.com/gradii/framework/contracts/config"
 	"github.com/gradii/framework/contracts/database"
+	contractsdriver "github.com/gradii/framework/contracts/database/driver"
 	contractslogger "github.com/gradii/framework/contracts/database/logger"
 	contractstelemetry "github.com/gradii/framework/contracts/telemetry"
 	"github.com/gradii/framework/errors"
@@ -43,7 +44,8 @@ type cachedReader struct {
 // driver module used to hand over did. A connection with no database name opens nothing and reports
 // (nil, nil, nil): that is a fresh application before any credentials exist, and callers read it as
 // "no database" rather than as a failure.
-func BuildConnection(config config.Config, logger contractslogger.Logger, pool database.Pool, connection string, telemetryResolver contractstelemetry.Resolver) (*sql.DB, *instrumentationdatabase.Instrument, error) {
+func BuildConnection(config config.Config, logger contractslogger.Logger, pool database.Pool, connection string, telemetryResolver contractstelemetry.Resolver, dialects ...contractsdriver.Dialect) (*sql.DB, *instrumentationdatabase.Instrument, error) {
+	connection = poolConnectionName(pool, connection)
 	if cached, ok := connectionToDB.Load(connection); ok {
 		c := cached.(cachedConnection)
 		return c.db, c.instrument, nil
@@ -53,7 +55,7 @@ func BuildConnection(config config.Config, logger contractslogger.Logger, pool d
 		return nil, nil, errors.DatabaseConfigNotFound
 	}
 
-	if pool.Writers[0].Database == "" {
+	if pool.Writers[0].Database == "" && pool.Writers[0].Dsn == "" && pool.Writers[0].Connector == nil {
 		return nil, nil, nil
 	}
 
@@ -65,7 +67,7 @@ func BuildConnection(config config.Config, logger contractslogger.Logger, pool d
 		return c.db, c.instrument, nil
 	}
 
-	writer, err := openPool(pool.Writers[0])
+	writer, err := openPool(pool.Writers[0], dialects...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -96,7 +98,7 @@ func BuildConnection(config config.Config, logger contractslogger.Logger, pool d
 
 	// The reader pool is opened next to the writer's, so the facades and the ORM resolve the same one
 	// whichever entry point built this connection.
-	if _, err := openReader(config, pool, connection); err != nil {
+	if _, err := openReader(config, pool, connection, dialects...); err != nil {
 		_ = writer.Close()
 		instrument.Shutdown()
 
@@ -106,6 +108,15 @@ func BuildConnection(config config.Config, logger contractslogger.Logger, pool d
 	connectionToDB.Store(connection, cachedConnection{db: writer, instrument: instrument})
 
 	return writer, instrument, nil
+}
+
+// A driver can expose a logical alias for an existing configured connection.
+// Cache its pools under the driver's connection identity, not a caller-local alias.
+func poolConnectionName(pool database.Pool, fallback string) string {
+	if len(pool.Writers) > 0 && pool.Writers[0].Connection != "" {
+		return pool.Writers[0].Connection
+	}
+	return fallback
 }
 
 // Instrument returns the telemetry instrument cached for a connection, or nil when telemetry is
@@ -122,12 +133,22 @@ func Instrument(connection string) *instrumentationdatabase.Instrument {
 
 // openPool builds one connection's pool: the connector the driver supplied when there is one, and
 // otherwise the framework's own dialect opener.
-func openPool(connection database.Config) (*sql.DB, error) {
+func openPool(connection database.Config, dialects ...contractsdriver.Dialect) (*sql.DB, error) {
 	if connection.Connector != nil {
 		return sql.OpenDB(connection.Connector), nil
 	}
+	if len(dialects) > 0 && dialects[0] != nil {
+		connector, err := dialects[0].NewConnector(connection)
+		if err != nil {
+			return nil, err
+		}
+		if connector == nil {
+			return nil, errors.DatabaseConfigNotFound
+		}
+		return sql.OpenDB(connector), nil
+	}
 
-	return openDialect(connection)
+	return nil, errors.DatabaseDialectRequired.Args(connection.Driver)
 }
 
 // openReader opens, on first use, the pool the framework's compiled reads run on for a connection:
@@ -140,7 +161,7 @@ func openPool(connection database.Config) (*sql.DB, error) {
 // the warning makes the misconfiguration visible without failing BuildConnection and with it
 // application boot. Laravel is equally lenient, inheriting the connection's own settings for an
 // incomplete read block rather than raising.
-func openReader(config config.Config, pool database.Pool, connection string) (*sql.DB, error) {
+func openReader(config config.Config, pool database.Pool, connection string, dialects ...contractsdriver.Dialect) (*sql.DB, error) {
 	if len(pool.Readers) == 0 {
 		return nil, nil
 	}
@@ -153,8 +174,11 @@ func openReader(config config.Config, pool database.Pool, connection string) (*s
 	// Laravel shuffles candidate hosts and tries the next after a connection failure.
 	for _, index := range rand.Perm(len(pool.Readers)) {
 		candidate := pool.Readers[index]
+		if candidate.Connector == nil && candidate.Host == "" && candidate.Dsn == "" && driverDialect(candidate.Driver) != "sqlite" {
+			continue
+		}
 
-		reader, err := openPool(candidate)
+		reader, err := openPool(candidate, dialects...)
 		if err != nil {
 			failures = append(failures, err)
 

@@ -19,3 +19,6 @@ var (
 func removeLeadingBoolean(value string) string {
 	return leadingBoolean.ReplaceAllString(value, "")
 }
+
+// RemoveLeadingBoolean strips the connector from a compiled condition group.
+func RemoveLeadingBoolean(value string) string { return removeLeadingBoolean(value) }

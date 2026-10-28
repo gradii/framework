@@ -37,7 +37,7 @@ func TestAddGlobalScopes(t *testing.T) {
 			setupQuery: func() *Query {
 				conditions := Conditions{}
 				conditions.model = &ModelWithGlobalScopes{}
-				query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
+				query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
 				return query
 			},
 			expectedScopesApplied: true,
@@ -48,7 +48,7 @@ func TestAddGlobalScopes(t *testing.T) {
 			setupQuery: func() *Query {
 				conditions := Conditions{}
 				conditions.model = &ModelWithoutGlobalScopes{}
-				query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
+				query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
 				return query
 			},
 			expectedScopesApplied: false,
@@ -60,7 +60,7 @@ func TestAddGlobalScopes(t *testing.T) {
 				conditions := Conditions{}
 				conditions.model = &ModelWithGlobalScopes{}
 				conditions.withoutGlobalScopes = []string{"*"}
-				query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
+				query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
 				return query
 			},
 			expectedScopesApplied: false,
@@ -72,7 +72,7 @@ func TestAddGlobalScopes(t *testing.T) {
 				conditions := Conditions{}
 				conditions.model = &ModelWithGlobalScopes{}
 				conditions.withoutGlobalScopes = []string{"active"}
-				query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
+				query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
 				return query
 			},
 			expectedScopesApplied: true,
@@ -82,7 +82,7 @@ func TestAddGlobalScopes(t *testing.T) {
 			name: "should not apply scopes when model is nil",
 			setupQuery: func() *Query {
 				conditions := Conditions{}
-				query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
+				query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
 				return query
 			},
 			expectedScopesApplied: false,
@@ -93,7 +93,7 @@ func TestAddGlobalScopes(t *testing.T) {
 			setupQuery: func() *Query {
 				conditions := Conditions{}
 				conditions.dest = &ModelWithGlobalScopes{}
-				query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
+				query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
 				return query
 			},
 			expectedScopesApplied: true,
@@ -104,7 +104,7 @@ func TestAddGlobalScopes(t *testing.T) {
 			setupQuery: func() *Query {
 				conditions := Conditions{}
 				conditions.model = &ModelWithEmptyGlobalScopes{}
-				query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
+				query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
 				return query
 			},
 			expectedScopesApplied: false,
@@ -115,7 +115,7 @@ func TestAddGlobalScopes(t *testing.T) {
 			setupQuery: func() *Query {
 				conditions := Conditions{}
 				conditions.model = &ModelWithGlobalScopes{}
-				query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
+				query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
 				return query
 			},
 			expectedScopesApplied: true,
@@ -127,7 +127,7 @@ func TestAddGlobalScopes(t *testing.T) {
 				conditions := Conditions{}
 				conditions.model = &ModelWithGlobalScopes{}
 				conditions.withoutGlobalScopes = []string{"active", "verified"}
-				query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
+				query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
 				return query
 			},
 			expectedScopesApplied: false,
@@ -180,7 +180,7 @@ func TestAddGlobalScopesWithPointerTypes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			conditions := Conditions{}
 			conditions.model = tt.model
-			query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
+			query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
 
 			result := query.addGlobalScopes()
 
@@ -216,7 +216,7 @@ func TestAddGlobalScopesWithSliceAndArray(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			conditions := Conditions{}
 			conditions.model = tt.model
-			query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
+			query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
 
 			result := query.addGlobalScopes()
 
@@ -1138,7 +1138,7 @@ func newGetColumnsQuery(t *testing.T) (*Query, *recordingSQLDriver) {
 
 	// The recording pool is the query's writer directly: the ORM compiles its own statements now, so
 	// there is no ORM session between the query and the pool.
-	return NewQuery(context.Background(), nil, contractsdatabase.Config{}, sqlDB, nil, nil, nil, nil, &conditions, nil), recorder
+	return newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, sqlDB, nil, nil, nil, nil, &conditions, nil), recorder
 }
 
 // TestBasicSelectWithGetColumns ports Laravel's testBasicSelectWithGetColumns. A column list passed
@@ -1221,9 +1221,9 @@ func TestBasicSelectUseWritePdo(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, conn)
 
-	query := NewQuery(context.Background(), config,
+	query := newDialectQuery(context.Background(), config,
 		contractsdatabase.Config{Driver: "mysql", Connection: "read_write_pdo"},
-		conn.Writer(), nil, nil, nil, nil, &Conditions{model: &getColumnsUser{}}, nil)
+		conn.Writer(), nil, nil, nil, nil, &Conditions{model: &getColumnsUser{}}, nil, mysqlTestComponents())
 
 	// get() reads through the replica.
 	var first []getColumnsUser

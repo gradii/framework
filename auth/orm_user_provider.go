@@ -4,8 +4,8 @@ import (
 	contractsauth "github.com/gradii/framework/contracts/auth"
 	"github.com/gradii/framework/contracts/database/orm"
 	"github.com/gradii/framework/contracts/http"
+	databaseorm "github.com/gradii/framework/database/orm"
 	"github.com/gradii/framework/errors"
-	"github.com/gradii/framework/support/database"
 )
 
 var _ contractsauth.UserProviderFunc = NewOrmUserProvider
@@ -28,7 +28,7 @@ func NewOrmUserProvider(ctx http.Context) (contractsauth.UserProvider, error) {
 
 // GetID implements auth.UserProvider.
 func (r *OrmUserProvider) GetID(user any) (any, error) {
-	return database.GetID(user), nil
+	return databaseorm.GetID(user), nil
 }
 
 // RetriveByID implements auth.UserProvider.

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gradii/framework/contracts/database/db"
+	contractsdriver "github.com/gradii/framework/contracts/database/driver"
 	querybuilder "github.com/gradii/framework/database/query"
 	"github.com/gradii/framework/errors"
 	"github.com/stretchr/testify/assert"
@@ -14,7 +15,10 @@ import (
 
 func previewQuery(driver string) *Query {
 	grammar, _ := querybuilder.NewGrammar(driver, "")
-	return NewQuery(context.Background(), nil, nil, grammar, driver, nil, "users", nil)
+	if dialect := testDialect(driver); dialect != nil {
+		grammar = dialect.NewQueryGrammar(contractsdriver.GrammarOptions{})
+	}
+	return newDialectTestQuery(context.Background(), nil, nil, grammar, driver, nil, "users", nil)
 }
 
 func TestPublicQueryOptionalArguments(t *testing.T) {

@@ -18,7 +18,7 @@ func newRelQuery(t *testing.T) *Query {
 	t.Helper()
 	db := stubWriter(t)
 	conditions := Conditions{}
-	return NewQuery(context.Background(), nil, contractsdatabase.Config{}, db, nil, nil, nil, nil, &conditions, nil)
+	return newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, db, nil, nil, nil, nil, &conditions, nil)
 }
 
 func toQuery(q contractsorm.Query) *Query {

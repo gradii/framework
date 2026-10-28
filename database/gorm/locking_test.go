@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	contractsdatabase "github.com/gradii/framework/contracts/database"
-	querybuilder "github.com/gradii/framework/database/query"
+	contractsdriver "github.com/gradii/framework/contracts/database/driver"
 )
 
 func TestRandomOrderFunction(t *testing.T) {
@@ -54,8 +54,10 @@ func TestCompileSelect_LockRendering(t *testing.T) {
 // "for share", unlike the base and MySQL grammars' "lock in share mode".
 func TestCompileSelect_SharedLockPostgres(t *testing.T) {
 	conditions := Conditions{model: &relUser{}}
-	query := NewQuery(context.Background(), nil, contractsdatabase.Config{Driver: "postgres"}, stubWriter(t), nil, nil, nil, nil, &conditions, nil)
-	grammar, ok := querybuilder.NewGrammar("postgres", "")
+	query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{Driver: "postgres"}, stubWriter(t), nil, nil, nil, nil, &conditions, nil)
+	dialect := testDialect("postgres")
+	grammar := dialect.NewQueryGrammar(contractsdriver.GrammarOptions{})
+	ok := grammar != nil
 	assert.True(t, ok)
 	query = rebindGrammar(query, "postgres", grammar)
 	query.SharedLock()

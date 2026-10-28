@@ -4,6 +4,10 @@ import (
 	"context"
 	databasesql "database/sql"
 	"database/sql/driver"
+	mysqldialect "github.com/gradii/mysql"
+	postgresdriver "github.com/gradii/postgres"
+	sqlitedriver "github.com/gradii/sqlite"
+	sqlserverdriver "github.com/gradii/sqlserver"
 	"io"
 	"testing"
 
@@ -30,7 +34,7 @@ type TestUser struct {
 }
 
 func TestSelectResetsColumnsAndBindings(t *testing.T) {
-	query := NewQuery(context.Background(), nil, nil, querybuilder.NewPostgresGrammar(""), "", nil, "users", nil)
+	query := newDialectTestQuery(context.Background(), nil, nil, postgresdriver.NewQueryGrammar(""), "", nil, "users", nil)
 	query.builder.SelectRaw("? as old", []any{1}).Where("id", 9)
 
 	snapshot := query.Clone().(*Query)
@@ -76,14 +80,14 @@ func TestQueryTestSuite(t *testing.T) {
 
 func (s *QueryTestSuite) SetupTest() {
 	s.ctx = context.Background()
-	s.grammar = querybuilder.NewMySqlGrammar("")
+	s.grammar = mysqldialect.NewQueryGrammar("")
 	s.mockLogger = mockslogger.NewLogger(s.T())
 	s.mockReadBuilder = mocksdb.NewBuilder(s.T())
 	s.mockWriteBuilder = mocksdb.NewBuilder(s.T())
 	s.now = carbon.Now()
 	carbon.SetTestNow(s.now)
 
-	s.query = NewQuery(s.ctx, s.mockReadBuilder, s.mockWriteBuilder, s.grammar, querybuilder.DialectMySQL, s.mockLogger, "users", nil)
+	s.query = newDialectTestQuery(s.ctx, s.mockReadBuilder, s.mockWriteBuilder, s.grammar, querybuilder.DialectMySQL, s.mockLogger, "users", nil)
 }
 
 // TestWhereAnyGroupConnector pins the connector that joins WhereAny's OR-group to the clauses
@@ -110,7 +114,7 @@ func (s *QueryTestSuite) TestWhereAnyGroupConnector() {
 	}{
 		{
 			name:     "mysql",
-			grammar:  querybuilder.NewMySqlGrammar(""),
+			grammar:  mysqldialect.NewQueryGrammar(""),
 			driver:   querybuilder.DialectMySQL,
 			where:    "select * from `users` where `name` = ? and (`email` = ? or `phone` = ?)",
 			all:      "select * from `users` where `name` = ? and (`email` = ? and `phone` = ?)",
@@ -119,7 +123,7 @@ func (s *QueryTestSuite) TestWhereAnyGroupConnector() {
 		},
 		{
 			name:     "postgres",
-			grammar:  querybuilder.NewPostgresGrammar(""),
+			grammar:  postgresdriver.NewQueryGrammar(""),
 			driver:   querybuilder.DialectPostgres,
 			where:    `select * from "users" where "name" = $1 and ("email" = $2 or "phone" = $3)`,
 			all:      `select * from "users" where "name" = $1 and ("email" = $2 and "phone" = $3)`,
@@ -128,7 +132,7 @@ func (s *QueryTestSuite) TestWhereAnyGroupConnector() {
 		},
 		{
 			name:     "sqlite",
-			grammar:  querybuilder.NewSqliteGrammar(""),
+			grammar:  sqlitedriver.NewQueryGrammar(""),
 			driver:   querybuilder.DialectSqlite,
 			where:    `select * from "users" where "name" = ? and ("email" = ? or "phone" = ?)`,
 			all:      `select * from "users" where "name" = ? and ("email" = ? and "phone" = ?)`,
@@ -137,7 +141,7 @@ func (s *QueryTestSuite) TestWhereAnyGroupConnector() {
 		},
 		{
 			name:     "sqlserver",
-			grammar:  querybuilder.NewSqlServerGrammar(""),
+			grammar:  sqlserverdriver.NewQueryGrammar(""),
 			driver:   querybuilder.DialectSqlServer,
 			where:    "select * from [users] where [name] = @p1 and ([email] = @p2 or [phone] = @p3)",
 			all:      "select * from [users] where [name] = @p1 and ([email] = @p2 and [phone] = @p3)",
@@ -151,7 +155,7 @@ func (s *QueryTestSuite) TestWhereAnyGroupConnector() {
 			// A fresh query per case: a builder carries the accumulated wheres, so reusing s.query
 			// would chain the cases together.
 			newQuery := func() *Query {
-				return NewQuery(s.ctx, nil, nil, test.grammar, test.driver, nil, "users", nil)
+				return newDialectTestQuery(s.ctx, nil, nil, test.grammar, test.driver, nil, "users", nil)
 			}
 
 			s.Equal(test.where, newQuery().Where("name", "John").WhereAny([]string{"email", "phone"}, "=", "x").ToSql().Get())
@@ -281,7 +285,7 @@ func (s *QueryTestSuite) TestCompiledSQL() {
 }
 
 func (s *QueryTestSuite) TestWhereExistsSQL() {
-	sub := NewQuery(s.ctx, s.mockReadBuilder, s.mockWriteBuilder, s.grammar, querybuilder.DialectMySQL, s.mockLogger, "agents", nil).Where("age", 25)
+	sub := newDialectTestQuery(s.ctx, s.mockReadBuilder, s.mockWriteBuilder, s.grammar, querybuilder.DialectMySQL, s.mockLogger, "agents", nil).Where("age", 25)
 
 	got := s.query.Clone().Where("name", "John").WhereExists(func() db.Query { return sub }).ToSql().Get()
 
@@ -433,7 +437,7 @@ func (s *QueryTestSuite) TestInsertGetID() {
 }
 
 func (s *QueryTestSuite) TestInsertGetIDSqlServer() {
-	query := NewQuery(s.ctx, s.mockReadBuilder, s.mockWriteBuilder, querybuilder.NewSqlServerGrammar(""), querybuilder.DialectSqlServer, s.mockLogger, "users", nil)
+	query := newDialectTestQuery(s.ctx, s.mockReadBuilder, s.mockWriteBuilder, sqlserverdriver.NewQueryGrammar(""), querybuilder.DialectSqlServer, s.mockLogger, "users", nil)
 	const statement = "insert into [users] ([age], [name]) output inserted.[id] values (@p1, @p2)"
 	const explained = "insert into [users] ([age], [name]) output inserted.[id] values (25, 'John')"
 
@@ -605,7 +609,7 @@ func (s *QueryTestSuite) TestWhen() {
 }
 
 func (s *QueryTestSuite) TestMissingTableIsRejected() {
-	query := NewQuery(s.ctx, s.mockReadBuilder, s.mockWriteBuilder, s.grammar, querybuilder.DialectMySQL, s.mockLogger, "", nil)
+	query := newDialectTestQuery(s.ctx, s.mockReadBuilder, s.mockWriteBuilder, s.grammar, querybuilder.DialectMySQL, s.mockLogger, "", nil)
 
 	s.Equal(errors.DatabaseTableIsRequired, query.Where("id", 1).Get(&[]TestUser{}))
 }
@@ -887,7 +891,7 @@ func (s *QueryTestSuite) newChunkQuery(pages [][][]driver.Value) (db.Query, *int
 	s.mockLogger.EXPECT().Trace(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return().Maybe()
 
-	return NewQuery(s.ctx, builder, builder, s.grammar, querybuilder.DialectMySQL, s.mockLogger, "users", nil).OrderBy("id").(*Query), served, queries
+	return newDialectTestQuery(s.ctx, builder, builder, s.grammar, querybuilder.DialectMySQL, s.mockLogger, "users", nil).OrderBy("id").(*Query), served, queries
 }
 
 // TestChunkStopsOnTheEmptyChunk pins the empty-chunk terminator over an exact-multiple dataset:

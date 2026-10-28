@@ -21,7 +21,7 @@ func TestNewGrammar(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.driver, func(t *testing.T) {
-			grammar, known := NewGrammar(test.driver, "")
+			grammar, known := newTestGrammar(test.driver, "")
 			assert.Equal(t, test.known, known)
 			assert.Equal(t, test.quoted, grammar.WrapTable("users"))
 		})
@@ -44,7 +44,7 @@ func TestNewGrammarWithDriverModuleNames(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.driver, func(t *testing.T) {
-			grammar, known := NewGrammar(test.driver, "")
+			grammar, known := newTestGrammar(test.driver, "")
 			assert.True(t, known)
 			assert.Equal(t, test.quoted, grammar.WrapTable("users"))
 		})

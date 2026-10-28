@@ -4,19 +4,12 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"sync"
 
 	"github.com/gradii/framework/contracts/database/driver"
 	"github.com/gradii/framework/database/query/processors"
 	"github.com/gradii/framework/errors"
 	"github.com/spf13/cast"
 )
-
-type schemaMetadataCache struct {
-	mu      sync.Mutex
-	version string
-	stats   *bool
-}
 
 func (r *Schema) selectMetadata(statement string, bindings ...any) ([]processors.Row, error) {
 	var rows []processors.Row
@@ -40,44 +33,7 @@ func (r *Schema) selectMetadata(statement string, bindings ...any) ([]processors
 	}
 	return rows, nil
 }
-func (r *Schema) metadataServerVersion() (string, error) {
-	if r.db != nil {
-		return r.db.ServerVersion()
-	}
-	r.metadataCache.mu.Lock()
-	defer r.metadataCache.mu.Unlock()
-	if r.metadataCache.version != "" {
-		return r.metadataCache.version, nil
-	}
-	statements := map[string]string{"mysql": "select version() as version", "postgres": "select current_setting('server_version') as version",
-		"sqlite": "select sqlite_version() as version", "sqlserver": "select cast(serverproperty('ProductVersion') as varchar(32)) as version"}
-	statement, ok := statements[r.metadataDialect()]
-	if !ok {
-		return "", errors.SchemaDriverNotSupported.Args(r.driverName)
-	}
-	rows, err := r.selectMetadata(statement)
-	if err != nil {
-		return "", err
-	}
-	if len(rows) > 0 {
-		r.metadataCache.version = cast.ToString(rows[0]["version"])
-	}
-	return r.metadataCache.version, nil
-}
-func (r *Schema) sqliteHasStats() (bool, error) {
-	r.metadataCache.mu.Lock()
-	defer r.metadataCache.mu.Unlock()
-	if r.metadataCache.stats != nil {
-		return *r.metadataCache.stats, nil
-	}
-	rows, err := r.selectMetadata("select exists (select 1 from pragma_compile_options where compile_options = 'ENABLE_DBSTAT_VTAB') as enabled")
-	if err != nil {
-		return false, err
-	}
-	value := len(rows) > 0 && metadataBool(rows[0]["enabled"])
-	r.metadataCache.stats = &value
-	return value, nil
-}
+
 func metadataBool(value any) bool {
 	switch v := value.(type) {
 	case nil:
@@ -105,20 +61,36 @@ func (r *Schema) metadataTable(reference string) (string, string, error) {
 	}
 	return r.schema, r.prefix + reference, nil
 }
-func (r *Schema) metadataRows(kind, reference string, schemas []string) ([]processors.Row, error) {
-	var schema, table string
+func (r *Schema) metadataResult(kind, reference string, schemas []string) (driver.SchemaMetadataResult, error) {
+	var namespace, table string
 	if reference != "" {
 		var err error
-		schema, table, err = r.metadataTable(reference)
+		namespace, table, err = r.metadataTable(reference)
 		if err != nil {
-			return nil, err
+			return driver.SchemaMetadataResult{}, err
 		}
 	}
-	statement, bindings, err := r.metadataSQL(kind, schema, table, schemas)
-	if err != nil {
-		return nil, err
+	query := driver.SchemaMetadataQuery{Kind: kind, Schema: namespace, Table: table, Schemas: schemas}
+	if resolver, ok := r.grammar.(driver.SchemaMetadataResolver); ok {
+		return resolver.ResolveSchemaMetadata(query, schemaCatalog{r})
 	}
-	return r.selectMetadata(statement, bindings...)
+	grammar, ok := r.grammar.(driver.SchemaMetadataGrammar)
+	if !ok {
+		return driver.SchemaMetadataResult{}, errors.SchemaMetadataNotSupported.Args(kind, r.driverName)
+	}
+	statement, err := grammar.CompileSchemaMetadata(query)
+	if err != nil {
+		return driver.SchemaMetadataResult{}, err
+	}
+	if statement.SQL == "" {
+		return driver.SchemaMetadataResult{}, nil
+	}
+	rows, err := r.selectMetadata(statement.SQL, statement.Bindings...)
+	return driver.SchemaMetadataResult{Rows: rows}, err
+}
+func (r *Schema) metadataRows(kind, reference string, schemas []string) ([]processors.Row, error) {
+	result, err := r.metadataResult(kind, reference, schemas)
+	return result.Rows, err
 }
 
 func (r *Schema) GetSchemas() ([]driver.Schema, error) {
@@ -133,43 +105,19 @@ func (r *Schema) GetSchemas() ([]driver.Schema, error) {
 	return result, nil
 }
 func (r *Schema) GetCurrentSchemaListing() ([]string, error) {
-	switch r.metadataDialect() {
-	case "mysql":
-		return []string{r.databaseName}, nil
-	case "sqlite":
-		return []string{"main"}, nil
-	case "postgres":
-		var configured any
+	if grammar, ok := r.grammar.(driver.SchemaCurrentSchemas); ok {
+		info := driver.SchemaConnectionInfo{Database: r.databaseName, Username: r.username, Schema: r.schema, Prefix: r.prefix}
 		if r.config != nil {
-			configured = r.config.Get("database.connections." + r.GetConnection() + ".search_path")
+			info.SearchPath = r.config.Get("database.connections." + r.GetConnection() + ".search_path")
 		}
-		var names []string
-		switch value := configured.(type) {
-		case []string:
-			names = append(names, value...)
-		case string:
-			if value != "" {
-				names = strings.Split(value, ",")
-			}
-		}
-		if len(names) == 0 {
-			path := r.schema
-			if path == "" {
-				path = "public"
-			}
-			names = strings.Split(path, ",")
-		}
-		for i, name := range names {
-			names[i] = strings.Trim(strings.TrimSpace(name), "\"")
-			if names[i] == "$user" {
-				names[i] = r.username
-			}
-		}
-		return names, nil
-	default:
-		return nil, nil
+		return grammar.ResolveCurrentSchemas(info, schemaCatalog{r})
 	}
+	if grammar, ok := r.grammar.(driver.SchemaMetadataGrammar); ok {
+		return grammar.CurrentSchemas(r.databaseName), nil
+	}
+	return nil, nil
 }
+
 func (r *Schema) GetCurrentSchemaName() (string, error) {
 	names, err := r.GetCurrentSchemaListing()
 	if err != nil {
@@ -182,25 +130,12 @@ func (r *Schema) GetCurrentSchemaName() (string, error) {
 }
 
 func (r *Schema) GetColumnsMetadata(table string) ([]driver.ColumnMetadata, error) {
-	raw, err := r.metadataRows("columns", table, nil)
+	metadata, err := r.metadataResult("columns", table, nil)
 	if err != nil {
 		return nil, err
 	}
-	var extraSQL []string
-	if r.metadataDialect() == "sqlite" {
-		schema, name, err := r.metadataTable(table)
-		if err != nil {
-			return nil, err
-		}
-		rows, err := r.selectMetadata("select sql from "+quoteSchemaIdentifier(sqliteSchemaName(schema))+".sqlite_master where type = 'table' and name = ?", name)
-		if err != nil {
-			return nil, err
-		}
-		if len(rows) > 0 {
-			extraSQL = []string{cast.ToString(rows[0]["sql"])}
-		}
-	}
-	rows := r.queryProcessor.ProcessColumns(raw, extraSQL...)
+	raw := metadata.Rows
+	rows := r.queryProcessor.ProcessColumns(raw, metadata.ColumnSQL...)
 	result := make([]driver.ColumnMetadata, 0, len(rows))
 	for i, row := range rows {
 		var generation *driver.ColumnGeneration
@@ -227,7 +162,7 @@ func (r *Schema) GetColumns(table string) ([]driver.Column, error) {
 	}
 	result := make([]driver.Column, 0, len(columns))
 	for _, column := range columns {
-		legacy := driver.Column{Name: column.Name, Type: column.Type, TypeName: column.TypeName, Default: cast.ToString(column.Default),
+		legacy := driver.Column{Name: column.Name, Type: column.Type, TypeName: column.TypeName, Default: cast.ToString(column.Default), DefaultValue: column.Default, DefaultKnown: true,
 			Nullable: column.Nullable, Autoincrement: column.AutoIncrement, Extra: column.Extra, Generation: column.Generation}
 		if column.Comment != nil {
 			legacy.Comment = *column.Comment
@@ -290,23 +225,7 @@ func (r *Schema) GetTables(schemas ...string) ([]driver.Table, error) {
 	if r.queryProcessor == nil {
 		return r.legacyGetTables()
 	}
-	var rows []processors.Row
-	var err error
-	if r.metadataDialect() == "sqlite" {
-		version, versionErr := r.metadataServerVersion()
-		if versionErr != nil {
-			return nil, versionErr
-		}
-		var major, minor int
-		_, _ = fmt.Sscanf(version, "%d.%d", &major, &minor)
-		if major < 3 || (major == 3 && minor < 37) {
-			rows, err = r.sqliteLegacyTables(schemas)
-		} else {
-			rows, err = r.metadataRows("tables", "", schemas)
-		}
-	} else {
-		rows, err = r.metadataRows("tables", "", schemas)
-	}
+	rows, err := r.metadataRows("tables", "", schemas)
 	if err != nil {
 		return nil, err
 	}
@@ -318,67 +237,14 @@ func (r *Schema) GetTables(schemas ...string) ([]driver.Table, error) {
 	}
 	return result, nil
 }
-func (r *Schema) attachedSchemas(names []string) ([]string, error) {
-	if len(names) > 0 {
-		return names, nil
-	}
-	schemas, err := r.GetSchemas()
-	if err != nil {
-		return nil, err
-	}
-	for _, schema := range schemas {
-		names = append(names, schema.Name)
-	}
-	return names, nil
-}
-func (r *Schema) sqliteLegacyTables(schemas []string) ([]processors.Row, error) {
-	names, err := r.attachedSchemas(schemas)
-	if err != nil {
-		return nil, err
-	}
-	stats, err := r.sqliteHasStats()
-	if err != nil {
-		return nil, err
-	}
-	var rows []processors.Row
-	for _, name := range names {
-		statement := "select name, ? as schema from " + quoteSchemaIdentifier(name) + ".sqlite_master where type = 'table' and name not like 'sqlite\\_%' escape '\\' order by name"
-		args := []any{name}
-		if stats {
-			statement = "select m.tbl_name as name, ? as schema, sum(s.pgsize) as size from " + quoteSchemaIdentifier(name) + ".sqlite_master as m join dbstat(?) as s on s.name = m.name where m.type in ('table', 'index') and m.tbl_name not like 'sqlite\\_%' escape '\\' group by m.tbl_name order by m.tbl_name"
-			args = append(args, name)
-		}
-		set, err := r.selectMetadata(statement, args...)
-		if err != nil {
-			return nil, err
-		}
-		rows = append(rows, set...)
-	}
-	return rows, nil
-}
+
 func (r *Schema) GetViews(schemas ...string) ([]driver.View, error) {
 	if r.queryProcessor == nil {
 		return r.legacyGetViews()
 	}
-	var rows []processors.Row
-	if r.metadataDialect() == "sqlite" {
-		names, err := r.attachedSchemas(schemas)
-		if err != nil {
-			return nil, err
-		}
-		for _, name := range names {
-			set, err := r.selectMetadata("select name, ? as schema, sql as definition from "+quoteSchemaIdentifier(name)+".sqlite_master where type = 'view' order by name", name)
-			if err != nil {
-				return nil, err
-			}
-			rows = append(rows, set...)
-		}
-	} else {
-		var err error
-		rows, err = r.metadataRows("views", "", schemas)
-		if err != nil {
-			return nil, err
-		}
+	rows, err := r.metadataRows("views", "", schemas)
+	if err != nil {
+		return nil, err
 	}
 	result := make([]driver.View, 0, len(rows))
 	for _, row := range r.queryProcessor.ProcessViews(rows) {
@@ -471,32 +337,10 @@ func (r *Schema) HasTable(reference string) bool {
 	if r.queryProcessor == nil {
 		return r.legacyHasTable(reference)
 	}
-	schema, table, err := r.metadataTable(reference)
-	if err != nil {
-		return false
-	}
-	var statement string
-	var values []any
-	switch r.metadataDialect() {
-	case "mysql":
-		statement = "select exists (select 1 from information_schema.tables where table_schema = coalesce(nullif(?, ''), schema()) and table_name = ? and table_type in ('BASE TABLE', 'SYSTEM VERSIONED')) as `exists`"
-		values = []any{schema, table}
-	case "postgres":
-		statement = "select exists (select 1 from pg_class c, pg_namespace n where n.nspname = coalesce(nullif(?, ''), current_schema()) and c.relname = ? and c.relkind in ('r', 'p') and n.oid = c.relnamespace) as \"exists\""
-		values = []any{schema, table}
-	case "sqlite":
-		statement = "select exists (select 1 from " + quoteSchemaIdentifier(sqliteSchemaName(schema)) + ".sqlite_master where name = ? and type = 'table') as \"exists\""
-		values = []any{table}
-	case "sqlserver":
-		if schema != "" {
-			table = schema + "." + table
-		}
-		statement = "select (case when object_id(?, 'U') is null then 0 else 1 end) as [exists]"
-		values = []any{table}
-	}
-	rows, err := r.selectMetadata(statement, values...)
+	rows, err := r.metadataRows("hasTable", reference, nil)
 	return err == nil && len(rows) > 0 && metadataBool(rows[0]["exists"])
 }
+
 func (r *Schema) HasView(table string) bool { return r.hasRelation(table, true) }
 func (r *Schema) hasRelation(reference string, view bool) bool {
 	schema, table, err := r.metadataTable(reference)

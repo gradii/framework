@@ -117,7 +117,11 @@ func (r *DB) ServerVersion() (string, error) {
 }
 func (r *DB) Escape(value any, binary ...bool) (string, error) {
 	isBinary := len(binary) > 0 && binary[0]
-	return databasedriver.Escape(r.DriverName(), value, isBinary)
+	dialect, err := databasedriver.ResolveDialect(r.driver)
+	if err != nil {
+		return "", err
+	}
+	return databasedriver.EscapeWithDialect(dialect, r.DriverName(), value, isBinary)
 }
 func (r *DB) Purge(connection ...string) error {
 	name := firstString(connection, r.Name())

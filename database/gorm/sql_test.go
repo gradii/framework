@@ -10,6 +10,7 @@ import (
 	contractsdatabase "github.com/gradii/framework/contracts/database"
 	contractsdriver "github.com/gradii/framework/contracts/database/driver"
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	databasedriver "github.com/gradii/framework/database/driver"
 	querybuilder "github.com/gradii/framework/database/query"
 	"github.com/gradii/framework/errors"
 )
@@ -19,7 +20,13 @@ import (
 // rebindGrammar swaps the dialect a query compiles with. Production builds the builder once, in
 // NewQuery; these tests drive several dialects through one query, so they rebind it explicitly.
 func rebindGrammar(query *Query, driver string, grammar querybuilder.Grammar) *Query {
-	builder := querybuilder.NewBuilder(grammar, querybuilder.NewProcessor(driver))
+	components := databasedriver.QueryComponents{Grammar: grammar, Processor: querybuilder.NewProcessor(driver)}
+	if dialect := testDialect(driver); dialect != nil {
+		components.Dialect = dialect
+		components.Processor = dialect.NewProcessor()
+	}
+	query.components = components
+	builder := querybuilder.NewBuilder(grammar, components.Processor)
 	builder.SetDriver(driver)
 	query.builder = builder
 	query.queryGrammar = grammar
@@ -33,7 +40,7 @@ func compiledQuery(t *testing.T, model any, conditions Conditions) *Query {
 
 	conditions.model = model
 
-	return NewQuery(context.Background(), nil, contractsdatabase.Config{}, stubWriter(t), nil, nil, nil, nil, &conditions, nil)
+	return newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, stubWriter(t), nil, nil, nil, nil, &conditions, nil)
 }
 
 func TestCompileSelect_WhereOrderLimit(t *testing.T) {
@@ -155,7 +162,7 @@ func TestCompileSelect_OrConnectorSurvivesEveryDispatchBranch(t *testing.T) {
 				{Query: "tags", Args: []any{2}, Or: true, Type: contractsdriver.WhereTypeJsonLength},
 			},
 		}
-		query := NewQuery(context.Background(), nil, contractsdatabase.Config{Driver: "postgres"}, stubWriter(t), nil, nil, nil, nil, &conditions, nil)
+		query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{Driver: "postgres"}, stubWriter(t), nil, nil, nil, nil, &conditions, nil)
 		query.queryGrammar, _ = querybuilder.NewGrammar("postgres", "")
 
 		sql, _, err := query.compileSelect()

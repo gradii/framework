@@ -1,6 +1,10 @@
 package gorm
 
 import (
+	mysqldialect "github.com/gradii/mysql"
+	postgresdriver "github.com/gradii/postgres"
+	sqlitedriver "github.com/gradii/sqlite"
+	sqlserverdriver "github.com/gradii/sqlserver"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -20,28 +24,28 @@ func TestDistinctPreservesSelection(t *testing.T) {
 	}{
 		{
 			name:     "postgres",
-			grammar:  querybuilder.NewPostgresGrammar(""),
+			grammar:  postgresdriver.NewQueryGrammar(""),
 			selected: `select distinct on ("name") "name", ? as flag from "users" where "id" = ?`,
 			all:      `select distinct "name", ? as flag from "users" where "id" = ?`,
 			count:    `select count(distinct "name") as aggregate from "users" where "id" = ?`,
 		},
 		{
 			name:     "mysql",
-			grammar:  querybuilder.NewMySqlGrammar(""),
+			grammar:  mysqldialect.NewQueryGrammar(""),
 			selected: "select distinct `name`, ? as flag from `users` where `id` = ?",
 			all:      "select distinct `name`, ? as flag from `users` where `id` = ?",
 			count:    "select count(distinct `name`) as aggregate from `users` where `id` = ?",
 		},
 		{
 			name:     "sqlite",
-			grammar:  querybuilder.NewSqliteGrammar(""),
+			grammar:  sqlitedriver.NewQueryGrammar(""),
 			selected: `select distinct "name", ? as flag from "users" where "id" = ?`,
 			all:      `select distinct "name", ? as flag from "users" where "id" = ?`,
 			count:    `select count(distinct "name") as aggregate from "users" where "id" = ?`,
 		},
 		{
 			name:     "sqlserver",
-			grammar:  querybuilder.NewSqlServerGrammar(""),
+			grammar:  sqlserverdriver.NewQueryGrammar(""),
 			selected: "select distinct [name], ? as flag from [users] where [id] = ?",
 			all:      "select distinct [name], ? as flag from [users] where [id] = ?",
 			count:    "select count(distinct [name]) as aggregate from [users] where [id] = ?",
@@ -79,7 +83,7 @@ func TestDistinctPreservesSelection(t *testing.T) {
 func TestDistinctPreservesRelationAggregate(t *testing.T) {
 	// Rebind first: rebindGrammar installs a fresh builder, so a Distinct written before it would be
 	// discarded along with the builder it was written to.
-	query := rebindGrammar(newRelQueryWith(t, &relUser{}), "postgres", querybuilder.NewPostgresGrammar(""))
+	query := rebindGrammar(newRelQueryWith(t, &relUser{}), "postgres", postgresdriver.NewQueryGrammar(""))
 	query = query.WithCount("Books").Distinct("name").(*Query)
 
 	statement, bindings, err := query.compileSelect()
@@ -91,7 +95,7 @@ func TestDistinctPreservesRelationAggregate(t *testing.T) {
 }
 
 func TestSelectPreservesDistinctColumns(t *testing.T) {
-	query := rebindGrammar(compiledQuery(t, &getColumnsUser{}, Conditions{}), "postgres", querybuilder.NewPostgresGrammar(""))
+	query := rebindGrammar(compiledQuery(t, &getColumnsUser{}, Conditions{}), "postgres", postgresdriver.NewQueryGrammar(""))
 	selected := query.SelectRaw("? as old", 1).Distinct("name").Select("id").(*Query)
 
 	statement, bindings, err := selected.compileSelect()

@@ -4,15 +4,15 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/goravel/mysql"
-	"github.com/goravel/postgres"
-	"github.com/goravel/sqlite"
-	"github.com/goravel/sqlserver"
 	"github.com/gradii/framework/contracts/database"
 	"github.com/gradii/framework/contracts/database/driver"
 	mocksconfig "github.com/gradii/framework/mocks/config"
 	"github.com/gradii/framework/process"
 	"github.com/gradii/framework/testing/utils"
+	"github.com/gradii/mysql"
+	"github.com/gradii/postgres"
+	"github.com/gradii/sqlite"
+	"github.com/gradii/sqlserver"
 )
 
 func mockDatabaseConfig(mockConfig *mocksconfig.Config, config database.Config) {
@@ -24,6 +24,11 @@ func mockDatabaseConfig(mockConfig *mocksconfig.Config, config database.Config) 
 
 func mockDatabaseConfigWithoutWriteAndRead(mockConfig *mocksconfig.Config, config database.Config) {
 	connection := config.Connection
+	mockConfig.EXPECT().Get("database.connections." + connection + ".isolation_level").Return(nil).Maybe()
+	mockConfig.EXPECT().Get("database.connections." + connection + ".connector").Return(config.Connector).Maybe()
+	mockConfig.EXPECT().GetString("database.connections." + connection + ".driver").Return(config.Driver).Maybe()
+	mockConfig.EXPECT().GetString("database.connections." + connection + ".collation").Return("").Maybe()
+	mockConfig.EXPECT().GetString("app.timezone", "UTC").Return("UTC").Maybe()
 	mockConfig.EXPECT().Get("database.connections." + connection + ".search_path").Return(nil).Maybe()
 	mockConfig.EXPECT().GetBool("database.connections."+connection+".sticky", false).Return(false).Maybe()
 	mockConfig.EXPECT().GetBool("database.connections."+connection+".use_upsert_alias", false).Return(false).Maybe()

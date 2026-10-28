@@ -450,7 +450,7 @@ func applySimpleWhere(builder *querybuilder.Builder, query any, args []any, bool
 // applyNestedWhere runs a callback against a child builder, so an `or` group the caller wrote keeps
 // its own grouping.
 func (r *Query) applyNestedWhere(callback func(contractsorm.Query) contractsorm.Query, builder *querybuilder.Builder) *querybuilder.Builder {
-	child := NewQuery(r.ctx, r.config, r.dbConfig, r.writer, r.tx, r.grammar, r.log, r.modelToObserver, nil, r.telemetryResolver)
+	child := NewQuery(r.ctx, r.config, r.dbConfig, r.writer, r.tx, r.grammar, r.log, r.modelToObserver, nil, r.telemetryResolver, r.components)
 	child.queryGrammar = r.queryGrammar
 	child.conditions = r.conditions
 	child.conditions.where = nil

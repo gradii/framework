@@ -10,15 +10,15 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/goravel/mysql"
-	"github.com/goravel/postgres"
-	"github.com/goravel/sqlite"
-	"github.com/goravel/sqlserver"
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
 	databasedb "github.com/gradii/framework/database/db"
 	"github.com/gradii/framework/errors"
 	"github.com/gradii/framework/support/carbon"
 	"github.com/gradii/framework/support/convert"
+	"github.com/gradii/mysql"
+	"github.com/gradii/postgres"
+	"github.com/gradii/sqlite"
+	"github.com/gradii/sqlserver"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )

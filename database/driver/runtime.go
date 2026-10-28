@@ -3,7 +3,6 @@ package driver
 import (
 	"context"
 	sqlDriver "database/sql/driver"
-	"encoding/hex"
 	"fmt"
 	"math"
 	"reflect"
@@ -12,6 +11,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	contractsdriver "github.com/gradii/framework/contracts/database/driver"
+	querybuilder "github.com/gradii/framework/database/query"
 	"github.com/gradii/framework/errors"
 )
 
@@ -66,17 +67,11 @@ func (r *Connection) ServerVersion(ctx context.Context) (string, error) {
 		return "", errors.DatabaseConnectionIsNil
 	}
 	var statement string
-	switch driverDialect(r.driver) {
-	case "mysql":
-		statement = "select version()"
-	case "postgres":
-		statement = "show server_version"
-	case "sqlite":
-		statement = "select sqlite_version()"
-	case "sqlserver":
-		statement = "select cast(serverproperty('ProductVersion') as varchar(32))"
-	default:
-		return "", errors.OrmDriverNotSupported.Args(r.driver)
+	if dialect, ok := r.dialect.(contractsdriver.DialectWithServerVersion); ok {
+		statement = dialect.ServerVersionSQL()
+	}
+	if statement == "" {
+		return "", errors.DatabaseDialectRequired.Args(r.driver)
 	}
 	if err := r.writer.QueryRowContext(ctx, statement).Scan(&r.serverVersion); err != nil {
 		return "", err
@@ -86,6 +81,9 @@ func (r *Connection) ServerVersion(ctx context.Context) (string, error) {
 
 // Escape produces a scalar SQL literal. Bound execution continues to use driver parameters.
 func Escape(driver string, value any, binary bool) (string, error) {
+	if querybuilder.CanonicalDialect(driver) != "" {
+		return "", errors.DatabaseDialectRequired.Args(driver)
+	}
 	if value == nil {
 		return "null", nil
 	}
@@ -107,7 +105,6 @@ func Escape(driver string, value any, binary bool) (string, error) {
 		value = date.Format("2006-01-02 15:04:05")
 		reflected = reflect.ValueOf(value)
 	}
-	dialect := driverDialect(driver)
 	if binary {
 		var bytes []byte
 		switch input := value.(type) {
@@ -118,23 +115,11 @@ func Escape(driver string, value any, binary bool) (string, error) {
 		default:
 			return "", errors.DatabaseUnsupportedType.Args(fmt.Sprintf("%T", value), "string or []byte")
 		}
-		encoded := hex.EncodeToString(bytes)
-		switch dialect {
-		case "postgres":
-			return "'\\x" + encoded + "'::bytea", nil
-		case "mysql", "sqlite":
-			return "x'" + encoded + "'", nil
-		case "sqlserver":
-			return "0x" + encoded, nil
-		default:
-			return "", errors.DatabaseEscapeBinaryNotSupported
-		}
+		_ = bytes
+		return "", errors.DatabaseEscapeBinaryNotSupported
 	}
 	switch reflected.Kind() {
 	case reflect.Bool:
-		if dialect == "postgres" {
-			return strconv.FormatBool(reflected.Bool()), nil
-		}
 		if reflected.Bool() {
 			return "1", nil
 		}
@@ -165,9 +150,6 @@ func Escape(driver string, value any, binary bool) (string, error) {
 	}
 	if strings.IndexByte(text, 0) >= 0 {
 		return "", errors.DatabaseEscapeNullByte
-	}
-	if dialect == "mysql" {
-		text = strings.ReplaceAll(text, "\\", "\\\\")
 	}
 	return "'" + strings.ReplaceAll(text, "'", "''") + "'", nil
 }

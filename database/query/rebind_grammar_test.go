@@ -12,7 +12,7 @@ import (
 // them and swap the grammar with them: a builder carried over unchanged renders the source
 // dialect's quoting, and its processor keeps the source dialect's key handling.
 func TestRebindGrammarKeepsClausesAndSwapsTheDialect(t *testing.T) {
-	source := NewBuilder(NewMySqlGrammar(""), NewProcessor("mysql"))
+	source := NewBuilder(NewMySqlGrammar(""), newTestProcessor("mysql"))
 	source.SetDriver("mysql")
 	source.From("users", "")
 	source.Select("name")
@@ -23,7 +23,7 @@ func TestRebindGrammarKeepsClausesAndSwapsTheDialect(t *testing.T) {
 	const onMySQL = "select `name` from `users` where `id` = ? order by `id` asc limit 5"
 	require.Equal(t, onMySQL, source.ToSQL())
 
-	rebound := source.RebindGrammar(NewPostgresGrammar(""), NewProcessor("postgres"), "postgres")
+	rebound := source.RebindGrammar(NewPostgresGrammar(""), newTestProcessor("postgres"), "postgres")
 
 	assert.Equal(t, `select "name" from "users" where "id" = ? order by "id" asc limit 5`, rebound.ToSQL())
 	assert.Equal(t, []any{1}, rebound.GetBindings(), "the where binding must move with its clause")
@@ -39,7 +39,7 @@ func TestRebindGrammarCopiesRatherThanAliases(t *testing.T) {
 	source := NewBuilder(NewBaseGrammar(""))
 	source.From("users", "")
 
-	rebound := source.RebindGrammar(NewBaseGrammar(""), NewProcessor("sqlite"), "sqlite")
+	rebound := source.RebindGrammar(NewBaseGrammar(""), newTestProcessor("sqlite"), "sqlite")
 	rebound.Where("id", 1)
 
 	assert.Equal(t, `select * from "users" where "id" = ?`, rebound.ToSQL())
@@ -50,7 +50,7 @@ func TestRebindGrammarCopiesRatherThanAliases(t *testing.T) {
 // A nil processor leaves the source's in place, so a caller that only needs another grammar does not
 // have to name one.
 func TestRebindGrammarKeepsTheProcessorWhenNoneIsGiven(t *testing.T) {
-	processor := NewProcessor("mysql")
+	processor := newTestProcessor("mysql")
 
 	source := NewBuilder(NewMySqlGrammar(""), processor)
 	source.From("users", "")
@@ -64,8 +64,8 @@ func TestRebindGrammarKeepsTheProcessorWhenNoneIsGiven(t *testing.T) {
 // The processor follows the dialect a query is rebound to, which is what carries the insert-key
 // strategy with it: MySQL reads LastInsertId, Postgres reads the RETURNING row.
 func TestRebindGrammarSwapsTheProcessor(t *testing.T) {
-	source := NewBuilder(NewMySqlGrammar(""), NewProcessor("mysql"))
-	postgres := NewProcessor("postgres")
+	source := NewBuilder(NewMySqlGrammar(""), newTestProcessor("mysql"))
+	postgres := newTestProcessor("postgres")
 
 	rebound := source.RebindGrammar(NewPostgresGrammar(""), postgres, "postgres")
 

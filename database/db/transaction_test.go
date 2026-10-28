@@ -2,10 +2,10 @@ package db
 
 import (
 	"context"
+	mysqldialect "github.com/gradii/mysql"
 	"testing"
 
 	"github.com/gradii/framework/contracts/database/db"
-	querybuilder "github.com/gradii/framework/database/query"
 	"github.com/gradii/framework/errors"
 	mocksdb "github.com/gradii/framework/mocks/database/db"
 	"github.com/stretchr/testify/assert"
@@ -17,7 +17,7 @@ func newTransactionTest(t *testing.T) (*Tx, *mocksdb.TxBuilder) {
 	builder := mocksdb.NewTxBuilder(t)
 	manager, record := newTransactionManager(builder)
 	return &Tx{ctx: context.Background(), txBuilder: builder, transactions: manager, record: record,
-		state: newConnectionState("test", "mysql"), queryGrammar: querybuilder.NewMySqlGrammar(""), txLogs: &[]TxLog{}}, builder
+		state: newConnectionState("test", "mysql"), queryGrammar: mysqldialect.NewQueryGrammar(""), txLogs: &[]TxLog{}}, builder
 }
 
 func TestTransactionCommitCallbacksFollowLaravelStagingOrder(t *testing.T) {

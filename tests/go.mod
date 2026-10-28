@@ -11,10 +11,10 @@ require (
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/google/uuid v1.6.0
 	github.com/gradii/framework v1.18.0
-	github.com/goravel/mysql v1.18.0
-	github.com/goravel/postgres v1.18.0
-	github.com/goravel/sqlite v1.18.0
-	github.com/goravel/sqlserver v1.18.0
+	github.com/gradii/mysql v1.18.0
+	github.com/gradii/postgres v1.18.0
+	github.com/gradii/sqlite v1.18.0
+	github.com/gradii/sqlserver v1.18.0
 	github.com/jackc/pgx/v5 v5.7.5
 	github.com/microsoft/go-mssqldb v1.9.2
 	github.com/spf13/cast v1.10.0
@@ -70,7 +70,6 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/ncruces/go-sqlite3 v0.26.3 // indirect
-	github.com/ncruces/go-sqlite3/gormlite v0.24.0 // indirect
 	github.com/ncruces/julianday v1.0.0 // indirect
 	github.com/pterm/pterm v0.12.84 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
@@ -111,16 +110,4 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc // indirect
 	google.golang.org/grpc v1.86.0-dev.0.20261016230555-3d85ab3cf6bf // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
-	gorm.io/driver/mysql v1.6.0 // indirect
-	gorm.io/driver/postgres v1.6.0 // indirect
-	gorm.io/driver/sqlserver v1.6.3 // indirect
-	gorm.io/gorm v1.31.2 // indirect
-)
-
-replace (
-	github.com/gradii/framework => ../
-	github.com/goravel/mysql v0.0.0 => github.com/goravel/mysql v0.0.0
-	github.com/goravel/postgres v0.0.0 => github.com/goravel/postgres v0.0.0
-	github.com/goravel/sqlite v0.0.0 => github.com/goravel/sqlite v0.0.0
-	github.com/goravel/sqlserver v0.0.0 => github.com/goravel/sqlserver v0.0.0
 )

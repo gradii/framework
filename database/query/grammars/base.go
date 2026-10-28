@@ -57,6 +57,11 @@ func (g *BaseGrammar) dialect() Grammar {
 // SetValueWrapper sets the dialect's identifier quoting.
 func (g *BaseGrammar) SetValueWrapper(wrapper func(string) string) { g.wrap.SetValueWrapper(wrapper) }
 
+// JsonFieldAndPath returns the quoted field and JSON path for an external dialect.
+func (g *BaseGrammar) JsonFieldAndPath(value string) (string, string) {
+	return g.wrap.JsonFieldAndPath(value)
+}
+
 // Prefix returns the table prefix.
 func (g *BaseGrammar) Prefix() string { return g.prefix }
 

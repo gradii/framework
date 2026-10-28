@@ -71,12 +71,12 @@ func TestSQLiteUpdateWrappingJsonPathArrayIndex(t *testing.T) {
 	sql, bindings := NewBuilder(NewSqliteGrammar("")).From("users", "").ToUpdateSQL(values)
 
 	assert.Equal(t,
-		`update "users" set "options" = json_patch(ifnull("options", json('{}')), json(?)), "meta" = json_patch(ifnull("meta", json('{}')), json(?))`,
+		`update "users" set "options" = json_set(ifnull("options", json('{}')), '$[1]."2fa"', json(?)), "meta" = json_set(ifnull("meta", json('{}')), '$."tags"[0][2]', json(?))`,
 		sql)
-	assert.Equal(t, []any{`{"[1]":{"2fa":false}}`, `{"tags[0][2]":"large"}`}, bindings)
+	assert.Equal(t, []any{`false`, `"large"`}, bindings)
 
 	// The where clause's boolean is emitted inline (`= true`) and contributes no binding, so the full
 	// corpus statement's binding list stays the same two values.
 	_, withWhere := NewBuilder(NewSqliteGrammar("")).From("users", "").Where("options->[1]->2fa", true).ToUpdateSQL(values)
-	assert.Equal(t, []any{`{"[1]":{"2fa":false}}`, `{"tags[0][2]":"large"}`}, withWhere)
+	assert.Equal(t, []any{`false`, `"large"`}, withWhere)
 }

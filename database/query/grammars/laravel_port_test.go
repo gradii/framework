@@ -1,10 +1,11 @@
-package grammars
+package grammars_test
 
 import (
 	"strings"
 	"testing"
 
 	"github.com/gradii/framework/database/query/core"
+	. "github.com/gradii/framework/database/query/grammars"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -103,10 +104,10 @@ func TestDatabasePostgresQueryGrammar_CustomOperators(t *testing.T) {
 
 // DatabasePostgresQueryGrammarTest::testCompileTruncate.
 func TestDatabasePostgresQueryGrammar_CompileTruncate(t *testing.T) {
-	defer CascadeOnTruncate(!postgresTruncateWithoutCascade.Load())
-	CascadeOnTruncate(true)
 	grammar := NewPostgresGrammar("")
 	query := &grammarTestQuery{state: core.State{From: "users"}}
+	defer CascadeOnTruncate(strings.HasSuffix(grammar.CompileTruncate(query)[0].SQL, " cascade"))
+	CascadeOnTruncate(true)
 	assert.Equal(t, []core.Statement{{SQL: `truncate "users" restart identity cascade`}}, grammar.CompileTruncate(query))
 	CascadeOnTruncate(false)
 	assert.Equal(t, []core.Statement{{SQL: `truncate "users" restart identity`}}, grammar.CompileTruncate(query))

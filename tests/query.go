@@ -22,14 +22,14 @@ import (
 	"github.com/gradii/framework/support/str"
 	"github.com/gradii/framework/testing/utils"
 
-	"github.com/goravel/mysql"
-	mysqlcontracts "github.com/goravel/mysql/contracts"
-	"github.com/goravel/postgres"
-	postgrescontracts "github.com/goravel/postgres/contracts"
-	"github.com/goravel/sqlite"
-	sqlitecontracts "github.com/goravel/sqlite/contracts"
-	"github.com/goravel/sqlserver"
-	sqlservercontracts "github.com/goravel/sqlserver/contracts"
+	"github.com/gradii/mysql"
+	mysqlcontracts "github.com/gradii/mysql/contracts"
+	"github.com/gradii/postgres"
+	postgrescontracts "github.com/gradii/postgres/contracts"
+	"github.com/gradii/sqlite"
+	sqlitecontracts "github.com/gradii/sqlite/contracts"
+	"github.com/gradii/sqlserver"
+	sqlservercontracts "github.com/gradii/sqlserver/contracts"
 )
 
 type TestQuery struct {
@@ -40,9 +40,14 @@ type TestQuery struct {
 }
 
 func NewTestQuery(ctx context.Context, driver contractsdriver.Driver, config config.Config, connection string) (*TestQuery, error) {
+	driver = withDatabaseFixture(driver)
 	pool := driver.Pool()
+	dialect, err := databasedriver.ResolveDialect(driver)
+	if err != nil {
+		return nil, err
+	}
 	logger := databasedb.NewLogger(config, utils.NewTestLog())
-	conn, err := databasedriver.Open(config, logger, pool, connection, nil)
+	conn, err := databasedriver.Open(config, logger, pool, connection, nil, dialect)
 	if err != nil {
 		return nil, err
 	}
@@ -57,11 +62,22 @@ func NewTestQuery(ctx context.Context, driver contractsdriver.Driver, config con
 		writer = conn.Writer()
 	}
 
+	options := contractsdriver.GrammarOptions{Driver: pool.Writers[0].Driver, Prefix: pool.Writers[0].Prefix}
+	if conn != nil {
+		options.ServerVersion = func() (string, error) { return conn.ServerVersion(ctx) }
+	}
+	components, err := databasedriver.ResolveQueryComponents(dialect, options)
+	if err != nil {
+		return nil, err
+	}
+	if conn != nil {
+		components.VersionSource = conn.ServerVersion
+	}
 	testQuery := &TestQuery{
 		config: config,
 		db:     db,
 		driver: driver,
-		query:  databasegorm.NewQuery(ctx, config, pool.Writers[0], writer, nil, driver.Grammar(), utils.NewTestLog(), nil, nil, nil),
+		query:  databasegorm.NewQuery(ctx, config, pool.Writers[0], writer, nil, driver.Grammar(), utils.NewTestLog(), nil, nil, nil, components),
 	}
 
 	return testQuery, nil
@@ -228,7 +244,7 @@ func (r *TestQueryBuilder) PostgresWithReadWrite() map[string]*TestQuery {
 func (r *TestQueryBuilder) Sqlite(prefix string, singular bool) *TestQuery {
 	connection := sqlite.Name + "_" + str.Random(6)
 	mockConfig := &mocksconfig.Config{}
-	docker := sqlite.NewDocker(fmt.Sprintf("%s_%s", testDatabase, str.Random(6)))
+	docker := newSqliteFixture(fmt.Sprintf("%s_%s", testDatabase, str.Random(6)))
 	err := docker.Build()
 	if err != nil {
 		panic(err)
@@ -256,7 +272,7 @@ func (r *TestQueryBuilder) Sqlite(prefix string, singular bool) *TestQuery {
 func (r *TestQueryBuilder) SqliteWithTimezone(timezone string) *TestQuery {
 	connection := sqlite.Name
 	mockConfig := &mocksconfig.Config{}
-	docker := sqlite.NewDocker(fmt.Sprintf("%s_%s", testDatabase, str.Random(6)))
+	docker := newSqliteFixture(fmt.Sprintf("%s_%s", testDatabase, str.Random(6)))
 	err := docker.Build()
 	if err != nil {
 		panic(err)
@@ -320,10 +336,10 @@ func (r *TestQueryBuilder) single(driver, prefix, timezone string, singular bool
 
 	switch driver {
 	case postgres.Name:
-		dockerDriver = postgres.NewDocker(postgres.NewConfig(mockConfig, connection), process.New(), testDatabase, testUsername, testPassword)
+		dockerDriver = newDatabaseFixture(postgres.Name, testDatabase, testUsername, testPassword, mockConfig, connection)
 		databaseDriver = postgres.NewPostgres(mockConfig, utils.NewTestLog(), process.New(), connection)
 	case mysql.Name:
-		dockerDriver = mysql.NewDocker(mysql.NewConfig(mockConfig, connection), process.New(), testDatabase, testUsername, testPassword)
+		dockerDriver = newDatabaseFixture(mysql.Name, testDatabase, testUsername, testPassword, mockConfig, connection)
 		databaseDriver = mysql.NewMysql(mockConfig, utils.NewTestLog(), process.New(), connection)
 		if os.Getenv("GORAVEL_TEST_MARIADB") == "1" {
 			dockerDriver.Image(contractsdocker.Image{
@@ -334,7 +350,7 @@ func (r *TestQueryBuilder) single(driver, prefix, timezone string, singular bool
 			})
 		}
 	case sqlserver.Name:
-		dockerDriver = sqlserver.NewDocker(sqlserver.NewConfig(mockConfig, connection), process.New(), testDatabase, testUsername, testPassword)
+		dockerDriver = newDatabaseFixture(sqlserver.Name, testDatabase, testUsername, testPassword, mockConfig, connection)
 		databaseDriver = sqlserver.NewSqlserver(mockConfig, utils.NewTestLog(), process.New(), connection)
 		// The driver defaults to `:latest`, which now resolves to SQL Server
 		// 2025. Its SQLPAL layer needs a newer kernel than the 5.4 of the CNB

@@ -36,6 +36,7 @@ type Query struct {
 	ctx          context.Context
 	grammar      contractsdriver.Grammar
 	queryGrammar querybuilder.Grammar
+	components   databasedriver.QueryComponents
 	log          log.Log
 	logger       contractslogger.Logger
 	// writer is the connection's writer pool, and tx is the transaction the query runs inside when it
@@ -64,25 +65,21 @@ func NewQuery(
 	modelToObserver []contractsorm.ModelToObserver,
 	conditions *Conditions,
 	telemetryResolver contractstelemetry.Resolver,
+	supplied ...databasedriver.QueryComponents,
 ) *Query {
-	// The framework's query grammar, derived from the connection, renders the identifiers of a
-	// compiled statement — its columns, tables and relation subqueries — so their quoting matches the
-	// dialect. Statements are compiled with it and run over the database/sql pool; GORM no longer
-	// builds or runs them.
-	// An unrecognised driver is deliberately allowed (a module may bring its own database/sql
-	// name); it warns once, naming the driver and the recognised set, rather than failing.
-	// When log is nil, the warning is silently lost: a nil logger cannot report anything, and
-	// the framework allows NewQuery to be called with nil log for testing or when logging is
-	// disabled. The base grammar still works, so silence is correct behaviour rather than an error.
-	queryGrammar, known := querybuilder.NewGrammar(dbConfig.Driver, dbConfig.Prefix)
-	if !known && log != nil {
-		if err := querybuilder.UnrecognisedDriverWarning(dbConfig.Driver); err != nil {
-			log.Warningf("%s", err)
-		}
+	components, initErr := databasedriver.ResolveQueryComponents(nil, contractsdriver.GrammarOptions{Driver: dbConfig.Driver, Prefix: dbConfig.Prefix})
+	if len(supplied) > 0 {
+		components = supplied[0].WithContext(ctx)
+		initErr = components.Validate()
 	}
-
-	builder := querybuilder.NewBuilder(queryGrammar, querybuilder.NewProcessor(dbConfig.Driver))
+	if initErr != nil {
+		// Keep a usable builder to carry the construction error through fluent methods.
+		components.Grammar = querybuilder.NewBaseGrammar(dbConfig.Prefix)
+		components.Processor = querybuilder.NewProcessor("")
+	}
+	builder := querybuilder.NewBuilder(components.Grammar, components.Processor)
 	builder.SetDriver(dbConfig.Driver)
+	builder.SetError(initErr)
 
 	queryImpl := &Query{
 		config:            config,
@@ -91,7 +88,8 @@ func NewQuery(
 		writer:            writer,
 		tx:                tx,
 		grammar:           grammar,
-		queryGrammar:      queryGrammar,
+		queryGrammar:      components.Grammar,
+		components:        components,
 		log:               log,
 		logger:            queryLogger(config, log),
 		modelToObserver:   modelToObserver,
@@ -102,6 +100,9 @@ func NewQuery(
 
 	if conditions != nil {
 		queryImpl.conditions = *conditions
+	}
+	if initErr != nil {
+		queryImpl.conditions.err = initErr
 	}
 
 	return queryImpl
@@ -141,13 +142,37 @@ func BuildQuery(ctx context.Context, config config.Config, connection string, lo
 	}
 
 	pool := driver.Pool()
-	logger := db.NewLogger(config, log)
-	writer, _, err := databasedriver.BuildConnection(config, logger, pool, connection, telemetryResolver)
+	if len(pool.Writers) == 0 {
+		return nil, contractsdatabase.Config{}, errors.DatabaseConfigNotFound
+	}
+	dialect, err := databasedriver.ResolveDialect(driver)
 	if err != nil {
 		return nil, pool.Writers[0], err
 	}
-
-	return NewQuery(ctx, config, pool.Writers[0], writer, nil, driver.Grammar(), log, modelToObserver, nil, telemetryResolver), pool.Writers[0], nil
+	logger := db.NewLogger(config, log)
+	connectionHandle, err := databasedriver.Open(config, logger, pool, connection, telemetryResolver, dialect)
+	if err != nil {
+		return nil, pool.Writers[0], err
+	}
+	var writer *sql.DB
+	options := contractsdriver.GrammarOptions{Driver: pool.Writers[0].Driver, Prefix: pool.Writers[0].Prefix}
+	if connectionHandle != nil {
+		writer = connectionHandle.Writer()
+	}
+	if connectionHandle != nil && connectionHandle.SupportsServerVersion() {
+		options.ServerVersion = func() (string, error) { return connectionHandle.ServerVersion(ctx) }
+		if versioned, ok := driver.(contractsdriver.DriverWithServerVersion); ok {
+			versioned.SetServerVersion(options.ServerVersion)
+		}
+	}
+	components, err := databasedriver.ResolveQueryComponents(dialect, options)
+	if err != nil {
+		return nil, pool.Writers[0], err
+	}
+	if connectionHandle != nil && connectionHandle.SupportsServerVersion() {
+		components.VersionSource = connectionHandle.ServerVersion
+	}
+	return NewQuery(ctx, config, pool.Writers[0], writer, nil, driver.Grammar(), log, modelToObserver, nil, telemetryResolver, components), pool.Writers[0], nil
 }
 
 // DEPRECATED Use BeginTransaction instead.
@@ -158,6 +183,12 @@ func (r *Query) Begin() (contractsorm.Query, error) {
 func (r *Query) BeginTransaction() (contractsorm.Query, error) {
 	if r.InTransaction() {
 		return r, nil
+	}
+	// Discover capabilities before BEGIN leases the only connection in a one-connection pool.
+	if _, versioned := r.components.Dialect.(contractsdriver.DialectWithServerVersion); versioned && r.components.VersionSource != nil {
+		if _, err := r.components.VersionSource(r.ctx); err != nil {
+			return nil, err
+		}
 	}
 
 	options, err := databasedriver.TransactionOptions(r.config, r.dbConfig.Connection)
@@ -1399,6 +1430,9 @@ func (r *Query) WithContext(ctx context.Context) contractsorm.Query {
 	query.ctx = ctx
 	query.conditions = r.conditions.clone()
 	query.builder = r.builder.Clone()
+	query.components = r.components.WithContext(ctx)
+	query.queryGrammar = query.components.Grammar
+	query.builder = query.builder.RebindGrammar(query.queryGrammar, query.components.Processor, query.dbConfig.Driver)
 
 	return &query
 }
@@ -2354,7 +2388,7 @@ func (r *Query) new(tx *sql.Tx) *Query {
 // point for a query that addresses a different table or exists only to carry one piece of state, such
 // as the per-row eager load the cursor path builds.
 func (r *Query) fresh() *Query {
-	return NewQuery(r.ctx, r.config, r.dbConfig, r.writer, r.tx, r.grammar, r.log, r.modelToObserver, nil, r.telemetryResolver)
+	return NewQuery(r.ctx, r.config, r.dbConfig, r.writer, r.tx, r.grammar, r.log, r.modelToObserver, nil, r.telemetryResolver, r.components)
 }
 
 func (r *Query) refreshConnection() (*Query, error) {
@@ -2383,7 +2417,7 @@ func (r *Query) refreshConnection() (*Query, error) {
 	// that expected no RETURNING loses its key.
 	query = query.clone()
 	query.conditions = r.conditions.clone()
-	query.builder = r.builder.RebindGrammar(query.queryGrammar, querybuilder.NewProcessor(query.dbConfig.Driver), query.dbConfig.Driver)
+	query.builder = r.builder.RebindGrammar(query.queryGrammar, query.components.Processor, query.dbConfig.Driver)
 
 	return query, nil
 }

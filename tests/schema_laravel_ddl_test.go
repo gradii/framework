@@ -4,12 +4,12 @@ import (
 	"context"
 	"strings"
 
-	"github.com/goravel/mysql"
-	"github.com/goravel/sqlite"
-	"github.com/goravel/sqlserver"
 	contractsschema "github.com/gradii/framework/contracts/database/schema"
 	querybuilder "github.com/gradii/framework/database/query"
 	"github.com/gradii/framework/errors"
+	"github.com/gradii/mysql"
+	"github.com/gradii/sqlite"
+	"github.com/gradii/sqlserver"
 	"github.com/spf13/cast"
 )
 

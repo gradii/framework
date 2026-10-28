@@ -7,6 +7,7 @@ import (
 	"github.com/gradii/framework/contracts/database/driver"
 	"github.com/gradii/framework/contracts/database/orm"
 	"github.com/gradii/framework/contracts/database/schema"
+	"github.com/gradii/framework/errors"
 	"github.com/gradii/framework/support/convert"
 )
 
@@ -69,13 +70,13 @@ func (r *Blueprint) Boolean(column string) driver.ColumnDefinition {
 }
 
 func (r *Blueprint) Build(query orm.Query, grammar driver.Grammar) error {
-	statements, err := r.ToSql(grammar)
+	statements, err := r.CompileStatements(grammar)
 	if err != nil {
 		return err
 	}
 
 	for _, sql := range statements {
-		if _, err = query.Exec(sql); err != nil {
+		if _, err = query.Exec(sql.SQL, sql.Bindings...); err != nil {
 			return err
 		}
 	}
@@ -536,19 +537,48 @@ func (r *Blueprint) TinyText(column string) driver.ColumnDefinition {
 	return r.createAndAddColumn("tinyText", column)
 }
 
+func appendSchemaSQL(statements []driver.SchemaStatement, sqls ...string) []driver.SchemaStatement {
+	for _, sql := range sqls {
+		statements = append(statements, driver.SchemaStatement{SQL: sql})
+	}
+	return statements
+}
+
 func (r *Blueprint) ToSql(grammar driver.Grammar) ([]string, error) {
-	if owner, ok := r.schema.(*Schema); ok && owner.metadataDialect() == "sqlite" && r.sqliteRebuild() {
-		return owner.compileSQLiteRebuild(r, grammar)
+	statements, err := r.CompileStatements(grammar)
+	if err != nil {
+		return nil, err
+	}
+	var sqls []string
+	for _, statement := range statements {
+		if len(statement.Bindings) > 0 {
+			return nil, errors.SchemaBindingsRequireExecution
+		}
+		sqls = append(sqls, statement.SQL)
+	}
+	return sqls, nil
+}
+
+func (r *Blueprint) CompileStatements(grammar driver.Grammar) ([]driver.SchemaStatement, error) {
+	if planner, ok := grammar.(driver.SchemaBlueprintPlanner); ok {
+		var catalog driver.SchemaCatalog
+		if owner, ok := r.schema.(*Schema); ok {
+			catalog = schemaCatalog{owner}
+		}
+		statements, handled, err := planner.CompileSchemaBlueprint(r, catalog)
+		if err != nil || handled {
+			return statements, err
+		}
 	}
 	r.addImpliedCommands(grammar)
 
-	var statements []string
+	var statements []driver.SchemaStatement
 	for _, command := range r.commands {
 		if command.ShouldBeSkipped {
 			continue
 		}
-		if owner, ok := r.schema.(*Schema); ok {
-			compiled, handled, err := owner.compileDDLCommand(r, grammar, command)
+		if compiler, ok := grammar.(driver.SchemaCompiler); ok {
+			compiled, handled, err := compiler.CompileSchemaCommand(r, command)
 			if err != nil {
 				return statements, err
 			}
@@ -562,47 +592,47 @@ func (r *Blueprint) ToSql(grammar driver.Grammar) ([]string, error) {
 		case CommandAdd:
 			if command.Column.IsChange() {
 				if statement := grammar.CompileChange(r, command); len(statement) > 0 {
-					statements = append(statements, statement...)
+					statements = appendSchemaSQL(statements, statement...)
 				}
 				continue
 			}
-			statements = append(statements, grammar.CompileAdd(r, command))
+			statements = appendSchemaSQL(statements, grammar.CompileAdd(r, command))
 		case CommandComment:
 			if statement := grammar.CompileComment(r, command); statement != "" {
-				statements = append(statements, statement)
+				statements = appendSchemaSQL(statements, statement)
 			}
 		case CommandCreate:
-			statements = append(statements, grammar.CompileCreate(r))
+			statements = appendSchemaSQL(statements, grammar.CompileCreate(r))
 		case CommandDefault:
 			if statement := grammar.CompileDefault(r, command); statement != "" {
-				statements = append(statements, statement)
+				statements = appendSchemaSQL(statements, statement)
 			}
 		case CommandDrop:
-			statements = append(statements, grammar.CompileDrop(r))
+			statements = appendSchemaSQL(statements, grammar.CompileDrop(r))
 		case CommandDropColumn:
-			statements = append(statements, grammar.CompileDropColumn(r, command)...)
+			statements = appendSchemaSQL(statements, grammar.CompileDropColumn(r, command)...)
 		case CommandDropForeign:
-			statements = append(statements, grammar.CompileDropForeign(r, command))
+			statements = appendSchemaSQL(statements, grammar.CompileDropForeign(r, command))
 		case CommandDropFullText:
-			statements = append(statements, grammar.CompileDropFullText(r, command))
+			statements = appendSchemaSQL(statements, grammar.CompileDropFullText(r, command))
 		case CommandDropIfExists:
-			statements = append(statements, grammar.CompileDropIfExists(r))
+			statements = appendSchemaSQL(statements, grammar.CompileDropIfExists(r))
 		case CommandDropIndex:
-			statements = append(statements, grammar.CompileDropIndex(r, command))
+			statements = appendSchemaSQL(statements, grammar.CompileDropIndex(r, command))
 		case CommandDropPrimary:
-			statements = append(statements, grammar.CompileDropPrimary(r, command))
+			statements = appendSchemaSQL(statements, grammar.CompileDropPrimary(r, command))
 		case CommandDropUnique:
-			statements = append(statements, grammar.CompileDropUnique(r, command))
+			statements = appendSchemaSQL(statements, grammar.CompileDropUnique(r, command))
 		case CommandForeign:
-			statements = append(statements, grammar.CompileForeign(r, command))
+			statements = appendSchemaSQL(statements, grammar.CompileForeign(r, command))
 		case CommandFullText:
-			statements = append(statements, grammar.CompileFullText(r, command))
+			statements = appendSchemaSQL(statements, grammar.CompileFullText(r, command))
 		case CommandIndex:
-			statements = append(statements, grammar.CompileIndex(r, command))
+			statements = appendSchemaSQL(statements, grammar.CompileIndex(r, command))
 		case CommandPrimary:
-			statements = append(statements, grammar.CompilePrimary(r, command))
+			statements = appendSchemaSQL(statements, grammar.CompilePrimary(r, command))
 		case CommandRename:
-			statements = append(statements, grammar.CompileRename(r, command))
+			statements = appendSchemaSQL(statements, grammar.CompileRename(r, command))
 		case CommandRenameColumn:
 			columns, err := r.schema.GetColumns(r.GetTableName())
 			if err != nil {
@@ -612,24 +642,28 @@ func (r *Blueprint) ToSql(grammar driver.Grammar) ([]string, error) {
 			if err != nil {
 				return statements, err
 			}
-			statements = append(statements, statement)
+			statements = appendSchemaSQL(statements, statement)
 		case CommandRenameIndex:
 			indexes, err := r.schema.GetIndexes(r.GetTableName())
 			if err != nil {
 				return statements, err
 			}
-			statements = append(statements, grammar.CompileRenameIndex(r, command, indexes)...)
+			statements = appendSchemaSQL(statements, grammar.CompileRenameIndex(r, command, indexes)...)
 		case CommandTableComment:
 			if statement := grammar.CompileTableComment(r, command); statement != "" {
-				statements = append(statements, statement)
+				statements = appendSchemaSQL(statements, statement)
 			}
 		case CommandUnique:
-			statements = append(statements, grammar.CompileUnique(r, command))
+			statements = appendSchemaSQL(statements, grammar.CompileUnique(r, command))
 		}
 	}
 
-	if owner, ok := r.schema.(*Schema); ok {
-		statements = append(statements, owner.ddlStartingValues(r)...)
+	if compiler, ok := grammar.(driver.SchemaCompiler); ok {
+		compiled, err := compiler.CompileSchemaStartingValues(r)
+		if err != nil {
+			return statements, err
+		}
+		statements = append(statements, compiled...)
 	}
 	return statements, nil
 }

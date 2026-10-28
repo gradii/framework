@@ -2,6 +2,8 @@ package db
 
 import (
 	"context"
+	mysqldialect "github.com/gradii/mysql"
+	postgresdriver "github.com/gradii/postgres"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -20,21 +22,21 @@ func TestDistinctPreservesSelection(t *testing.T) {
 	}{
 		{
 			name:     "postgres",
-			grammar:  querybuilder.NewPostgresGrammar(""),
+			grammar:  postgresdriver.NewQueryGrammar(""),
 			selected: `select distinct on ("name") "name", ? as flag from "users" where "id" = ?`,
 			all:      `select distinct "name", ? as flag from "users" where "id" = ?`,
 			count:    `select count(distinct "name") as aggregate from "users" where "id" = ?`,
 		},
 		{
 			name:     "mysql",
-			grammar:  querybuilder.NewMySqlGrammar(""),
+			grammar:  mysqldialect.NewQueryGrammar(""),
 			selected: "select distinct `name`, ? as flag from `users` where `id` = ?",
 			all:      "select distinct `name`, ? as flag from `users` where `id` = ?",
 			count:    "select count(distinct `name`) as aggregate from `users` where `id` = ?",
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			query := NewQuery(context.Background(), nil, nil, test.grammar, "", nil, "users", nil)
+			query := newDialectTestQuery(context.Background(), nil, nil, test.grammar, "", nil, "users", nil)
 			base := query.Select("name").(*Query)
 			base.builder.SelectRaw("? as flag", []any{1}).Where("id", 9)
 			columns := []string{"name"}

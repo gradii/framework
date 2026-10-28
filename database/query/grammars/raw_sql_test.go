@@ -1,9 +1,10 @@
-package grammars
+package grammars_test
 
 import (
 	"sync"
 	"testing"
 
+	. "github.com/gradii/framework/database/query/grammars"
 	"github.com/stretchr/testify/assert"
 )
 

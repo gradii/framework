@@ -1,6 +1,7 @@
 package query
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -614,6 +615,12 @@ func (b *Builder) OrWhereRowValues(columns []any, operator string, values []any)
 
 // WhereJsonContains adds a JSON contains clause. Mirrors Builder::whereJsonContains().
 func (b *Builder) WhereJsonContains(column string, value any, boolean string, not bool) *Builder {
+	if !IsExpression(value) {
+		if _, err := json.Marshal(value); err != nil {
+			b.setError(err)
+			return b
+		}
+	}
 	b.State().Wheres = append(b.State().Wheres, core.Where{Type: core.WhereJsonContainsType, Column: column, Value: value, Boolean: boolean, Not: not})
 
 	if !IsExpression(value) && b.grammar != nil {
@@ -642,6 +649,12 @@ func (b *Builder) OrWhereJsonDoesntContain(column string, value any) *Builder {
 
 // WhereJsonOverlaps adds a JSON overlaps clause. Mirrors Builder::whereJsonOverlaps().
 func (b *Builder) WhereJsonOverlaps(column string, value any, boolean string, not bool) *Builder {
+	if !IsExpression(value) {
+		if _, err := json.Marshal(value); err != nil {
+			b.setError(err)
+			return b
+		}
+	}
 	b.State().Wheres = append(b.State().Wheres, core.Where{Type: core.WhereJsonOverlapsType, Column: column, Value: value, Boolean: boolean, Not: not})
 
 	if !IsExpression(value) && b.grammar != nil {

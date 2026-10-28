@@ -157,6 +157,21 @@ func TestBuildConnection_NoDatabaseOpensNothing(t *testing.T) {
 	assert.Nil(t, instrument)
 }
 
+func TestOpenScopesSharedAliasesToConfiguredConnections(t *testing.T) {
+	t.Cleanup(CloseConnections)
+	firstPool, secondPool := stubPool(), stubPool()
+	firstPool.Writers[0].Connection = "first_configured_connection"
+	secondPool.Writers[0].Connection = "second_configured_connection"
+	first, err := Open(stubConfig(t), discardLogger{}, firstPool, "shared_alias", nil)
+	require.NoError(t, err)
+	second, err := Open(stubConfig(t), discardLogger{}, secondPool, "shared_alias", nil)
+	require.NoError(t, err)
+	assert.NotSame(t, first.Writer(), second.Writer())
+	alias, err := Open(mocksconfig.NewConfig(t), discardLogger{}, firstPool, "another_alias", nil)
+	require.NoError(t, err)
+	assert.Same(t, first.Writer(), alias.Writer())
+}
+
 // stubConfig answers only what opening a pool reads, with telemetry off.
 func stubConfig(t *testing.T) *mocksconfig.Config {
 	t.Helper()

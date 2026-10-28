@@ -6,13 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/goravel/mysql"
-	"github.com/goravel/postgres"
-	"github.com/goravel/sqlite"
-	"github.com/goravel/sqlserver"
 	contractsschema "github.com/gradii/framework/contracts/database/schema"
 	databaseschema "github.com/gradii/framework/database/schema"
 	"github.com/gradii/framework/support/carbon"
+	"github.com/gradii/mysql"
+	"github.com/gradii/postgres"
+	"github.com/gradii/sqlite"
+	"github.com/gradii/sqlserver"
 	"github.com/spf13/cast"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
@@ -58,8 +58,7 @@ func (s *SchemaSuite) TestColumnChange() {
 			expectedColumnType := "text"
 
 			if driver == sqlserver.Name {
-				expectedDefaultStringLength = databaseschema.DefaultStringLength * 2
-				expectedCustomStringLength = customStringLength * 2
+				// Metadata reports declared characters rather than catalog bytes.
 				expectedColumnType = "nvarchar"
 			}
 			s.NoError(schema.Create(table, func(table contractsschema.Blueprint) {
@@ -1237,13 +1236,13 @@ func (s *SchemaSuite) TestColumnTypes_Sqlserver() {
 			s.Empty(column.Comment)
 			s.Empty(column.Default)
 			s.True(column.Nullable)
-			s.Equal("datetimeoffset(34)", column.Type)
+			s.Equal("datetimeoffset(7)", column.Type)
 			s.Equal("datetimeoffset", column.TypeName)
 		}
 		if column.Name == "big_integer" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a big_integer column", column.Comment)
 			s.Empty(column.Default)
 			s.False(column.Nullable)
 			s.Equal("bigint", column.Type)
@@ -1252,7 +1251,7 @@ func (s *SchemaSuite) TestColumnTypes_Sqlserver() {
 		if column.Name == "boolean_default" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a boolean column with default value", column.Comment)
 			s.Equal("('1')", column.Default)
 			s.False(column.Nullable)
 			s.Equal("bit", column.Type)
@@ -1261,10 +1260,10 @@ func (s *SchemaSuite) TestColumnTypes_Sqlserver() {
 		if column.Name == "char" {
 			s.False(column.Autoincrement)
 			s.Equal("SQL_Latin1_General_CP1_CI_AS", column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a char column", column.Comment)
 			s.Empty(column.Default)
 			s.False(column.Nullable)
-			s.Equal("nchar(510)", column.Type)
+			s.Equal("nchar(255)", column.Type)
 			s.Equal("nchar", column.TypeName)
 		}
 		if column.Name == "created_at" {
@@ -1273,12 +1272,12 @@ func (s *SchemaSuite) TestColumnTypes_Sqlserver() {
 			s.Empty(column.Comment)
 			s.Empty(column.Default)
 			s.True(column.Nullable)
-			s.Equal("datetime2(22)", column.Type)
+			s.Equal("datetime2(2)", column.Type)
 			s.Equal("datetime2", column.TypeName)
 		}
 		if column.Name == "custom_type" {
 			s.False(column.Autoincrement)
-			s.Empty(column.Comment)
+			s.Equal("This is a custom type column", column.Comment)
 			s.Empty(column.Default)
 			s.False(column.Nullable)
 			s.Equal("geometry", column.Type)
@@ -1287,7 +1286,7 @@ func (s *SchemaSuite) TestColumnTypes_Sqlserver() {
 		if column.Name == "date" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a date column", column.Comment)
 			s.Empty(column.Default)
 			s.False(column.Nullable)
 			s.Equal("date", column.Type)
@@ -1296,25 +1295,25 @@ func (s *SchemaSuite) TestColumnTypes_Sqlserver() {
 		if column.Name == "date_time" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a date time column", column.Comment)
 			s.Empty(column.Default)
 			s.False(column.Nullable)
-			s.Equal("datetime2(23)", column.Type)
+			s.Equal("datetime2(3)", column.Type)
 			s.Equal("datetime2", column.TypeName)
 		}
 		if column.Name == "date_time_tz" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a date time with time zone column", column.Comment)
 			s.Empty(column.Default)
 			s.False(column.Nullable)
-			s.Equal("datetimeoffset(30)", column.Type)
+			s.Equal("datetimeoffset(3)", column.Type)
 			s.Equal("datetimeoffset", column.TypeName)
 		}
 		if column.Name == "decimal" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a decimal column", column.Comment)
 			s.Empty(column.Default)
 			s.False(column.Nullable)
 			s.Equal("decimal(4,1)", column.Type)
@@ -1332,7 +1331,7 @@ func (s *SchemaSuite) TestColumnTypes_Sqlserver() {
 		if column.Name == "double" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a double column", column.Comment)
 			s.Empty(column.Default)
 			s.False(column.Nullable)
 			s.Equal("float(53)", column.Type)
@@ -1341,25 +1340,25 @@ func (s *SchemaSuite) TestColumnTypes_Sqlserver() {
 		if column.Name == "enum" {
 			s.False(column.Autoincrement)
 			s.Equal("SQL_Latin1_General_CP1_CI_AS", column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a enum column", column.Comment)
 			s.Empty(column.Default)
 			s.False(column.Nullable)
-			s.Equal("nvarchar(510)", column.Type)
+			s.Equal("nvarchar(255)", column.Type)
 			s.Equal("nvarchar", column.TypeName)
 		}
 		if column.Name == "enum_int" {
 			s.False(column.Autoincrement)
 			s.Equal("SQL_Latin1_General_CP1_CI_AS", column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a enum column", column.Comment)
 			s.Empty(column.Default)
 			s.False(column.Nullable)
-			s.Equal("nvarchar(510)", column.Type)
+			s.Equal("nvarchar(255)", column.Type)
 			s.Equal("nvarchar", column.TypeName)
 		}
 		if column.Name == "float" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a float column", column.Comment)
 			s.Empty(column.Default)
 			s.False(column.Nullable)
 			s.Equal("real", column.Type)
@@ -1368,7 +1367,7 @@ func (s *SchemaSuite) TestColumnTypes_Sqlserver() {
 		if column.Name == "id" {
 			s.True(column.Autoincrement)
 			s.Empty(column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a id column", column.Comment)
 			s.Empty(column.Default)
 			s.False(column.Nullable)
 			s.Equal("bigint", column.Type)
@@ -1377,7 +1376,7 @@ func (s *SchemaSuite) TestColumnTypes_Sqlserver() {
 		if column.Name == "integer" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a integer column", column.Comment)
 			s.Empty(column.Default)
 			s.False(column.Nullable)
 			s.Equal("int", column.Type)
@@ -1386,7 +1385,7 @@ func (s *SchemaSuite) TestColumnTypes_Sqlserver() {
 		if column.Name == "integer_default" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a integer_default column", column.Comment)
 			s.Equal("('1')", column.Default)
 			s.False(column.Nullable)
 			s.Equal("int", column.Type)
@@ -1395,7 +1394,7 @@ func (s *SchemaSuite) TestColumnTypes_Sqlserver() {
 		if column.Name == "json" {
 			s.False(column.Autoincrement)
 			s.Equal("SQL_Latin1_General_CP1_CI_AS", column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a json column", column.Comment)
 			s.Empty(column.Default)
 			s.False(column.Nullable)
 			s.Equal("nvarchar(max)", column.Type)
@@ -1404,7 +1403,7 @@ func (s *SchemaSuite) TestColumnTypes_Sqlserver() {
 		if column.Name == "jsonb" {
 			s.False(column.Autoincrement)
 			s.Equal("SQL_Latin1_General_CP1_CI_AS", column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a jsonb column", column.Comment)
 			s.Empty(column.Default)
 			s.False(column.Nullable)
 			s.Equal("nvarchar(max)", column.Type)
@@ -1413,7 +1412,7 @@ func (s *SchemaSuite) TestColumnTypes_Sqlserver() {
 		if column.Name == "long_text" {
 			s.False(column.Autoincrement)
 			s.Equal("SQL_Latin1_General_CP1_CI_AS", column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a long_text column", column.Comment)
 			s.Empty(column.Default)
 			s.False(column.Nullable)
 			s.Equal("nvarchar(max)", column.Type)
@@ -1422,7 +1421,7 @@ func (s *SchemaSuite) TestColumnTypes_Sqlserver() {
 		if column.Name == "medium_text" {
 			s.False(column.Autoincrement)
 			s.Equal("SQL_Latin1_General_CP1_CI_AS", column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a medium_text column", column.Comment)
 			s.Empty(column.Default)
 			s.False(column.Nullable)
 			s.Equal("nvarchar(max)", column.Type)
@@ -1431,25 +1430,25 @@ func (s *SchemaSuite) TestColumnTypes_Sqlserver() {
 		if column.Name == "string" {
 			s.False(column.Autoincrement)
 			s.Equal("SQL_Latin1_General_CP1_CI_AS", column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a string column", column.Comment)
 			s.Empty(column.Default)
 			s.False(column.Nullable)
-			s.Equal("nvarchar(510)", column.Type)
+			s.Equal("nvarchar(255)", column.Type)
 			s.Equal("nvarchar", column.TypeName)
 		}
 		if column.Name == "string_default" {
 			s.False(column.Autoincrement)
 			s.Equal("SQL_Latin1_General_CP1_CI_AS", column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a string_default column", column.Comment)
 			s.Equal("('goravel')", column.Default)
 			s.False(column.Nullable)
-			s.Equal("nvarchar(510)", column.Type)
+			s.Equal("nvarchar(255)", column.Type)
 			s.Equal("nvarchar", column.TypeName)
 		}
 		if column.Name == "text" {
 			s.False(column.Autoincrement)
 			s.Equal("SQL_Latin1_General_CP1_CI_AS", column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a text column", column.Comment)
 			s.Empty(column.Default)
 			s.False(column.Nullable)
 			s.Equal("nvarchar(max)", column.Type)
@@ -1458,43 +1457,43 @@ func (s *SchemaSuite) TestColumnTypes_Sqlserver() {
 		if column.Name == "time" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a time column", column.Comment)
 			s.Empty(column.Default)
 			s.False(column.Nullable)
-			s.Equal("time(11)", column.Type)
+			s.Equal("time(2)", column.Type)
 			s.Equal("time", column.TypeName)
 		}
 		if column.Name == "time_tz" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a time with time zone column", column.Comment)
 			s.Empty(column.Default)
 			s.False(column.Nullable)
-			s.Equal("time(11)", column.Type)
+			s.Equal("time(2)", column.Type)
 			s.Equal("time", column.TypeName)
 		}
 		if column.Name == "timestamp" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a timestamp without time zone column", column.Comment)
 			s.Empty(column.Default)
 			s.False(column.Nullable)
-			s.Equal("datetime2(22)", column.Type)
+			s.Equal("datetime2(2)", column.Type)
 			s.Equal("datetime2", column.TypeName)
 		}
 		if column.Name == "timestamp_tz" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a timestamp with time zone column", column.Comment)
 			s.Empty(column.Default)
 			s.False(column.Nullable)
-			s.Equal("datetimeoffset(29)", column.Type)
+			s.Equal("datetimeoffset(2)", column.Type)
 			s.Equal("datetimeoffset", column.TypeName)
 		}
 		if column.Name == "timestamp_use_current" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a timestamp_use_current column", column.Comment)
 			s.Equal("(getdate())", column.Default)
 			s.False(column.Nullable)
 			s.Equal("datetime", column.Type)
@@ -1503,7 +1502,7 @@ func (s *SchemaSuite) TestColumnTypes_Sqlserver() {
 		if column.Name == "timestamp_use_current_on_update" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a timestamp_use_current_on_update column", column.Comment)
 			s.Equal("(getdate())", column.Default)
 			s.False(column.Nullable)
 			s.Equal("datetime", column.Type)
@@ -1512,10 +1511,10 @@ func (s *SchemaSuite) TestColumnTypes_Sqlserver() {
 		if column.Name == "tiny_text" {
 			s.False(column.Autoincrement)
 			s.Equal("SQL_Latin1_General_CP1_CI_AS", column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a tiny_text column", column.Comment)
 			s.Empty(column.Default)
 			s.False(column.Nullable)
-			s.Equal("nvarchar(510)", column.Type)
+			s.Equal("nvarchar(255)", column.Type)
 			s.Equal("nvarchar", column.TypeName)
 		}
 		if column.Name == "updated_at" {
@@ -1524,13 +1523,13 @@ func (s *SchemaSuite) TestColumnTypes_Sqlserver() {
 			s.Empty(column.Comment)
 			s.Empty(column.Default)
 			s.True(column.Nullable)
-			s.Equal("datetime2(22)", column.Type)
+			s.Equal("datetime2(2)", column.Type)
 			s.Equal("datetime2", column.TypeName)
 		}
 		if column.Name == "unsigned_integer" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a unsigned_integer column", column.Comment)
 			s.Empty(column.Default)
 			s.False(column.Nullable)
 			s.Equal("int", column.Type)
@@ -1539,7 +1538,7 @@ func (s *SchemaSuite) TestColumnTypes_Sqlserver() {
 		if column.Name == "unsigned_big_integer" {
 			s.False(column.Autoincrement)
 			s.Empty(column.Collation)
-			s.Empty(column.Comment)
+			s.Equal("This is a unsigned_big_integer column", column.Comment)
 			s.Empty(column.Default)
 			s.False(column.Nullable)
 			s.Equal("bigint", column.Type)
@@ -1786,6 +1785,33 @@ func (s *SchemaSuite) TestFullText() {
 				table.FullText("name")
 				table.FullText("avatar").Name("fulltext_avatar_fulltext")
 			})
+
+			if driver == sqlserver.Name || driver == sqlite.Name {
+				unsupported := fmt.Sprintf("database driver %s does not support fulltext indexes", driver)
+				s.Require().ErrorContains(err, unsupported)
+				s.False(schema.HasTable(table))
+				s.Require().NoError(schema.Create(table, func(table contractsschema.Blueprint) {
+					table.String("name")
+					table.String("avatar")
+				}))
+				s.True(schema.HasTable(table))
+				for _, command := range []struct {
+					name  string
+					apply func(contractsschema.Blueprint)
+				}{
+					{"create generated index name", func(table contractsschema.Blueprint) { table.FullText("name") }},
+					{"create explicit index name", func(table contractsschema.Blueprint) { table.FullText("avatar").Name("fulltext_avatar_fulltext") }},
+					{"drop generated index name", func(table contractsschema.Blueprint) { table.DropFullText("name") }},
+					{"drop explicit index name", func(table contractsschema.Blueprint) { table.DropFullTextByName("fulltext_avatar_fulltext") }},
+				} {
+					s.Run(command.name, func() {
+						s.ErrorContains(schema.Table(table, command.apply), unsupported)
+						s.False(schema.HasIndex(table, "goravel_fulltext_name_fulltext"))
+						s.False(schema.HasIndex(table, "fulltext_avatar_fulltext"))
+					})
+				}
+				return
+			}
 
 			s.Require().Nil(err)
 
@@ -2263,7 +2289,7 @@ func (s *SchemaSuite) TestID_Sqlserver() {
 			s.Require().Equal(1, len(columns))
 			s.True(columns[0].Autoincrement)
 			s.Empty(columns[0].Collation)
-			s.Empty(columns[0].Comment)
+			s.Equal("This is a id column", columns[0].Comment)
 			s.Empty(columns[0].Default)
 			s.False(columns[0].Nullable)
 			s.Equal(test.expectType, columns[0].Type)

@@ -1,8 +1,9 @@
-package processors
+package processors_test
 
 import (
 	"testing"
 
+	. "github.com/gradii/framework/database/query/processors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 

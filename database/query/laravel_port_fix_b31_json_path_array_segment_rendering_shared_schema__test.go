@@ -59,6 +59,6 @@ func TestSQLiteUpdateWrappingJsonPathArrayIndexWithWhereClause(t *testing.T) {
 
 	sql, bindings := NewBuilder(NewSqliteGrammar("")).From("users", "").Where("options->[1]->2fa", true).ToUpdateSQL(values)
 
-	assert.Equal(t, `update "users" set "options" = json_patch(ifnull("options", json('{}')), json(?)), "meta" = json_patch(ifnull("meta", json('{}')), json(?)) where json_extract("options", '$[1]."2fa"') = true`, sql)
-	assert.Equal(t, []any{`{"[1]":{"2fa":false}}`, `{"tags[0][2]":"large"}`}, bindings)
+	assert.Equal(t, `update "users" set "options" = json_set(ifnull("options", json('{}')), '$[1]."2fa"', json(?)), "meta" = json_set(ifnull("meta", json('{}')), '$."tags"[0][2]', json(?)) where json_extract("options", '$[1]."2fa"') = true`, sql)
+	assert.Equal(t, []any{`false`, `"large"`}, bindings)
 }

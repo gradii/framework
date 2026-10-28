@@ -192,5 +192,5 @@ func TestPrepareBindingsSQLiteWrappingJsonPathArrayIndex(t *testing.T) {
 	_, bindings := NewBuilder(NewSqliteGrammar("")).From("users", "").
 		Where("options->[1]->2fa", true).ToUpdateSQL(values)
 
-	assert.Equal(t, []any{`{"[1]":{"2fa":false}}`, `{"tags[0][2]":"large"}`}, bindings)
+	assert.Equal(t, []any{`false`, `"large"`}, bindings)
 }

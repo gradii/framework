@@ -212,7 +212,7 @@ func TestNewTx_UnrecognisedDriverWarning(t *testing.T) {
 		mockDriver.EXPECT().Grammar().Return(mockGrammar).Once()
 
 		mockConfig := mocksconfig.NewConfig(t)
-		tx := NewTx(ctx, mockConfig, mockDriver, mockLogger, nil, nil, &[]TxLog{}, nil)
+		tx := NewTx(ctx, mockConfig, mysqlTestDriver{mockDriver}, mockLogger, nil, nil, &[]TxLog{}, nil)
 
 		assert.NotNil(t, tx)
 		assert.NotNil(t, tx.queryGrammar)

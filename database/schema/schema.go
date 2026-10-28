@@ -30,7 +30,6 @@ type Schema struct {
 	databaseName     string
 	username         string
 	queryProcessor   processors.Processor
-	metadataCache    *schemaMetadataCache
 	config           config.Config
 	driver           driver.Driver
 	grammar          driver.Grammar
@@ -45,18 +44,17 @@ type Schema struct {
 	modelsByFullName map[string]any
 }
 
-func NewSchema(config config.Config, log log.Log, orm contractsorm.Orm, driver driver.Driver, migrations []contractsschema.Migration, connections ...contractsdb.DB) (*Schema, error) {
+func NewSchema(config config.Config, log log.Log, orm contractsorm.Orm, databaseDriver driver.Driver, migrations []contractsschema.Migration, connections ...contractsdb.DB) (*Schema, error) {
 	var connection contractsdb.DB
 	if len(connections) > 0 {
 		connection = connections[0]
 	}
-	if driver == nil {
+	if databaseDriver == nil {
 		return &Schema{
 			constraints:      &schemaConstraintScope{},
 			db:               connection,
-			metadataCache:    &schemaMetadataCache{},
 			config:           config,
-			driver:           driver,
+			driver:           databaseDriver,
 			log:              log,
 			migrations:       migrations,
 			orm:              orm,
@@ -66,15 +64,21 @@ func NewSchema(config config.Config, log log.Log, orm contractsorm.Orm, driver d
 		}, nil
 	}
 
-	writers := driver.Pool().Writers
+	writers := databaseDriver.Pool().Writers
 	if len(writers) == 0 {
 		return nil, errors.DatabaseConfigNotFound
 	}
 
 	prefix := writers[0].Prefix
 	schema := writers[0].Schema
-	grammar := driver.Grammar()
-	processor := driver.Processor()
+	grammar := databaseDriver.Grammar()
+	if _, ok := databaseDriver.(driver.DriverWithDialect); ok && schemaNilComponent(grammar) {
+		return nil, errors.DatabaseDialectComponentsMissing
+	}
+	if versioned, ok := grammar.(driver.SchemaGrammarWithVersionResolver); ok && connection != nil {
+		versioned.SetVersionResolver(connection.ServerVersion)
+	}
+	processor := databaseDriver.Processor()
 
 	result := &Schema{
 		constraints:      &schemaConstraintScope{},
@@ -83,9 +87,8 @@ func NewSchema(config config.Config, log log.Log, orm contractsorm.Orm, driver d
 		driverName:       writers[0].Driver,
 		databaseName:     writers[0].Database,
 		username:         writers[0].Username,
-		metadataCache:    &schemaMetadataCache{},
 		config:           config,
-		driver:           driver,
+		driver:           databaseDriver,
 		grammar:          grammar,
 		log:              log,
 		migrations:       migrations,
@@ -97,9 +100,15 @@ func NewSchema(config config.Config, log log.Log, orm contractsorm.Orm, driver d
 		models:           make([]any, 0),
 		modelsByFullName: make(map[string]any),
 	}
-	switch result.metadataDialect() {
-	case "mysql", "postgres", "sqlite", "sqlserver":
-		result.queryProcessor = processors.New(result.driverName)
+	if provider, ok := databaseDriver.(driver.DriverWithDialect); ok {
+		dialect := provider.Dialect()
+		if schemaNilComponent(dialect) {
+			return nil, errors.DatabaseDialectComponentsMissing
+		}
+		result.queryProcessor = dialect.NewProcessor()
+		if schemaNilComponent(result.queryProcessor) {
+			return nil, errors.DatabaseDialectComponentsMissing
+		}
 	}
 	return result, nil
 }
@@ -147,6 +156,9 @@ func (r *Schema) DropAllTables() error {
 		return err
 	}
 
+	if _, ok := r.grammar.(driver.SchemaOperationsGrammar); ok {
+		return r.executeSchemaOperation(driver.SchemaOperation{Kind: "dropAllTables", Tables: tables})
+	}
 	sqls := r.grammar.CompileDropAllTables(r.schema, tables)
 	if sqls == nil {
 		return nil
@@ -173,6 +185,9 @@ func (r *Schema) DropAllTypes() error {
 		return err
 	}
 
+	if _, ok := r.grammar.(driver.SchemaOperationsGrammar); ok {
+		return r.executeSchemaOperation(driver.SchemaOperation{Kind: "dropAllTypes", Types: types})
+	}
 	return r.orm.Transaction(func(tx contractsorm.Query) error {
 		for _, sql := range r.grammar.CompileDropAllTypes(r.schema, types) {
 			if _, err := tx.Exec(sql); err != nil {
@@ -194,6 +209,9 @@ func (r *Schema) DropAllViews() error {
 		return err
 	}
 
+	if _, ok := r.grammar.(driver.SchemaOperationsGrammar); ok {
+		return r.executeSchemaOperation(driver.SchemaOperation{Kind: "dropAllViews", Views: views})
+	}
 	sqls := r.grammar.CompileDropAllViews(r.schema, views)
 	if sqls == nil {
 		return nil
@@ -513,6 +531,15 @@ func (r *Schema) SetConnection(name string) {
 		return
 	}
 
+	if r.constraints != nil {
+		if err := r.restoreForeignKeyConstraints(true); err != nil {
+			r.log.Panic(err.Error())
+			return
+		}
+	}
+	r.charset = schema.charset
+	r.constraints = schema.constraints
+	r.executor = schema.executor
 	r.driver = schema.driver
 	r.grammar = schema.grammar
 	r.orm = schema.orm
@@ -524,7 +551,6 @@ func (r *Schema) SetConnection(name string) {
 	r.databaseName = schema.databaseName
 	r.username = schema.username
 	r.queryProcessor = schema.queryProcessor
-	r.metadataCache = schema.metadataCache
 }
 
 func (r *Schema) newConnection(name string) (*Schema, error) {
@@ -534,12 +560,17 @@ func (r *Schema) newConnection(name string) (*Schema, error) {
 		return nil, err
 	}
 
-	schema, err := NewSchema(r.config, r.log, r.orm.Connection(connection), connectionDriver, r.migrations)
+	var connectionDB contractsdb.DB
+	if r.db != nil {
+		connectionDB = r.db.Connection(connection)
+	}
+	var connectionORM contractsorm.Orm
+	if r.orm != nil {
+		connectionORM = r.orm.Connection(connection)
+	}
+	schema, err := NewSchema(r.config, r.log, connectionORM, connectionDriver, r.migrations, connectionDB)
 	if err != nil {
 		return nil, err
-	}
-	if r.db != nil {
-		schema.db = r.db.Connection(connection)
 	}
 
 	schema.goTypes = slices.Clone(r.goTypes)
@@ -845,5 +876,18 @@ func defaultGoTypes() []contractsschema.GoType {
 
 		// Fallback for unknown types
 		{Pattern: ".*", Type: "any", NullType: "any"},
+	}
+}
+
+func schemaNilComponent(value any) bool {
+	if value == nil {
+		return true
+	}
+	reflected := reflect.ValueOf(value)
+	switch reflected.Kind() {
+	case reflect.Pointer, reflect.Interface, reflect.Map, reflect.Slice, reflect.Func, reflect.Chan:
+		return reflected.IsNil()
+	default:
+		return false
 	}
 }

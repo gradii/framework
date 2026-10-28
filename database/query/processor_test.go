@@ -55,15 +55,15 @@ func TestNewProcessorSelectsTheConnectionDialect(t *testing.T) {
 		driver string
 		want   Processor
 	}{
-		{"MySQL", &processors.MySqlProcessor{}},
-		{"Maria-DB", &processors.MariaDbProcessor{}},
-		{"pgx", &processors.PostgresProcessor{}},
-		{"SQLite3", &processors.SqliteProcessor{}},
-		{"SQL Server", &processors.SqlServerProcessor{}},
+		{"MySQL", &MySqlProcessor{}},
+		{"Maria-DB", &MariaDbProcessor{}},
+		{"pgx", &PostgresProcessor{}},
+		{"SQLite3", &SqliteProcessor{}},
+		{"SQL Server", &SqlServerProcessor{}},
 		{"custom", &processors.BaseProcessor{}},
 	} {
 		t.Run(test.driver, func(t *testing.T) {
-			assert.IsType(t, test.want, NewProcessor(test.driver))
+			assert.IsType(t, test.want, newTestProcessor(test.driver))
 		})
 	}
 }

@@ -1,6 +1,7 @@
 package query
 
 import (
+	"encoding/json"
 	"strings"
 
 	"github.com/gradii/framework/database/query/core"
@@ -115,6 +116,20 @@ func (b *Builder) ToUpdateSQL(values any) (string, []any) {
 	b.ApplyBeforeQueryCallbacks()
 
 	ordered := updateValuesFrom(values)
+	for _, value := range ordered {
+		if IsExpression(value.Value) {
+			continue
+		}
+		if _, query := value.Value.(*Builder); query {
+			continue
+		}
+		if b.grammar.IsJsonSelector(value.Column) || core.IsArrayValue(value.Value) {
+			if _, err := json.Marshal(value.Value); err != nil {
+				b.setError(err)
+				return "", nil
+			}
+		}
+	}
 	compiled, contributions := b.resolveUpdateValues(ordered)
 
 	return b.grammar.CompileUpdate(b, compiled), CleanBindings(b.grammar.PrepareBindingsForUpdate(b.State().Bindings, contributions))

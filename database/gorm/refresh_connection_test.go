@@ -1,13 +1,14 @@
 package gorm
 
 import (
+	mysqldialect "github.com/gradii/mysql"
+	postgresdriver "github.com/gradii/postgres"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	contractsdatabase "github.com/gradii/framework/contracts/database"
-	querybuilder "github.com/gradii/framework/database/query"
 )
 
 // refreshTarget is a model that names a connection of its own, which is what makes a query refresh
@@ -26,11 +27,11 @@ func (refreshTarget) Connection() string { return "target" }
 // on Postgres. TestCustomConnection covers the same defect end to end; this pins it without a
 // database behind it.
 func TestRefreshConnectionRebindsTheDialect(t *testing.T) {
-	source := rebindGrammar(compiledQuery(t, &refreshTarget{}, Conditions{}), "mysql", querybuilder.NewMySqlGrammar(""))
+	source := rebindGrammar(compiledQuery(t, &refreshTarget{}, Conditions{}), "mysql", mysqldialect.NewQueryGrammar(""))
 	source.dbConfig = contractsdatabase.Config{Driver: "mysql", Connection: "source"}
 	source.Where("id", 1)
 
-	target := rebindGrammar(compiledQuery(t, &refreshTarget{}, Conditions{}), "postgres", querybuilder.NewPostgresGrammar(""))
+	target := rebindGrammar(compiledQuery(t, &refreshTarget{}, Conditions{}), "postgres", postgresdriver.NewQueryGrammar(""))
 	target.dbConfig = contractsdatabase.Config{Driver: "postgres", Connection: "target"}
 
 	// The connection being moved to is already built, so no config lookup happens here.
@@ -38,6 +39,7 @@ func TestRefreshConnectionRebindsTheDialect(t *testing.T) {
 
 	refreshed, err := source.refreshConnection()
 	require.NoError(t, err)
+	assert.Same(t, target.components.Processor, refreshed.builder.Processor())
 
 	statement, bindings, err := refreshed.compileSelect()
 	require.NoError(t, err)

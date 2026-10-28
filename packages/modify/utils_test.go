@@ -1827,8 +1827,8 @@ func Boot() contractsfoundation.Application {
 			expectedProviders: `package bootstrap
 
 import (
-	"github.com/gradii/framework/contracts/foundation"
 	"github.com/goravel/redis"
+	"github.com/gradii/framework/contracts/foundation"
 )
 
 func Providers() []foundation.ServiceProvider {
@@ -1870,8 +1870,8 @@ func Boot() contractsfoundation.Application {
 			expectedProviders: `package bootstrap
 
 import (
-	"github.com/gradii/framework/contracts/foundation"
 	r "github.com/goravel/redis"
+	"github.com/gradii/framework/contracts/foundation"
 )
 
 func Providers() []foundation.ServiceProvider {
@@ -3279,8 +3279,8 @@ func Boot() contractsfoundation.Application {
 			providersContent: `package bootstrap
 
 import (
-	"github.com/gradii/framework/contracts/foundation"
 	"github.com/goravel/redis"
+	"github.com/gradii/framework/contracts/foundation"
 
 	"goravel/app/providers"
 )
@@ -3340,8 +3340,8 @@ func Boot() contractsfoundation.Application {
 			providersContent: `package bootstrap
 
 import (
-	"github.com/gradii/framework/contracts/foundation"
 	r "github.com/goravel/redis"
+	"github.com/gradii/framework/contracts/foundation"
 
 	"goravel/app/providers"
 )

@@ -15,7 +15,7 @@ import (
 func newPointerTestQuery(t *testing.T) *Query {
 	t.Helper()
 
-	return NewQuery(context.Background(), nil, contractsdatabase.Config{}, stubWriter(t), nil, nil, nil, nil, &Conditions{}, nil)
+	return newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, stubWriter(t), nil, nil, nil, nil, &Conditions{}, nil)
 }
 
 func TestInsertRecordsAcceptsPointerToPointer(t *testing.T) {

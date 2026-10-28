@@ -16,7 +16,7 @@ func newRelQueryWith(t *testing.T, model any) *Query {
 	t.Helper()
 	db := stubWriter(t)
 	conditions := Conditions{model: model}
-	return NewQuery(context.Background(), nil, contractsdatabase.Config{}, db, nil, nil, nil, nil, &conditions, nil)
+	return newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, db, nil, nil, nil, nil, &conditions, nil)
 }
 
 // --- compileExistenceSubquery (covers HasOne/HasMany/BelongsTo/M2M/Morph/Through SQL) ---

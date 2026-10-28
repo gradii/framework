@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	sqlitedriver "github.com/gradii/sqlite"
 	"io"
 	"testing"
 	"time"
@@ -14,7 +15,6 @@ import (
 	contractsdb "github.com/gradii/framework/contracts/database/db"
 	"github.com/gradii/framework/database/db"
 	"github.com/gradii/framework/database/orm"
-	querybuilder "github.com/gradii/framework/database/query"
 )
 
 func TestQueryMapsDBTagsToStructs(t *testing.T) {
@@ -164,7 +164,7 @@ func structMappingQuery(t *testing.T, transaction bool, columns []string, values
 		require.NoError(t, err)
 	}
 	logs := []db.TxLog{}
-	return db.NewQuery(context.Background(), builder, builder, querybuilder.NewSqliteGrammar(""), "sqlite", nil, "users", &logs)
+	return db.NewQuery(context.Background(), builder, builder, sqlitedriver.NewQueryGrammar(""), "sqlite", nil, "users", &logs)
 }
 
 type structMappingConnector struct {

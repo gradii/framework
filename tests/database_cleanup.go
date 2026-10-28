@@ -7,13 +7,13 @@ import (
 	"regexp"
 	"sync"
 
-	"github.com/goravel/mysql"
-	"github.com/goravel/postgres"
-	"github.com/goravel/sqlite"
-	"github.com/goravel/sqlserver"
 	"github.com/gradii/framework/contracts/testing/docker"
 	"github.com/gradii/framework/support/color"
 	"github.com/gradii/framework/support/file"
+	"github.com/gradii/mysql"
+	"github.com/gradii/postgres"
+	"github.com/gradii/sqlite"
+	"github.com/gradii/sqlserver"
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v5/stdlib"

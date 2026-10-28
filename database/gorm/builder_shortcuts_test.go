@@ -2,12 +2,12 @@ package gorm
 
 import (
 	"database/sql/driver"
+	postgresdriver "github.com/gradii/postgres"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	querybuilder "github.com/gradii/framework/database/query"
 	"github.com/gradii/framework/errors"
 )
 
@@ -343,7 +343,7 @@ func TestTouchStampsTheUpdatedAtColumn(t *testing.T) {
 // created_at by default, and always refreshes updated_at. Mirrors Builder::upsert with
 // addTimestampsToUpsertValues and addUpdatedAtToUpsertColumns.
 func TestUpsertStampsTimestampsAndUpdatesAllButCreatedAt(t *testing.T) {
-	query := rebindGrammar(compiledQuery(t, &shortcutUser{}, Conditions{}), "postgres", querybuilder.NewPostgresGrammar(""))
+	query := rebindGrammar(compiledQuery(t, &shortcutUser{}, Conditions{}), "postgres", postgresdriver.NewQueryGrammar(""))
 
 	records, err := query.insertRecords([]shortcutUser{{Name: "a", Score: 1}, {Name: "b", Score: 2}})
 	require.NoError(t, err)

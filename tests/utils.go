@@ -4,7 +4,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/goravel/mysql"
 	"github.com/gradii/framework/contracts/config"
 	contractsdb "github.com/gradii/framework/contracts/database/db"
 	"github.com/gradii/framework/contracts/database/driver"
@@ -13,6 +12,7 @@ import (
 	"github.com/gradii/framework/database/schema"
 	mocksfoundation "github.com/gradii/framework/mocks/foundation"
 	"github.com/gradii/framework/testing/utils"
+	"github.com/gradii/mysql"
 )
 
 func isMariaDBTest(driver string) bool {
@@ -93,19 +93,39 @@ type ormConfig struct {
 }
 
 func (r ormConfig) Get(path string, defaultValue ...any) any {
-	if name, ok := strings.CutPrefix(path, "database.connections."); ok {
-		if name, ok = strings.CutSuffix(name, ".via"); ok {
-			if query := r.queries[name]; query != nil {
-				return func() (driver.Driver, error) { return query.Driver(), nil }
-			}
+	if query, mapped := r.connectionConfig(path); query != nil {
+		if strings.HasSuffix(path, ".via") {
+			return func() (driver.Driver, error) { return query.Driver(), nil }
 		}
+		return query.Config().Get(mapped, defaultValue...)
 	}
 	return r.Config.Get(path, defaultValue...)
+}
+
+func (r ormConfig) connectionConfig(path string) (*TestQuery, string) {
+	rest, ok := strings.CutPrefix(path, "database.connections.")
+	if !ok {
+		return nil, path
+	}
+	name, field, ok := strings.Cut(rest, ".")
+	if !ok {
+		return nil, path
+	}
+	for alias, query := range r.queries {
+		actual := query.Driver().Pool().Writers[0].Connection
+		if name == alias || name == actual {
+			return query, "database.connections." + actual + "." + field
+		}
+	}
+	return nil, path
 }
 
 func (r ormConfig) GetString(path string, defaultValue ...string) string {
 	if path == "database.default" {
 		return r.connection
+	}
+	if query, mapped := r.connectionConfig(path); query != nil {
+		return query.Config().GetString(mapped, defaultValue...)
 	}
 	return r.Config.GetString(path, defaultValue...)
 }
@@ -113,6 +133,9 @@ func (r ormConfig) GetString(path string, defaultValue ...string) string {
 func (r ormConfig) GetBool(path string, defaultValue ...bool) bool {
 	if path == "telemetry.instrumentation.database.enabled" {
 		return false
+	}
+	if query, mapped := r.connectionConfig(path); query != nil {
+		return query.Config().GetBool(mapped, defaultValue...)
 	}
 	return r.Config.GetBool(path, defaultValue...)
 }

@@ -2,15 +2,15 @@ package db
 
 import (
 	"context"
+	mysqldialect "github.com/gradii/mysql"
 	"testing"
 
 	"github.com/gradii/framework/contracts/database/db"
-	querybuilder "github.com/gradii/framework/database/query"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestLaravelFluentClausesMutateTheSameBuilder(t *testing.T) {
-	query := NewQuery(context.Background(), nil, nil, querybuilder.NewMySqlGrammar(""), "mysql", nil, "users", nil)
+	query := newDialectTestQuery(context.Background(), nil, nil, mysqldialect.NewQueryGrammar(""), "mysql", nil, "users", nil)
 	assert.Same(t, query, query.Where("active", true))
 	assert.Same(t, query, query.OrWhereColumn("first_name", "=", "last_name"))
 	assert.Same(t, query, query.OrderBy("id"))
@@ -28,7 +28,7 @@ func TestLaravelFluentClausesMutateTheSameBuilder(t *testing.T) {
 }
 
 func TestLaravelNestedCallbacksKeepTheProvidedBuilder(t *testing.T) {
-	query := NewQuery(context.Background(), nil, nil, querybuilder.NewMySqlGrammar(""), "mysql", nil, "users", nil)
+	query := newDialectTestQuery(context.Background(), nil, nil, mysqldialect.NewQueryGrammar(""), "mysql", nil, "users", nil)
 	other := query.NewQuery().From("ignored").Where("wrong", 9)
 	query.WhereNested(func(child db.Query) db.Query {
 		child.Where("active", true)
@@ -45,7 +45,7 @@ func TestLaravelNestedCallbacksKeepTheProvidedBuilder(t *testing.T) {
 }
 
 func TestLaravelNewQueryStartsWithFreshClauses(t *testing.T) {
-	query := NewQuery(context.Background(), nil, nil, querybuilder.NewMySqlGrammar(""), "mysql", nil, "users", nil)
+	query := newDialectTestQuery(context.Background(), nil, nil, mysqldialect.NewQueryGrammar(""), "mysql", nil, "users", nil)
 	query.Where("active", true).Limit(3).UseWritePdo()
 	fresh := query.NewQuery().From("posts")
 	assert.NotSame(t, query, fresh)

@@ -3,8 +3,8 @@ package db
 import (
 	"strconv"
 	"strings"
-	"time"
 
+	contractsdriver "github.com/gradii/framework/contracts/database/driver"
 	dbdriver "github.com/gradii/framework/database/driver"
 	querybuilder "github.com/gradii/framework/database/query"
 	"github.com/gradii/framework/database/query/core"
@@ -36,7 +36,11 @@ func Raw(expr string, args ...any) any {
 
 // explainWithDriver uses the same scalar escaping as DB.Escape, then substitutes the
 // placeholders already prepared for database/sql. Expressions prevent a second quoting pass.
-func explainWithDriver(statement string, bindings []any, driver string) (string, error) {
+func explainWithDriver(statement string, bindings []any, driver string, dialects ...contractsdriver.Dialect) (string, error) {
+	var dialect contractsdriver.Dialect
+	if len(dialects) > 0 {
+		dialect = dialects[0]
+	}
 	escaped := make([]any, len(bindings))
 	for i, value := range bindings {
 		switch scalar := value.(type) {
@@ -45,15 +49,10 @@ func explainWithDriver(statement string, bindings []any, driver string) (string,
 			if scalar {
 				value = 1
 			}
-		case time.Time:
-			format := "2006-01-02 15:04:05"
-			if querybuilder.CanonicalDialect(driver) == querybuilder.DialectSqlServer {
-				format += ".000"
-			}
-			value = scalar.Format(format)
+
 		}
 		_, binary := value.([]byte)
-		literal, err := dbdriver.Escape(driver, value, binary)
+		literal, err := dbdriver.EscapeWithDialect(dialect, driver, value, binary)
 		if err != nil {
 			return "", err
 		}

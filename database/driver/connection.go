@@ -6,6 +6,7 @@ import (
 
 	"github.com/gradii/framework/contracts/config"
 	"github.com/gradii/framework/contracts/database"
+	contractsdriver "github.com/gradii/framework/contracts/database/driver"
 	contractslogger "github.com/gradii/framework/contracts/database/logger"
 	contractstelemetry "github.com/gradii/framework/contracts/telemetry"
 	instrumentationdatabase "github.com/gradii/framework/telemetry/instrumentation/database"
@@ -23,6 +24,7 @@ type Connection struct {
 	serverVersion string
 	name          string
 	driver        string
+	dialect       contractsdriver.Dialect
 	writer        *sql.DB
 	reader        *sql.DB
 	instrument    *instrumentationdatabase.Instrument
@@ -33,8 +35,8 @@ type Connection struct {
 // It returns a nil connection, without an error, when the connection carries no database name:
 // that is the state of a fresh application before any credentials exist, and callers treat it as
 // "no database" rather than as a failure.
-func Open(config config.Config, logger contractslogger.Logger, pool database.Pool, connection string, telemetryResolver contractstelemetry.Resolver) (*Connection, error) {
-	writer, instrument, err := BuildConnection(config, logger, pool, connection, telemetryResolver)
+func Open(config config.Config, logger contractslogger.Logger, pool database.Pool, connection string, telemetryResolver contractstelemetry.Resolver, dialects ...contractsdriver.Dialect) (*Connection, error) {
+	writer, instrument, err := BuildConnection(config, logger, pool, connection, telemetryResolver, dialects...)
 	if err != nil {
 		return nil, err
 	}
@@ -46,12 +48,17 @@ func Open(config config.Config, logger contractslogger.Logger, pool database.Poo
 	if len(pool.Writers) > 0 {
 		driverName = pool.Writers[0].Driver
 	}
+	var dialect contractsdriver.Dialect
+	if len(dialects) > 0 {
+		dialect = dialects[0]
+	}
 
 	return &Connection{
 		name:       connection,
 		driver:     driverName,
+		dialect:    dialect,
 		writer:     writer,
-		reader:     Reader(connection),
+		reader:     Reader(poolConnectionName(pool, connection)),
 		instrument: instrument,
 	}, nil
 }
@@ -64,6 +71,11 @@ func (r *Connection) Name() string {
 // Driver returns the driver name the connection is configured with.
 func (r *Connection) Driver() string {
 	return r.driver
+}
+
+func (r *Connection) SupportsServerVersion() bool {
+	_, ok := r.dialect.(contractsdriver.DialectWithServerVersion)
+	return ok
 }
 
 // Writer returns the pool writes execute through: inserts, updates, deletes and transactions.

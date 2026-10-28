@@ -10,10 +10,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/goravel/mysql"
-	"github.com/goravel/postgres"
-	"github.com/goravel/sqlite"
-	"github.com/goravel/sqlserver"
 	"github.com/gradii/framework/contracts/database"
 	"github.com/gradii/framework/contracts/database/db"
 	databasedb "github.com/gradii/framework/database/db"
@@ -23,6 +19,10 @@ import (
 	"github.com/gradii/framework/support/convert"
 	"github.com/gradii/framework/support/str"
 	"github.com/gradii/framework/testing/utils"
+	"github.com/gradii/mysql"
+	"github.com/gradii/postgres"
+	"github.com/gradii/sqlite"
+	"github.com/gradii/sqlserver"
 	"github.com/spf13/cast"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -2823,7 +2823,7 @@ func TestDbReadWriteSeparate(t *testing.T) {
 func TestConnection_ConcurrentRace(t *testing.T) {
 	connection := sqlite.Name + "_racetest_" + str.Random(6)
 	mockConfig := &mocksconfig.Config{}
-	docker := sqlite.NewDocker(fmt.Sprintf("%s_%s", testDatabase, str.Random(6)))
+	docker := newSqliteFixture(fmt.Sprintf("%s_%s", testDatabase, str.Random(6)))
 	err := docker.Build()
 	require.NoError(t, err)
 	defer func() {

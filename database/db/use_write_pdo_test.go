@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	mysqldialect "github.com/gradii/mysql"
 	"io"
 	"sync"
 	"testing"
@@ -96,7 +97,7 @@ func TestLockUsesWriteConnection(t *testing.T) {
 	logger := mockslogger.NewLogger(t)
 	logger.EXPECT().Trace(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
 
-	query := NewQuery(context.Background(), readBuilder, writeBuilder, querybuilder.NewMySqlGrammar(""), querybuilder.DialectMySQL, logger, "users", nil)
+	query := newDialectTestQuery(context.Background(), readBuilder, writeBuilder, mysqldialect.NewQueryGrammar(""), querybuilder.DialectMySQL, logger, "users", nil)
 
 	var first []TestUser
 	require.NoError(t, query.LockForUpdate().Get(&first))
@@ -129,7 +130,7 @@ func TestUseWritePdoUsesWriteConnection(t *testing.T) {
 	logger := mockslogger.NewLogger(t)
 	logger.EXPECT().Trace(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
 
-	query := NewQuery(context.Background(), readBuilder, writeBuilder, querybuilder.NewMySqlGrammar(""), querybuilder.DialectMySQL, logger, "users", nil)
+	query := newDialectTestQuery(context.Background(), readBuilder, writeBuilder, mysqldialect.NewQueryGrammar(""), querybuilder.DialectMySQL, logger, "users", nil)
 
 	// A plain get() reads through the reader.
 	var plain []TestUser

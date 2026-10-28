@@ -44,7 +44,13 @@ func NewDB(ctx context.Context, config config.Config, driver contractsdriver.Dri
 		instrument = connection.Instrument()
 	}
 
+	if versioned, ok := driver.(contractsdriver.DriverWithServerVersion); ok && connection != nil && connection.SupportsServerVersion() {
+		versioned.SetServerVersion(func() (string, error) { return connection.ServerVersion(ctx) })
+	}
 	tx := NewTx(ctx, config, driver, logger, connection, nil, &[]TxLog{}, instrument)
+	if tx.initErr != nil {
+		return nil, tx.initErr
+	}
 	if config != nil && connection != nil {
 		tx.state.sticky = config.GetBool("database.connections."+connection.Name()+".sticky", false)
 		tx.state.useUpsertAlias = config.GetBool("database.connections."+connection.Name()+".use_upsert_alias", false)
@@ -79,7 +85,11 @@ func BuildDB(ctx context.Context, config config.Config, log log.Log, connection 
 
 	pool := driver.Pool()
 	logger := NewLogger(config, log)
-	conn, err := databasedriver.Open(config, logger, pool, connection, telemetryResolver)
+	dialect, err := databasedriver.ResolveDialect(driver)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := databasedriver.Open(config, logger, pool, connection, telemetryResolver, dialect)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +130,7 @@ func (r *DB) BeginTransaction() (contractsdb.Tx, error) {
 	_, _ = r.ServerVersion()
 
 	driverName := r.driver.Pool().Writers[0].Driver
-	options, err := databasedriver.TransactionOptions(r.config, driverName)
+	options, err := databasedriver.TransactionOptions(r.config, r.Name())
 	if err != nil {
 		return nil, err
 	}
@@ -194,6 +204,8 @@ type Tx struct {
 	driver       contractsdriver.Driver
 	grammar      contractsdriver.Grammar
 	queryGrammar querybuilder.Grammar
+	components   databasedriver.QueryComponents
+	initErr      error
 	instrument   *instrumentationdatabase.Instrument
 	logger       contractslogger.Logger
 	txBuilder    contractsdb.TxBuilder
@@ -217,14 +229,19 @@ func NewTx(
 	}
 
 	poolWriter := driver.Pool().Writers[0]
-	// An unrecognised driver is deliberately allowed (a module may bring its own database/sql
-	// name); it warns once, naming the driver and the recognised set, rather than failing.
-	// When logger is nil, the warning is silently lost: a nil logger cannot report anything,
-	// and the framework allows NewTx to be called with nil logger for testing or when logging
-	// is disabled. The base grammar still works, so silence is correct behaviour rather than
-	// an error.
-	queryGrammar, known := querybuilder.NewGrammar(poolWriter.Driver, poolWriter.Prefix)
-	if !known && logger != nil {
+	dialect, initErr := databasedriver.ResolveDialect(driver)
+	options := contractsdriver.GrammarOptions{Driver: poolWriter.Driver, Prefix: poolWriter.Prefix}
+	if connection != nil && connection.SupportsServerVersion() {
+		options.ServerVersion = func() (string, error) { return connection.ServerVersion(ctx) }
+	}
+	components, componentErr := databasedriver.ResolveQueryComponents(dialect, options)
+	if connection != nil && connection.SupportsServerVersion() {
+		components.VersionSource = connection.ServerVersion
+	}
+	if initErr == nil {
+		initErr = componentErr
+	}
+	if initErr == nil && dialect == nil && logger != nil {
 		if err := querybuilder.UnrecognisedDriverWarning(poolWriter.Driver); err != nil {
 			logger.Warningf(ctx, "%s", err)
 		}
@@ -236,7 +253,9 @@ func NewTx(
 		config:       config,
 		driver:       driver,
 		driverName:   poolWriter.Driver,
-		queryGrammar: queryGrammar,
+		queryGrammar: components.Grammar,
+		components:   components,
+		initErr:      initErr,
 		connection:   connection,
 		grammar:      driver.Grammar(),
 		instrument:   instrument,
@@ -354,11 +373,17 @@ func (r *Tx) StatementContext(ctx context.Context, statement string, args ...any
 }
 
 func (r *Tx) Table(name string) contractsdb.Query {
+	if r.initErr != nil {
+		q := NewQuery(r.ctx, nil, nil, querybuilder.NewBaseGrammar(""), r.driverName, r.logger, name, nil)
+		q.err = r.initErr
+		q.builder.SetError(r.initErr)
+		return q
+	}
 	ctx := instrumentationdatabase.ContextWithTable(r.ctx, name)
 
 	if r.txBuilder != nil {
 		builder := r.transactionalBuilder()
-		return NewQuery(ctx, builder, builder, r.queryGrammar, r.driverName, r.logger, name, r.txLogs)
+		return NewQuery(ctx, builder, builder, r.queryGrammar, r.driverName, r.logger, name, r.txLogs, r.components)
 	}
 
 	readBuilder, err := r.readBuilder()
@@ -373,7 +398,7 @@ func (r *Tx) Table(name string) contractsdb.Query {
 		return nil
 	}
 
-	return NewQuery(ctx, readBuilder, writeBuilder, r.queryGrammar, r.driverName, r.logger, name, nil)
+	return NewQuery(ctx, readBuilder, writeBuilder, r.queryGrammar, r.driverName, r.logger, name, nil, r.components)
 }
 
 func (r *Tx) Update(sql string, args ...any) (*contractsdb.Result, error) {

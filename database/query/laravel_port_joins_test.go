@@ -439,7 +439,7 @@ func TestJoinLateralMariaDb(t *testing.T) {
 // TestJoinLateralMariaDbGrammarSelection pins the dialect wiring the case above depends on: the
 // "mariadb" driver name resolves to the MariaDB grammar, which quotes identifiers the MySQL way.
 func TestJoinLateralMariaDbGrammarSelection(t *testing.T) {
-	grammar, known := NewGrammar("mariadb", "")
+	grammar, known := newTestGrammar("mariadb", "")
 
 	assert.True(t, known)
 	assert.Equal(t, "`users`", grammar.WrapTable("users"))
