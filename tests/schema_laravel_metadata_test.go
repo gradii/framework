@@ -1,9 +1,10 @@
 package tests
 
 import (
+	"strings"
+
 	"github.com/gradii/framework/contracts/database/driver"
 	"github.com/gradii/sqlserver"
-	"strings"
 )
 
 func (s *SchemaSuite) TestLaravelGeneratedColumnMetadata() {
