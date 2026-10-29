@@ -5,7 +5,6 @@ import (
 
 	"github.com/gradii/framework/contracts/database/driver"
 	"github.com/gradii/framework/contracts/database/schema"
-	"github.com/gradii/framework/support/convert"
 	"github.com/gradii/framework/support/pluralizer"
 )
 
@@ -96,13 +95,13 @@ func (r *IndexDefinition) Algorithm(algorithm string) schema.IndexDefinition {
 }
 
 func (r *IndexDefinition) Deferrable() schema.IndexDefinition {
-	r.command.Deferrable = convert.Pointer(true)
+	r.command.Deferrable = new(true)
 
 	return r
 }
 
 func (r *IndexDefinition) InitiallyImmediate() schema.IndexDefinition {
-	r.command.InitiallyImmediate = convert.Pointer(true)
+	r.command.InitiallyImmediate = new(true)
 
 	return r
 }

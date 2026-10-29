@@ -21,7 +21,6 @@ import (
 	"github.com/gradii/framework/errors"
 	mocksconfig "github.com/gradii/framework/mocks/config"
 	"github.com/gradii/framework/support/carbon"
-	"github.com/gradii/framework/support/convert"
 )
 
 func TestAddGlobalScopes(t *testing.T) {
@@ -707,25 +706,25 @@ func TestModelToStruct(t *testing.T) {
 		},
 		{
 			name:        "pointer to string",
-			input:       convert.Pointer("test"),
+			input:       new("test"),
 			expectError: true,
 			expectedErr: errors.OrmQueryInvalidModel.Args(""),
 		},
 		{
 			name:        "pointer to int",
-			input:       convert.Pointer(123),
+			input:       new(123),
 			expectError: true,
 			expectedErr: errors.OrmQueryInvalidModel.Args(""),
 		},
 		{
 			name:        "pointer to float",
-			input:       convert.Pointer(123.45),
+			input:       new(123.45),
 			expectError: true,
 			expectedErr: errors.OrmQueryInvalidModel.Args(""),
 		},
 		{
 			name:        "pointer to bool",
-			input:       convert.Pointer(true),
+			input:       new(true),
 			expectError: true,
 			expectedErr: errors.OrmQueryInvalidModel.Args(""),
 		},

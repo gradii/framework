@@ -2,7 +2,6 @@ package schema
 
 import (
 	"github.com/gradii/framework/contracts/database/driver"
-	"github.com/gradii/framework/support/convert"
 )
 
 type ColumnDefinition struct {
@@ -47,7 +46,7 @@ type ColumnDefinition struct {
 func NewColumnDefinition(name string, ttype string) driver.ColumnDefinition {
 	return &ColumnDefinition{
 		name:  &name,
-		ttype: convert.Pointer(ttype),
+		ttype: new(ttype),
 	}
 }
 
@@ -64,7 +63,7 @@ func (r *ColumnDefinition) Always() driver.ColumnDefinition {
 }
 
 func (r *ColumnDefinition) AutoIncrement() driver.ColumnDefinition {
-	r.autoIncrement = convert.Pointer(true)
+	r.autoIncrement = new(true)
 
 	return r
 }
@@ -257,31 +256,31 @@ func (r *ColumnDefinition) OnUpdate(value any) driver.ColumnDefinition {
 }
 
 func (r *ColumnDefinition) Places(places int) driver.ColumnDefinition {
-	r.places = convert.Pointer(places)
+	r.places = new(places)
 
 	return r
 }
 
 func (r *ColumnDefinition) Total(total int) driver.ColumnDefinition {
-	r.total = convert.Pointer(total)
+	r.total = new(total)
 
 	return r
 }
 
 func (r *ColumnDefinition) Unsigned() driver.ColumnDefinition {
-	r.unsigned = convert.Pointer(true)
+	r.unsigned = new(true)
 
 	return r
 }
 
 func (r *ColumnDefinition) UseCurrent() driver.ColumnDefinition {
-	r.useCurrent = convert.Pointer(true)
+	r.useCurrent = new(true)
 
 	return r
 }
 
 func (r *ColumnDefinition) UseCurrentOnUpdate() driver.ColumnDefinition {
-	r.useCurrentOnUpdate = convert.Pointer(true)
+	r.useCurrentOnUpdate = new(true)
 
 	return r
 }

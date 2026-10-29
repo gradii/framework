@@ -85,7 +85,7 @@ func (b *Builder) addWhere(column any, args []any, boolean string) *Builder {
 	}
 
 	// A JSON reference compared against a bool becomes a raw true or false literal. The caller may
-	// hand the bool behind a pointer (a nullable Go bool, e.g. convert.Pointer(false)); dereference
+	// hand the bool behind a pointer (a nullable Go bool, e.g. new(false)); dereference
 	// it first so it is treated as the JSON boolean Laravel sees via is_bool($value), rather than
 	// binding the pointer address and matching nothing.
 	if strings.Contains(columnString, "->") {

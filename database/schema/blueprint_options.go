@@ -122,14 +122,3 @@ func (r *Blueprint) DropConstrainedForeignId(column string) {
 	r.DropForeign(column)
 	r.DropColumn(column)
 }
-func (r *Blueprint) hasAdvanced() bool {
-	if r.temporary || r.engine != "" || r.charset != "" || r.collation != "" {
-		return true
-	}
-	for _, column := range r.columns {
-		if column.advanced() {
-			return true
-		}
-	}
-	return false
-}

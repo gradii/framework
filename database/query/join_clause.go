@@ -39,11 +39,11 @@ func NewJoinClause(parent *Builder, typ string, table any) *JoinClause {
 // is a column comparison.
 func (j *JoinClause) On(first any, operator any, second any, boolean string) *JoinClause {
 	if callback, ok := first.(func(*Builder) *Builder); ok {
-		j.Builder.WhereNested(callback, boolean)
+		j.WhereNested(callback, boolean)
 		return j
 	}
 
-	j.Builder.WhereColumn(first, operator, second, boolean)
+	j.WhereColumn(first, operator, second, boolean)
 
 	return j
 }

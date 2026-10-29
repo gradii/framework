@@ -114,7 +114,7 @@ func TestWheres(t *testing.T) {
 				Value:    4,
 				Boolean:  core.BooleanAnd,
 			})
-			builder.AddBinding(CleanBindings([]any{4}), "where")
+			_ = builder.AddBinding(CleanBindings([]any{4}), "where")
 
 			return builder
 			// Laravel renders this as `"flags" & ? > 0` on the dialects that define whereBitwise; the base
@@ -1336,7 +1336,7 @@ func TestBitwiseWhereInheritedDialects(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			builder := NewBuilder(test.grammar).From("users", "")
 			builder.State().Wheres = append(builder.State().Wheres, core.Where{Type: core.WhereBitwise, Column: "flags", Operator: "&", Value: 4, Boolean: core.BooleanAnd})
-			builder.AddBinding(CleanBindings([]any{4}), "where")
+			_ = builder.AddBinding(CleanBindings([]any{4}), "where")
 
 			assert.Equal(t, test.want, builder.ToSQL())
 		})

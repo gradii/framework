@@ -71,11 +71,3 @@ func (r *ColumnDefinition) Fixed() driver.ColumnDefinition { r.fixed = true; ret
 func (r *ColumnDefinition) Srid(value int) driver.ColumnDefinition { r.srid = &value; return r }
 
 func (r *ColumnDefinition) Instant() driver.ColumnDefinition { r.instant = true; return r }
-
-func (r *ColumnDefinition) advanced() bool {
-	switch r.GetType() {
-	case "binary", "year", "ipAddress", "macAddress", "geometry", "geography", "vector", "computed", "set", "raw":
-		return true
-	}
-	return r.storedSet || r.virtualSet || r.persisted || r.invisible || r.charset != "" || r.collation != "" || r.startingValue != nil || r.instant
-}

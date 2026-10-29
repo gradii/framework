@@ -18,17 +18,9 @@ var (
 	errIncrementAmountNonNumeric   = errors.QueryIncrementAmountNonNumeric
 	errIncrementEachNonAssociative = errors.QueryIncrementEachNonAssociative
 
-	errJsonSelectorNotSupported      = errors.QueryJsonSelectorNotSupported
-	errJsonContainsNotSupported      = errors.QueryJsonContainsNotSupported
-	errJsonContainsKeyNotSupported   = errors.QueryJsonContainsKeyNotSupported
-	errJsonLengthNotSupported        = errors.QueryJsonLengthNotSupported
-	errJsonOverlapsNotSupported      = errors.QueryJsonOverlapsNotSupported
-	errFullTextNotSupported          = errors.QueryFullTextNotSupported
-	errUpsertNotSupported            = errors.QueryUpsertNotSupported
-	errInsertIgnoreNotSupported      = errors.QueryInsertIgnoreNotSupported
-	errLateralJoinNotSupported       = errors.QueryLateralJoinNotSupported
-	errCaseSensitiveLikeNotSupported = errors.QueryCaseSensitiveLikeNotSupported
-	errNestedArraysNotAllowed        = errors.QueryNestedArraysNotAllowed
+	errJsonSelectorNotSupported = errors.QueryJsonSelectorNotSupported
+	errLateralJoinNotSupported  = errors.QueryLateralJoinNotSupported
+	errNestedArraysNotAllowed   = errors.QueryNestedArraysNotAllowed
 )
 
 // mapEntries normalises an associative map argument into ordered column/value pairs, or reports false

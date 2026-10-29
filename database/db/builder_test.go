@@ -57,7 +57,7 @@ var sqlxBindCases = []struct {
 // resolved to UNKNOWN.
 func TestNewBuilder_UsesCanonicalDialectForBinding(t *testing.T) {
 	pool := sql.OpenDB(builderStubConnector{})
-	defer pool.Close()
+	defer func() { require.NoError(t, pool.Close()) }()
 
 	for _, tc := range sqlxBindCases {
 		builder, err := NewBuilder(pool, tc.driver)
@@ -70,7 +70,7 @@ func TestNewBuilder_UsesCanonicalDialectForBinding(t *testing.T) {
 // same driver string with sqlx.
 func TestNewTxBuilder_UsesCanonicalDialectForBinding(t *testing.T) {
 	pool := sql.OpenDB(builderStubConnector{})
-	defer pool.Close()
+	defer func() { require.NoError(t, pool.Close()) }()
 
 	for _, tc := range sqlxBindCases {
 		tx, err := NewTxBuilder(pool, tc.driver, nil)

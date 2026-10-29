@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/gradii/framework/support/carbon"
-	"github.com/gradii/framework/support/convert"
 )
 
 type Model struct {
@@ -368,7 +367,7 @@ func TestStructToMap(t *testing.T) {
 			},
 		},
 		Name:     "name",
-		Avatar:   convert.Pointer("avatar"),
+		Avatar:   new("avatar"),
 		IsAdmin:  true,
 		IsManage: 2,
 		AdminAt:  testNow,

@@ -8,7 +8,6 @@ import (
 	"github.com/gradii/framework/contracts/database/orm"
 	"github.com/gradii/framework/contracts/database/schema"
 	"github.com/gradii/framework/errors"
-	"github.com/gradii/framework/support/convert"
 )
 
 const (
@@ -249,7 +248,7 @@ func (r *Blueprint) Enum(column string, allowed []any) driver.ColumnDefinition {
 
 func (r *Blueprint) Float(column string, precision ...int) driver.ColumnDefinition {
 	columnImpl := r.createAndAddColumn("float", column)
-	columnImpl.precision = convert.Pointer(53)
+	columnImpl.precision = new(53)
 
 	if len(precision) > 0 {
 		columnImpl.precision = &precision[0]
@@ -752,7 +751,7 @@ func (r *Blueprint) addImpliedCommands(grammar driver.Grammar) {
 func (r *Blueprint) createAndAddColumn(ttype, name string) *ColumnDefinition {
 	columnImpl := &ColumnDefinition{
 		name:  &name,
-		ttype: convert.Pointer(ttype),
+		ttype: new(ttype),
 	}
 
 	r.columns = append(r.columns, columnImpl)

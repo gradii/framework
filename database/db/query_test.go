@@ -817,7 +817,7 @@ type chunkStubConnector struct {
 }
 
 func (c chunkStubConnector) Connect(context.Context) (driver.Conn, error) {
-	return chunkStubConn{columns: c.columns, pages: c.pages, served: c.served, queries: c.queries}, nil
+	return chunkStubConn(c), nil
 }
 
 func (c chunkStubConnector) Driver() driver.Driver { return chunkStubDriver{} }
