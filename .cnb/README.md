@@ -52,11 +52,11 @@ checkouts and the independent integration module:
 
 ```sh
 go work init . ./tests ../mysql ../postgres ../sqlite ../sqlserver
-go work edit -replace=github.com/gradii/framework@v1.18.0=.
-go work edit -replace=github.com/gradii/mysql@v1.18.0=../mysql
-go work edit -replace=github.com/gradii/postgres@v1.18.0=../postgres
-go work edit -replace=github.com/gradii/sqlite@v1.18.0=../sqlite
-go work edit -replace=github.com/gradii/sqlserver@v1.18.0=../sqlserver
+go work edit -replace=github.com/gradii/framework@v1.20.0-alpha.0=.
+go work edit -replace=github.com/gradii/mysql@v1.20.0-alpha.0=../mysql
+go work edit -replace=github.com/gradii/postgres@v1.20.0-alpha.0=../postgres
+go work edit -replace=github.com/gradii/sqlite@v1.20.0-alpha.0=../sqlite
+go work edit -replace=github.com/gradii/sqlserver@v1.20.0-alpha.0=../sqlserver
 go test ./...
 (cd tests && go test ./...)
 ```

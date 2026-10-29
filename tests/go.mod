@@ -10,11 +10,11 @@ require (
 	github.com/brianvoe/gofakeit/v7 v7.18.0
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/google/uuid v1.6.0
-	github.com/gradii/framework v1.18.0
-	github.com/gradii/mysql v1.18.0
-	github.com/gradii/postgres v1.18.0
-	github.com/gradii/sqlite v1.18.0
-	github.com/gradii/sqlserver v1.18.0
+	github.com/gradii/framework v1.20.0-alpha.0
+	github.com/gradii/mysql v1.20.0-alpha.0
+	github.com/gradii/postgres v1.20.0-alpha.0
+	github.com/gradii/sqlite v1.20.0-alpha.0
+	github.com/gradii/sqlserver v1.20.0-alpha.0
 	github.com/jackc/pgx/v5 v5.7.5
 	github.com/microsoft/go-mssqldb v1.9.2
 	github.com/spf13/cast v1.10.0
