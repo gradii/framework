@@ -73,3 +73,29 @@ new dialects, and no old GORM source or compatibility module is retained.
 The new driver runtime packages contain no GORM dependencies. Fully obfuscated
 ORM field/relationship access is a separate mapping concern; this refactor does
 not restore automatic table naming from Go type names.
+
+## GitHub mirror
+
+Every repository of this workspace mirrors itself to its GitHub home,
+`github.com/gradii/<module>`, from the CNB pipeline. Only two things are
+published, and only from `main`: a push to `main` publishes that branch
+together with every `v*` tag the CNB repository holds, and a `v*` tag push
+publishes that tag. No other branch is mirrored.
+
+The destination is derived from the module path in `go.mod` and the credential
+from `DEPLOY_GITHUB_GRADII_<MODULE>_TOKEN` (`FRAMEWORK`, `MYSQL`, `POSTGRES`,
+`SQLITE`, `SQLSERVER`). The shared secret file
+`https://cnb.cool/gradii/secret/-/blob/main/deploy-github/gradii.yml` provides
+all five, and the mirror jobs import it. When a token is absent the mirror
+skips the run with a message rather than failing, so a repository whose token is
+not configured yet still builds.
+
+`bash .cnb/mirror-github.sh branch` publishes `main` and its version tags,
+`bash .cnb/mirror-github.sh tag` publishes the tag named by `CNB_BRANCH`. The
+script is identical in all five repositories, like `ci.sh`.
+
+The Gradii module line starts at `v1.20.0`. That is the first tag these modules
+publish, and the mirror skips everything below it: the older tags are upstream
+release history and point at commits that predate the native-contract ports. A
+mirrored tag keeps its original target commit, so a tag that already exists on
+GitHub is republished unchanged.
