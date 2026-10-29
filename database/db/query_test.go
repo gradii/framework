@@ -4,10 +4,6 @@ import (
 	"context"
 	databasesql "database/sql"
 	"database/sql/driver"
-	mysqldialect "github.com/gradii/mysql"
-	postgresdriver "github.com/gradii/postgres"
-	sqlitedriver "github.com/gradii/sqlite"
-	sqlserverdriver "github.com/gradii/sqlserver"
 	"io"
 	"testing"
 
@@ -34,7 +30,7 @@ type TestUser struct {
 }
 
 func TestSelectResetsColumnsAndBindings(t *testing.T) {
-	query := newDialectTestQuery(context.Background(), nil, nil, postgresdriver.NewQueryGrammar(""), "", nil, "users", nil)
+	query := newDialectTestQuery(context.Background(), nil, nil, querybuilder.NewBaseGrammar(""), "", nil, "users", nil)
 	query.builder.SelectRaw("? as old", []any{1}).Where("id", 9)
 
 	snapshot := query.Clone().(*Query)
@@ -80,7 +76,7 @@ func TestQueryTestSuite(t *testing.T) {
 
 func (s *QueryTestSuite) SetupTest() {
 	s.ctx = context.Background()
-	s.grammar = mysqldialect.NewQueryGrammar("")
+	s.grammar = querybuilder.NewBaseGrammar("")
 	s.mockLogger = mockslogger.NewLogger(s.T())
 	s.mockReadBuilder = mocksdb.NewBuilder(s.T())
 	s.mockWriteBuilder = mocksdb.NewBuilder(s.T())
@@ -114,16 +110,16 @@ func (s *QueryTestSuite) TestWhereAnyGroupConnector() {
 	}{
 		{
 			name:     "mysql",
-			grammar:  mysqldialect.NewQueryGrammar(""),
+			grammar:  querybuilder.NewBaseGrammar(""),
 			driver:   querybuilder.DialectMySQL,
-			where:    "select * from `users` where `name` = ? and (`email` = ? or `phone` = ?)",
-			all:      "select * from `users` where `name` = ? and (`email` = ? and `phone` = ?)",
-			none:     "select * from `users` where `name` = ? and not (`email` = ? or `phone` = ?)",
-			adjacent: "select * from `users` where (`weight` >= ?) and (`height` <= ?)",
+			where:    "select * from \"users\" where \"name\" = ? and (\"email\" = ? or \"phone\" = ?)",
+			all:      "select * from \"users\" where \"name\" = ? and (\"email\" = ? and \"phone\" = ?)",
+			none:     "select * from \"users\" where \"name\" = ? and not (\"email\" = ? or \"phone\" = ?)",
+			adjacent: "select * from \"users\" where (\"weight\" >= ?) and (\"height\" <= ?)",
 		},
 		{
 			name:     "postgres",
-			grammar:  postgresdriver.NewQueryGrammar(""),
+			grammar:  querybuilder.NewBaseGrammar(""),
 			driver:   querybuilder.DialectPostgres,
 			where:    `select * from "users" where "name" = $1 and ("email" = $2 or "phone" = $3)`,
 			all:      `select * from "users" where "name" = $1 and ("email" = $2 and "phone" = $3)`,
@@ -132,7 +128,7 @@ func (s *QueryTestSuite) TestWhereAnyGroupConnector() {
 		},
 		{
 			name:     "sqlite",
-			grammar:  sqlitedriver.NewQueryGrammar(""),
+			grammar:  querybuilder.NewBaseGrammar(""),
 			driver:   querybuilder.DialectSqlite,
 			where:    `select * from "users" where "name" = ? and ("email" = ? or "phone" = ?)`,
 			all:      `select * from "users" where "name" = ? and ("email" = ? and "phone" = ?)`,
@@ -141,12 +137,12 @@ func (s *QueryTestSuite) TestWhereAnyGroupConnector() {
 		},
 		{
 			name:     "sqlserver",
-			grammar:  sqlserverdriver.NewQueryGrammar(""),
+			grammar:  querybuilder.NewBaseGrammar(""),
 			driver:   querybuilder.DialectSqlServer,
-			where:    "select * from [users] where [name] = @p1 and ([email] = @p2 or [phone] = @p3)",
-			all:      "select * from [users] where [name] = @p1 and ([email] = @p2 and [phone] = @p3)",
-			none:     "select * from [users] where [name] = @p1 and not ([email] = @p2 or [phone] = @p3)",
-			adjacent: "select * from [users] where ([weight] >= @p1) and ([height] <= @p2)",
+			where:    "select * from \"users\" where \"name\" = @p1 and (\"email\" = @p2 or \"phone\" = @p3)",
+			all:      "select * from \"users\" where \"name\" = @p1 and (\"email\" = @p2 and \"phone\" = @p3)",
+			none:     "select * from \"users\" where \"name\" = @p1 and not (\"email\" = @p2 or \"phone\" = @p3)",
+			adjacent: "select * from \"users\" where (\"weight\" >= @p1) and (\"height\" <= @p2)",
 		},
 	}
 
@@ -176,69 +172,66 @@ func (s *QueryTestSuite) TestCompiledSQL() {
 		build func(db.Query) db.Query
 		want  string
 	}{
-		{"bare", func(q db.Query) db.Query { return q }, "select * from `users`"},
-		{"where", func(q db.Query) db.Query { return q.Where("name", "John") }, "select * from `users` where `name` = ?"},
-		{"where operator", func(q db.Query) db.Query { return q.Where("age", ">", 18) }, "select * from `users` where `age` > ?"},
-		{"or where", func(q db.Query) db.Query { return q.Where("name", "John").OrWhere("name", "Jane") }, "select * from `users` where `name` = ? or `name` = ?"},
-		{"where not", func(q db.Query) db.Query { return q.Where("name", "John").WhereNot("name", "Jane") }, "select * from `users` where `name` = ? and not `name` = ?"},
-		{"or where not", func(q db.Query) db.Query { return q.Where("name", "John").OrWhereNot("name", "Jane") }, "select * from `users` where `name` = ? or not `name` = ?"},
-		{"where raw", func(q db.Query) db.Query { return q.WhereRaw("age > ?", []any{18}) }, "select * from `users` where age > ?"},
-		{"where string with placeholder", func(q db.Query) db.Query { return q.Where("age > ?", 18) }, "select * from `users` where age > ?"},
-		{"where slice means in", func(q db.Query) db.Query { return q.Where("age", []int{25, 30}) }, "select * from `users` where `age` in (?, ?)"},
-		{"where in", func(q db.Query) db.Query { return q.WhereIn("age", []any{25, 30}) }, "select * from `users` where `age` in (?, ?)"},
-		{"where not in", func(q db.Query) db.Query { return q.WhereNotIn("age", []any{25, 30}) }, "select * from `users` where `age` not in (?, ?)"},
-		{"where null", func(q db.Query) db.Query { return q.WhereNull("name") }, "select * from `users` where `name` is null"},
-		{"where not null", func(q db.Query) db.Query { return q.WhereNotNull("name") }, "select * from `users` where `name` is not null"},
-		{"where between", func(q db.Query) db.Query { return q.WhereBetween("age", 18, 30) }, "select * from `users` where `age` between ? and ?"},
-		{"where not between", func(q db.Query) db.Query { return q.WhereNotBetween("age", 18, 30) }, "select * from `users` where `age` not between ? and ?"},
-		{"where column", func(q db.Query) db.Query { return q.WhereColumn("a", "b") }, "select * from `users` where `a` = `b`"},
-		{"where column operator", func(q db.Query) db.Query { return q.WhereColumn("a", "<", "b") }, "select * from `users` where `a` < `b`"},
-		{"where column arity", func(q db.Query) db.Query { return q.WhereColumn("a", "b", "c") }, "select * from `users` where `a` = `b`"},
-		{"where like", func(q db.Query) db.Query { return q.WhereLike("name", "%John%") }, "select * from `users` where `name` like ?"},
-		{"where not like", func(q db.Query) db.Query { return q.WhereNotLike("name", "%John%") }, "select * from `users` where `name` not like ?"},
-		{"where any", func(q db.Query) db.Query { return q.WhereAny([]string{"name", "email"}, "=", "John") }, "select * from `users` where (`name` = ? or `email` = ?)"},
-		{"where all", func(q db.Query) db.Query { return q.WhereAll([]string{"name", "email"}, "=", "John") }, "select * from `users` where (`name` = ? and `email` = ?)"},
-		{"where none", func(q db.Query) db.Query { return q.WhereNone([]string{"name", "email"}, "=", "John") }, "select * from `users` where not (`name` = ? or `email` = ?)"},
-		{"where json contains", func(q db.Query) db.Query { return q.WhereJsonContains("data", "x") }, "select * from `users` where json_contains(`data`, ?)"},
-		{"where json contains key", func(q db.Query) db.Query { return q.WhereJsonContainsKey("data") }, "select * from `users` where ifnull(json_contains_path(`data`, 'one'), 0)"},
-		{"where json length", func(q db.Query) db.Query { return q.WhereJsonLength("data", 2) }, "select * from `users` where json_length(`data`) = ?"},
-		{"select", func(q db.Query) db.Query { return q.Select("id", "name") }, "select `id`, `name` from `users`"},
-		{"select preserves duplicates", func(q db.Query) db.Query { return q.Select("name", "name") }, "select `name`, `name` from `users`"},
-		{"select replaces columns", func(q db.Query) db.Query { return q.Select("id").Select("name") }, "select `name` from `users`"},
-		{"select preserves explicit wildcard", func(q db.Query) db.Query { return q.Select("*", "name") }, "select *, `name` from `users`"},
-		{"select defaults to wildcard", func(q db.Query) db.Query { return q.Select("id").Select() }, "select * from `users`"},
-		{"distinct", func(q db.Query) db.Query { return q.Distinct() }, "select distinct * from `users`"},
-		{"distinct columns", func(q db.Query) db.Query { return q.Distinct("name") }, "select distinct * from `users`"},
-		{"distinct two columns", func(q db.Query) db.Query { return q.Distinct("name", "age") }, "select distinct * from `users`"},
-		{"group by", func(q db.Query) db.Query { return q.GroupBy("name") }, "select * from `users` group by `name`"},
-		{"having", func(q db.Query) db.Query { return q.GroupBy("name").Having("name", "John") }, "select * from `users` group by `name` having `name` = ?"},
-		{"order by", func(q db.Query) db.Query { return q.OrderBy("name") }, "select * from `users` order by `name` asc"},
-		{"order by desc", func(q db.Query) db.Query { return q.OrderByDesc("name") }, "select * from `users` order by `name` desc"},
-		{"order by raw", func(q db.Query) db.Query { return q.OrderByRaw("age DESC, id ASC") }, "select * from `users` order by age DESC, id ASC"},
-		{"latest", func(q db.Query) db.Query { return q.Latest() }, "select * from `users` order by `created_at` desc"},
-		{"latest column", func(q db.Query) db.Query { return q.Latest("name") }, "select * from `users` order by `name` desc"},
-		{"random order", func(q db.Query) db.Query { return q.InRandomOrder() }, "select * from `users` order by RAND()"},
-		{"limit", func(q db.Query) db.Query { return q.Limit(10) }, "select * from `users` limit 10"},
-		{"offset", func(q db.Query) db.Query { return q.Offset(5) }, "select * from `users` offset 5"},
-		{"lock for update", func(q db.Query) db.Query { return q.LockForUpdate() }, "select * from `users` for update"},
-		{"shared lock", func(q db.Query) db.Query { return q.SharedLock() }, "select * from `users` lock in share mode"},
-		{"join", func(q db.Query) db.Query { return q.Join("posts as p ON users.id = p.user_id", 1) }, "select * from `users` inner join posts as p ON users.id = p.user_id"},
-		{"left join", func(q db.Query) db.Query { return q.LeftJoin("posts as p ON users.id = p.user_id") }, "select * from `users` left join posts as p ON users.id = p.user_id"},
-		{"right join", func(q db.Query) db.Query { return q.RightJoin("posts as p ON users.id = p.user_id") }, "select * from `users` right join posts as p ON users.id = p.user_id"},
-		{"cross join", func(q db.Query) db.Query { return q.CrossJoin("posts as p") }, "select * from `users` cross join posts as p"},
-		{"count", func(q db.Query) db.Query { return q }, "select count(*) as aggregate from `users`"},
-		{"count one column", func(q db.Query) db.Query { return q.Select("name") }, "select count(`name`) as aggregate from `users`"},
-		{"count renamed column", func(q db.Query) db.Query { return q.Select("name as n") }, "select count(`name`) as aggregate from `users`"},
-		{"count distinct column", func(q db.Query) db.Query { return q.Distinct("name") }, "select count(distinct `name`) as aggregate from `users`"},
-		{"count several columns", func(q db.Query) db.Query { return q.Select("name", "age") }, "select count(*) as aggregate from `users`"},
-		{"value", func(q db.Query) db.Query { return q }, "select `name` from `users` limit 1"},
-		{"pluck", func(q db.Query) db.Query { return q }, "select `name` from `users`"},
-		{"sum", func(q db.Query) db.Query { return q }, "select sum(`age`) as aggregate from `users`"},
-		{"delete", func(q db.Query) db.Query { return q.Where("name", "John") }, "delete from `users` where `name` = ?"},
-		{"update", func(q db.Query) db.Query { return q.Where("id", 1) }, "update `users` set `name` = ? where `id` = ?"},
-		{"increment", func(q db.Query) db.Query { return q.Where("name", "John") }, "update `users` set `age` = `age` + 1 where `name` = ?"},
-		{"decrement", func(q db.Query) db.Query { return q.Where("name", "John") }, "update `users` set `age` = `age` - 1 where `name` = ?"},
-		{"insert", func(q db.Query) db.Query { return q }, "insert into `users` (`name`) values (?)"},
+		{"bare", func(q db.Query) db.Query { return q }, "select * from \"users\""},
+		{"where", func(q db.Query) db.Query { return q.Where("name", "John") }, "select * from \"users\" where \"name\" = ?"},
+		{"where operator", func(q db.Query) db.Query { return q.Where("age", ">", 18) }, "select * from \"users\" where \"age\" > ?"},
+		{"or where", func(q db.Query) db.Query { return q.Where("name", "John").OrWhere("name", "Jane") }, "select * from \"users\" where \"name\" = ? or \"name\" = ?"},
+		{"where not", func(q db.Query) db.Query { return q.Where("name", "John").WhereNot("name", "Jane") }, "select * from \"users\" where \"name\" = ? and not \"name\" = ?"},
+		{"or where not", func(q db.Query) db.Query { return q.Where("name", "John").OrWhereNot("name", "Jane") }, "select * from \"users\" where \"name\" = ? or not \"name\" = ?"},
+		{"where raw", func(q db.Query) db.Query { return q.WhereRaw("age > ?", []any{18}) }, "select * from \"users\" where age > ?"},
+		{"where string with placeholder", func(q db.Query) db.Query { return q.Where("age > ?", 18) }, "select * from \"users\" where age > ?"},
+		{"where slice means in", func(q db.Query) db.Query { return q.Where("age", []int{25, 30}) }, "select * from \"users\" where \"age\" in (?, ?)"},
+		{"where in", func(q db.Query) db.Query { return q.WhereIn("age", []any{25, 30}) }, "select * from \"users\" where \"age\" in (?, ?)"},
+		{"where not in", func(q db.Query) db.Query { return q.WhereNotIn("age", []any{25, 30}) }, "select * from \"users\" where \"age\" not in (?, ?)"},
+		{"where null", func(q db.Query) db.Query { return q.WhereNull("name") }, "select * from \"users\" where \"name\" is null"},
+		{"where not null", func(q db.Query) db.Query { return q.WhereNotNull("name") }, "select * from \"users\" where \"name\" is not null"},
+		{"where between", func(q db.Query) db.Query { return q.WhereBetween("age", 18, 30) }, "select * from \"users\" where \"age\" between ? and ?"},
+		{"where not between", func(q db.Query) db.Query { return q.WhereNotBetween("age", 18, 30) }, "select * from \"users\" where \"age\" not between ? and ?"},
+		{"where column", func(q db.Query) db.Query { return q.WhereColumn("a", "b") }, "select * from \"users\" where \"a\" = \"b\""},
+		{"where column operator", func(q db.Query) db.Query { return q.WhereColumn("a", "<", "b") }, "select * from \"users\" where \"a\" < \"b\""},
+		{"where column arity", func(q db.Query) db.Query { return q.WhereColumn("a", "b", "c") }, "select * from \"users\" where \"a\" = \"b\""},
+		{"where like", func(q db.Query) db.Query { return q.WhereLike("name", "%John%") }, "select * from \"users\" where \"name\" like ?"},
+		{"where not like", func(q db.Query) db.Query { return q.WhereNotLike("name", "%John%") }, "select * from \"users\" where \"name\" not like ?"},
+		{"where any", func(q db.Query) db.Query { return q.WhereAny([]string{"name", "email"}, "=", "John") }, "select * from \"users\" where (\"name\" = ? or \"email\" = ?)"},
+		{"where all", func(q db.Query) db.Query { return q.WhereAll([]string{"name", "email"}, "=", "John") }, "select * from \"users\" where (\"name\" = ? and \"email\" = ?)"},
+		{"where none", func(q db.Query) db.Query { return q.WhereNone([]string{"name", "email"}, "=", "John") }, "select * from \"users\" where not (\"name\" = ? or \"email\" = ?)"},
+		{"select", func(q db.Query) db.Query { return q.Select("id", "name") }, "select \"id\", \"name\" from \"users\""},
+		{"select preserves duplicates", func(q db.Query) db.Query { return q.Select("name", "name") }, "select \"name\", \"name\" from \"users\""},
+		{"select replaces columns", func(q db.Query) db.Query { return q.Select("id").Select("name") }, "select \"name\" from \"users\""},
+		{"select preserves explicit wildcard", func(q db.Query) db.Query { return q.Select("*", "name") }, "select *, \"name\" from \"users\""},
+		{"select defaults to wildcard", func(q db.Query) db.Query { return q.Select("id").Select() }, "select * from \"users\""},
+		{"distinct", func(q db.Query) db.Query { return q.Distinct() }, "select distinct * from \"users\""},
+		{"distinct columns", func(q db.Query) db.Query { return q.Distinct("name") }, "select distinct * from \"users\""},
+		{"distinct two columns", func(q db.Query) db.Query { return q.Distinct("name", "age") }, "select distinct * from \"users\""},
+		{"group by", func(q db.Query) db.Query { return q.GroupBy("name") }, "select * from \"users\" group by \"name\""},
+		{"having", func(q db.Query) db.Query { return q.GroupBy("name").Having("name", "John") }, "select * from \"users\" group by \"name\" having \"name\" = ?"},
+		{"order by", func(q db.Query) db.Query { return q.OrderBy("name") }, "select * from \"users\" order by \"name\" asc"},
+		{"order by desc", func(q db.Query) db.Query { return q.OrderByDesc("name") }, "select * from \"users\" order by \"name\" desc"},
+		{"order by raw", func(q db.Query) db.Query { return q.OrderByRaw("age DESC, id ASC") }, "select * from \"users\" order by age DESC, id ASC"},
+		{"latest", func(q db.Query) db.Query { return q.Latest() }, "select * from \"users\" order by \"created_at\" desc"},
+		{"latest column", func(q db.Query) db.Query { return q.Latest("name") }, "select * from \"users\" order by \"name\" desc"},
+		{"random order", func(q db.Query) db.Query { return q.InRandomOrder() }, "select * from \"users\" order by RANDOM()"},
+		{"limit", func(q db.Query) db.Query { return q.Limit(10) }, "select * from \"users\" limit 10"},
+		{"offset", func(q db.Query) db.Query { return q.Offset(5) }, "select * from \"users\" offset 5"},
+		{"lock for update", func(q db.Query) db.Query { return q.LockForUpdate() }, "select * from \"users\" for update"},
+		{"shared lock", func(q db.Query) db.Query { return q.SharedLock() }, "select * from \"users\" lock in share mode"},
+		{"join", func(q db.Query) db.Query { return q.Join("posts as p ON users.id = p.user_id", 1) }, "select * from \"users\" inner join posts as p ON users.id = p.user_id"},
+		{"left join", func(q db.Query) db.Query { return q.LeftJoin("posts as p ON users.id = p.user_id") }, "select * from \"users\" left join posts as p ON users.id = p.user_id"},
+		{"right join", func(q db.Query) db.Query { return q.RightJoin("posts as p ON users.id = p.user_id") }, "select * from \"users\" right join posts as p ON users.id = p.user_id"},
+		{"cross join", func(q db.Query) db.Query { return q.CrossJoin("posts as p") }, "select * from \"users\" cross join posts as p"},
+		{"count", func(q db.Query) db.Query { return q }, "select count(*) as aggregate from \"users\""},
+		{"count one column", func(q db.Query) db.Query { return q.Select("name") }, "select count(\"name\") as aggregate from \"users\""},
+		{"count renamed column", func(q db.Query) db.Query { return q.Select("name as n") }, "select count(\"name\") as aggregate from \"users\""},
+		{"count distinct column", func(q db.Query) db.Query { return q.Distinct("name") }, "select count(distinct \"name\") as aggregate from \"users\""},
+		{"count several columns", func(q db.Query) db.Query { return q.Select("name", "age") }, "select count(*) as aggregate from \"users\""},
+		{"value", func(q db.Query) db.Query { return q }, "select \"name\" from \"users\" limit 1"},
+		{"pluck", func(q db.Query) db.Query { return q }, "select \"name\" from \"users\""},
+		{"sum", func(q db.Query) db.Query { return q }, "select sum(\"age\") as aggregate from \"users\""},
+		{"delete", func(q db.Query) db.Query { return q.Where("name", "John") }, "delete from \"users\" where \"name\" = ?"},
+		{"update", func(q db.Query) db.Query { return q.Where("id", 1) }, "update \"users\" set \"name\" = ? where \"id\" = ?"},
+		{"increment", func(q db.Query) db.Query { return q.Where("name", "John") }, "update \"users\" set \"age\" = \"age\" + 1 where \"name\" = ?"},
+		{"decrement", func(q db.Query) db.Query { return q.Where("name", "John") }, "update \"users\" set \"age\" = \"age\" - 1 where \"name\" = ?"},
+		{"insert", func(q db.Query) db.Query { return q }, "insert into \"users\" (\"name\") values (?)"},
 	}
 
 	for _, test := range tests {
@@ -289,7 +282,7 @@ func (s *QueryTestSuite) TestWhereExistsSQL() {
 
 	got := s.query.Clone().Where("name", "John").WhereExists(func() db.Query { return sub }).ToSql().Get()
 
-	assert.Equal(s.T(), "select * from `users` where `name` = ? and exists (select * from `agents` where `age` = ?)", got)
+	assert.Equal(s.T(), "select * from \"users\" where \"name\" = ? and exists (select * from \"agents\" where \"age\" = ?)", got)
 }
 
 func (s *QueryTestSuite) TestNestedWhereSQL() {
@@ -297,7 +290,7 @@ func (s *QueryTestSuite) TestNestedWhereSQL() {
 		return q.WhereIn("age", []any{25, 30}).Where("name", "Tom")
 	}).ToSql().Get()
 
-	assert.Equal(s.T(), "select * from `users` where `name` = ? and (`age` in (?, ?) and `name` = ?)", got)
+	assert.Equal(s.T(), "select * from \"users\" where \"name\" = ? and (\"age\" in (?, ?) and \"name\" = ?)", got)
 }
 
 // --- execution ---------------------------------------------------------------
@@ -305,9 +298,9 @@ func (s *QueryTestSuite) TestNestedWhereSQL() {
 func (s *QueryTestSuite) TestGet() {
 	var users []TestUser
 
-	s.mockReadBuilder.EXPECT().SelectContext(s.ctx, &users, "select * from `users` where `name` = ?", "John").Return(nil).Once()
-	s.mockReadBuilder.EXPECT().Explain("select * from `users` where `name` = ?", "John").Return("select * from `users` where `name` = \"John\"").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select * from `users` where `name` = \"John\"", int64(0), nil).Return().Once()
+	s.mockReadBuilder.EXPECT().SelectContext(s.ctx, &users, "select * from \"users\" where \"name\" = ?", "John").Return(nil).Once()
+	s.mockReadBuilder.EXPECT().Explain("select * from \"users\" where \"name\" = ?", "John").Return("select * from \"users\" where \"name\" = \"John\"").Once()
+	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select * from \"users\" where \"name\" = \"John\"", int64(0), nil).Return().Once()
 
 	s.NoError(s.query.Clone().Where("name", "John").Get(&users))
 }
@@ -315,9 +308,9 @@ func (s *QueryTestSuite) TestGet() {
 func (s *QueryTestSuite) TestFirst() {
 	var user TestUser
 
-	s.mockReadBuilder.EXPECT().GetContext(s.ctx, &user, "select * from `users` where `name` = ? limit 1", "John").Return(nil).Once()
-	s.mockReadBuilder.EXPECT().Explain("select * from `users` where `name` = ? limit 1", "John").Return("select * from `users` where `name` = \"John\" limit 1").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select * from `users` where `name` = \"John\" limit 1", int64(1), nil).Return().Once()
+	s.mockReadBuilder.EXPECT().GetContext(s.ctx, &user, "select * from \"users\" where \"name\" = ? limit 1", "John").Return(nil).Once()
+	s.mockReadBuilder.EXPECT().Explain("select * from \"users\" where \"name\" = ? limit 1", "John").Return("select * from \"users\" where \"name\" = \"John\" limit 1").Once()
+	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select * from \"users\" where \"name\" = \"John\" limit 1", int64(1), nil).Return().Once()
 
 	s.NoError(s.query.Clone().Where("name", "John").First(&user))
 }
@@ -325,9 +318,9 @@ func (s *QueryTestSuite) TestFirst() {
 func (s *QueryTestSuite) TestFirstReportsNoRowsAsEmpty() {
 	var user TestUser
 
-	s.mockReadBuilder.EXPECT().GetContext(s.ctx, &user, "select * from `users` where `name` = ? limit 1", "John").Return(databasesql.ErrNoRows).Once()
-	s.mockReadBuilder.EXPECT().Explain("select * from `users` where `name` = ? limit 1", "John").Return("select * from `users` where `name` = \"John\" limit 1").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select * from `users` where `name` = \"John\" limit 1", int64(0), nil).Return().Once()
+	s.mockReadBuilder.EXPECT().GetContext(s.ctx, &user, "select * from \"users\" where \"name\" = ? limit 1", "John").Return(databasesql.ErrNoRows).Once()
+	s.mockReadBuilder.EXPECT().Explain("select * from \"users\" where \"name\" = ? limit 1", "John").Return("select * from \"users\" where \"name\" = \"John\" limit 1").Once()
+	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select * from \"users\" where \"name\" = \"John\" limit 1", int64(0), nil).Return().Once()
 
 	s.NoError(s.query.Clone().Where("name", "John").First(&user))
 }
@@ -335,9 +328,9 @@ func (s *QueryTestSuite) TestFirstReportsNoRowsAsEmpty() {
 func (s *QueryTestSuite) TestFirstOr() {
 	var user TestUser
 
-	s.mockReadBuilder.EXPECT().GetContext(s.ctx, &user, "select * from `users` where `name` = ? limit 1", "John").Return(databasesql.ErrNoRows).Once()
-	s.mockReadBuilder.EXPECT().Explain("select * from `users` where `name` = ? limit 1", "John").Return("select * from `users` where `name` = \"John\" limit 1").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select * from `users` where `name` = \"John\" limit 1", int64(0), nil).Return().Once()
+	s.mockReadBuilder.EXPECT().GetContext(s.ctx, &user, "select * from \"users\" where \"name\" = ? limit 1", "John").Return(databasesql.ErrNoRows).Once()
+	s.mockReadBuilder.EXPECT().Explain("select * from \"users\" where \"name\" = ? limit 1", "John").Return("select * from \"users\" where \"name\" = \"John\" limit 1").Once()
+	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select * from \"users\" where \"name\" = \"John\" limit 1", int64(0), nil).Return().Once()
 
 	called := false
 	err := s.query.Clone().Where("name", "John").FirstOr(&user, func() error {
@@ -352,9 +345,9 @@ func (s *QueryTestSuite) TestFirstOr() {
 func (s *QueryTestSuite) TestFindShorthand() {
 	var user TestUser
 
-	s.mockReadBuilder.EXPECT().GetContext(s.ctx, &user, "select * from `users` where `id` = ? limit 1", 1).Return(nil).Once()
-	s.mockReadBuilder.EXPECT().Explain("select * from `users` where `id` = ? limit 1", 1).Return("select * from `users` where `id` = 1 limit 1").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select * from `users` where `id` = 1 limit 1", int64(1), nil).Return().Once()
+	s.mockReadBuilder.EXPECT().GetContext(s.ctx, &user, "select * from \"users\" where \"id\" = ? limit 1", 1).Return(nil).Once()
+	s.mockReadBuilder.EXPECT().Explain("select * from \"users\" where \"id\" = ? limit 1", 1).Return("select * from \"users\" where \"id\" = 1 limit 1").Once()
+	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select * from \"users\" where \"id\" = 1 limit 1", int64(1), nil).Return().Once()
 
 	s.NoError(s.query.Clone().Find(&user, 1))
 }
@@ -362,9 +355,9 @@ func (s *QueryTestSuite) TestFindShorthand() {
 func (s *QueryTestSuite) TestFindWithSlice() {
 	var users []TestUser
 
-	s.mockReadBuilder.EXPECT().SelectContext(s.ctx, &users, "select * from `users` where `id` in (?, ?)", 1, 2).Return(nil).Once()
-	s.mockReadBuilder.EXPECT().Explain("select * from `users` where `id` in (?, ?)", 1, 2).Return("select * from `users` where `id` in (1, 2)").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select * from `users` where `id` in (1, 2)", int64(0), nil).Return().Once()
+	s.mockReadBuilder.EXPECT().SelectContext(s.ctx, &users, "select * from \"users\" where \"id\" in (?, ?)", 1, 2).Return(nil).Once()
+	s.mockReadBuilder.EXPECT().Explain("select * from \"users\" where \"id\" in (?, ?)", 1, 2).Return("select * from \"users\" where \"id\" in (1, 2)").Once()
+	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select * from \"users\" where \"id\" in (1, 2)", int64(0), nil).Return().Once()
 
 	s.NoError(s.query.Clone().Find(&users, []int{1, 2}))
 }
@@ -378,17 +371,17 @@ func (s *QueryTestSuite) TestFindRejectsTooManyConditions() {
 func (s *QueryTestSuite) TestCountAndExists() {
 	var count int64
 
-	s.mockReadBuilder.EXPECT().GetContext(s.ctx, &count, "select count(*) as aggregate from `users` where `name` = ?", "John").Run(func(_ context.Context, dest any, _ string, _ ...any) {
+	s.mockReadBuilder.EXPECT().GetContext(s.ctx, &count, "select count(*) as aggregate from \"users\" where \"name\" = ?", "John").Run(func(_ context.Context, dest any, _ string, _ ...any) {
 		*(dest.(*int64)) = 1
 	}).Return(nil).Once()
-	s.mockReadBuilder.EXPECT().Explain("select count(*) as aggregate from `users` where `name` = ?", "John").Return("select count(*) as aggregate from `users` where `name` = \"John\"").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select count(*) as aggregate from `users` where `name` = \"John\"", int64(-1), nil).Return().Once()
+	s.mockReadBuilder.EXPECT().Explain("select count(*) as aggregate from \"users\" where \"name\" = ?", "John").Return("select count(*) as aggregate from \"users\" where \"name\" = \"John\"").Once()
+	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select count(*) as aggregate from \"users\" where \"name\" = \"John\"", int64(-1), nil).Return().Once()
 
 	got, err := s.query.Clone().Where("name", "John").Count()
 	s.NoError(err)
 	s.Equal(int64(1), got)
 
-	s.expectExists(false, " where `name` = ?", "John")
+	s.expectExists(false, " where \"name\" = ?", "John")
 
 	exists, err := s.query.Clone().Where("name", "John").Exists()
 	s.NoError(err)
@@ -407,9 +400,9 @@ func (s *QueryTestSuite) TestInsert() {
 	result := &MockResult{}
 	result.On("RowsAffected").Return(int64(1), nil)
 
-	s.mockWriteBuilder.EXPECT().ExecContext(s.ctx, "insert into `users` (`name`) values (?)", "John").Return(result, nil).Once()
-	s.mockWriteBuilder.EXPECT().Explain("insert into `users` (`name`) values (?)", "John").Return("insert into `users` (`name`) values (\"John\")").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "insert into `users` (`name`) values (\"John\")", int64(1), nil).Return().Once()
+	s.mockWriteBuilder.EXPECT().ExecContext(s.ctx, "insert into \"users\" (\"name\") values (?)", "John").Return(result, nil).Once()
+	s.mockWriteBuilder.EXPECT().Explain("insert into \"users\" (\"name\") values (?)", "John").Return("insert into \"users\" (\"name\") values (\"John\")").Once()
+	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "insert into \"users\" (\"name\") values (\"John\")", int64(1), nil).Return().Once()
 
 	got, err := s.query.Clone().Insert(map[string]any{"name": "John"})
 	s.NoError(err)
@@ -427,33 +420,17 @@ func (s *QueryTestSuite) TestInsertGetID() {
 	result := &MockResult{}
 	result.On("LastInsertId").Return(int64(1), nil)
 
-	s.mockWriteBuilder.EXPECT().ExecContext(s.ctx, "insert into `users` (`age`, `name`) values (?, ?)", 25, "John").Return(result, nil).Once()
-	s.mockWriteBuilder.EXPECT().Explain("insert into `users` (`age`, `name`) values (?, ?)", 25, "John").Return("insert into `users` (`age`, `name`) values (25, \"John\")").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "insert into `users` (`age`, `name`) values (25, \"John\")", int64(1), nil).Return().Once()
+	s.mockWriteBuilder.EXPECT().ExecContext(s.ctx, "insert into \"users\" (\"age\", \"name\") values (?, ?)", 25, "John").Return(result, nil).Once()
+	s.mockWriteBuilder.EXPECT().Explain("insert into \"users\" (\"age\", \"name\") values (?, ?)", 25, "John").Return("insert into \"users\" (\"age\", \"name\") values (25, \"John\")").Once()
+	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "insert into \"users\" (\"age\", \"name\") values (25, \"John\")", int64(1), nil).Return().Once()
 
 	id, err := s.query.Clone().InsertGetID(map[string]any{"name": "John", "age": 25})
 	s.NoError(err)
 	s.Equal(int64(1), id)
 }
 
-func (s *QueryTestSuite) TestInsertGetIDSqlServer() {
-	query := newDialectTestQuery(s.ctx, s.mockReadBuilder, s.mockWriteBuilder, sqlserverdriver.NewQueryGrammar(""), querybuilder.DialectSqlServer, s.mockLogger, "users", nil)
-	const statement = "insert into [users] ([age], [name]) output inserted.[id] values (@p1, @p2)"
-	const explained = "insert into [users] ([age], [name]) output inserted.[id] values (25, 'John')"
-
-	s.mockWriteBuilder.EXPECT().GetContext(s.ctx, mock.Anything, statement, 25, "John").Run(func(_ context.Context, dest any, _ string, _ ...any) {
-		*(dest.(*int64)) = 17
-	}).Return(nil).Once()
-	s.mockWriteBuilder.EXPECT().Explain(statement, 25, "John").Return(explained).Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, explained, int64(1), nil).Return().Once()
-
-	id, err := query.InsertGetID(map[string]any{"name": "John", "age": 25})
-	s.Require().NoError(err)
-	s.Equal(int64(17), id)
-}
-
 func (s *QueryTestSuite) TestInsertGetIDIgnoresSQLKeywordsInValues() {
-	const statement = "insert into `users` (`name`) values (' returning output inserted. ')"
+	const statement = "insert into \"users\" (\"name\") values (' returning output inserted. ')"
 	result := &MockResult{}
 	result.On("LastInsertId").Return(int64(17), nil)
 	s.mockWriteBuilder.EXPECT().ExecContext(s.ctx, statement).Return(result, nil).Once()
@@ -469,9 +446,9 @@ func (s *QueryTestSuite) TestUpdate() {
 	result := &MockResult{}
 	result.On("RowsAffected").Return(int64(1), nil)
 
-	s.mockWriteBuilder.EXPECT().ExecContext(s.ctx, "update `users` set `name` = ? where `id` = ?", "John", 1).Return(result, nil).Once()
-	s.mockWriteBuilder.EXPECT().Explain("update `users` set `name` = ? where `id` = ?", "John", 1).Return("update `users` set `name` = \"John\" where `id` = 1").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "update `users` set `name` = \"John\" where `id` = 1", int64(1), nil).Return().Once()
+	s.mockWriteBuilder.EXPECT().ExecContext(s.ctx, "update \"users\" set \"name\" = ? where \"id\" = ?", "John", 1).Return(result, nil).Once()
+	s.mockWriteBuilder.EXPECT().Explain("update \"users\" set \"name\" = ? where \"id\" = ?", "John", 1).Return("update \"users\" set \"name\" = \"John\" where \"id\" = 1").Once()
+	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "update \"users\" set \"name\" = \"John\" where \"id\" = 1", int64(1), nil).Return().Once()
 
 	got, err := s.query.Clone().Where("id", 1).Update("name", "John")
 	s.NoError(err)
@@ -482,9 +459,9 @@ func (s *QueryTestSuite) TestDelete() {
 	result := &MockResult{}
 	result.On("RowsAffected").Return(int64(1), nil)
 
-	s.mockWriteBuilder.EXPECT().ExecContext(s.ctx, "delete from `users` where `name` = ?", "John").Return(result, nil).Once()
-	s.mockWriteBuilder.EXPECT().Explain("delete from `users` where `name` = ?", "John").Return("delete from `users` where `name` = \"John\"").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "delete from `users` where `name` = \"John\"", int64(1), nil).Return().Once()
+	s.mockWriteBuilder.EXPECT().ExecContext(s.ctx, "delete from \"users\" where \"name\" = ?", "John").Return(result, nil).Once()
+	s.mockWriteBuilder.EXPECT().Explain("delete from \"users\" where \"name\" = ?", "John").Return("delete from \"users\" where \"name\" = \"John\"").Once()
+	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "delete from \"users\" where \"name\" = \"John\"", int64(1), nil).Return().Once()
 
 	got, err := s.query.Clone().Where("name", "John").Delete()
 	s.NoError(err)
@@ -495,28 +472,29 @@ func (s *QueryTestSuite) TestIncrementAndDecrement() {
 	result := &MockResult{}
 	result.On("RowsAffected").Return(int64(1), nil).Twice()
 
-	s.mockWriteBuilder.EXPECT().ExecContext(s.ctx, "update `users` set `age` = `age` + 1 where `name` = ?", "John").Return(result, nil).Once()
-	s.mockWriteBuilder.EXPECT().Explain("update `users` set `age` = `age` + 1 where `name` = ?", "John").Return("update `users` set `age` = `age` + 1 where `name` = \"John\"").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "update `users` set `age` = `age` + 1 where `name` = \"John\"", int64(1), nil).Return().Once()
+	s.mockWriteBuilder.EXPECT().ExecContext(s.ctx, "update \"users\" set \"age\" = \"age\" + 1 where \"name\" = ?", "John").Return(result, nil).Once()
+	s.mockWriteBuilder.EXPECT().Explain("update \"users\" set \"age\" = \"age\" + 1 where \"name\" = ?", "John").Return("update \"users\" set \"age\" = \"age\" + 1 where \"name\" = \"John\"").Once()
+	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "update \"users\" set \"age\" = \"age\" + 1 where \"name\" = \"John\"", int64(1), nil).Return().Once()
 
 	s.NoError(s.query.Clone().Where("name", "John").Increment("age"))
 
-	s.mockWriteBuilder.EXPECT().ExecContext(s.ctx, "update `users` set `age` = `age` - 1 where `name` = ?", "John").Return(result, nil).Once()
-	s.mockWriteBuilder.EXPECT().Explain("update `users` set `age` = `age` - 1 where `name` = ?", "John").Return("update `users` set `age` = `age` - 1 where `name` = \"John\"").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "update `users` set `age` = `age` - 1 where `name` = \"John\"", int64(1), nil).Return().Once()
+	s.mockWriteBuilder.EXPECT().ExecContext(s.ctx, "update \"users\" set \"age\" = \"age\" - 1 where \"name\" = ?", "John").Return(result, nil).Once()
+	s.mockWriteBuilder.EXPECT().Explain("update \"users\" set \"age\" = \"age\" - 1 where \"name\" = ?", "John").Return("update \"users\" set \"age\" = \"age\" - 1 where \"name\" = \"John\"").Once()
+	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "update \"users\" set \"age\" = \"age\" - 1 where \"name\" = \"John\"", int64(1), nil).Return().Once()
 
 	s.NoError(s.query.Clone().Where("name", "John").Decrement("age"))
 }
 
 func (s *QueryTestSuite) TestUpdateOrInsertUpdatesExistingRow() {
-	s.expectExists(true, " where `id` = ?", 1)
+	s.expectExists(true, " where \"id\" = ?", 1)
 
 	result := &MockResult{}
 	result.On("RowsAffected").Return(int64(1), nil)
 
-	s.mockWriteBuilder.EXPECT().ExecContext(s.ctx, "update `users` set `phone` = ? where `id` = ? limit 1", "123", 1).Return(result, nil).Once()
-	s.mockWriteBuilder.EXPECT().Explain("update `users` set `phone` = ? where `id` = ? limit 1", "123", 1).Return("update `users` set `phone` = \"123\" where `id` = 1 limit 1").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "update `users` set `phone` = \"123\" where `id` = 1 limit 1", int64(1), nil).Return().Once()
+	// The base grammar renders no LIMIT on an update; MySQL's "limit 1" is asserted in tests/database/db.
+	s.mockWriteBuilder.EXPECT().ExecContext(s.ctx, "update \"users\" set \"phone\" = ? where \"id\" = ?", "123", 1).Return(result, nil).Once()
+	s.mockWriteBuilder.EXPECT().Explain("update \"users\" set \"phone\" = ? where \"id\" = ?", "123", 1).Return("update \"users\" set \"phone\" = \"123\" where \"id\" = 1").Once()
+	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "update \"users\" set \"phone\" = \"123\" where \"id\" = 1", int64(1), nil).Return().Once()
 
 	got, err := s.query.Clone().UpdateOrInsert(map[string]any{"id": 1}, map[string]any{"phone": "123"})
 	s.NoError(err)
@@ -524,14 +502,14 @@ func (s *QueryTestSuite) TestUpdateOrInsertUpdatesExistingRow() {
 }
 
 func (s *QueryTestSuite) TestUpdateOrInsertInsertsMissingRow() {
-	s.expectExists(false, " where `id` = ?", 1)
+	s.expectExists(false, " where \"id\" = ?", 1)
 
 	result := &MockResult{}
 	result.On("RowsAffected").Return(int64(1), nil)
 
-	s.mockWriteBuilder.EXPECT().ExecContext(s.ctx, "insert into `users` (`id`, `phone`) values (?, ?)", 1, "123").Return(result, nil).Once()
-	s.mockWriteBuilder.EXPECT().Explain("insert into `users` (`id`, `phone`) values (?, ?)", 1, "123").Return("insert into `users` (`id`, `phone`) values (1, \"123\")").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "insert into `users` (`id`, `phone`) values (1, \"123\")", int64(1), nil).Return().Once()
+	s.mockWriteBuilder.EXPECT().ExecContext(s.ctx, "insert into \"users\" (\"id\", \"phone\") values (?, ?)", 1, "123").Return(result, nil).Once()
+	s.mockWriteBuilder.EXPECT().Explain("insert into \"users\" (\"id\", \"phone\") values (?, ?)", 1, "123").Return("insert into \"users\" (\"id\", \"phone\") values (1, \"123\")").Once()
+	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "insert into \"users\" (\"id\", \"phone\") values (1, \"123\")", int64(1), nil).Return().Once()
 
 	got, err := s.query.Clone().UpdateOrInsert(map[string]any{"id": 1}, map[string]any{"phone": "123"})
 	s.NoError(err)
@@ -543,7 +521,7 @@ func (s *QueryTestSuite) TestUpdateOrInsertInsertsMissingRow() {
 // supplied, UpdateOrInsert must not run an update at all, yet still report success. The missing
 // write-builder expectation is the assertion - any update or insert call would fail the mock.
 func (s *QueryTestSuite) TestUpdateOrInsertEmptyValuesSkipsUpdate() {
-	s.expectExists(true, " where `email` = ?", "foo")
+	s.expectExists(true, " where \"email\" = ?", "foo")
 
 	got, err := s.query.Clone().UpdateOrInsert(map[string]any{"email": "foo"}, nil)
 	s.NoError(err)
@@ -554,15 +532,15 @@ func (s *QueryTestSuite) TestPaginate() {
 	var users []TestUser
 	var total int64
 
-	s.mockReadBuilder.EXPECT().GetContext(s.ctx, &total, "select count(*) as aggregate from `users` where `name` = ?", "John").Run(func(_ context.Context, dest any, _ string, _ ...any) {
+	s.mockReadBuilder.EXPECT().GetContext(s.ctx, &total, "select count(*) as aggregate from \"users\" where \"name\" = ?", "John").Run(func(_ context.Context, dest any, _ string, _ ...any) {
 		*(dest.(*int64)) = 2
 	}).Return(nil).Once()
-	s.mockReadBuilder.EXPECT().Explain("select count(*) as aggregate from `users` where `name` = ?", "John").Return("select count(*) as aggregate from `users` where `name` = \"John\"").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select count(*) as aggregate from `users` where `name` = \"John\"", int64(-1), nil).Return().Once()
+	s.mockReadBuilder.EXPECT().Explain("select count(*) as aggregate from \"users\" where \"name\" = ?", "John").Return("select count(*) as aggregate from \"users\" where \"name\" = \"John\"").Once()
+	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select count(*) as aggregate from \"users\" where \"name\" = \"John\"", int64(-1), nil).Return().Once()
 
-	s.mockReadBuilder.EXPECT().SelectContext(s.ctx, &users, "select * from `users` where `name` = ? limit 10 offset 0", "John").Return(nil).Once()
-	s.mockReadBuilder.EXPECT().Explain("select * from `users` where `name` = ? limit 10 offset 0", "John").Return("select * from `users` where `name` = \"John\" limit 10 offset 0").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select * from `users` where `name` = \"John\" limit 10 offset 0", int64(0), nil).Return().Once()
+	s.mockReadBuilder.EXPECT().SelectContext(s.ctx, &users, "select * from \"users\" where \"name\" = ? limit 10 offset 0", "John").Return(nil).Once()
+	s.mockReadBuilder.EXPECT().Explain("select * from \"users\" where \"name\" = ? limit 10 offset 0", "John").Return("select * from \"users\" where \"name\" = \"John\" limit 10 offset 0").Once()
+	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select * from \"users\" where \"name\" = \"John\" limit 10 offset 0", int64(0), nil).Return().Once()
 
 	s.NoError(s.query.Clone().Where("name", "John").Paginate(1, 10, &users, &total))
 	s.Equal(int64(2), total)
@@ -579,11 +557,11 @@ func (s *QueryTestSuite) TestPaginate() {
 func (s *QueryTestSuite) TestPaginateNilTotalSkipsFetchOnZeroCount() {
 	var users []TestUser
 
-	s.mockReadBuilder.EXPECT().GetContext(s.ctx, mock.Anything, "select count(*) as aggregate from `users` where `name` = ?", "John").Run(func(_ context.Context, dest any, _ string, _ ...any) {
+	s.mockReadBuilder.EXPECT().GetContext(s.ctx, mock.Anything, "select count(*) as aggregate from \"users\" where \"name\" = ?", "John").Run(func(_ context.Context, dest any, _ string, _ ...any) {
 		*(dest.(*int64)) = 0
 	}).Return(nil).Once()
-	s.mockReadBuilder.EXPECT().Explain("select count(*) as aggregate from `users` where `name` = ?", "John").Return("select count(*) as aggregate from `users` where `name` = \"John\"").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select count(*) as aggregate from `users` where `name` = \"John\"", int64(-1), nil).Return().Once()
+	s.mockReadBuilder.EXPECT().Explain("select count(*) as aggregate from \"users\" where \"name\" = ?", "John").Return("select count(*) as aggregate from \"users\" where \"name\" = \"John\"").Once()
+	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select count(*) as aggregate from \"users\" where \"name\" = \"John\"", int64(-1), nil).Return().Once()
 
 	s.NoError(s.query.Clone().Where("name", "John").Paginate(1, 10, &users, nil))
 	s.Empty(users)
@@ -597,7 +575,7 @@ func (s *QueryTestSuite) TestWhen() {
 		return q.Where("name", "John")
 	})
 	s.True(applied)
-	s.Equal("select * from `users` where `name` = ?", got.ToSql().Get())
+	s.Equal("select * from \"users\" where \"name\" = ?", got.ToSql().Get())
 
 	got = s.query.Clone().When(false, func(q db.Query) db.Query {
 		s.Fail("the true callback must not run")
@@ -605,17 +583,13 @@ func (s *QueryTestSuite) TestWhen() {
 	}, func(q db.Query) db.Query {
 		return q.Where("name", "Jane")
 	})
-	s.Equal("select * from `users` where `name` = ?", got.ToSql().Get())
+	s.Equal("select * from \"users\" where \"name\" = ?", got.ToSql().Get())
 }
 
 func (s *QueryTestSuite) TestMissingTableIsRejected() {
 	query := newDialectTestQuery(s.ctx, s.mockReadBuilder, s.mockWriteBuilder, s.grammar, querybuilder.DialectMySQL, s.mockLogger, "", nil)
 
 	s.Equal(errors.DatabaseTableIsRequired, query.Where("id", 1).Get(&[]TestUser{}))
-}
-
-func (s *QueryTestSuite) TestToRawSql() {
-	s.Equal("select * from `users` where `name` = 'John'", s.query.Clone().Where("name", "John").ToRawSql().Get())
 }
 
 // TestCursorPaginate asserts the facade emits the keyset statement for a first page and projects the
@@ -633,13 +607,13 @@ func (s *QueryTestSuite) TestCursorPaginate() {
 			gotSQL = sql
 			gotArgs = args
 		}).Return(nil).Once()
-	s.mockReadBuilder.EXPECT().Explain(mock.Anything).Return("select * from `users` order by `id` asc limit 16").Once()
+	s.mockReadBuilder.EXPECT().Explain(mock.Anything).Return("select * from \"users\" order by \"id\" asc limit 16").Once()
 	s.mockLogger.EXPECT().Trace(s.ctx, s.now, mock.Anything, int64(0), nil).Return().Once()
 
 	page, err := s.query.Clone().OrderBy("id").CursorPaginate(15, "", &items)
 	s.Require().NoError(err)
 
-	s.Equal("select * from `users` order by `id` asc limit 16", gotSQL)
+	s.Equal("select * from \"users\" order by \"id\" asc limit 16", gotSQL)
 	s.Empty(gotArgs)
 	s.Equal(15, page.PerPage)
 	s.False(page.HasMorePages)
@@ -667,7 +641,7 @@ func (s *QueryTestSuite) TestCursorPaginateWithCursor() {
 	page, err := s.query.Clone().OrderBy("id").CursorPaginate(15, encoded, &items)
 	s.Require().NoError(err)
 
-	s.Equal("select * from `users` where (`id` > ?) order by `id` asc limit 16", gotSQL)
+	s.Equal("select * from \"users\" where (\"id\" > ?) order by \"id\" asc limit 16", gotSQL)
 	s.Equal(15, page.PerPage)
 	s.False(page.HasMorePages)
 }
@@ -696,24 +670,24 @@ func (s *QueryTestSuite) TestCursorPaginateRequiresAnOrder() {
 // (MySQL grammar, so backtick quoting and our ? placeholder).
 func (s *QueryTestSuite) TestImplode() {
 	// Test without glue.
-	s.mockReadBuilder.EXPECT().SelectContext(s.ctx, mock.Anything, "select `foo` from `users` where `id` = ?", 1).
+	s.mockReadBuilder.EXPECT().SelectContext(s.ctx, mock.Anything, "select \"foo\" from \"users\" where \"id\" = ?", 1).
 		Run(func(_ context.Context, dest any, _ string, _ ...any) {
 			*(dest.(*[]map[string]any)) = []map[string]any{{"foo": "bar"}, {"foo": "baz"}}
 		}).Return(nil).Once()
-	s.mockReadBuilder.EXPECT().Explain("select `foo` from `users` where `id` = ?", 1).Return("select `foo` from `users` where `id` = 1").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select `foo` from `users` where `id` = 1", int64(2), nil).Return().Once()
+	s.mockReadBuilder.EXPECT().Explain("select \"foo\" from \"users\" where \"id\" = ?", 1).Return("select \"foo\" from \"users\" where \"id\" = 1").Once()
+	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select \"foo\" from \"users\" where \"id\" = 1", int64(2), nil).Return().Once()
 
 	var withoutGlue string
 	s.NoError(s.query.Clone().Where("id", 1).Implode("foo", "", &withoutGlue))
 	s.Equal("barbaz", withoutGlue)
 
 	// Test with glue.
-	s.mockReadBuilder.EXPECT().SelectContext(s.ctx, mock.Anything, "select `foo` from `users` where `id` = ?", 1).
+	s.mockReadBuilder.EXPECT().SelectContext(s.ctx, mock.Anything, "select \"foo\" from \"users\" where \"id\" = ?", 1).
 		Run(func(_ context.Context, dest any, _ string, _ ...any) {
 			*(dest.(*[]map[string]any)) = []map[string]any{{"foo": "bar"}, {"foo": "baz"}}
 		}).Return(nil).Once()
-	s.mockReadBuilder.EXPECT().Explain("select `foo` from `users` where `id` = ?", 1).Return("select `foo` from `users` where `id` = 1").Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select `foo` from `users` where `id` = 1", int64(2), nil).Return().Once()
+	s.mockReadBuilder.EXPECT().Explain("select \"foo\" from \"users\" where \"id\" = ?", 1).Return("select \"foo\" from \"users\" where \"id\" = 1").Once()
+	s.mockLogger.EXPECT().Trace(s.ctx, s.now, "select \"foo\" from \"users\" where \"id\" = 1", int64(2), nil).Return().Once()
 
 	var withGlue string
 	s.NoError(s.query.Clone().Where("id", 1).Implode("foo", ",", &withGlue))
@@ -727,8 +701,8 @@ func (s *QueryTestSuite) TestImplode() {
 // backtick-quoted while the raw expression's own text (UPPER("foo")) is passed through verbatim.
 func (s *QueryTestSuite) TestRawValue() {
 	const (
-		wantSQL = "select UPPER(\"foo\") from `users` where `id` = ? limit 1"
-		explain = "select UPPER(\"foo\") from `users` where `id` = 1"
+		wantSQL = "select UPPER(\"foo\") from \"users\" where \"id\" = ? limit 1"
+		explain = "select UPPER(\"foo\") from \"users\" where \"id\" = 1"
 	)
 
 	s.mockReadBuilder.EXPECT().GetContext(s.ctx, mock.Anything, wantSQL, 1).
@@ -793,7 +767,7 @@ func (s *QueryTestSuite) TestDoesntExistOr() {
 // expectCount scripts the count aggregate statement for the "users"
 // table with no additional clauses.
 func (s *QueryTestSuite) expectCount(count int64) {
-	const sql = "select count(*) as aggregate from `users`"
+	const sql = "select count(*) as aggregate from \"users\""
 
 	s.mockReadBuilder.EXPECT().GetContext(s.ctx, mock.Anything, sql).
 		Run(func(_ context.Context, dest any, _ string, _ ...any) {
@@ -913,9 +887,9 @@ func (s *QueryTestSuite) TestChunkStopsOnTheEmptyChunk() {
 
 	s.Equal([]int{2, 2}, sizes)
 	s.Equal([]string{
-		"select * from `users` order by `id` asc limit 2 offset 0",
-		"select * from `users` order by `id` asc limit 2 offset 2",
-		"select * from `users` order by `id` asc limit 2 offset 4",
+		"select * from \"users\" order by \"id\" asc limit 2 offset 0",
+		"select * from \"users\" order by \"id\" asc limit 2 offset 2",
+		"select * from \"users\" order by \"id\" asc limit 2 offset 4",
 	}, *queries)
 }
 
@@ -976,7 +950,7 @@ func (s *QueryTestSuite) TestChunkStopsCleanlyOnChunkStopped() {
 }
 
 func (s *QueryTestSuite) expectExists(exists bool, where string, values ...any) {
-	statement := "select exists(select * from `users`" + where + ") as `exists`"
+	statement := "select exists(select * from \"users\"" + where + ") as \"exists\""
 	s.mockReadBuilder.EXPECT().GetContext(s.ctx, mock.Anything, statement, values...).Run(func(_ context.Context, dest any, _ string, _ ...any) {
 		*dest.(*bool) = exists
 	}).Return(nil).Once()

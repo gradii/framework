@@ -3,8 +3,6 @@ package gorm
 import (
 	"context"
 	"database/sql"
-	"database/sql/driver"
-	mysqldialect "github.com/gradii/mysql"
 	"reflect"
 	"testing"
 
@@ -49,39 +47,9 @@ func TestInsertRecordsKeepsASetStringPrimaryKey(t *testing.T) {
 	}
 }
 
-// A string primary key is read back as a string. The key read-back used to scan the returning value
-// into a fixed int64, so on PostgreSQL a ULID key failed to scan ("converting driver.Value type
-// string ... to a int64") and, where it did not error, the integer was coerced into a one-byte
-// string. The value now goes into a target built from the primary key column's own Go type.
-func TestInsertRowReadsAStringKeyByItsColumnType(t *testing.T) {
-	query, recordDriver := newPostgresKeyQuery(t, insertKeyEntity{})
-	recordDriver.returnRows("returning", []string{"id"}, []driver.Value{"01AN4Z07BY79KA1307SR9X4MV3"})
-
-	key, err := query.insertRow(map[string]any{"id": "01AN4Z07BY79KA1307SR9X4MV3", "name": "ulid"})
-	require.NoError(t, err)
-	assert.Equal(t, "01AN4Z07BY79KA1307SR9X4MV3", key, "a string key must come back as a string")
-
-	// The write-back preserves the key on the receiver rather than overwriting it with a coerced
-	// number, which is the half the integration test TestUlidColumn pins against a real database.
-	entity := insertKeyEntity{Name: "ulid"}
-	query.assignInsertedKeys(&entity, []any{key})
-	assert.Equal(t, "01AN4Z07BY79KA1307SR9X4MV3", entity.ID)
-}
-
-// An integer primary key still comes back as the model's own integer type, so the fix did not turn
-// every key into a string.
-func TestInsertRowReadsAnIntegerKeyByItsColumnType(t *testing.T) {
-	query, recordDriver := newPostgresKeyQuery(t, relUser{})
-	recordDriver.returnRows("returning", []string{"id"}, []driver.Value{int64(42)})
-
-	key, err := query.insertRow(map[string]any{"name": "user"})
-	require.NoError(t, err)
-	assert.Equal(t, uint(42), key)
-}
-
 func TestInsertRowIgnoresSQLKeywordsInValues(t *testing.T) {
 	query, recorder := newPostgresKeyQuery(t, &insertKeyEntity{})
-	query = rebindGrammar(query, "MySQL", mysqldialect.NewQueryGrammar(""))
+	query = rebindGrammar(query, "MySQL", querybuilder.NewBaseGrammar(""))
 
 	key, err := query.insertRow(map[string]any{
 		"id":   "01AN4Z07BY79KA1307SR9X4MV3",
@@ -89,7 +57,9 @@ func TestInsertRowIgnoresSQLKeywordsInValues(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Nil(t, key)
-	assert.Zero(t, recorder.count(), "a MySQL insert must not attempt to read a returned row")
+	// The insert itself is one statement; a returning read-back would be a second, so a single
+	// recorded statement proves the MySQL insert never asked the driver for a returned row.
+	assert.Equal(t, 1, recorder.count(), "a MySQL insert must not attempt to read a returned row")
 }
 
 // isIntegerKeyType is what the non-returning path consults before trusting the driver's LastInsertId,

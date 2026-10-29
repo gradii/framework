@@ -2,7 +2,6 @@ package gorm
 
 import (
 	"database/sql/driver"
-	postgresdriver "github.com/gradii/postgres"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -271,7 +270,7 @@ func TestWithAttributesReachTheCreatedModel(t *testing.T) {
 // The pending attributes are written to the row when the model is created.
 func TestCreateWritesThePendingAttributes(t *testing.T) {
 	query, recorder := newPostgresKeyQuery(t, &shortcutUser{})
-	recorder.returnRows(`insert into "shortcut_users"`, []string{"id"}, []driver.Value{int64(1)})
+	recorder.returnLastInsertID(1)
 
 	user := &shortcutUser{Score: 3}
 	require.NoError(t, query.WithAttributes("name", "preset", false).Create(user))
@@ -341,9 +340,11 @@ func TestTouchStampsTheUpdatedAtColumn(t *testing.T) {
 
 // upsert() on a model stamps both timestamps onto every row, updates every inserted column except
 // created_at by default, and always refreshes updated_at. Mirrors Builder::upsert with
-// addTimestampsToUpsertValues and addUpdatedAtToUpsertColumns.
+// addTimestampsToUpsertValues and addUpdatedAtToUpsertColumns. The compiled upsert statement is dialect specific
+// (Postgres spells it "on conflict ... do update set"); it is pinned in the integration corpus
+// (tests/database/query) against the real driver grammar.
 func TestUpsertStampsTimestampsAndUpdatesAllButCreatedAt(t *testing.T) {
-	query := rebindGrammar(compiledQuery(t, &shortcutUser{}, Conditions{}), "postgres", postgresdriver.NewQueryGrammar(""))
+	query := compiledQuery(t, &shortcutUser{}, Conditions{})
 
 	records, err := query.insertRecords([]shortcutUser{{Name: "a", Score: 1}, {Name: "b", Score: 2}})
 	require.NoError(t, err)
@@ -367,11 +368,6 @@ func TestUpsertStampsTimestampsAndUpdatesAllButCreatedAt(t *testing.T) {
 	}
 	assert.Equal(t, []string{"name", "score", "updated_at"}, columns, "created_at is never updated; updated_at always is")
 
-	builder, err := query.newBuilder()
-	require.NoError(t, err)
-	statement, _ := builder.ToUpsertSQL(records, []string{"name"}, updates)
-	require.NoError(t, builder.Error())
-	assert.Equal(t, `insert into "shortcut_users" ("created_at", "name", "score", "updated_at") values (?, ?, ?, ?), (?, ?, ?, ?) on conflict ("name") do update set "name" = "excluded"."name", "score" = "excluded"."score", "updated_at" = "excluded"."updated_at"`, statement)
 }
 
 // An explicit update list is used as given, with updated_at joining it; an empty list inserts only.

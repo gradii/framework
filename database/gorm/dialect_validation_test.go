@@ -9,7 +9,6 @@ import (
 	contractsdriver "github.com/gradii/framework/contracts/database/driver"
 	databasedriver "github.com/gradii/framework/database/driver"
 	"github.com/gradii/framework/errors"
-	mysql "github.com/gradii/mysql"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,7 +18,7 @@ type unversionedDialect struct{ contractsdriver.Dialect }
 func TestTransactionDoesNotRequireOptionalVersionDiscovery(t *testing.T) {
 	pool := sql.OpenDB(stubTxConnector{})
 	t.Cleanup(func() { require.NoError(t, pool.Close()) })
-	dialect := unversionedDialect{Dialect: mysql.NewDialect()}
+	dialect := unversionedDialect{Dialect: baseTestDialect{}}
 	components, err := databasedriver.ResolveQueryComponents(dialect, contractsdriver.GrammarOptions{})
 	require.NoError(t, err)
 	lookups := 0

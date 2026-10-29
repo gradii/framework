@@ -1,3 +1,7 @@
+// Checked in as .go.test on purpose: this case drives the connection-alias machinery through a
+// real driver, and the framework's own go.mod must not require one. It is therefore invisible to
+// go build, go test, go vet and go mod tidy; .cnb/ci.sh renames it into place for the runs that
+// build the workspace holding the four driver modules, and renames it back on exit.
 package internal_test
 
 import (

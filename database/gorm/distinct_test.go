@@ -1,105 +1,63 @@
 package gorm
 
 import (
-	mysqldialect "github.com/gradii/mysql"
-	postgresdriver "github.com/gradii/postgres"
-	sqlitedriver "github.com/gradii/sqlite"
-	sqlserverdriver "github.com/gradii/sqlserver"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	querybuilder "github.com/gradii/framework/database/query"
 )
 
-// Laravel keeps the DISTINCT columns separate from both the projection and its bindings.
+// Laravel keeps the DISTINCT columns separate from both the projection and its bindings. These run
+// on the framework's own base grammar; the dialect spelling of DISTINCT ON — Postgres' `select
+// distinct on (...)` — is pinned in the integration corpus (tests/database/query) against the real
+// driver grammars.
 func TestDistinctPreservesSelection(t *testing.T) {
-	for _, test := range []struct {
-		name     string
-		grammar  querybuilder.Grammar
-		selected string
-		all      string
-		count    string
-	}{
-		{
-			name:     "postgres",
-			grammar:  postgresdriver.NewQueryGrammar(""),
-			selected: `select distinct on ("name") "name", ? as flag from "users" where "id" = ?`,
-			all:      `select distinct "name", ? as flag from "users" where "id" = ?`,
-			count:    `select count(distinct "name") as aggregate from "users" where "id" = ?`,
-		},
-		{
-			name:     "mysql",
-			grammar:  mysqldialect.NewQueryGrammar(""),
-			selected: "select distinct `name`, ? as flag from `users` where `id` = ?",
-			all:      "select distinct `name`, ? as flag from `users` where `id` = ?",
-			count:    "select count(distinct `name`) as aggregate from `users` where `id` = ?",
-		},
-		{
-			name:     "sqlite",
-			grammar:  sqlitedriver.NewQueryGrammar(""),
-			selected: `select distinct "name", ? as flag from "users" where "id" = ?`,
-			all:      `select distinct "name", ? as flag from "users" where "id" = ?`,
-			count:    `select count(distinct "name") as aggregate from "users" where "id" = ?`,
-		},
-		{
-			name:     "sqlserver",
-			grammar:  sqlserverdriver.NewQueryGrammar(""),
-			selected: "select distinct [name], ? as flag from [users] where [id] = ?",
-			all:      "select distinct [name], ? as flag from [users] where [id] = ?",
-			count:    "select count(distinct [name]) as aggregate from [users] where [id] = ?",
-		},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			query := rebindGrammar(compiledQuery(t, &getColumnsUser{}, Conditions{}), test.name, test.grammar)
-			base := query.Select("name").SelectRaw("? as flag", 1).Where("id", 9).(*Query)
-			columns := []string{"name"}
-			selected := base.clone().Distinct(columns...).(*Query)
-			columns[0] = "id"
-			all := selected.clone().Distinct().(*Query)
+	query := compiledQuery(t, &getColumnsUser{}, Conditions{})
+	base := query.Select("name").SelectRaw("? as flag", 1).Where("id", 9).(*Query)
+	columns := []string{"name"}
+	selected := base.clone().Distinct(columns...).(*Query)
+	// Writing through the caller's slice must not reach the query, which copies it.
+	columns[0] = "id"
+	all := selected.clone().Distinct().(*Query)
 
-			statement, bindings, err := selected.compileSelect()
-			require.NoError(t, err)
-			assert.Equal(t, test.selected, statement)
-			assert.Equal(t, []any{1, 9}, bindings)
+	statement, bindings, err := selected.compileSelect()
+	require.NoError(t, err)
+	assert.Equal(t, `select distinct "name", ? as flag from "users" where "id" = ?`, statement)
+	assert.Equal(t, []any{1, 9}, bindings)
 
-			statement, bindings, err = all.compileSelect()
-			require.NoError(t, err)
-			assert.Equal(t, test.all, statement)
-			assert.Equal(t, []any{1, 9}, bindings)
+	statement, bindings, err = all.compileSelect()
+	require.NoError(t, err)
+	assert.Equal(t, `select distinct "name", ? as flag from "users" where "id" = ?`, statement)
+	assert.Equal(t, []any{1, 9}, bindings)
 
-			statement, bindings, err = selected.compileAggregate("count", []any{"*"})
-			require.NoError(t, err)
-			assert.Equal(t, test.count, statement)
-			assert.Equal(t, []any{9}, bindings)
+	statement, bindings, err = selected.compileAggregate("count", []any{"*"})
+	require.NoError(t, err)
+	assert.Equal(t, `select count(distinct "name") as aggregate from "users" where "id" = ?`, statement)
+	assert.Equal(t, []any{9}, bindings)
 
-			assert.False(t, base.builder.DistinctFlag())
-			assert.Len(t, base.builder.Selects(), 2)
-		})
-	}
+	// Distinct is written to the clone, not the query it branched from.
+	assert.False(t, base.builder.DistinctFlag())
+	assert.Len(t, base.builder.Selects(), 2)
 }
 
 func TestDistinctPreservesRelationAggregate(t *testing.T) {
-	// Rebind first: rebindGrammar installs a fresh builder, so a Distinct written before it would be
-	// discarded along with the builder it was written to.
-	query := rebindGrammar(newRelQueryWith(t, &relUser{}), "postgres", postgresdriver.NewQueryGrammar(""))
-	query = query.WithCount("Books").Distinct("name").(*Query)
+	query := newRelQueryWith(t, &relUser{}).WithCount("Books").Distinct("name").(*Query)
 
 	statement, bindings, err := query.compileSelect()
 	require.NoError(t, err)
-	assert.Contains(t, statement, `select distinct on ("name") "rel_users".*`)
+	assert.Contains(t, statement, `select distinct "rel_users".*`)
 	assert.Contains(t, statement, `(select count(*) from "rel_books"`)
 	assert.Contains(t, statement, `AS "books_count"`)
 	assert.Empty(t, bindings)
 }
 
 func TestSelectPreservesDistinctColumns(t *testing.T) {
-	query := rebindGrammar(compiledQuery(t, &getColumnsUser{}, Conditions{}), "postgres", postgresdriver.NewQueryGrammar(""))
+	query := compiledQuery(t, &getColumnsUser{}, Conditions{})
+	// A later Select replaces the projection but must leave the DISTINCT columns in place.
 	selected := query.SelectRaw("? as old", 1).Distinct("name").Select("id").(*Query)
 
 	statement, bindings, err := selected.compileSelect()
 	require.NoError(t, err)
-	assert.Equal(t, `select distinct on ("name") "id" from "users"`, statement)
+	assert.Equal(t, `select distinct "id" from "users"`, statement)
 	assert.Empty(t, bindings)
 }

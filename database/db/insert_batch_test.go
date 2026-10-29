@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	mysqldialect "github.com/gradii/mysql"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -33,24 +32,24 @@ func TestBuildInsertKeepsColumnOnlyALaterRecordCarries(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	query := newDialectTestQuery(context.Background(), mocksdb.NewBuilder(t), mocksdb.NewBuilder(t), mysqldialect.NewQueryGrammar(""), querybuilder.DialectMySQL, mockslogger.NewLogger(t), "products", nil)
+	query := newDialectTestQuery(context.Background(), mocksdb.NewBuilder(t), mocksdb.NewBuilder(t), querybuilder.NewBaseGrammar(""), querybuilder.DialectMySQL, mockslogger.NewLogger(t), "products", nil)
 
 	sql, args, err := query.buildInsert(records)
 	assert.NoError(t, err)
-	assert.Equal(t, "insert into `products` (`name`, `weight`) values (?, ?), (?, ?)", sql)
+	assert.Equal(t, "insert into \"products\" (\"name\", \"weight\") values (?, ?), (?, ?)", sql)
 	assert.Equal(t, []any{"row1", nil, "row2", &weight}, args)
 }
 
 // A batch whose records already share their columns must compile exactly as before, so the fix changes
 // nothing for the common case.
 func TestBuildInsertHomogeneousBatchIsUnchanged(t *testing.T) {
-	query := newDialectTestQuery(context.Background(), mocksdb.NewBuilder(t), mocksdb.NewBuilder(t), mysqldialect.NewQueryGrammar(""), querybuilder.DialectMySQL, mockslogger.NewLogger(t), "products", nil)
+	query := newDialectTestQuery(context.Background(), mocksdb.NewBuilder(t), mocksdb.NewBuilder(t), querybuilder.NewBaseGrammar(""), querybuilder.DialectMySQL, mockslogger.NewLogger(t), "products", nil)
 
 	sql, args, err := query.buildInsert([]map[string]any{
 		{"name": "row1", "weight": 1},
 		{"name": "row2", "weight": 2},
 	})
 	assert.NoError(t, err)
-	assert.Equal(t, "insert into `products` (`name`, `weight`) values (?, ?), (?, ?)", sql)
+	assert.Equal(t, "insert into \"products\" (\"name\", \"weight\") values (?, ?), (?, ?)", sql)
 	assert.Equal(t, []any{"row1", 1, "row2", 2}, args)
 }

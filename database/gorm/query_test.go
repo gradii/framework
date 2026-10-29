@@ -1227,13 +1227,13 @@ func TestBasicSelectUseWritePdo(t *testing.T) {
 	// get() reads through the replica.
 	var first []getColumnsUser
 	assert.NoError(t, query.Get(&first))
-	assert.Equal(t, "select * from `users`", reader.last(t).sql)
+	assert.Equal(t, "select * from \"users\"", reader.last(t).sql)
 	assert.Equal(t, 0, writer.count())
 
 	// useWritePdo()->get() forces the write connection.
 	var second []getColumnsUser
 	assert.NoError(t, query.UseWritePdo().Get(&second))
-	assert.Equal(t, "select * from `users`", writer.last(t).sql)
+	assert.Equal(t, "select * from \"users\"", writer.last(t).sql)
 	assert.Equal(t, 1, reader.count())
 }
 

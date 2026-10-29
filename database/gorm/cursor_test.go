@@ -37,7 +37,7 @@ func TestCursorPaginateFirstPage(t *testing.T) {
 	page, err := query.CursorPaginate(15, "", &items)
 	require.NoError(t, err)
 
-	assert.Equal(t, "select * from `rel_users` order by `id` asc limit 16", recorder.last(t).sql)
+	assert.Equal(t, "select * from \"rel_users\" order by \"id\" asc limit 16", recorder.last(t).sql)
 	assert.Equal(t, 15, page.PerPage)
 	assert.False(t, page.HasMorePages)
 	assert.Nil(t, page.NextCursor)
@@ -62,7 +62,7 @@ func TestCursorPaginateWithCursor(t *testing.T) {
 
 	// The ORM stores orders as raw fragments, which the facade converts back into columns and
 	// directions so the predicate can be built; the emitted ORDER BY must be unchanged by that.
-	assert.Equal(t, "select * from `rel_users` where (`id` > ?) order by `id` asc limit 16", recorder.last(t).sql)
+	assert.Equal(t, "select * from \"rel_users\" where (\"id\" > ?) order by \"id\" asc limit 16", recorder.last(t).sql)
 }
 
 // TestCursorPaginateRejectsAMalformedCursor pins that a non-empty cursor which cannot be decoded is

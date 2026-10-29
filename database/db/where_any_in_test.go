@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	mysqldialect "github.com/gradii/mysql"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -16,7 +15,7 @@ import (
 func newWhereAnyQuery() *Query {
 	return newDialectTestQuery(
 		context.Background(), nil, nil,
-		mysqldialect.NewQueryGrammar(""), querybuilder.DialectMySQL,
+		querybuilder.NewBaseGrammar(""), querybuilder.DialectMySQL,
 		nil, "users", nil,
 	)
 }
@@ -42,55 +41,55 @@ func TestWhereAnyFamilyExpandsInSlice(t *testing.T) {
 		{
 			"whereAny IN expands per column",
 			func(q db.Query) db.Query { return q.WhereAny([]string{"name", "email"}, "IN", []any{"one", "two"}) },
-			"select * from `users` where (`name` in (?, ?) or `email` in (?, ?))",
+			"select * from \"users\" where (\"name\" in (?, ?) or \"email\" in (?, ?))",
 			[]any{"one", "two", "one", "two"},
 		},
 		{
 			"whereAll IN expands per column",
 			func(q db.Query) db.Query { return q.WhereAll([]string{"name", "email"}, "IN", []any{"one", "two"}) },
-			"select * from `users` where (`name` in (?, ?) and `email` in (?, ?))",
+			"select * from \"users\" where (\"name\" in (?, ?) and \"email\" in (?, ?))",
 			[]any{"one", "two", "one", "two"},
 		},
 		{
 			"whereNone IN expands per column and negates the group",
 			func(q db.Query) db.Query { return q.WhereNone([]string{"name", "email"}, "IN", []any{"one", "two"}) },
-			"select * from `users` where not (`name` in (?, ?) or `email` in (?, ?))",
+			"select * from \"users\" where not (\"name\" in (?, ?) or \"email\" in (?, ?))",
 			[]any{"one", "two", "one", "two"},
 		},
 		{
 			"whereAny NOT IN expands per column",
 			func(q db.Query) db.Query { return q.WhereAny([]string{"name"}, "NOT IN", []any{"one", "two"}) },
-			"select * from `users` where (`name` not in (?, ?))",
+			"select * from \"users\" where (\"name\" not in (?, ?))",
 			[]any{"one", "two"},
 		},
 		{
 			"whereAny empty IN matches nothing",
 			func(q db.Query) db.Query { return q.WhereAny([]string{"name"}, "IN", []any{}) },
-			"select * from `users` where (0 = 1)",
+			"select * from \"users\" where (0 = 1)",
 			[]any{},
 		},
 		{
 			"whereAll empty IN matches nothing",
 			func(q db.Query) db.Query { return q.WhereAll([]string{"name", "email"}, "IN", []any{}) },
-			"select * from `users` where (0 = 1 and 0 = 1)",
+			"select * from \"users\" where (0 = 1 and 0 = 1)",
 			[]any{},
 		},
 		{
 			"whereNone empty IN matches everything",
 			func(q db.Query) db.Query { return q.WhereNone([]string{"name"}, "IN", []any{}) },
-			"select * from `users` where not (0 = 1)",
+			"select * from \"users\" where not (0 = 1)",
 			[]any{},
 		},
 		{
 			"whereAny empty NOT IN matches everything",
 			func(q db.Query) db.Query { return q.WhereAny([]string{"name"}, "NOT IN", []any{}) },
-			"select * from `users` where (1 = 1)",
+			"select * from \"users\" where (1 = 1)",
 			[]any{},
 		},
 		{
 			"scalar operator is unchanged",
 			func(q db.Query) db.Query { return q.WhereAny([]string{"name", "email"}, "=", "x") },
-			"select * from `users` where (`name` = ? or `email` = ?)",
+			"select * from \"users\" where (\"name\" = ? or \"email\" = ?)",
 			[]any{"x", "x"},
 		},
 	}

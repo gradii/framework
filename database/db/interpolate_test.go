@@ -45,10 +45,10 @@ func TestInterpolateNumberedFormLeavesUnusableDollarIntact(t *testing.T) {
 // dialect still use is rendered exactly as before.
 func TestInterpolateQuestionMarkFormUnchanged(t *testing.T) {
 	// With no bindings there is nothing to inline, so a "?" statement is returned untouched.
-	assert.Equal(t, "select * from `users` where `name` = ?", Explain("select * from `users` where `name` = ?"))
+	assert.Equal(t, "select * from \"users\" where \"name\" = ?", Explain("select * from \"users\" where \"name\" = ?"))
 	assert.Equal(t,
-		"select * from `users` where `name` = 'John' and `id` = 1",
-		Explain("select * from `users` where `name` = ? and `id` = ?", "John", 1))
+		"select * from \"users\" where \"name\" = 'John' and \"id\" = 1",
+		Explain("select * from \"users\" where \"name\" = ? and \"id\" = ?", "John", 1))
 }
 
 // TestInterpolateQuestionFormIgnoresQuotedDollar pins that a "$<n>" inside a quoted literal, in a
@@ -78,13 +78,13 @@ func TestInterpolateNumberedFormIgnoresQuotedDollar(t *testing.T) {
 // recognise, so a ToRawSql-style render of a SQL Server statement left every binding uninterpolated.
 func TestInterpolateSqlServerPlaceholders(t *testing.T) {
 	assert.Equal(t,
-		`insert into [users] ([name], [age]) values ('John', 25)`,
-		Explain(`insert into [users] ([name], [age]) values (@p1, @p2)`, "John", 25))
+		`insert into "users" ("name", "age") values ('John', 25)`,
+		Explain(`insert into "users" ("name", "age") values (@p1, @p2)`, "John", 25))
 
 	// The placeholders are rendered by their own number, not by order of appearance.
 	assert.Equal(t,
-		`select * from [t] where [b] = 2 and [a] = 1`,
-		Explain(`select * from [t] where [b] = @p2 and [a] = @p1`, 1, 2))
+		`select * from "t" where "b" = 2 and "a" = 1`,
+		Explain(`select * from "t" where "b" = @p2 and "a" = @p1`, 1, 2))
 }
 
 // TestInterpolateSqlServerPlaceholderScope pins the edges of the "@pN" recognition: a marker inside
@@ -92,16 +92,16 @@ func TestInterpolateSqlServerPlaceholders(t *testing.T) {
 // statement quoting "@p1" stays on the positional form.
 func TestInterpolateSqlServerPlaceholderScope(t *testing.T) {
 	assert.Equal(t,
-		`insert into [t] (a) values ('x', '@p2')`,
-		Explain(`insert into [t] (a) values (@p1, '@p2')`, "x", "y"))
+		`insert into "t" (a) values ('x', '@p2')`,
+		Explain(`insert into "t" (a) values (@p1, '@p2')`, "x", "y"))
 
 	assert.Equal(t,
-		`select * from [t] where a = 1 and b = @p`,
-		Explain(`select * from [t] where a = @p1 and b = @p`, 1))
+		`select * from "t" where a = 1 and b = @p`,
+		Explain(`select * from "t" where a = @p1 and b = @p`, 1))
 
 	assert.Equal(t,
-		`select * from [t] where note = '@p1' and id = 7`,
-		Explain(`select * from [t] where note = '@p1' and id = ?`, 7))
+		`select * from "t" where note = '@p1' and id = 7`,
+		Explain(`select * from "t" where note = '@p1' and id = ?`, 7))
 }
 
 // TestInterpolateOrdinaryStatementsUnchanged guards that quote tracking does not alter the rendering

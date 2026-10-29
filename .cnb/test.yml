@@ -2,6 +2,7 @@
 #   Test          .github/workflows/test.yml, test_pr.yml (goravel/.github test.yml)
 #   Test External .github/workflows/test_external.yml
 #   Test Database (added here only: no upstream counterpart)
+#   Driver Free   (added here only: proves the framework module needs no driver)
 #
 # CNB has no matrix, so every Go version is its own pipeline, and the pipelines
 # of an event run in parallel. The windows job of Test is not ported, the hosted
@@ -43,6 +44,11 @@
     - name: checkout compatible modules and run all root tests
       timeout: 30m
       script: bash .cnb/ci.sh unit
+    # Runs after the suite above, in the same workspace: the *.go.test files need a driver
+    # module, so they are renamed into place here and renamed back when this stage ends.
+    - name: run the specified tests
+      timeout: 20m
+      script: bash .cnb/ci.sh specified
 
 .test-database: &test-database
   <<: *go
@@ -76,6 +82,24 @@
       timeout: 30m
       script: bash .cnb/ci.sh integration
 
+.test-driver-free: &test-driver-free
+  <<: *go
+  stages:
+    # No sibling checkout and no ci.sh: this pipeline only has to prove that the
+    # framework module resolves, builds, tests and tidies on its own, so any
+    # driver module creeping back into go.mod fails the build.
+    - name: build, test and tidy the framework module alone
+      timeout: 20m
+      script: |
+        for f in $(git ls-files '*.go.test'); do
+          if [ -e "${f%.test}" ]; then
+            echo "a specified test is renamed in: ${f%.test}; tidy would then require a driver module"
+            exit 1
+          fi
+        done
+        GOWORK=off go test -count=1 ./...
+        GOWORK=off go mod tidy -diff
+
 main:
   push:
     - name: Test (go 1.26)
@@ -104,8 +128,18 @@ main:
         image: golang:1.27
         volumes: *go-cache
 # Pull requests into any branch, like the unfiltered pull_request of GitHub.
+    - name: Driver Free (go 1.27)
+      <<: *test-driver-free
+      docker:
+        image: golang:1.27
+        volumes: *go-cache
 "**":
   pull_request:
+    - name: Driver Free (go 1.27)
+      <<: *test-driver-free
+      docker:
+        image: golang:1.27
+        volumes: *go-cache-read-only
     - name: Test (go 1.26)
       <<: *test
       docker:

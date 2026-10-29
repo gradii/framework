@@ -1,13 +1,9 @@
 package gorm
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	contractsdatabase "github.com/gradii/framework/contracts/database"
-	contractsdriver "github.com/gradii/framework/contracts/database/driver"
 )
 
 func TestRandomOrderFunction(t *testing.T) {
@@ -21,6 +17,10 @@ func TestRandomOrderFunction(t *testing.T) {
 // resolved when the statement is compiled (sql.go drives builder.Lock from conditions.lockForUpdate/
 // sharedLock), not by a GORM clause, so this keeps it covered in-package rather than only by the
 // Docker-gated integration suite's TestLockForUpdate / TestSharedLock.
+//
+// The dialect spellings differ — the base grammar and MySQL share "lock in share mode" where Postgres
+// uses "for share" — and are pinned in the integration corpus (tests/database/query), which runs the
+// real driver grammars.
 func TestCompileSelect_LockRendering(t *testing.T) {
 	// lockForUpdate() renders the exclusive clause, sharedLock() the shared one.
 	sql, _, err := compiledQuery(t, &relUser{}, Conditions{}).LockForUpdate().(*Query).compileSelect()
@@ -48,21 +48,4 @@ func TestCompileSelect_LockRendering(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotContains(t, sql, "for update")
 	assert.NotContains(t, sql, "share")
-}
-
-// TestCompileSelect_SharedLockPostgres pins the dialect override: Postgres spells the shared lock
-// "for share", unlike the base and MySQL grammars' "lock in share mode".
-func TestCompileSelect_SharedLockPostgres(t *testing.T) {
-	conditions := Conditions{model: &relUser{}}
-	query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{Driver: "postgres"}, stubWriter(t), nil, nil, nil, nil, &conditions, nil)
-	dialect := testDialect("postgres")
-	grammar := dialect.NewQueryGrammar(contractsdriver.GrammarOptions{})
-	ok := grammar != nil
-	assert.True(t, ok)
-	query = rebindGrammar(query, "postgres", grammar)
-	query.SharedLock()
-
-	sql, _, err := query.compileSelect()
-	assert.NoError(t, err)
-	assert.Contains(t, sql, "for share")
 }

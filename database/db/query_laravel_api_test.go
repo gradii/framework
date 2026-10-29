@@ -2,7 +2,7 @@ package db
 
 import (
 	"context"
-	mysqldialect "github.com/gradii/mysql"
+	querybuilder "github.com/gradii/framework/database/query"
 	"testing"
 
 	"github.com/gradii/framework/contracts/database/db"
@@ -13,42 +13,42 @@ import (
 )
 
 func TestPublicLaravelClausesMutateAndExplicitCloneIsolates(t *testing.T) {
-	var query db.Query = newDialectTestQuery(context.Background(), nil, nil, mysqldialect.NewQueryGrammar(""), "mysql", nil, "users", nil)
+	var query db.Query = newDialectTestQuery(context.Background(), nil, nil, querybuilder.NewBaseGrammar(""), "mysql", nil, "users", nil)
 	snapshot := query.Clone()
 	subquery := query.NewQuery().From("posts").Select("user_id").Where("published", true)
 	joined := query.Select("users.id").JoinSub(subquery, "p", "users.id", "=", "p.user_id").
 		WhereDate("created_at", ">=", "2026-01-01").GroupBy("users.id").HavingRaw("count(*) > ?", 2)
-	assert.Equal(t, "select `users`.`id` from `users` inner join (select `user_id` from `posts` where `published` = ?) as `p` on `users`.`id` = `p`.`user_id` where date(`created_at`) >= ? group by `users`.`id` having count(*) > ?", joined.ToSql().Get())
+	assert.Equal(t, "select \"users\".\"id\" from \"users\" inner join (select \"user_id\" from \"posts\" where \"published\" = ?) as \"p\" on \"users\".\"id\" = \"p\".\"user_id\" where date(\"created_at\") >= ? group by \"users\".\"id\" having count(*) > ?", joined.ToSql().Get())
 	assert.Equal(t, []any{true, "2026-01-01", 2}, joined.GetBindings())
 	assert.Same(t, query, joined)
-	assert.Equal(t, "select * from `users`", snapshot.ToSql().Get())
+	assert.Equal(t, "select * from \"users\"", snapshot.ToSql().Get())
 	assert.Empty(t, snapshot.GetBindings())
 	query = query.NewQuery().From("users")
 
 	joined = query.Join("posts", func(join db.JoinClause) db.JoinClause {
 		return join.On("users.id", "=", "posts.user_id").Where("posts.state", "active")
 	}).Where("users.active", true)
-	assert.Equal(t, "select * from `users` inner join `posts` on `users`.`id` = `posts`.`user_id` and `posts`.`state` = ? where `users`.`active` = ?", joined.ToSql().Get())
+	assert.Equal(t, "select * from \"users\" inner join \"posts\" on \"users\".\"id\" = \"posts\".\"user_id\" and \"posts\".\"state\" = ? where \"users\".\"active\" = ?", joined.ToSql().Get())
 	assert.Equal(t, []any{"active", true}, joined.GetBindings())
 }
 
 func TestPublicBeforeQueryAndSubqueryCallbacks(t *testing.T) {
-	query := newDialectTestQuery(context.Background(), nil, nil, mysqldialect.NewQueryGrammar(""), "mysql", nil, "users", nil)
+	query := newDialectTestQuery(context.Background(), nil, nil, querybuilder.NewBaseGrammar(""), "mysql", nil, "users", nil)
 	calls := 0
 	callback := query.BeforeQuery(func(q db.Query) db.Query { calls++; return q.Where("active", true) })
-	assert.Equal(t, "select * from `users` where `active` = ?", callback.ToSql().Get())
-	assert.Equal(t, "select * from `users` where `active` = ?", callback.ToSql().Get())
+	assert.Equal(t, "select * from \"users\" where \"active\" = ?", callback.ToSql().Get())
+	assert.Equal(t, "select * from \"users\" where \"active\" = ?", callback.ToSql().Get())
 	assert.Equal(t, 1, calls)
 	subquery := query.NewQuery().From("users").WhereNotExists(func(q db.Query) db.Query {
 		return q.From("posts").WhereColumn("posts.user_id", "users.id").Where("published", true)
 	})
-	assert.Equal(t, "select * from `users` where not exists (select * from `posts` where `posts`.`user_id` = `users`.`id` and `published` = ?)", subquery.ToSql().Get())
+	assert.Equal(t, "select * from \"users\" where not exists (select * from \"posts\" where \"posts\".\"user_id\" = \"users\".\"id\" and \"published\" = ?)", subquery.ToSql().Get())
 	assert.Equal(t, []any{true}, subquery.GetBindings())
 }
 
 func (s *QueryTestSuite) TestSimplePaginateProbesWithoutCount() {
 	users := []TestUser{}
-	const statement = "select * from `users` order by `id` asc limit 3 offset 2"
+	const statement = "select * from \"users\" order by \"id\" asc limit 3 offset 2"
 	s.mockReadBuilder.EXPECT().SelectContext(s.ctx, &users, statement).Run(func(_ context.Context, dest any, _ string, _ ...any) {
 		*dest.(*[]TestUser) = []TestUser{{ID: 3}, {ID: 4}, {ID: 5}}
 	}).Return(nil).Once()
@@ -64,7 +64,7 @@ func (s *QueryTestSuite) TestSimplePaginateProbesWithoutCount() {
 
 func (s *QueryTestSuite) TestSimplePaginateEmptyAndInvalidDest() {
 	var users []TestUser
-	const statement = "select * from `users` limit 16 offset 0"
+	const statement = "select * from \"users\" limit 16 offset 0"
 	s.mockReadBuilder.EXPECT().SelectContext(s.ctx, &users, statement).Return(nil).Once()
 	s.mockReadBuilder.EXPECT().Explain(statement).Return(statement).Once()
 	s.mockLogger.EXPECT().Trace(s.ctx, s.now, statement, int64(0), nil).Once()
@@ -78,7 +78,7 @@ func (s *QueryTestSuite) TestSimplePaginateEmptyAndInvalidDest() {
 }
 
 func (s *QueryTestSuite) TestInsertUsingExecutesWriterAndCleansBindings() {
-	const statement = "insert into `users` (`name`) select `name` from `archived_users` where `active` = ?"
+	const statement = "insert into \"users\" (\"name\") select \"name\" from \"archived_users\" where \"active\" = ?"
 	result := &MockResult{}
 	result.On("RowsAffected").Return(int64(2), nil).Once()
 	s.mockWriteBuilder.EXPECT().ExecContext(s.ctx, statement, true).Return(result, nil).Once()
@@ -91,27 +91,21 @@ func (s *QueryTestSuite) TestInsertUsingExecutesWriterAndCleansBindings() {
 	s.Equal(int64(2), got.RowsAffected)
 }
 
-func (s *QueryTestSuite) TestUpsertDefaultAndExplicitValues() {
-	const statement = "insert into `users` (`email`, `name`) values (?, ?) on duplicate key update `name` = ?"
-	result := &MockResult{}
-	result.On("RowsAffected").Return(int64(2), nil).Once()
-	s.mockWriteBuilder.EXPECT().ExecContext(s.ctx, statement, "foo", "Alice", "Bob").Return(result, nil).Once()
-	s.mockWriteBuilder.EXPECT().Explain(statement, "foo", "Alice", "Bob").Return(statement).Once()
-	s.mockLogger.EXPECT().Trace(s.ctx, s.now, statement, int64(2), nil).Once()
-	got, err := s.query.Upsert(map[string]any{"name": "Alice", "email": "foo"}, []string{"email"}, map[string]any{"name": "Bob"})
-	s.NoError(err)
-	s.Equal(int64(2), got.RowsAffected)
+// Upsert and InsertOrIgnore treat empty input as a no-op: nothing is compiled and the result
+// reports zero affected rows. The upsert statement itself is dialect-specific - the base grammar
+// refuses upserts - so its SQL is asserted against the real drivers in tests/database/db.
+func (s *QueryTestSuite) TestUpsertEmptyInputsAreNoOps() {
 	empty, err := s.query.Upsert([]map[string]any{}, []string{"id"})
 	s.NoError(err)
 	s.Zero(empty.RowsAffected)
+
 	empty, err = s.query.InsertOrIgnore(map[string]any{})
 	s.NoError(err)
 	s.Zero(empty.RowsAffected)
 }
-
 func (s *QueryTestSuite) TestAfterQueryTransformsRowsWithoutASecondSelect() {
 	var values []TestUser
-	const statement = "select * from `users`"
+	const statement = "select * from \"users\""
 	s.mockReadBuilder.EXPECT().SelectContext(s.ctx, &values, statement).Run(func(_ context.Context, dest any, _ string, _ ...any) {
 		*dest.(*[]TestUser) = []TestUser{{ID: 1}, {ID: 2}}
 	}).Return(nil).Once()
@@ -123,7 +117,7 @@ func (s *QueryTestSuite) TestAfterQueryTransformsRowsWithoutASecondSelect() {
 }
 
 func (s *QueryTestSuite) TestLazyStopsBeforeFetchingTheNextChunk() {
-	const statement = "select * from `users` order by `id` asc limit 2 offset 0"
+	const statement = "select * from \"users\" order by \"id\" asc limit 2 offset 0"
 	s.mockReadBuilder.EXPECT().SelectContext(s.ctx, mock.Anything, statement).Run(func(_ context.Context, dest any, _ string, _ ...any) {
 		*dest.(*[]map[string]any) = []map[string]any{{"id": 1}, {"id": 2}}
 	}).Return(nil).Once()

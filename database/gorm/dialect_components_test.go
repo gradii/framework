@@ -7,33 +7,33 @@ import (
 	contractsdatabase "github.com/gradii/framework/contracts/database"
 	contractsdriver "github.com/gradii/framework/contracts/database/driver"
 	databasedriver "github.com/gradii/framework/database/driver"
-	mysqldialect "github.com/gradii/mysql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-type versionContextKey struct{}
-
-func TestORMWithContextRebindsVersionAndKeepsSuppliedProcessor(t *testing.T) {
-	sourceContext := context.WithValue(context.Background(), versionContextKey{}, "8.0.32")
-	mariaContext := context.WithValue(context.Background(), versionContextKey{}, "10.11.8-MariaDB")
-	versionSource := func(ctx context.Context) (string, error) { return ctx.Value(versionContextKey{}).(string), nil }
-	dialect := mysqldialect.NewDialect()
-	options := contractsdriver.GrammarOptions{Driver: "mysql", Prefix: "app_", ServerVersion: func() (string, error) { return versionSource(sourceContext) }}
-	components, err := databasedriver.ResolveQueryComponents(dialect, options)
+// TestORMWithContextKeepsSuppliedProcessor pins that a branch taken with WithContext keeps the
+// processor the connection supplied rather than rebuilding one: the processor carries the
+// connection's result post-processing, so a branch that swapped it would post-process its rows
+// differently from the query it branched from.
+//
+// WithContext also re-derives the compiler from the branch's own context, so a version-dependent
+// grammar compiles against that context's server version (MySQL 8's json_value against MariaDB's
+// json_unquote(json_extract(...))). That SQL is dialect specific and is pinned in the integration
+// corpus (tests/database/gorm) against the real driver grammars.
+func TestORMWithContextKeepsSuppliedProcessor(t *testing.T) {
+	components, err := databasedriver.ResolveQueryComponents(baseTestDialect{}, contractsdriver.GrammarOptions{Driver: "base"})
 	require.NoError(t, err)
-	components.VersionSource = versionSource
-	query := NewQuery(sourceContext, nil, contractsdatabase.Config{Driver: "mysql", Prefix: "app_"}, nil, nil, nil, nil, nil, nil, nil, components).
-		Table("users").Select("data->language").(*Query)
 
-	child := query.WithContext(mariaContext).(*Query)
+	query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, nil, nil, components).
+		Table("users").Select("name").(*Query)
+
+	child := query.WithContext(context.Background()).(*Query)
 	for _, current := range []*Query{child, child.Clone().(*Query)} {
-		statement, _, err := current.compileSelect()
+		_, _, err := current.compileSelect()
 		require.NoError(t, err)
-		assert.Equal(t, "select json_value(`data`, '$.\"language\"') from `app_users`", statement)
 		assert.Same(t, components.Processor, current.builder.Processor())
 	}
-	statement, _, err := query.compileSelect()
-	require.NoError(t, err)
-	assert.Equal(t, "select json_unquote(json_extract(`data`, '$.\"language\"')) from `app_users`", statement)
+
+	// The receiver is left as it was built.
+	assert.Same(t, components.Processor, query.builder.Processor())
 }

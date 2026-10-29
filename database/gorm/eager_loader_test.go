@@ -573,6 +573,24 @@ type recordingSQLDriver struct {
 	mu         sync.Mutex
 	statements []recordedStatement
 	canned     []cannedDriverResult
+	lastID     int64
+}
+
+// returnLastInsertID makes the driver report id from LastInsertId for every later statement, so the
+// non-returning insert path can carry a generated key back to the ORM.
+func (d *recordingSQLDriver) returnLastInsertID(id int64) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	d.lastID = id
+}
+
+// insertID reads the key the driver was told to report.
+func (d *recordingSQLDriver) insertID() int64 {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	return d.lastID
 }
 
 func (d *recordingSQLDriver) Open(string) (driver.Conn, error) { return &recordingConn{driver: d}, nil }
@@ -622,7 +640,7 @@ func (d *recordingSQLDriver) cannedFor(sql string) driver.Rows {
 }
 
 // count reports how many statements the driver has seen, so a test can pin that a loader ran each of
-// its reads exactly once.
+// its reads exactly once. Writes are recorded too, so a create test can pin the insert statement it ran.
 func (d *recordingSQLDriver) count() int {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -659,9 +677,19 @@ type recordingStmt struct {
 
 func (s *recordingStmt) Close() error  { return nil }
 func (s *recordingStmt) NumInput() int { return -1 }
-func (s *recordingStmt) Exec([]driver.Value) (driver.Result, error) {
-	return driver.RowsAffected(0), nil
+func (s *recordingStmt) Exec(args []driver.Value) (driver.Result, error) {
+	s.driver.record(s.query, args)
+	return &recordingResult{id: s.driver.insertID()}, nil
 }
+
+// recordingResult is the result an Exec reports. It answers LastInsertId with the key the driver was
+// told to hand back, so an insert that reads its generated key from the driver (the path a base
+// grammar takes, which emits no returning clause) can be driven with no database behind it; a plain
+// driver.RowsAffected refuses LastInsertId, which would mask the framework's own insert behaviour.
+type recordingResult struct{ id int64 }
+
+func (r *recordingResult) LastInsertId() (int64, error) { return r.id, nil }
+func (r *recordingResult) RowsAffected() (int64, error) { return 0, nil }
 func (s *recordingStmt) Query(args []driver.Value) (driver.Rows, error) {
 	s.driver.record(s.query, args)
 

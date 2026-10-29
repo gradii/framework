@@ -12,15 +12,23 @@ import (
 	contractstelemetry "github.com/gradii/framework/contracts/telemetry"
 	databasedriver "github.com/gradii/framework/database/driver"
 	querybuilder "github.com/gradii/framework/database/query"
-	mysqldialect "github.com/gradii/mysql"
-	postgresdriver "github.com/gradii/postgres"
-	sqlitedriver "github.com/gradii/sqlite"
-	sqlserverdriver "github.com/gradii/sqlserver"
 )
+
+// baseTestDialect is the framework's own dialect: the base grammar and the base processor, which
+// is what a connection runs on when its driver supplies no dialect of its own.
+type baseTestDialect struct{ contractsdriver.Dialect }
+
+func (baseTestDialect) Name() string { return "base" }
+
+func (baseTestDialect) NewQueryGrammar(options contractsdriver.GrammarOptions) querybuilder.Grammar {
+	return querybuilder.NewBaseGrammar(options.Prefix)
+}
+
+func (baseTestDialect) NewProcessor() querybuilder.Processor { return querybuilder.NewProcessor("") }
 
 // Recording pools exercise query execution without requiring server-version SQL.
 func mysqlTestComponents() databasedriver.QueryComponents {
-	dialect := mysqldialect.NewDialect()
+	dialect := baseTestDialect{}
 	return databasedriver.QueryComponents{
 		Grammar:   dialect.NewQueryGrammar(contractsdriver.GrammarOptions{}),
 		Processor: dialect.NewProcessor(), Dialect: dialect,
@@ -28,18 +36,10 @@ func mysqlTestComponents() databasedriver.QueryComponents {
 }
 
 func testDialect(name string) contractsdriver.Dialect {
-	switch querybuilder.CanonicalDialect(name) {
-	case querybuilder.DialectMySQL:
-		return mysqldialect.NewDialect(name)
-	case querybuilder.DialectPostgres:
-		return postgresdriver.NewDialect()
-	case querybuilder.DialectSqlite:
-		return sqlitedriver.NewDialect()
-	case querybuilder.DialectSqlServer:
-		return sqlserverdriver.NewDialect()
-	default:
+	if querybuilder.CanonicalDialect(name) == "" {
 		return nil
 	}
+	return baseTestDialect{}
 }
 
 func newDialectQuery(ctx context.Context, config config.Config, dbConfig contractsdatabase.Config, writer *sql.DB, tx *sql.Tx, grammar contractsdriver.Grammar, log log.Log, observers []contractsorm.ModelToObserver, conditions *Conditions, resolver contractstelemetry.Resolver, supplied ...databasedriver.QueryComponents) *Query {

@@ -1,8 +1,7 @@
 package gorm
 
 import (
-	mysqldialect "github.com/gradii/mysql"
-	postgresdriver "github.com/gradii/postgres"
+	querybuilder "github.com/gradii/framework/database/query"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -27,11 +26,11 @@ func (refreshTarget) Connection() string { return "target" }
 // on Postgres. TestCustomConnection covers the same defect end to end; this pins it without a
 // database behind it.
 func TestRefreshConnectionRebindsTheDialect(t *testing.T) {
-	source := rebindGrammar(compiledQuery(t, &refreshTarget{}, Conditions{}), "mysql", mysqldialect.NewQueryGrammar(""))
+	source := rebindGrammar(compiledQuery(t, &refreshTarget{}, Conditions{}), "mysql", querybuilder.NewBaseGrammar(""))
 	source.dbConfig = contractsdatabase.Config{Driver: "mysql", Connection: "source"}
 	source.Where("id", 1)
 
-	target := rebindGrammar(compiledQuery(t, &refreshTarget{}, Conditions{}), "postgres", postgresdriver.NewQueryGrammar(""))
+	target := rebindGrammar(compiledQuery(t, &refreshTarget{}, Conditions{}), "postgres", querybuilder.NewBaseGrammar(""))
 	target.dbConfig = contractsdatabase.Config{Driver: "postgres", Connection: "target"}
 
 	// The connection being moved to is already built, so no config lookup happens here.
@@ -50,7 +49,7 @@ func TestRefreshConnectionRebindsTheDialect(t *testing.T) {
 	assert.Equal(t, "mysql", source.dbConfig.Driver)
 	sourceStatement, sourceBindings, err := source.compileSelect()
 	require.NoError(t, err)
-	assert.Equal(t, "select * from `target_rows` where `id` = ?", sourceStatement, "the receiver still renders the dialect it was built for")
+	assert.Equal(t, "select * from \"target_rows\" where \"id\" = ?", sourceStatement, "the receiver still renders the dialect it was built for")
 	assert.Equal(t, []any{1}, sourceBindings)
 }
 

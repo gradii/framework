@@ -49,11 +49,34 @@ does not depend on a developer's ignored `go.work`, rewrite module declarations,
 or run `go mod tidy`. Each repository carries the same `ci.sh` so its CNB
 checkout can prepare the workspace without fetching an unpinned helper script.
 
+A test file whose name ends in `.go.test` is checked in uncompiled on purpose: it
+needs a driver module that this repository's `go.mod` must not require, so it stays
+invisible to `go build`, `go test`, `go vet`, `golangci-lint` and `go mod tidy`. Such
+files are run by their own step, `bash .cnb/ci.sh specified`, which the Test pipelines
+run after the ordinary suites: it builds the workspace, renames each file into place,
+runs the tests it declares (selected by name with `go test -run`, because the file
+list form would build them as a throwaway package that cannot import an internal
+one), and renames the file back. The framework's
+`database/internal/connection_alias_test.go.test` is the one that exists for that
+reason, and a plain `go test ./...` therefore does not run it. Never run `go mod tidy`
+in a checkout where such a file is renamed in: `tidy` reads test imports and would add
+the driver module to `go.mod`. The Driver Free pipeline fails loudly if it finds one
+renamed in.
+
+`bash .cnb/ci.sh unit` also has a companion that needs none of that: the Driver
+Free pipeline runs the framework module alone (`GOWORK=off go test ./...`
+followed by `GOWORK=off go mod tidy -diff`), so a driver module cannot creep back
+into the framework's `go.mod`.
+
 ## Local development before publication
 
+The framework module stands alone: from the framework checkout, `go test ./...`
+and `go mod tidy` both work without any workspace, because its own tests run on
+the base grammar rather than on a driver dialect.
+
 The Gradii modules do not need to be published to develop or test them together.
-From the framework checkout, create an ignored local workspace using the sibling
-checkouts and the independent integration module:
+The integration module and the four driver repositories still need the sibling
+checkouts, so create an ignored local workspace from the framework checkout:
 
 ```sh
 go work init . ./tests ../mysql ../postgres ../sqlite ../sqlserver

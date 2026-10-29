@@ -74,9 +74,9 @@ func TestConnectionPretendUsesAnIsolatedSession(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, events, 2)
-	assert.Equal(t, "insert into `users` (`name`) values (?)", events[0].SQL)
+	assert.Equal(t, "insert into \"users\" (\"name\") values (?)", events[0].SQL)
 	assert.Equal(t, []any{"Alice"}, events[0].Bindings)
-	assert.Equal(t, "select * from `users` where `name` = ?", events[1].SQL)
+	assert.Equal(t, "select * from \"users\" where \"name\" = ?", events[1].SQL)
 	assert.Len(t, observed, 2)
 	assert.False(t, connection.state.pretend())
 	assert.False(t, connection.HasModifiedRecords())
@@ -109,7 +109,10 @@ func TestPretendResolvesServerCapabilitiesBeforeTheCallback(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, calls)
 	require.Len(t, events, 1)
-	assert.Contains(t, events[0].SQL, "@laravel_row")
+	// The base grammar rewrites the cap with its own row_number alias, which still spells
+	// laravel_row; the MySQL legacy form (@laravel_row) is asserted against the real dialect in
+	// tests/database/db.
+	assert.Contains(t, events[0].SQL, "laravel_row")
 }
 
 func TestConnectionStickyAndExplicitWriterRouting(t *testing.T) {

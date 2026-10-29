@@ -134,10 +134,13 @@ func TestCompileSelect_NestedCallbackIsGrouped(t *testing.T) {
 }
 
 // TestCompileSelect_OrConnectorSurvivesEveryDispatchBranch pins that applySingleWhere carries the
-// connector into each branch that has a boolean argument. The (column, value) default branch used to
-// hand the condition to a hard-wired-and primitive, so an OrWhere rendered "and" and matched nothing;
-// the JSON-length branch did the same through the builder's plain WhereJsonLength. Both must keep the
-// "or".
+// connector into the branch that takes a boolean argument: the (column, value) default branch used
+// to hand the condition to a hard-wired-and primitive, so an OrWhere rendered "and" and matched
+// nothing. It must keep the "or".
+//
+// The JSON-length branch had the same defect through the builder's plain WhereJsonLength; it only
+// renders on a dialect that supports the operation, so it is pinned in the integration corpus
+// (tests/database/gorm) against the real Postgres grammar.
 func TestCompileSelect_OrConnectorSurvivesEveryDispatchBranch(t *testing.T) {
 	t.Run("column and value", func(t *testing.T) {
 		query := compiledQuery(t, &relUser{}, Conditions{
@@ -153,23 +156,6 @@ func TestCompileSelect_OrConnectorSurvivesEveryDispatchBranch(t *testing.T) {
 		assert.Contains(t, sql, `"name" = ? or "email" = ?`)
 	})
 
-	t.Run("json length", func(t *testing.T) {
-		// WhereJsonLength only renders on a dialect that supports it, so compile with Postgres.
-		conditions := Conditions{
-			model: &relUser{},
-			where: []contractsdriver.Where{
-				{Query: "name", Args: []any{"John"}},
-				{Query: "tags", Args: []any{2}, Or: true, Type: contractsdriver.WhereTypeJsonLength},
-			},
-		}
-		query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{Driver: "postgres"}, stubWriter(t), nil, nil, nil, nil, &conditions, nil)
-		query.queryGrammar, _ = querybuilder.NewGrammar("postgres", "")
-
-		sql, _, err := query.compileSelect()
-		assert.NoError(t, err)
-
-		assert.Contains(t, sql, `"name" = ? or jsonb_array_length`)
-	})
 }
 
 func TestCompileDelete(t *testing.T) {
