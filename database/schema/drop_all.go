@@ -2,6 +2,7 @@ package schema
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/gradii/framework/contracts/database/driver"
 	contractsschema "github.com/gradii/framework/contracts/database/schema"
@@ -24,6 +25,11 @@ func (r *Schema) dropAllScoped(kind string) error {
 			return errors.SchemaCurrentNamespaceUnavailable
 		}
 		check := func(namespace, name string) error {
+			// A name or namespace carrying the separator cannot be re-joined and re-split safely: the
+			// statement would target a different object than the one validated here.
+			if strings.Contains(namespace, ".") || strings.Contains(name, ".") {
+				return errors.SchemaObjectNameAmbiguous.Args(namespace, name)
+			}
 			if !slices.Contains(names, namespace) {
 				return errors.SchemaObjectOutsideScope.Args(namespace, name)
 			}

@@ -85,6 +85,7 @@ func TestDropAllScopesShareOneWriterAndRejectUnsafeMetadata(t *testing.T) {
 			name                       string
 			names                      []string
 			namespace                  string
+			objectName                 string
 			failure, wantError         error
 			wantReadObjects, wantWrite bool
 		}{
@@ -93,9 +94,15 @@ func TestDropAllScopesShareOneWriterAndRejectUnsafeMetadata(t *testing.T) {
 			{name: "unknown namespace", names: []string{""}, wantError: errors.SchemaCurrentNamespaceUnavailable},
 			{name: "scope query failed", failure: context.Canceled, wantError: context.Canceled},
 			{name: "outside object", names: []string{"tenant"}, namespace: "outside", wantReadObjects: true, wantError: errors.SchemaObjectOutsideScope},
+			{name: "dotted object name", names: []string{"tenant"}, namespace: "tenant", objectName: "outside.victim", wantReadObjects: true, wantError: errors.SchemaObjectNameAmbiguous},
+			{name: "dotted namespace", names: []string{"tenant.staging"}, namespace: "tenant.staging", wantReadObjects: true, wantError: errors.SchemaObjectNameAmbiguous},
 		} {
 			t.Run(kind+"/"+tc.name, func(t *testing.T) {
-				connection := &scopeTestSession{names: tc.names, failure: tc.failure, objects: []map[string]any{{"name": "object", "schema": tc.namespace, "type": "enum"}}}
+				objectName := tc.objectName
+				if objectName == "" {
+					objectName = "object"
+				}
+				connection := &scopeTestSession{names: tc.names, failure: tc.failure, objects: []map[string]any{{"name": objectName, "schema": tc.namespace, "type": "enum"}}}
 				pool := &scopeTestDB{session: connection}
 				grammar := &scopeTestGrammar{}
 				s := &Schema{db: pool, constraints: &schemaConstraintScope{}, grammar: grammar, queryProcessor: &processors.BaseProcessor{}}
@@ -117,7 +124,11 @@ func TestDropAllScopesShareOneWriterAndRejectUnsafeMetadata(t *testing.T) {
 				wantReads := []string{"scope"}
 				if tc.wantReadObjects {
 					wantReads = append(wantReads, "objects")
-					require.Equal(t, []any{"tenant"}, connection.bindings)
+					wantBindings := make([]any, len(tc.names))
+					for i, name := range tc.names {
+						wantBindings[i] = name
+					}
+					require.Equal(t, wantBindings, connection.bindings)
 				}
 				require.Equal(t, wantReads, connection.reads)
 				require.Equal(t, tc.wantWrite, grammar.compiled)
