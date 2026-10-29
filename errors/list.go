@@ -441,9 +441,15 @@ var (
 	ValidationRuleRegisterFailed   = New("rule register failed: %v")
 	ValidationUnknownRule          = New("unknown validation rule: %s")
 
+	ViewCompileFailed      = New("failed to compile views: %v")
 	ViewFSRequired         = New("view filesystem is required")
 	ViewFSRootNotDirectory = New("view filesystem root %q is not a directory")
+	ViewInvalidData        = New("view data for %s must be a map with string keys or a struct, got %T")
 	ViewInvalidFSRoot      = New("invalid view filesystem root %q: %v")
+	ViewNoneExist          = New("none of the views %v exist")
+	ViewParseFailed        = New("failed to parse view %s: %v")
+	ViewReadFailed         = New("failed to read view %s: %v")
+	ViewSourceWalkFailed   = New("failed to walk view source %s: %v")
 	ViewTemplateNotExist   = New("view template %s does not exist")
 )
 
