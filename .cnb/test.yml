@@ -70,7 +70,7 @@
       timeout: 30m
       script: bash .cnb/ci.sh integration
 
-master:
+main:
   push:
     - name: Test (go 1.26)
       <<: *test
