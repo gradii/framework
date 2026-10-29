@@ -65,7 +65,9 @@ func (r *Query) updateAssignments(values any) (map[string]any, error) {
 		return nil, errors.DatabaseUnsupportedType.Args(reflected.Type().String(), "map[string]any or struct")
 	}
 
-	addAutoUpdateTime(assignments, filter, restricted, schema)
+	if err := addAutoUpdateTime(assignments, filter, restricted, schema, reflected.Kind() == reflect.Struct); err != nil {
+		return nil, err
+	}
 
 	return assignments, nil
 }
@@ -91,7 +93,9 @@ func (r *Query) saveAssignments(value any) (map[string]any, error) {
 			assignments[column] = modelColumnBinding(schema, column, item)
 		}
 
-		addAutoUpdateTime(assignments, filter, restricted, schema)
+		if err := addAutoUpdateTime(assignments, filter, restricted, schema, false); err != nil {
+			return nil, err
+		}
 
 		return assignments, nil
 	}
@@ -116,7 +120,9 @@ func (r *Query) saveAssignments(value any) (map[string]any, error) {
 		}
 	}
 
-	addAutoUpdateTime(assignments, filter, restricted, schema)
+	if err := addAutoUpdateTime(assignments, filter, restricted, schema, true); err != nil {
+		return nil, err
+	}
 
 	return assignments, nil
 }
@@ -249,12 +255,12 @@ func assignFromStruct(ctx context.Context, assignments map[string]any, filter ma
 //
 // It is added when the model declares one and the caller supplied no value for it, so a row always
 // records when it was written. A value the caller did supply is kept.
-func addAutoUpdateTime(assignments map[string]any, filter map[string]bool, restricted bool, schema *modelSchema) {
+func addAutoUpdateTime(assignments map[string]any, filter map[string]bool, restricted bool, schema *modelSchema, structValues bool) error {
 	if schema == nil {
-		return
+		return nil
 	}
 
-	now := carbon.NewDateTime(carbon.Now())
+	now := carbon.Now().StdTime()
 
 	for _, field := range schema.Fields {
 		if field.AutoUpdateTime == 0 {
@@ -263,12 +269,19 @@ func addAutoUpdateTime(assignments map[string]any, filter map[string]bool, restr
 		if !columnIncluded(filter, restricted, field.DBName, true) {
 			continue
 		}
-		if value, ok := assignments[field.DBName]; ok && value != nil {
+		// A map explicitly supplies every key, including nil. Structs have no
+		// presence bit: an empty automatic timestamp is an unset field.
+		if value, ok := assignments[field.DBName]; ok && (!structValues || !zeroTimestamp(value)) {
 			continue
 		}
 
-		assignments[field.DBName] = now
+		stamp, err := field.timestampValue(now)
+		if err != nil {
+			return err
+		}
+		assignments[field.DBName] = stamp
 	}
+	return nil
 }
 
 // asColumnMap reads a value as a column-keyed map, the shape the ORM accepts alongside a model.

@@ -2492,8 +2492,10 @@ func (r *Query) save(value any) error {
 	}
 
 	_, err = r.execStatement(statement, bindings)
-
-	return err
+	if err != nil {
+		return err
+	}
+	return r.assignSavedTimestamps(value, assignments)
 }
 
 func (r *Query) saved(dest any) (any, error) {
@@ -2588,7 +2590,9 @@ func (r *Query) updateScoped(values any, byDest bool) (*contractsdb.Result, erro
 	// holds. The write-back belongs to the update path, where the values are a separate object from the
 	// model; a soft delete is scoped by the model itself and already writes into it.
 	if !byDest {
-		r.assignUpdatedValues(assignments)
+		if err := r.assignUpdatedValues(assignments); err != nil {
+			return nil, err
+		}
 	}
 
 	statement, bindings, err := r.compileUpdateScoped(assignments, byDest)
@@ -2607,32 +2611,46 @@ func (r *Query) updateScoped(values any, byDest bool) (*contractsdb.Result, erro
 // generated key back after an insert. Each pair is keyed by database column, because that is what
 // updateAssignments resolved it to, so a Go field name or a raw column both land on the right field;
 // a column the model does not declare is left alone.
-func (r *Query) assignUpdatedValues(assignments map[string]any) {
+func (r *Query) assignUpdatedValues(assignments map[string]any) error {
 	model := r.conditions.model
 	if model == nil || len(assignments) == 0 {
-		return
+		return nil
 	}
 
 	// Only a pointer leads back to the caller's model; a value with no address has no receiver to
 	// write to.
 	reflected := reflect.ValueOf(model)
 	if reflected.Kind() != reflect.Pointer || reflected.IsNil() {
-		return
+		return nil
 	}
 
-	schema, err := parseSchema(model)
+	schema, err := parseSchemaWithTable(model, r.declaredTable())
 	if err != nil {
-		return
+		return err
 	}
 
 	for column, value := range assignments {
+		// SQL-side values can only be known after a read, not assigned to a Go
+		// field while compiling the update.
+		if querybuilder.IsExpression(value) {
+			continue
+		}
+		if _, ok := value.(*querybuilder.Builder); ok {
+			continue
+		}
 		field, ok := schema.FieldsByDBName[column]
 		if !ok {
 			continue
 		}
 
-		_ = field.Set(r.ctx, reflected, value)
+		// Automatic timestamps must stay in sync with their SQL value. Other
+		// columns retain their existing best-effort write-back for driver values
+		// that database/sql accepts but the model cannot directly represent.
+		if err := field.Set(r.ctx, reflected, value); err != nil && (field.AutoCreateTime != 0 || field.AutoUpdateTime != 0) {
+			return err
+		}
 	}
+	return nil
 }
 
 // countColumns returns the column a count reduces: the one column the query selects, or every row.

@@ -382,7 +382,7 @@ func (s *ToSqlTestSuite) TestSave() {
 	toSql = gorm.NewToSql(s.testQuery.Query().WithoutGlobalScopes().(*gorm.Query), s.mockLog, true)
 	sql = toSql.Save(&GlobalScope{Model: Model{ID: 2}, Name: "to_sql_save", Avatar: "avatar"})
 	s.Contains(sql, "update \"global_scopes\" set \"avatar\" = 'avatar', \"created_at\" = NULL, \"deleted_at\" = NULL")
-	s.Contains(sql, "\"name\" = 'to_sql_save', \"updated_at\" = NULL where \"global_scopes\".\"deleted_at\" IS NULL and \"id\" = 2")
+	s.Regexp(`"name" = 'to_sql_save', "updated_at" = '\d{4}-\d{2}-\d{2}[^']+' where "global_scopes"\."deleted_at" IS NULL and "id" = 2`, sql)
 
 	toSql = gorm.NewToSql(s.testQuery.Query().WithoutGlobalScopes("name").(*gorm.Query), s.mockLog, false)
 	s.Equal("insert into \"global_scopes\" (\"avatar\", \"created_at\", \"deleted_at\", \"name\", \"updated_at\") values ($1, $2, $3, $4, $5) returning \"id\"", toSql.Save(&GlobalScope{}))
@@ -398,7 +398,7 @@ func (s *ToSqlTestSuite) TestSave() {
 	toSql = gorm.NewToSql(s.testQuery.Query().WithoutGlobalScopes("name").(*gorm.Query), s.mockLog, true)
 	sql = toSql.Save(&GlobalScope{Model: Model{ID: 2}, Name: "to_sql_save", Avatar: "avatar"})
 	s.Contains(sql, "update \"global_scopes\" set \"avatar\" = 'avatar', \"created_at\" = NULL, \"deleted_at\" = NULL")
-	s.Contains(sql, "\"name\" = 'to_sql_save', \"updated_at\" = NULL where \"avatar\" = 'avatar_scope' and \"global_scopes\".\"deleted_at\" IS NULL and \"id\" = 2")
+	s.Regexp(`"name" = 'to_sql_save', "updated_at" = '\d{4}-\d{2}-\d{2}[^']+' where "avatar" = 'avatar_scope' and "global_scopes"\."deleted_at" IS NULL and "id" = 2`, sql)
 }
 
 func (s *ToSqlTestSuite) TestSum() {

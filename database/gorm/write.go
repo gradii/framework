@@ -45,7 +45,11 @@ func (r *Query) insertRecords(value any) ([]map[string]any, error) {
 	case reflect.Slice, reflect.Array:
 		records := make([]map[string]any, 0, reflected.Len())
 		for index := 0; index < reflected.Len(); index++ {
-			element, err := r.insertRecords(reflected.Index(index).Interface())
+			item := reflected.Index(index)
+			if item.Kind() == reflect.Struct && item.CanAddr() {
+				item = item.Addr()
+			}
+			element, err := r.insertRecords(item.Interface())
 			if err != nil {
 				return nil, err
 			}
@@ -96,13 +100,22 @@ func (r *Query) structRecord(value any) (map[string]any, error) {
 	if !reflected.IsValid() || reflected.Kind() != reflect.Struct {
 		return nil, errors.DatabaseUnsupportedType.Args(reflect.TypeOf(value).String(), "struct")
 	}
+	// Value models cannot be written back, but their SQL record still needs
+	// populated automatic fields. Slice elements keep their original address.
+	if !reflected.CanSet() {
+		copy := reflect.New(reflected.Type()).Elem()
+		copy.Set(reflected)
+		reflected = copy
+	}
 
 	schema, err := parseSchemaWithTable(value, r.declaredTable())
 	if err != nil {
 		return nil, err
 	}
 
-	r.applyInsertTimestamps(reflected, schema)
+	if err := r.applyInsertTimestamps(reflected, schema); err != nil {
+		return nil, err
+	}
 
 	record := make(map[string]any, len(schema.Fields))
 	for _, field := range schema.Fields {
@@ -115,20 +128,27 @@ func (r *Query) structRecord(value any) (map[string]any, error) {
 
 // applyInsertTimestamps fills the model's automatic timestamps, so a column the caller left unset is
 // populated and one the caller set is left alone.
-func (r *Query) applyInsertTimestamps(value reflect.Value, schema *modelSchema) {
-	now := carbon.NewDateTime(carbon.Now())
+func (r *Query) applyInsertTimestamps(value reflect.Value, schema *modelSchema) error {
+	now := carbon.Now().StdTime()
 
 	for _, field := range schema.Fields {
 		if field.AutoCreateTime == 0 && field.AutoUpdateTime == 0 {
 			continue
 		}
 
-		if _, zero := field.BindingValueOf(r.ctx, value); !zero {
+		if current, _ := field.ValueOf(r.ctx, value); !zeroTimestamp(current) {
 			continue
 		}
 
-		_ = field.Set(r.ctx, value, now)
+		stamp, err := field.timestampValue(now)
+		if err != nil {
+			return err
+		}
+		if err := field.Set(r.ctx, value, stamp); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // filterInsertColumns applies the query's select and omit lists to a record, and leaves a primary

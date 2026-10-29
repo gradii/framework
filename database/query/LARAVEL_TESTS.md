@@ -42,8 +42,8 @@ go test -race ./database/query/grammars ./database/query/processors
 ## Public database execution coverage
 
 The 16 methods above cover only the processor/query-grammar classes. They do not measure the
-complete Query Builder, connection, transaction or Schema port. The expanded source-to-runtime
-mapping is in [../LARAVEL_DB_TESTS.md](../LARAVEL_DB_TESTS.md).
+complete Query Builder, connection, transaction or Schema port; the independent integration
+module additionally exercises those runtime behaviors against databases.
 
 Public regressions cover mutable fluent clauses and explicit clone isolation, callback ownership,
 IN/EXISTS subqueries, LIKE options, InsertGetID keys, advanced writes and previews, nullable

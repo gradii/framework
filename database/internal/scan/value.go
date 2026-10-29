@@ -190,7 +190,14 @@ func Assign(target reflect.Value, source any) error {
 				var err error
 				timestamp, err = time.Parse(time.RFC3339Nano, source)
 				if err != nil {
-					return err
+					// SQL datetime text commonly omits the RFC3339 separator or
+					// zone. Match Carbon's date parsing for native time fields too,
+					// without changing any custom Scanner's input contract.
+					parsed := carbon.Parse(source)
+					if parsed.Error != nil || parsed.IsEmpty() {
+						return err
+					}
+					timestamp = parsed.StdTime()
 				}
 			case int64:
 				timestamp = time.UnixMilli(source)

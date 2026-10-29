@@ -90,7 +90,7 @@ func assertTimestampReviewEqual(t *testing.T, model any, field string, want time
 }
 
 func TestTimestampShapesReview(t *testing.T) {
-	queries := NewTestQueryBuilder().AllWithTimezone("UTC")
+	queries := NewTestQueryBuilder().All("", false)
 	if queries[sqlserver.Name] == nil && os.Getenv("GRADII_TEST_SQLSERVER_DSN") != "" {
 		queries[sqlserver.Name] = NewTestQueryBuilder().SqlserverWithTimezone("UTC")
 	}
@@ -109,6 +109,8 @@ func TestTimestampShapesReview(t *testing.T) {
 			t.Cleanup(func() {
 				assert.NoError(t, schema.DropIfExists("review_timestamps"))
 				if name == sqlite.Name {
+					// Release the unique pool before deleting the fixture's database file.
+					assert.NoError(t, fixture.DB().Purge())
 					database, err := fixture.Driver().Docker()
 					if assert.NoError(t, err) {
 						assert.NoError(t, database.Shutdown())
@@ -139,12 +141,32 @@ func TestTimestampShapesReview(t *testing.T) {
 							assertTimestampReviewNow(t, model, field, started)
 							assertTimestampReviewNow(t, loaded, field, started)
 						}
+						created, updated := timestampReviewField(model, "CreatedAt"), timestampReviewField(model, "UpdatedAt")
+						if created.Kind() == reflect.Pointer && !created.IsNil() && !updated.IsNil() {
+							assert.NotEqual(t, created.Pointer(), updated.Pointer(), "automatic timestamps must own independent pointer storage")
+						}
+						// Mutating the update timestamp must not mutate a created timestamp
+						// through a shared pointer, even when the database row stays correct.
+						createdBefore := timestampReviewTime(t, created.Interface())
+						_, err := fixture.Query().Model(model).Where("id", id).Update("updated_at", manualUpdate)
+						require.NoError(t, err)
+						assertTimestampReviewEqual(t, model, "CreatedAt", createdBefore)
+						assertTimestampReviewEqual(t, model, "UpdatedAt", manualUpdate)
 					})
 					t.Run("CreateManual", func(t *testing.T) {
 						create(t, &manual)
 						loaded := read(t, id)
 						assertTimestampReviewEqual(t, loaded, "CreatedAt", manual)
 						assertTimestampReviewEqual(t, loaded, "UpdatedAt", manual)
+					})
+					t.Run("CreateUnaddressableValue", func(t *testing.T) {
+						id++
+						model := reflect.ValueOf(tc.model(id, nil)).Elem().Interface()
+						started := time.Now()
+						require.NoError(t, fixture.Query().Create(model))
+						loaded := read(t, id)
+						assertTimestampReviewNow(t, loaded, "CreatedAt", started)
+						assertTimestampReviewNow(t, loaded, "UpdatedAt", started)
 					})
 					t.Run("SaveAutomatic", func(t *testing.T) {
 						create(t, &manual)
@@ -154,6 +176,8 @@ func TestTimestampShapesReview(t *testing.T) {
 						timestampReviewField(model, "Label").SetString("saved")
 						started := time.Now()
 						require.NoError(t, fixture.Query().Save(model))
+						assertTimestampReviewEqual(t, model, "CreatedAt", manual)
+						assertTimestampReviewNow(t, model, "UpdatedAt", started)
 						loaded := read(t, id)
 						assertTimestampReviewEqual(t, loaded, "CreatedAt", manual)
 						assertTimestampReviewNow(t, loaded, "UpdatedAt", started)
@@ -172,6 +196,7 @@ func TestTimestampShapesReview(t *testing.T) {
 						started := time.Now()
 						_, err := fixture.Query().Model(model).Where("id", id).Update("label", "updated")
 						require.NoError(t, err)
+						assertTimestampReviewEqual(t, model, "CreatedAt", manual)
 						assertTimestampReviewNow(t, model, "UpdatedAt", started)
 						loaded := read(t, id)
 						assertTimestampReviewEqual(t, loaded, "CreatedAt", manual)
@@ -181,6 +206,8 @@ func TestTimestampShapesReview(t *testing.T) {
 						model := create(t, &manual)
 						_, err := fixture.Query().Model(model).Where("id", id).Update(map[string]any{"label": "updated", "updated_at": tc.value(manualUpdate)})
 						require.NoError(t, err)
+						assertTimestampReviewEqual(t, model, "CreatedAt", manual)
+						assertTimestampReviewEqual(t, model, "UpdatedAt", manualUpdate)
 						loaded := read(t, id)
 						assertTimestampReviewEqual(t, loaded, "CreatedAt", manual)
 						assertTimestampReviewEqual(t, loaded, "UpdatedAt", manualUpdate)
@@ -209,6 +236,30 @@ func TestTimestampShapesReview(t *testing.T) {
 							}
 						}
 					})
+					if reflect.TypeOf(tc.value(manual)).Kind() == reflect.Pointer {
+						t.Run("UpdateSharedManualPointer", func(t *testing.T) {
+							id++
+							shared := tc.value(manual)
+							model := tc.model(id, nil)
+							timestampReviewField(model, "CreatedAt").Set(reflect.ValueOf(shared))
+							timestampReviewField(model, "UpdatedAt").Set(reflect.ValueOf(shared))
+							require.NoError(t, fixture.Query().Create(model))
+							for _, source := range []struct {
+								value any
+								want  time.Time
+							}{{manualUpdate, manualUpdate}, {shared, manual}} {
+								_, err := fixture.Query().Model(model).Where("id", id).Update("updated_at", source.value)
+								require.NoError(t, err)
+								assert.True(t, manual.Equal(timestampReviewTime(t, shared)), "caller-owned time must not change")
+								assertTimestampReviewEqual(t, model, "CreatedAt", manual)
+								assertTimestampReviewEqual(t, model, "UpdatedAt", source.want)
+								assert.NotEqual(t, timestampReviewField(model, "CreatedAt").Pointer(), timestampReviewField(model, "UpdatedAt").Pointer())
+								loaded := read(t, id)
+								assertTimestampReviewEqual(t, loaded, "CreatedAt", manual)
+								assertTimestampReviewEqual(t, loaded, "UpdatedAt", source.want)
+							}
+						})
+					}
 					for _, pointers := range []bool{false, true} {
 						operation := "BulkAutomaticValues"
 						if pointers {
@@ -234,10 +285,53 @@ func TestTimestampShapesReview(t *testing.T) {
 							batchPointer := reflect.New(batch.Type())
 							batchPointer.Elem().Set(batch)
 							require.NoError(t, fixture.Query().Create(batchPointer.Interface()))
+							for i := range batch.Len() {
+								model := batch.Index(i)
+								if !pointers {
+									model = model.Addr()
+								}
+								assertTimestampReviewNow(t, model.Interface(), "CreatedAt", started)
+								assertTimestampReviewNow(t, model.Interface(), "UpdatedAt", started)
+							}
 							for _, id := range ids {
 								loaded := read(t, id)
 								assertTimestampReviewNow(t, loaded, "CreatedAt", started)
 								assertTimestampReviewNow(t, loaded, "UpdatedAt", started)
+							}
+						})
+						operation = "BulkManualValues"
+						if pointers {
+							operation = "BulkManualPointers"
+						}
+						t.Run(operation, func(t *testing.T) {
+							typ := reflect.TypeOf(tc.model(0, nil))
+							if !pointers {
+								typ = typ.Elem()
+							}
+							batch := reflect.MakeSlice(reflect.SliceOf(typ), 2, 2)
+							ids := make([]int, batch.Len())
+							for i := range batch.Len() {
+								id++
+								ids[i] = id
+								model := reflect.ValueOf(tc.model(id, &manual))
+								if !pointers {
+									model = model.Elem()
+								}
+								batch.Index(i).Set(model)
+							}
+							batchPointer := reflect.New(batch.Type())
+							batchPointer.Elem().Set(batch)
+							require.NoError(t, fixture.Query().Create(batchPointer.Interface()))
+							for i, id := range ids {
+								model := batch.Index(i)
+								if !pointers {
+									model = model.Addr()
+								}
+								loaded := read(t, id)
+								for _, field := range []string{"CreatedAt", "UpdatedAt"} {
+									assertTimestampReviewEqual(t, model.Interface(), field, manual)
+									assertTimestampReviewEqual(t, loaded, field, manual)
+								}
 							}
 						})
 					}

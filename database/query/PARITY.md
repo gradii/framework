@@ -1,8 +1,8 @@
 # Laravel Query Builder parity checklist
 
 **Purpose.** This file records the compiler contracts and public database integration for the
-[approved port scope](../LARAVEL_PORT_PLAN.md). Execution and platform evidence are recorded in
-[the database test mapping](../LARAVEL_DB_TESTS.md); compiler coverage alone is not proof of runtime parity.
+approved port scope. Compiler coverage alone is not proof of runtime parity; the integration
+tests validate connection, transaction, Schema and DDL behavior against databases.
 
 **Source of truth** (Laravel checkout at `/Users/dog/OpenSource/framework`):
 
@@ -267,9 +267,8 @@ branches, and obtain request-local connection state with `WithContext`.
 
 ## 10. Verification and upstream mapping
 
-See [LARAVEL_TESTS.md](LARAVEL_TESTS.md) for the 16 processor/query-grammar upstream methods and
-[../LARAVEL_DB_TESTS.md](../LARAVEL_DB_TESTS.md) for DB, connection, transaction, Schema and DDL
-mappings. Those 16 methods are a bounded corpus, not the entire database abstraction's coverage.
+See [LARAVEL_TESTS.md](LARAVEL_TESTS.md) for the 16 processor/query-grammar upstream methods.
+Those 16 methods are a bounded corpus, not the entire database abstraction's coverage.
 
 The root module tests do not require live databases. The separate `tests/` module exercises
 real drivers. SQL Server requires an actual amd64 run; an ARM run that skips it is insufficient.

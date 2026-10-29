@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/gradii/framework/database/internal/annotation"
 	"github.com/gradii/framework/database/internal/reflectx"
@@ -250,7 +251,10 @@ func (f *schemaField) Set(_ context.Context, value reflect.Value, source any) er
 	}
 
 	base := indirectType(target.Type())
-	if reflect.PointerTo(base).Implements(reflect.TypeFor[sql.Scanner]()) {
+	if timestampPointer(target.Type()) {
+		return assignTimestampPointer(target, source)
+	}
+	if reflect.PointerTo(base).Implements(reflect.TypeFor[sql.Scanner]()) || base.ConvertibleTo(reflect.TypeFor[time.Time]()) {
 		return scan.Assign(target, source)
 	}
 
