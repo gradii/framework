@@ -76,8 +76,16 @@ func (r *Connection) IsCurrent() bool {
 	return ok && current == r.resources
 }
 
-// Purge closes this logical connection's current resources, leaving other aliases untouched.
-func (r *Connection) Purge() error { return purgeConnection(r.identity) }
+// Purge closes this logical connection's current resources, leaving other aliases untouched. A handle
+// whose generation was already replaced is a no-op, because purging by identity alone would close the
+// pools another Open published in the meantime.
+func (r *Connection) Purge() error {
+	if !r.IsCurrent() {
+		return nil
+	}
+
+	return purgeConnection(r.identity)
+}
 
 // Driver returns the driver name the connection is configured with.
 func (r *Connection) Driver() string {

@@ -112,16 +112,14 @@ func Escape(driver string, value any, binary bool) (string, error) {
 		reflected = reflect.ValueOf(value)
 	}
 	if binary {
-		var bytes []byte
-		switch input := value.(type) {
-		case []byte:
-			bytes = input
-		case string:
-			bytes = []byte(input)
+		// The dialect escapers render binary literals; the generic fallback only validates the input
+		// shape before reporting that it cannot render them.
+		switch value.(type) {
+		case []byte, string:
 		default:
 			return "", errors.DatabaseUnsupportedType.Args(fmt.Sprintf("%T", value), "string or []byte")
 		}
-		_ = bytes
+
 		return "", errors.DatabaseEscapeBinaryNotSupported
 	}
 	switch reflected.Kind() {

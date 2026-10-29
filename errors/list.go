@@ -107,7 +107,6 @@ var (
 	DatabaseConfigNotFound              = New("not found database configuration")
 	DatabaseDialectRequired             = New("database driver %q must provide a dialect")
 	DatabaseDialectComponentsMissing    = New("database driver must provide a query grammar and processor")
-	DatabaseDialectNotSupported         = New("unsupported database driver %q: expected mysql, postgres, sqlite or sqlserver")
 	DatabaseIsolationLevelInvalid       = New("unsupported transaction isolation level %q: expected default, read uncommitted, read committed, repeatable read or serializable")
 	DatabaseMultipleColumnsSelected     = New("Multiple columns were selected.")
 	DatabaseEscapeNonFinite             = New("Cannot escape non-finite numbers.")

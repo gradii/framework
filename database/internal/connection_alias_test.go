@@ -97,6 +97,14 @@ func TestConnectionAliasesShareResourcesAcrossFacadesAndRefreshIndependently(t *
 	require.NoError(t, sibling.Writer().Ping())
 	assert.True(t, schemaFacade.Connection("primary_alias").HasTable("only_writer"))
 
+	// The root facade holds the query built at construction, so it has to follow the new generation.
+	require.NoError(t, orm.Query().Raw("select marker from markers").Scan(&marker))
+	assert.Equal(t, "reader", marker.Marker)
+	rootWriter, err := orm.DB()
+	require.NoError(t, err)
+	assert.Same(t, reconnectedWriter, rootWriter)
+	require.NoError(t, rootWriter.Ping())
+
 	// Purge can also resolve the identity of an alias opened only through ORM.
 	ormOnly := orm.Connection("orm_only_alias")
 	ormOnlyWriter, err := ormOnly.DB()
@@ -218,4 +226,25 @@ func (aliasConfig) GetDuration(_ string, fallback ...time.Duration) time.Duratio
 		return fallback[0]
 	}
 	return 0
+}
+
+func TestOrmSharedCacheDoesNotInheritARequestContext(t *testing.T) {
+	t.Cleanup(databasedriver.CloseConnections)
+	ctx := context.Background()
+	pool := aliasSQLitePool(t)
+	configuration := aliasConfig{sources: map[string]database.Pool{
+		"primary_alias": pool, "sibling_alias": pool,
+	}}
+	orm, err := internal.BuildOrm(ctx, configuration, "", nil, nil, func() contractstelemetry.Telemetry { return nil })
+	require.NoError(t, err)
+
+	// Building a connection while serving a request used to leave that request's context inside the
+	// shared cache entry, so a later caller with no request context inherited its cancellation.
+	requestContext, cancel := context.WithCancel(ctx)
+	_ = orm.WithContext(requestContext).Connection("sibling_alias")
+	cancel()
+
+	var marker aliasMarker
+	require.NoError(t, orm.Connection("sibling_alias").Query().Raw("select marker from markers").Scan(&marker))
+	assert.Equal(t, "reader", marker.Marker)
 }

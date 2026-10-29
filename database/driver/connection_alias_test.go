@@ -68,6 +68,12 @@ func TestAliasResourcesUseOneGenerationAcrossEntryPoints(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "2", got)
 	assert.EqualValues(t, 2, queries.Load())
+
+	// A handle from the replaced generation must not close the live one.
+	require.NoError(t, first.Purge())
+	assert.True(t, fresh.IsCurrent())
+	require.NoError(t, fresh.Writer().Ping())
+	require.NoError(t, fresh.Reader().Ping())
 }
 
 func TestAliasConcurrentOpenAndPurgeDoesNotLeaveStalePools(t *testing.T) {

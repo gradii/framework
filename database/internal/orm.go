@@ -142,7 +142,7 @@ func queryConnectionIsCurrent(query contractsorm.Query) bool {
 }
 
 func (r *Orm) DB() (*sql.DB, error) {
-	return r.query.DB()
+	return r.currentQuery().DB()
 }
 
 func (r *Orm) Factory() contractsorm.Factory {
@@ -188,18 +188,33 @@ func (r *Orm) Observe(model any, observer contractsorm.Observer) {
 // Connection::query() does: a fresh builder every call, so the Model / Where / Raw a caller writes are
 // that caller's alone. The stored handle is the connection's, not a query anyone builds on.
 func (r *Orm) Query() contractsorm.Query {
-	query := r.query
+	query := r.currentQuery()
 	if cloner, ok := query.(contractsorm.QueryWithClone); ok {
 		query = cloner.Clone()
 	}
 
-	if r.ctx != context.Background() {
-		if queryWithContext, ok := query.(contractsorm.QueryWithContext); ok {
-			return queryWithContext.WithContext(r.ctx)
-		}
+	// Bind the caller's context on every call, Background included: the cached handle may have been
+	// built while serving a request, and that request's cancellation must not outlive it.
+	if queryWithContext, ok := query.(contractsorm.QueryWithContext); ok {
+		return queryWithContext.WithContext(r.ctx)
 	}
 
 	return query
+}
+
+// currentQuery returns the handle bound to the connection's current generation. A purge or Reconnect
+// performed through another facade leaves r.query pointing at a closed pool, so the registry the
+// Connection accessor maintains is the authority on what to use.
+func (r *Orm) currentQuery() contractsorm.Query {
+	if queryConnectionIsCurrent(r.query) {
+		return r.query
+	}
+
+	if current, ok := r.Connection(r.connection).(*Orm); ok && current.query != nil {
+		return current.query
+	}
+
+	return r.query
 }
 
 // Related returns a Query pre-scoped to the related rows for parent.relation. parent must be
