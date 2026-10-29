@@ -11,10 +11,10 @@ require (
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/google/uuid v1.6.0
 	github.com/gradii/framework v1.20.0-alpha.1
-	github.com/gradii/mysql v1.20.0-alpha.0
-	github.com/gradii/postgres v1.20.0-alpha.0
-	github.com/gradii/sqlite v1.20.0-alpha.0
-	github.com/gradii/sqlserver v1.20.0-alpha.0
+	github.com/gradii/mysql v1.20.0-alpha.1
+	github.com/gradii/postgres v1.20.0-alpha.1
+	github.com/gradii/sqlite v1.20.0-alpha.1
+	github.com/gradii/sqlserver v1.20.0-alpha.1
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/microsoft/go-mssqldb v1.9.6
 	github.com/spf13/cast v1.10.0
