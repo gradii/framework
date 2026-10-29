@@ -37,6 +37,8 @@
 
 .test: &test
   <<: *go
+  imports:
+    - https://cnb.cool/gradii/secret/-/blob/main/ci/framework-refs.yml
   stages:
     - name: checkout compatible modules and run all root tests
       timeout: 30m
@@ -44,6 +46,8 @@
 
 .test-database: &test-database
   <<: *go
+  imports:
+    - https://cnb.cool/gradii/secret/-/blob/main/ci/framework-refs.yml
   stages:
     - name: checkout compatible modules and run database tests
       # Every package under database/ is stub-backed: no database, no Docker, no
@@ -54,6 +58,8 @@
 
 .test-external: &test-external
   <<: *go
+  imports:
+    - https://cnb.cool/gradii/secret/-/blob/main/ci/framework-refs.yml
   services:
     # The database containers of the goravel/* drivers run on a Docker daemon of
     # the platform. `docker context inspect` of the job reports

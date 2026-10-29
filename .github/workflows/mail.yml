@@ -1,11 +1,8 @@
-name: Test
+name: Test Mail
+# The upstream workflow ran these tests against a live SMTP server, which needs
+# eight MAIL_* secrets this repository does not define. Manual until they exist.
 on:
-  push:
-    branches:
-      - master
-  pull_request:
-    paths:
-      - 'mail/**'
+  workflow_dispatch:
 env:
   MAIL_HOST: ${{ secrets.MAIL_HOST }}
   MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
@@ -23,7 +20,5 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: 'stable'
-      - name: Install dependencies
-        run: go mod tidy
       - name: Run tests
         run: go test ./mail/...

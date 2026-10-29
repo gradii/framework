@@ -1,15 +1,53 @@
+# Lint and vulnerability scan, run inside the same workspace the test workflows
+# build. The upstream reusable workflow got there by running `go mod tidy` on the
+# checkout, which rewrote go.mod to pull the driver modules in.
 name: Lint
 on:
   push:
     branches:
-      - master
+      - main
   pull_request:
 permissions:
   contents: read
+env:
+  # The sibling repositories are cloned from GitHub here; CNB uses its own host.
+  GRADII_FRAMEWORK_URL: https://github.com/gradii/framework
+  GRADII_MYSQL_URL: https://github.com/gradii/mysql
+  GRADII_POSTGRES_URL: https://github.com/gradii/postgres
+  GRADII_SQLITE_URL: https://github.com/gradii/sqlite
+  GRADII_SQLSERVER_URL: https://github.com/gradii/sqlserver
+  GRADII_MYSQL_REF: main
+  GRADII_POSTGRES_REF: main
+  GRADII_SQLITE_REF: main
+  GRADII_SQLSERVER_REF: main
 jobs:
   lint:
-    uses: goravel/.github/.github/workflows/lint.yml@master
-    secrets: inherit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 'stable'
+          cache: true
+      - name: Build the workspace
+        run: echo "GOWORK=$(bash .cnb/ci.sh workspace | sed -n 's/^GOWORK=//p')" >> "$GITHUB_ENV"
+      - name: Lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          skip-cache: true
+          version: latest
+          args: --timeout=10m ./...
   govulncheck:
-    uses: goravel/.github/.github/workflows/govulncheck.yml@master
-    secrets: inherit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 'stable'
+          cache: true
+      - name: Build the workspace
+        run: echo "GOWORK=$(bash .cnb/ci.sh workspace | sed -n 's/^GOWORK=//p')" >> "$GITHUB_ENV"
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: Run govulncheck
+        run: govulncheck ./...

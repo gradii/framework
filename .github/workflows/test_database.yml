@@ -1,33 +1,38 @@
-# A named pipeline for the database packages.
-#
-# The root module already tests them: the reusable Test workflow
-# (`goravel/.github/.github/workflows/test.yml`) runs `go test ./...`, and every
-# package under database/ is part of that root module. What this adds is
-# attribution — a database failure shows up as its own check instead of as
-# "Test / ubuntu (1.27)" with the cause buried in a 235-package log.
-#
-# They are cheap: 12 of the 15 packages carry tests, none needs Docker or a
-# database (the ORM and query suites are stub-backed), and the whole run is
-# about ten seconds. `tests/` is a separate Go module, so it is not included
-# here; test_external.yml covers it.
+# A named pipeline for the database packages, ported from .cnb/test.yml: the
+# reusable Test workflow already covers them, but a database failure shows up
+# here as its own check instead of inside a 244-package log. The packages are
+# stub-backed, so no database and no Docker are needed.
+
 name: Test Database
 on:
   push:
     branches:
-      - master
+      - main
   pull_request:
+env:
+  # The sibling repositories are cloned from GitHub here; CNB uses its own host.
+  GRADII_FRAMEWORK_URL: https://github.com/gradii/framework
+  GRADII_MYSQL_URL: https://github.com/gradii/mysql
+  GRADII_POSTGRES_URL: https://github.com/gradii/postgres
+  GRADII_SQLITE_URL: https://github.com/gradii/sqlite
+  GRADII_SQLSERVER_URL: https://github.com/gradii/sqlserver
+  GRADII_MYSQL_REF: main
+  GRADII_POSTGRES_REF: main
+  GRADII_SQLITE_REF: main
+  GRADII_SQLSERVER_REF: main
 jobs:
   ubuntu:
     strategy:
       matrix:
-        go: [ "1.26", "1.27" ]
+        go: ["1.26", "1.27"]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version: ${{ matrix.go }}
-      - name: Install dependencies
-        run: go mod tidy
       - name: Run database tests
-        run: go test -timeout 10m ./database/...
+        run: bash .cnb/ci.sh database

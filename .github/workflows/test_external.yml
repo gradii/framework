@@ -1,22 +1,37 @@
+# Integration tests of the framework's tests module, ported from .cnb/test.yml.
+# The suite starts its own database containers, which is why this job needs the
+# Docker daemon the GitHub runners already provide.
+
 name: Test External
 on:
   push:
     branches:
-      - master
+      - main
   pull_request:
+env:
+  # The sibling repositories are cloned from GitHub here; CNB uses its own host.
+  GRADII_FRAMEWORK_URL: https://github.com/gradii/framework
+  GRADII_MYSQL_URL: https://github.com/gradii/mysql
+  GRADII_POSTGRES_URL: https://github.com/gradii/postgres
+  GRADII_SQLITE_URL: https://github.com/gradii/sqlite
+  GRADII_SQLSERVER_URL: https://github.com/gradii/sqlserver
+  GRADII_MYSQL_REF: main
+  GRADII_POSTGRES_REF: main
+  GRADII_SQLITE_REF: main
+  GRADII_SQLSERVER_REF: main
 jobs:
   ubuntu:
     strategy:
       matrix:
-        go: [ "1.26", "1.27" ]
+        go: ["1.26", "1.27"]
     runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version: ${{ matrix.go }}
-      - name: Install dependencies
-        run: go mod tidy && cd tests && go mod tidy
-      - name: Run tests
-        run: cd tests && go test -timeout 10m ./...
-        
+      - name: Run the integration suite
+        run: bash .cnb/ci.sh integration
