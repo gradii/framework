@@ -18,9 +18,7 @@ var (
 	errIncrementAmountNonNumeric   = errors.QueryIncrementAmountNonNumeric
 	errIncrementEachNonAssociative = errors.QueryIncrementEachNonAssociative
 
-	errJsonSelectorNotSupported = errors.QueryJsonSelectorNotSupported
-	errLateralJoinNotSupported  = errors.QueryLateralJoinNotSupported
-	errNestedArraysNotAllowed   = errors.QueryNestedArraysNotAllowed
+	errNestedArraysNotAllowed = errors.QueryNestedArraysNotAllowed
 )
 
 // mapEntries normalises an associative map argument into ordered column/value pairs, or reports false

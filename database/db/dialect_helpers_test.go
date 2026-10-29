@@ -32,11 +32,3 @@ func newDialectTestQuery(ctx context.Context, read, write contractsdb.CommonBuil
 type mysqlTestDriver struct{ contractsdriver.Driver }
 
 func (mysqlTestDriver) Dialect() contractsdriver.Dialect { return baseTestDialect{} }
-
-// testDialect keeps the helper contract its callers were written against.
-func testDialect(name string) contractsdriver.Dialect {
-	if querybuilder.CanonicalDialect(name) == "" {
-		return nil
-	}
-	return baseTestDialect{}
-}

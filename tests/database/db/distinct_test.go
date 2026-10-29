@@ -9,7 +9,8 @@ import (
 // TestDistinctPreservesSelection pins each dialect's distinct rendering through the public preview
 // API: PostgreSQL turns the column list into "distinct on (...)", MySQL keeps a plain distinct with
 // backticks. The builder invariants behind the same code (DistinctFlag, Selects) live in database/db,
-// where the test can reach the builder.
+// where the test can reach the builder. PostgreSQL shows the numbered "$1" placeholders the facade
+// rewrites for the driver, MySQL the "?" bindings it runs unchanged.
 func TestDistinctPreservesSelection(t *testing.T) {
 	for _, test := range []struct {
 		driver   string
@@ -19,9 +20,9 @@ func TestDistinctPreservesSelection(t *testing.T) {
 	}{
 		{
 			driver:   "postgres",
-			selected: `select distinct on ("name") "name", ? as flag from "users" where "id" = ?`,
-			all:      `select distinct "name", ? as flag from "users" where "id" = ?`,
-			count:    `select count(distinct "name") as aggregate from "users" where "id" = ?`,
+			selected: `select distinct on ("name") "name", $1 as flag from "users" where "id" = $2`,
+			all:      `select distinct "name", $1 as flag from "users" where "id" = $2`,
+			count:    `select count(distinct "name") as aggregate from "users" where "id" = $1`,
 		},
 		{
 			driver:   "mysql",

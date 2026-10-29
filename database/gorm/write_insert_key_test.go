@@ -73,9 +73,11 @@ func TestIsIntegerKeyType(t *testing.T) {
 	assert.False(t, isIntegerKeyType(nil))
 }
 
-// newPostgresKeyQuery builds a query that compiles through the PostgreSQL grammar, whose insert
-// carries the returning clause, over a recording pool, so the key read-back can be driven with no
-// database behind it.
+// newPostgresKeyQuery builds a query that names a PostgreSQL connection over a recording pool. The
+// connection name is what makes the ORM rebind "?" to "$1" and type the generated key by the model's
+// key column; the statement itself compiles on the framework's base grammar, so no driver module is
+// needed. The dialect's own insert — its `returning` clause — is pinned in the integration corpus
+// (tests/database/gorm).
 func newPostgresKeyQuery(t *testing.T, model any) (*Query, *recordingSQLDriver) {
 	t.Helper()
 
