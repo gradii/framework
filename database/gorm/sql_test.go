@@ -387,17 +387,17 @@ func TestCompileSelect_SelectAndSelectRawKeepCallOrder(t *testing.T) {
 		{
 			name: "Select clears earlier raw columns and bindings",
 			build: func(q contractsorm.Query) contractsorm.Query {
-				return q.SelectRaw("? as a", 1).Select("name").SelectRaw("? as b", 2).Where("id = ?", 9)
+				return q.SelectRaw("? as a", 1).Select("name").SelectRaw("? as b", 2).Where("id", 9)
 			},
-			wantSQL:      `select "name", ? as b from "rel_users" where id = ?`,
+			wantSQL:      `select "name", ? as b from "rel_users" where "id" = ?`,
 			wantBindings: []any{2, 9},
 		},
 		{
 			name: "identical SelectRaw calls each keep their placeholder",
 			build: func(q contractsorm.Query) contractsorm.Query {
-				return q.SelectRaw("? as flag", 1).SelectRaw("? as flag", 2).Where("id = ?", 9)
+				return q.SelectRaw("? as flag", 1).SelectRaw("? as flag", 2).Where("id", 9)
 			},
-			wantSQL:      `select ? as flag, ? as flag from "rel_users" where id = ?`,
+			wantSQL:      `select ? as flag, ? as flag from "rel_users" where "id" = ?`,
 			wantBindings: []any{1, 2, 9},
 		},
 	}

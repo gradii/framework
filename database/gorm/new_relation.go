@@ -148,9 +148,9 @@ func (r *OrmBuilder) newMany2ManyQuery(parent any, desc *relationDescriptor, isM
 		Join(r.tableRef(pivotTable)+" ON "+
 			r.ident(pivotTable, desc.pivotRelatedRef.foreignColumn)+" = "+
 			r.ident(relatedTable, desc.pivotRelatedRef.primaryColumn)).
-		Where(r.ident(pivotTable, desc.pivotParentRef.foreignColumn)+" = ?", parentVal)
+		WhereRaw(r.ident(pivotTable, desc.pivotParentRef.foreignColumn)+" = ?", parentVal)
 	if isMorph {
-		q = q.Where(r.ident(pivotTable, desc.morphTypeColumn)+" = ?", desc.morphValue)
+		q = q.WhereRaw(r.ident(pivotTable, desc.morphTypeColumn)+" = ?", desc.morphValue)
 	}
 	return applyOnPivotQueryToQuery(r.queryGrammar, q, desc)
 }
@@ -169,7 +169,7 @@ func (r *OrmBuilder) newThroughQuery(parent any, desc *relationDescriptor) contr
 		Join(r.tableRef(desc.throughTable)+" ON "+
 			r.ident(desc.relatedTable, desc.secondKey)+" = "+
 			r.ident(desc.throughTable, desc.secondLocalKey)).
-		Where(r.ident(desc.throughTable, desc.firstKey)+" = ?", parentVal)
+		WhereRaw(r.ident(desc.throughTable, desc.firstKey)+" = ?", parentVal)
 }
 
 // --- helpers ---------------------------------------------------------------
@@ -191,7 +191,7 @@ func (r *OrmBuilder) guardedQuery(err error) contractsorm.Query {
 // zeroRowQuery returns an OrmBuilder whose Get/First yields no rows without a database round-trip —
 // the WHERE evaluates to a guaranteed-false condition.
 func (r *OrmBuilder) zeroRowQuery() contractsorm.Query {
-	return r.fresh().Where("1 = 0")
+	return r.fresh().WhereRaw("1 = 0")
 }
 
 // readParentColumn reads the value of the given DB column from parent via GORM's parsed schema.

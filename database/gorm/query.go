@@ -917,7 +917,7 @@ func (r *OrmBuilder) OrWhere(query any, args ...any) contractsorm.Query {
 		return r.addNestedWhereQuery(callback, core.BooleanOr)
 	}
 
-	applyWhereShape(r.query, query, args, core.BooleanOr, false)
+	r.query.OrWhere(query, args...)
 
 	return r
 }
@@ -1775,14 +1775,30 @@ func (r *OrmBuilder) When(condition bool, callback func(query contractsorm.Query
 
 // Where mirrors Eloquent's Builder::where() (Builder.php:352-365). A callback with no operator runs
 // against a new query without relationships: its eager loads merge into this query and its wheres
-// join this query as one nested group. Every other condition is applied to the inner database/query
-// builder immediately, which owns the operator, the value and the raw-fragment grammar.
+// join this query as one nested group. Every other condition is handed to the inner database/query
+// builder as written, which owns the operator and value grammar. Raw SQL has its own entry point in
+// WhereRaw, the way Eloquent separates where() from whereRaw().
 func (r *OrmBuilder) Where(query any, args ...any) contractsorm.Query {
 	if callback, ok := query.(func(contractsorm.Query) contractsorm.Query); ok && len(args) == 0 {
 		return r.addNestedWhereQuery(callback, core.BooleanAnd)
 	}
 
-	applyWhereShape(r.query, query, args, core.BooleanAnd, false)
+	r.query.Where(query, args...)
+
+	return r
+}
+
+// WhereRaw mirrors Eloquent's Builder::whereRaw: the fragment renders verbatim and the values bind
+// to its placeholders in order.
+func (r *OrmBuilder) WhereRaw(query string, args ...any) contractsorm.Query {
+	r.query.WhereRaw(query, args, core.BooleanAnd)
+
+	return r
+}
+
+// OrWhereRaw mirrors Eloquent's Builder::orWhereRaw.
+func (r *OrmBuilder) OrWhereRaw(query string, args ...any) contractsorm.Query {
+	r.query.WhereRaw(query, args, core.BooleanOr)
 
 	return r
 }

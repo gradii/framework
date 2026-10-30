@@ -4139,6 +4139,65 @@ func (_c *Query_OrWhereNull_Call) RunAndReturn(run func(string) orm.Query) *Quer
 	return _c
 }
 
+// OrWhereRaw provides a mock function with given fields: query, args
+func (_m *Query) OrWhereRaw(query string, args ...interface{}) orm.Query {
+	var _ca []interface{}
+	_ca = append(_ca, query)
+	_ca = append(_ca, args...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for OrWhereRaw")
+	}
+
+	var r0 orm.Query
+	if rf, ok := ret.Get(0).(func(string, ...interface{}) orm.Query); ok {
+		r0 = rf(query, args...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(orm.Query)
+		}
+	}
+
+	return r0
+}
+
+// Query_OrWhereRaw_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'OrWhereRaw'
+type Query_OrWhereRaw_Call struct {
+	*mock.Call
+}
+
+// OrWhereRaw is a helper method to define mock.On call
+//   - query string
+//   - args ...interface{}
+func (_e *Query_Expecter) OrWhereRaw(query interface{}, args ...interface{}) *Query_OrWhereRaw_Call {
+	return &Query_OrWhereRaw_Call{Call: _e.mock.On("OrWhereRaw",
+		append([]interface{}{query}, args...)...)}
+}
+
+func (_c *Query_OrWhereRaw_Call) Run(run func(query string, args ...interface{})) *Query_OrWhereRaw_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]interface{}, len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(interface{})
+			}
+		}
+		run(args[0].(string), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *Query_OrWhereRaw_Call) Return(_a0 orm.Query) *Query_OrWhereRaw_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Query_OrWhereRaw_Call) RunAndReturn(run func(string, ...interface{}) orm.Query) *Query_OrWhereRaw_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // OrWhereRelation provides a mock function with given fields: relation, column, args
 func (_m *Query) OrWhereRelation(relation string, column interface{}, args ...interface{}) orm.Query {
 	var _ca []interface{}
@@ -7035,6 +7094,65 @@ func (_c *Query_WhereNull_Call) Return(_a0 orm.Query) *Query_WhereNull_Call {
 }
 
 func (_c *Query_WhereNull_Call) RunAndReturn(run func(string) orm.Query) *Query_WhereNull_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// WhereRaw provides a mock function with given fields: query, args
+func (_m *Query) WhereRaw(query string, args ...interface{}) orm.Query {
+	var _ca []interface{}
+	_ca = append(_ca, query)
+	_ca = append(_ca, args...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for WhereRaw")
+	}
+
+	var r0 orm.Query
+	if rf, ok := ret.Get(0).(func(string, ...interface{}) orm.Query); ok {
+		r0 = rf(query, args...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(orm.Query)
+		}
+	}
+
+	return r0
+}
+
+// Query_WhereRaw_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'WhereRaw'
+type Query_WhereRaw_Call struct {
+	*mock.Call
+}
+
+// WhereRaw is a helper method to define mock.On call
+//   - query string
+//   - args ...interface{}
+func (_e *Query_Expecter) WhereRaw(query interface{}, args ...interface{}) *Query_WhereRaw_Call {
+	return &Query_WhereRaw_Call{Call: _e.mock.On("WhereRaw",
+		append([]interface{}{query}, args...)...)}
+}
+
+func (_c *Query_WhereRaw_Call) Run(run func(query string, args ...interface{})) *Query_WhereRaw_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]interface{}, len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(interface{})
+			}
+		}
+		run(args[0].(string), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *Query_WhereRaw_Call) Return(_a0 orm.Query) *Query_WhereRaw_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Query_WhereRaw_Call) RunAndReturn(run func(string, ...interface{}) orm.Query) *Query_WhereRaw_Call {
 	_c.Call.Return(run)
 	return _c
 }

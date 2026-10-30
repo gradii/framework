@@ -74,7 +74,7 @@ func TestCompileExistenceSubquery_WithCallback(t *testing.T) {
 	desc, err := resolveRelation(&relUser{}, "Books")
 	assert.NoError(t, err)
 	cb := contractsorm.RelationCallback(func(qq contractsorm.Query) contractsorm.Query {
-		return qq.Where("title = ?", "x")
+		return qq.Where("title", "x")
 	})
 	inner, err := q.compileExistenceSubquery(desc, cb)
 	assert.NoError(t, err)

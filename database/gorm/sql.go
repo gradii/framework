@@ -373,10 +373,11 @@ func (r *OrmBuilder) applySingleWhere(builder *querybuilder.Builder, item contra
 	applyWhereShape(builder, item.Query, item.Args, boolean, item.IsNot)
 }
 
-// applyWhereShape applies one condition to the builder in the shape the caller passed. The declared
-// where methods call it when they run, the way Eloquent's write through to $this->query; the
-// descriptor queue that remains (Find's conditions, the pivot chain, the relation writers) funnels
-// into it through applySingleWhere too.
+// applyWhereShape applies one condition to the builder in the shape the ORM records internally: a
+// raw fragment with its bindings, a column with its value, a slice standing for an IN list, or a
+// string carrying a slice for the "col in ?" shorthand Find's conditions and the pivot chain queue.
+// The declared where methods do not pass through here; they write to the inner builder directly, and
+// raw SQL has its own entry point in WhereRaw.
 func applyWhereShape(builder *querybuilder.Builder, query any, args []any, boolean string, not bool) {
 	if column, ok := query.(string); ok {
 		applyRawOrColumnWhere(builder, column, args, boolean, not)

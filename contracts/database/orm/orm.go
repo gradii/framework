@@ -289,8 +289,14 @@ type Query interface {
 	// Where adds a "where" clause to the query, mirroring Eloquent's Builder::where. A callback
 	// with no other arguments runs against a new query without relationships: its eager loads
 	// merge into this query and its wheres join this query as one nested group. Every other
-	// condition is applied to the underlying query builder as it is written.
+	// condition is applied to the underlying query builder as it is written; raw SQL goes through
+	// WhereRaw, the way Eloquent separates where() from whereRaw().
 	Where(query any, args ...any) Query
+	// WhereRaw adds a raw where clause, mirroring Eloquent's Builder::whereRaw: the fragment renders
+	// verbatim and the values bind to its placeholders in order.
+	WhereRaw(query string, args ...any) Query
+	// OrWhereRaw adds a raw where clause with the "or" connector, mirroring Builder::orWhereRaw.
+	OrWhereRaw(query string, args ...any) Query
 	// WhereAll adds a "where all columns match" clause to the query.
 	WhereAll(columns []string, args ...any) Query
 	// WhereAny adds a "where any of columns match" clause to the query.

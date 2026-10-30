@@ -57,7 +57,7 @@ func (s *WithTestSuite) TestWith_HasMany() {
 			s.Nil(query.Query().Relation(bob, "Books").SaveMany([]*Book{{Name: "wr_hm_b1"}}))
 
 			var users []User
-			s.Nil(query.Query().Where("name like ?", "wr_hm_%").OrderBy("name").
+			s.Nil(query.Query().Where("name", "like", "wr_hm_%").OrderBy("name").
 				With("Books").Get(&users))
 			s.Require().Len(users, 2)
 			s.Equal("wr_hm_alice", users[0].Name)
@@ -76,7 +76,7 @@ func (s *WithTestSuite) TestWith_HasOne() {
 			s.Nil(query.Query().Relation(u, "Address").Save(&Address{Name: "wr_ho_addr", Province: "X"}))
 
 			var loaded User
-			s.Nil(query.Query().Where("name = ?", "wr_ho_user").
+			s.Nil(query.Query().Where("name", "wr_ho_user").
 				With("Address").First(&loaded))
 			s.NotNil(loaded.Address)
 			s.Equal("wr_ho_addr", loaded.Address.Name)
@@ -94,7 +94,7 @@ func (s *WithTestSuite) TestWith_BelongsTo() {
 			s.Nil(query.Query().Relation(addr, "User").Associate(u))
 
 			var addrs []Address
-			s.Nil(query.Query().Where("name = ?", "wr_bt_addr").
+			s.Nil(query.Query().Where("name", "wr_bt_addr").
 				With("User").Get(&addrs))
 			s.Require().Len(addrs, 1)
 			s.NotNil(addrs[0].User)
@@ -113,7 +113,7 @@ func (s *WithTestSuite) TestWith_Many2Many() {
 			s.Nil(query.Query().Relation(u, "Roles").Save(role))
 
 			var loaded User
-			s.Nil(query.Query().Where("name = ?", "wr_m2m_user").
+			s.Nil(query.Query().Where("name", "wr_m2m_user").
 				With("Roles").First(&loaded))
 			s.Require().Len(loaded.Roles, 1)
 			s.Equal("wr_m2m_role", loaded.Roles[0].Name)
@@ -129,7 +129,7 @@ func (s *WithTestSuite) TestWith_MorphOne() {
 			s.Nil(query.Query().Relation(u, "House").Save(&House{Name: "wr_mo_house"}))
 
 			var loaded User
-			s.Nil(query.Query().Where("name = ?", "wr_mo_user").
+			s.Nil(query.Query().Where("name", "wr_mo_user").
 				With("House").First(&loaded))
 			s.NotNil(loaded.House)
 			s.Equal("wr_mo_house", loaded.House.Name)
@@ -145,7 +145,7 @@ func (s *WithTestSuite) TestWith_MorphMany() {
 			s.Nil(query.Query().Relation(u, "Phones").SaveMany([]*Phone{{Name: "wr_mm_p1"}, {Name: "wr_mm_p2"}}))
 
 			var loaded User
-			s.Nil(query.Query().Where("name = ?", "wr_mm_user").
+			s.Nil(query.Query().Where("name", "wr_mm_user").
 				With("Phones").First(&loaded))
 			s.Len(loaded.Phones, 2)
 		})
@@ -175,7 +175,7 @@ func (s *WithTestSuite) TestWith_HasManyThrough() {
 			// declaration but reads from the same users table.
 			var users []userAuthorsThrough
 			s.Nil(query.Query().Model(&userAuthorsThrough{}).
-				Where("name like ?", "wr_th_%").OrderBy("name").
+				Where("name", "like", "wr_th_%").OrderBy("name").
 				With("Authors").Get(&users))
 			s.Require().Len(users, 2)
 			s.Require().Len(users[0].Authors, 1)
@@ -195,7 +195,7 @@ func (s *WithTestSuite) TestWith_Nested() {
 			s.Nil(query.Query().Relation(b1, "Author").Save(&Author{Name: "wr_n_a1"}))
 
 			var loaded User
-			s.Nil(query.Query().Where("name = ?", "wr_n_user").
+			s.Nil(query.Query().Where("name", "wr_n_user").
 				With("Books.Author").First(&loaded))
 			s.Require().Len(loaded.Books, 1)
 			s.NotNil(loaded.Books[0].Author)
@@ -213,9 +213,9 @@ func (s *WithTestSuite) TestWith_Callback() {
 
 			var loaded User
 			cb := func(q contractsorm.Query) contractsorm.Query {
-				return q.Where("name = ?", "wr_cb_keep")
+				return q.Where("name", "wr_cb_keep")
 			}
-			s.Nil(query.Query().Where("name = ?", "wr_cb_user").
+			s.Nil(query.Query().Where("name", "wr_cb_user").
 				With("Books", cb).First(&loaded))
 			s.Require().Len(loaded.Books, 1)
 			s.Equal("wr_cb_keep", loaded.Books[0].Name)
@@ -234,7 +234,7 @@ func (s *WithTestSuite) TestWith_Map() {
 			s.Nil(query.Query().Relation(u, "Roles").Save(role))
 
 			var loaded User
-			s.Nil(query.Query().Where("name = ?", "wr_map_user").
+			s.Nil(query.Query().Where("name", "wr_map_user").
 				With(map[string]contractsorm.RelationCallback{
 					"Books": nil,
 					"Roles": nil,
@@ -253,7 +253,7 @@ func (s *WithTestSuite) TestWith_Columns() {
 			s.Nil(query.Query().Relation(u, "Books").Save(&Book{Name: "wr_col_b1"}))
 
 			var loaded User
-			s.Nil(query.Query().Where("name = ?", "wr_col_user").
+			s.Nil(query.Query().Where("name", "wr_col_user").
 				With("Books:id,name").First(&loaded))
 			s.Require().Len(loaded.Books, 1)
 			s.Equal("wr_col_b1", loaded.Books[0].Name)
@@ -274,7 +274,7 @@ func (s *WithTestSuite) TestWithout() {
 			s.Nil(query.Query().Relation(u, "Address").Save(&Address{Name: "wrr_a"}))
 
 			var loaded User
-			s.Nil(query.Query().Where("name = ?", "wrr_user").
+			s.Nil(query.Query().Where("name", "wrr_user").
 				With("Books", "Address").
 				Without("Books").
 				First(&loaded))
@@ -293,7 +293,7 @@ func (s *WithTestSuite) TestWithOnly() {
 			s.Nil(query.Query().Relation(u, "Address").Save(&Address{Name: "wro_a"}))
 
 			var loaded User
-			s.Nil(query.Query().Where("name = ?", "wro_user").
+			s.Nil(query.Query().Where("name", "wro_user").
 				With("Books", "Address").
 				WithOnly("Books").
 				First(&loaded))
@@ -320,7 +320,7 @@ func (s *WithTestSuite) TestWith_ChunkedIN() {
 	}
 
 	var users []User
-	s.Nil(q.Query().Where("name like ?", "wr_chunk_%").
+	s.Nil(q.Query().Where("name", "like", "wr_chunk_%").
 		With("Books").Get(&users))
 	s.Len(users, total, "all parents should be returned")
 

@@ -55,7 +55,7 @@ func (s *QueriesRelationshipsTestSuite) TestHas_Existence() {
 			rq := rq(query.Query())
 			var users []User
 			s.Nil(rq.Has("Books").
-				Where("name like ?", "rel_has_%").Get(&users))
+				Where("name", "like", "rel_has_%").Get(&users))
 			names := namesOf(users)
 			s.ElementsMatch([]string{"rel_has_alice", "rel_has_carol"}, names)
 		})
@@ -75,7 +75,7 @@ func (s *QueriesRelationshipsTestSuite) TestHas_CountComparison() {
 			rq := rq(query.Query())
 			var users []User
 			s.Nil(rq.Has("Books", ">=", 2).
-				Where("name like ?", "rel_hasc_%").Get(&users))
+				Where("name", "like", "rel_hasc_%").Get(&users))
 			s.Require().Len(users, 1)
 			s.Equal("rel_hasc_alice", users[0].Name)
 		})
@@ -94,7 +94,7 @@ func (s *QueriesRelationshipsTestSuite) TestDoesntHave() {
 			rq := rq(query.Query())
 			var users []User
 			s.Nil(rq.DoesntHave("Books").
-				Where("name like ?", "rel_dh_%").Get(&users))
+				Where("name", "like", "rel_dh_%").Get(&users))
 			s.Require().Len(users, 1)
 			s.Equal("rel_dh_without", users[0].Name)
 		})
@@ -113,11 +113,11 @@ func (s *QueriesRelationshipsTestSuite) TestWhereHas_Callback() {
 
 			rq := rq(query.Query())
 			cb := func(q contractsorm.Query) contractsorm.Query {
-				return q.Where("name = ?", "wh_target")
+				return q.Where("name", "wh_target")
 			}
 			var users []User
 			s.Nil(rq.WhereHas("Books", cb).
-				Where("name like ?", "rel_wh_%").Get(&users))
+				Where("name", "like", "rel_wh_%").Get(&users))
 			s.Require().Len(users, 1)
 			s.Equal("rel_wh_match", users[0].Name)
 		})
@@ -136,7 +136,7 @@ func (s *QueriesRelationshipsTestSuite) TestHas_BelongsTo() {
 			rq := rq(query.Query())
 			var addresses []Address
 			s.Nil(rq.Has("User").
-				Where("name = ?", "rel_bt_address").Get(&addresses))
+				Where("name", "rel_bt_address").Get(&addresses))
 			s.Len(addresses, 1)
 		})
 	}
@@ -156,7 +156,7 @@ func (s *QueriesRelationshipsTestSuite) TestHas_ManyToMany() {
 			rq := rq(query.Query())
 			var users []User
 			s.Nil(rq.Has("Roles").
-				Where("name like ?", "rel_mtm_%").Get(&users))
+				Where("name", "like", "rel_mtm_%").Get(&users))
 			names := namesOf(users)
 			s.Contains(names, "rel_mtm_with")
 			s.NotContains(names, "rel_mtm_no")
@@ -176,7 +176,7 @@ func (s *QueriesRelationshipsTestSuite) TestHasMorph() {
 			rq := rq(query.Query())
 			var users []User
 			s.Nil(rq.HasMorph("House", []any{&User{}}).
-				Where("name like ?", "rel_hm_%").Get(&users))
+				Where("name", "like", "rel_hm_%").Get(&users))
 			s.Require().Len(users, 1)
 			s.Equal("rel_hm_with", users[0].Name)
 		})
@@ -200,7 +200,7 @@ func (s *QueriesRelationshipsTestSuite) TestNestedHas() {
 			rq := rq(query.Query())
 			var users []User
 			s.Nil(rq.Has("Books.Author").
-				Where("name like ?", "rel_nested_%").Get(&users))
+				Where("name", "like", "rel_nested_%").Get(&users))
 			names := namesOf(users)
 			s.Contains(names, "rel_nested_carol")
 			s.NotContains(names, "rel_nested_dan")
@@ -222,7 +222,7 @@ func (s *QueriesRelationshipsTestSuite) TestOrHas() {
 
 			rq := rq(query.Query())
 			var users []User
-			s.Nil(rq.Where("name like ?", "rel_or_has_%").
+			s.Nil(rq.Where("name", "like", "rel_or_has_%").
 				Has("Books").OrHas("Roles").Get(&users))
 			names := namesOf(users)
 			s.ElementsMatch([]string{"rel_or_has_books", "rel_or_has_roles"}, names)
@@ -246,7 +246,7 @@ func (s *QueriesRelationshipsTestSuite) TestOrDoesntHave() {
 
 			rq := rq(query.Query())
 			var users []User
-			s.Nil(rq.Where("name like ?", "rel_or_dh_%").
+			s.Nil(rq.Where("name", "like", "rel_or_dh_%").
 				DoesntHave("Books").OrDoesntHave("Roles").Get(&users))
 			names := namesOf(users)
 			s.ElementsMatch([]string{"rel_or_dh_books", "rel_or_dh_roles"}, names)
@@ -269,13 +269,13 @@ func (s *QueriesRelationshipsTestSuite) TestOrWhereHas() {
 
 			rq := rq(query.Query())
 			cbBook := func(q contractsorm.Query) contractsorm.Query {
-				return q.Where("name = ?", "target_book")
+				return q.Where("name", "target_book")
 			}
 			cbRole := func(q contractsorm.Query) contractsorm.Query {
-				return q.Where("name = ?", "target_role")
+				return q.Where("name", "target_role")
 			}
 			var users []User
-			s.Nil(rq.Where("name like ?", "rel_or_wh_%").
+			s.Nil(rq.Where("name", "like", "rel_or_wh_%").
 				WhereHas("Books", cbBook).OrWhereHas("Roles", cbRole).Get(&users))
 			names := namesOf(users)
 			s.ElementsMatch([]string{"rel_or_wh_alice", "rel_or_wh_bob"}, names)
@@ -299,13 +299,13 @@ func (s *QueriesRelationshipsTestSuite) TestOrWhereDoesntHave() {
 
 			rq := rq(query.Query())
 			cbBook := func(q contractsorm.Query) contractsorm.Query {
-				return q.Where("name = ?", "target_book")
+				return q.Where("name", "target_book")
 			}
 			cbRole := func(q contractsorm.Query) contractsorm.Query {
-				return q.Where("name = ?", "target_role")
+				return q.Where("name", "target_role")
 			}
 			var users []User
-			s.Nil(rq.Where("name like ?", "rel_or_wdh_%").
+			s.Nil(rq.Where("name", "like", "rel_or_wdh_%").
 				WhereDoesntHave("Books", cbBook).OrWhereDoesntHave("Roles", cbRole).Get(&users))
 			names := namesOf(users)
 			s.ElementsMatch([]string{"rel_or_wdh_alice", "rel_or_wdh_bob", "rel_or_wdh_carol"}, names)
@@ -327,7 +327,7 @@ func (s *QueriesRelationshipsTestSuite) TestOrHasMorph() {
 
 			rq := rq(query.Query())
 			var users []User
-			s.Nil(rq.Where("name like ?", "rel_or_hm_%").
+			s.Nil(rq.Where("name", "like", "rel_or_hm_%").
 				HasMorph("House", []any{&User{}}).OrHasMorph("Phones", []any{&User{}}).Get(&users))
 			names := namesOf(users)
 			s.ElementsMatch([]string{"rel_or_hm_house", "rel_or_hm_phone"}, names)
@@ -351,7 +351,7 @@ func (s *QueriesRelationshipsTestSuite) TestOrDoesntHaveMorph() {
 
 			rq := rq(query.Query())
 			var users []User
-			s.Nil(rq.Where("name like ?", "rel_or_dhm_%").
+			s.Nil(rq.Where("name", "like", "rel_or_dhm_%").
 				DoesntHaveMorph("House", []any{&User{}}).OrDoesntHaveMorph("Phones", []any{&User{}}).Get(&users))
 			names := namesOf(users)
 			s.ElementsMatch([]string{"rel_or_dhm_house", "rel_or_dhm_phone"}, names)
@@ -374,13 +374,13 @@ func (s *QueriesRelationshipsTestSuite) TestOrWhereHasMorph() {
 
 			rq := rq(query.Query())
 			cbHouse := func(q contractsorm.Query) contractsorm.Query {
-				return q.Where("name = ?", "target_house")
+				return q.Where("name", "target_house")
 			}
 			cbPhone := func(q contractsorm.Query) contractsorm.Query {
-				return q.Where("name = ?", "555-9999")
+				return q.Where("name", "555-9999")
 			}
 			var users []User
-			s.Nil(rq.Where("name like ?", "rel_or_whm_%").
+			s.Nil(rq.Where("name", "like", "rel_or_whm_%").
 				WhereHasMorph("House", []any{&User{}}, cbHouse).
 				OrWhereHasMorph("Phones", []any{&User{}}, cbPhone).Get(&users))
 			names := namesOf(users)
@@ -405,13 +405,13 @@ func (s *QueriesRelationshipsTestSuite) TestOrWhereDoesntHaveMorph() {
 
 			rq := rq(query.Query())
 			cbHouse := func(q contractsorm.Query) contractsorm.Query {
-				return q.Where("name = ?", "target_house")
+				return q.Where("name", "target_house")
 			}
 			cbPhone := func(q contractsorm.Query) contractsorm.Query {
-				return q.Where("name = ?", "555-8888")
+				return q.Where("name", "555-8888")
 			}
 			var users []User
-			s.Nil(rq.Where("name like ?", "rel_or_wdhm_%").
+			s.Nil(rq.Where("name", "like", "rel_or_wdhm_%").
 				WhereDoesntHaveMorph("House", []any{&User{}}, cbHouse).
 				OrWhereDoesntHaveMorph("Phones", []any{&User{}}, cbPhone).Get(&users))
 			names := namesOf(users)
@@ -472,11 +472,11 @@ func (s *QueriesRelationshipsTestSuite) TestHasManyThrough_WhereHas() {
 
 			rq := rq(query.Query().Model(&userWithThrough{}))
 			cb := func(q contractsorm.Query) contractsorm.Query {
-				return q.Where("authors.name = ?", "th_author_match")
+				return q.Where("authors.name", "th_author_match")
 			}
 			var users []User
 			s.Nil(rq.WhereHas("Authors", cb).
-				Where("name like ?", "rel_th_%").Get(&users))
+				Where("name", "like", "rel_th_%").Get(&users))
 			s.Require().Len(users, 1)
 			s.Equal("rel_th_u1", users[0].Name)
 		})
@@ -562,12 +562,12 @@ func (s *QueriesRelationshipsTestSuite) TestSQL_WhereHasWithCallback() {
 	}
 	rq := rq(q.Query().Model(&User{}))
 	cb := func(q contractsorm.Query) contractsorm.Query {
-		return q.Where("name = ?", "wh_target")
+		return q.Where("name", "wh_target")
 	}
 	var users []User
 	sql := rq.WhereHas("Books", cb).ToRawSql().Get(&users)
 	s.Equal(
-		"select * from \"users\" where exists (select 1 from \"books\" where \"users\".\"id\" = \"books\".\"user_id\" and name = 'wh_target') and \"users\".\"deleted_at\" IS NULL",
+		"select * from \"users\" where exists (select 1 from \"books\" where \"users\".\"id\" = \"books\".\"user_id\" and \"name\" = 'wh_target') and \"users\".\"deleted_at\" IS NULL",
 		sql,
 	)
 }
@@ -579,9 +579,9 @@ func (s *QueriesRelationshipsTestSuite) TestSQL_OrHas() {
 	}
 	rq := rq(q.Query().Model(&User{}))
 	var users []User
-	sql := rq.Where("name = ?", "x").OrHas("Books").ToRawSql().Get(&users)
+	sql := rq.Where("name", "x").OrHas("Books").ToRawSql().Get(&users)
 	s.Equal(
-		"select * from \"users\" where name = 'x' or exists (select 1 from \"books\" where \"users\".\"id\" = \"books\".\"user_id\") and \"users\".\"deleted_at\" IS NULL",
+		"select * from \"users\" where \"name\" = 'x' or exists (select 1 from \"books\" where \"users\".\"id\" = \"books\".\"user_id\") and \"users\".\"deleted_at\" IS NULL",
 		sql,
 	)
 }
@@ -593,9 +593,9 @@ func (s *QueriesRelationshipsTestSuite) TestSQL_OrDoesntHave() {
 	}
 	rq := rq(q.Query().Model(&User{}))
 	var users []User
-	sql := rq.Where("name = ?", "x").OrDoesntHave("Books").ToRawSql().Get(&users)
+	sql := rq.Where("name", "x").OrDoesntHave("Books").ToRawSql().Get(&users)
 	s.Equal(
-		"select * from \"users\" where name = 'x' or not exists (select 1 from \"books\" where \"users\".\"id\" = \"books\".\"user_id\") and \"users\".\"deleted_at\" IS NULL",
+		"select * from \"users\" where \"name\" = 'x' or not exists (select 1 from \"books\" where \"users\".\"id\" = \"books\".\"user_id\") and \"users\".\"deleted_at\" IS NULL",
 		sql,
 	)
 }
@@ -608,11 +608,11 @@ func (s *QueriesRelationshipsTestSuite) TestSQL_OrWhereHas() {
 	rq := rq(q.Query().Model(&User{}))
 	var users []User
 	cb := func(q contractsorm.Query) contractsorm.Query {
-		return q.Where("name = ?", "target")
+		return q.Where("name", "target")
 	}
-	sql := rq.Where("id = ?", 1).OrWhereHas("Books", cb).ToRawSql().Get(&users)
+	sql := rq.Where("id", 1).OrWhereHas("Books", cb).ToRawSql().Get(&users)
 	s.Equal(
-		"select * from \"users\" where id = 1 or exists (select 1 from \"books\" where \"users\".\"id\" = \"books\".\"user_id\" and name = 'target') and \"users\".\"deleted_at\" IS NULL",
+		"select * from \"users\" where \"id\" = 1 or exists (select 1 from \"books\" where \"users\".\"id\" = \"books\".\"user_id\" and \"name\" = 'target') and \"users\".\"deleted_at\" IS NULL",
 		sql,
 	)
 }
@@ -625,11 +625,11 @@ func (s *QueriesRelationshipsTestSuite) TestSQL_OrWhereDoesntHave() {
 	rq := rq(q.Query().Model(&User{}))
 	var users []User
 	cb := func(q contractsorm.Query) contractsorm.Query {
-		return q.Where("name = ?", "target")
+		return q.Where("name", "target")
 	}
-	sql := rq.Where("id = ?", 1).OrWhereDoesntHave("Books", cb).ToRawSql().Get(&users)
+	sql := rq.Where("id", 1).OrWhereDoesntHave("Books", cb).ToRawSql().Get(&users)
 	s.Equal(
-		"select * from \"users\" where id = 1 or not exists (select 1 from \"books\" where \"users\".\"id\" = \"books\".\"user_id\" and name = 'target') and \"users\".\"deleted_at\" IS NULL",
+		"select * from \"users\" where \"id\" = 1 or not exists (select 1 from \"books\" where \"users\".\"id\" = \"books\".\"user_id\" and \"name\" = 'target') and \"users\".\"deleted_at\" IS NULL",
 		sql,
 	)
 }
@@ -641,9 +641,9 @@ func (s *QueriesRelationshipsTestSuite) TestSQL_OrHasMorph() {
 	}
 	rq := rq(q.Query().Model(&User{}))
 	var users []User
-	sql := rq.Where("name = ?", "x").OrHasMorph("House", []any{&User{}}).ToRawSql().Get(&users)
+	sql := rq.Where("name", "x").OrHasMorph("House", []any{&User{}}).ToRawSql().Get(&users)
 	s.Equal(
-		"select * from \"users\" where name = 'x' or (exists (select 1 from \"houses\" where \"users\".\"id\" = \"houses\".\"houseable_id\" and \"houses\".\"houseable_type\" = 'users')) and \"users\".\"deleted_at\" IS NULL",
+		"select * from \"users\" where \"name\" = 'x' or (exists (select 1 from \"houses\" where \"users\".\"id\" = \"houses\".\"houseable_id\" and \"houses\".\"houseable_type\" = 'users')) and \"users\".\"deleted_at\" IS NULL",
 		sql,
 	)
 }
@@ -655,9 +655,9 @@ func (s *QueriesRelationshipsTestSuite) TestSQL_OrDoesntHaveMorph() {
 	}
 	rq := rq(q.Query().Model(&User{}))
 	var users []User
-	sql := rq.Where("name = ?", "x").OrDoesntHaveMorph("House", []any{&User{}}).ToRawSql().Get(&users)
+	sql := rq.Where("name", "x").OrDoesntHaveMorph("House", []any{&User{}}).ToRawSql().Get(&users)
 	s.Equal(
-		"select * from \"users\" where name = 'x' or (not exists (select 1 from \"houses\" where \"users\".\"id\" = \"houses\".\"houseable_id\" and \"houses\".\"houseable_type\" = 'users')) and \"users\".\"deleted_at\" IS NULL",
+		"select * from \"users\" where \"name\" = 'x' or (not exists (select 1 from \"houses\" where \"users\".\"id\" = \"houses\".\"houseable_id\" and \"houses\".\"houseable_type\" = 'users')) and \"users\".\"deleted_at\" IS NULL",
 		sql,
 	)
 }
@@ -670,11 +670,11 @@ func (s *QueriesRelationshipsTestSuite) TestSQL_OrWhereHasMorph() {
 	rq := rq(q.Query().Model(&User{}))
 	var users []User
 	cb := func(q contractsorm.Query) contractsorm.Query {
-		return q.Where("name = ?", "target")
+		return q.Where("name", "target")
 	}
-	sql := rq.Where("id = ?", 1).OrWhereHasMorph("House", []any{&User{}}, cb).ToRawSql().Get(&users)
+	sql := rq.Where("id", 1).OrWhereHasMorph("House", []any{&User{}}, cb).ToRawSql().Get(&users)
 	s.Equal(
-		"select * from \"users\" where id = 1 or (exists (select 1 from \"houses\" where \"users\".\"id\" = \"houses\".\"houseable_id\" and \"houses\".\"houseable_type\" = 'users' and name = 'target')) and \"users\".\"deleted_at\" IS NULL",
+		"select * from \"users\" where \"id\" = 1 or (exists (select 1 from \"houses\" where \"users\".\"id\" = \"houses\".\"houseable_id\" and \"houses\".\"houseable_type\" = 'users' and \"name\" = 'target')) and \"users\".\"deleted_at\" IS NULL",
 		sql,
 	)
 }
@@ -687,11 +687,11 @@ func (s *QueriesRelationshipsTestSuite) TestSQL_OrWhereDoesntHaveMorph() {
 	rq := rq(q.Query().Model(&User{}))
 	var users []User
 	cb := func(q contractsorm.Query) contractsorm.Query {
-		return q.Where("name = ?", "target")
+		return q.Where("name", "target")
 	}
-	sql := rq.Where("id = ?", 1).OrWhereDoesntHaveMorph("House", []any{&User{}}, cb).ToRawSql().Get(&users)
+	sql := rq.Where("id", 1).OrWhereDoesntHaveMorph("House", []any{&User{}}, cb).ToRawSql().Get(&users)
 	s.Equal(
-		"select * from \"users\" where id = 1 or (not exists (select 1 from \"houses\" where \"users\".\"id\" = \"houses\".\"houseable_id\" and \"houses\".\"houseable_type\" = 'users' and name = 'target')) and \"users\".\"deleted_at\" IS NULL",
+		"select * from \"users\" where \"id\" = 1 or (not exists (select 1 from \"houses\" where \"users\".\"id\" = \"houses\".\"houseable_id\" and \"houses\".\"houseable_type\" = 'users' and \"name\" = 'target')) and \"users\".\"deleted_at\" IS NULL",
 		sql,
 	)
 }
@@ -717,12 +717,12 @@ func (s *QueriesRelationshipsTestSuite) TestSQL_WithCountAndCallback() {
 	}
 	rq := rq(q.Query().Model(&User{}))
 	cb := func(q contractsorm.Query) contractsorm.Query {
-		return q.Where("name = ?", "active")
+		return q.Where("name", "active")
 	}
 	var users []User
 	sql := rq.WithCount(contractsorm.RelationCount{Name: "Books", Callback: cb}).ToRawSql().Get(&users)
 	s.Equal(
-		"select \"users\".*, (select count(*) from \"books\" where \"users\".\"id\" = \"books\".\"user_id\" and name = 'active') AS \"books_count\" from \"users\" where \"users\".\"deleted_at\" IS NULL",
+		"select \"users\".*, (select count(*) from \"books\" where \"users\".\"id\" = \"books\".\"user_id\" and \"name\" = 'active') AS \"books_count\" from \"users\" where \"users\".\"deleted_at\" IS NULL",
 		sql,
 	)
 }
@@ -786,7 +786,7 @@ func (s *QueriesRelationshipsTestSuite) TestWithCount_Retrieve() {
 			s.Nil(query.Query().Relation(b3, "Author").Save(&Author{Name: "Author1"}))
 
 			var rows []userAggregates
-			s.Nil(query.Query().Model(&User{}).Where("name like ?", "agg_count_%").OrderBy("name").
+			s.Nil(query.Query().Model(&User{}).Where("name", "like", "agg_count_%").OrderBy("name").
 				WithCount("Books").
 				WithCount("Books.Author").
 				Get(&rows))
@@ -810,10 +810,10 @@ func (s *QueriesRelationshipsTestSuite) TestWithCount_CustomAliasAndCallback() {
 			s.Nil(query.Query().Relation(u, "Books").SaveMany([]*Book{{Name: "pop_x"}, {Name: "pop_y"}, {Name: "boring"}}))
 
 			cb := func(q contractsorm.Query) contractsorm.Query {
-				return q.Where("name like ?", "pop_%")
+				return q.Where("name", "like", "pop_%")
 			}
 			var rows []userAggregates
-			s.Nil(query.Query().Model(&User{}).Where("name = ?", "agg_alias_u").
+			s.Nil(query.Query().Model(&User{}).Where("name", "agg_alias_u").
 				WithCount(contractsorm.RelationCount{Name: "Books", Alias: "popular_books", Callback: cb}).
 				Get(&rows))
 
@@ -832,7 +832,7 @@ func (s *QueriesRelationshipsTestSuite) TestWithMaxMinSumAvg_Retrieve() {
 			s.Nil(query.Query().Relation(u, "Books").SaveMany([]*Book{{Name: "n1"}, {Name: "n2"}, {Name: "n3"}}))
 
 			var rows []userAggregates
-			s.Nil(query.Query().Model(&User{}).Where("name = ?", "agg_num_u").
+			s.Nil(query.Query().Model(&User{}).Where("name", "agg_num_u").
 				WithMax("Books", "id").
 				WithMin("Books", "id").
 				WithSum("Books", "id").
@@ -863,7 +863,7 @@ func (s *QueriesRelationshipsTestSuite) TestWithExists_Retrieve() {
 			s.Nil(query.Query().Create(withoutBooks))
 
 			var rows []userAggregates
-			s.Nil(query.Query().Model(&User{}).Where("name like ?", "agg_exist_%").OrderBy("name").
+			s.Nil(query.Query().Model(&User{}).Where("name", "like", "agg_exist_%").OrderBy("name").
 				WithExists("Books").
 				Get(&rows))
 

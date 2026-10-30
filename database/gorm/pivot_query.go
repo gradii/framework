@@ -3,6 +3,7 @@ package gorm
 import (
 	"fmt"
 
+	contractsdriver "github.com/gradii/framework/contracts/database/driver"
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
 	querybuilder "github.com/gradii/framework/database/query"
 )
@@ -14,6 +15,20 @@ type queryPivotQuery struct {
 	grammar   querybuilder.Grammar
 	q         contractsorm.Query
 	tableName string
+}
+
+// whereFragment appends one raw pivot predicate, identified with the wrapped table.column name, to
+// the underlying query's condition queue. The queue keeps the fragment's rendering — the wrapped
+// identifier verbatim and the "col in ?" slice shorthand expanded — which the structured where
+// methods cannot take because they would wrap the already-wrapped name a second time.
+func (p *queryPivotQuery) whereFragment(fragment string, args ...any) {
+	if builder, ok := p.q.(*OrmBuilder); ok {
+		builder.addWhere(contractsdriver.Where{Query: fragment, Args: args})
+
+		return
+	}
+
+	p.q = p.q.WhereRaw(fragment, args...)
 }
 
 func newQueryPivotQuery(grammar querybuilder.Grammar, q contractsorm.Query, tableName string) *queryPivotQuery {
@@ -46,22 +61,22 @@ func (p *queryPivotQuery) Where(column string, args ...any) contractsorm.PivotQu
 }
 
 func (p *queryPivotQuery) WhereIn(column string, values []any) contractsorm.PivotQuery {
-	p.q = p.q.Where(fmt.Sprintf("%s IN ?", p.qualified(column)), values)
+	p.whereFragment(fmt.Sprintf("%s IN ?", p.qualified(column)), values)
 	return p
 }
 
 func (p *queryPivotQuery) WhereNotIn(column string, values []any) contractsorm.PivotQuery {
-	p.q = p.q.Where(fmt.Sprintf("%s NOT IN ?", p.qualified(column)), values)
+	p.whereFragment(fmt.Sprintf("%s NOT IN ?", p.qualified(column)), values)
 	return p
 }
 
 func (p *queryPivotQuery) WhereNull(column string) contractsorm.PivotQuery {
-	p.q = p.q.Where(fmt.Sprintf("%s IS NULL", p.qualified(column)))
+	p.whereFragment(fmt.Sprintf("%s IS NULL", p.qualified(column)))
 	return p
 }
 
 func (p *queryPivotQuery) WhereNotNull(column string) contractsorm.PivotQuery {
-	p.q = p.q.Where(fmt.Sprintf("%s IS NOT NULL", p.qualified(column)))
+	p.whereFragment(fmt.Sprintf("%s IS NOT NULL", p.qualified(column)))
 	return p
 }
 
