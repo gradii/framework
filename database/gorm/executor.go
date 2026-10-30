@@ -43,13 +43,13 @@ type statementPool interface {
 // base pool instead executes in auto-commit, so a Rollback rolls nothing back and a FOR UPDATE
 // takes no lock; the transaction would exist on paper only. Every path that spawns a query carries
 // tx across, which is what keeps a statement inside its transaction.
-func (r *Query) transaction() (*sql.Tx, bool) {
+func (r *OrmBuilder) transaction() (*sql.Tx, bool) {
 	return r.tx, r.tx != nil
 }
 
 // queryPool returns the pool statements execute through: the transaction's own pool when the query
 // is bound to a transaction, and the writer pool otherwise.
-func (r *Query) queryPool() (statementPool, error) {
+func (r *OrmBuilder) queryPool() (statementPool, error) {
 	if tx, ok := r.transaction(); ok {
 		return tx, nil
 	}
@@ -79,8 +79,8 @@ func (r *Query) queryPool() (statementPool, error) {
 // any non-null lock, so both lockForUpdate() and sharedLock() force the writer. That is also the
 // only correct routing, since a FOR UPDATE (or a shared lock) sent to a replica locks nothing the
 // writer can see.
-func (r *Query) readPool() (statementPool, error) {
-	if r.conditions.useWritePdo || r.builder.State().Lock != nil {
+func (r *OrmBuilder) readPool() (statementPool, error) {
+	if r.conditions.useWritePdo || r.query.State().Lock != nil {
 		return r.queryPool()
 	}
 
@@ -102,7 +102,7 @@ func (r *Query) readPool() (statementPool, error) {
 // inTransaction reports whether the query executes inside a transaction. GORM swaps the
 // statement's connection pool for the transaction's *sql.Tx when Begin runs, which is what this
 // looks for.
-func (r *Query) inTransaction() bool {
+func (r *OrmBuilder) inTransaction() bool {
 	_, ok := r.transaction()
 
 	return ok
@@ -112,7 +112,7 @@ func (r *Query) inTransaction() bool {
 // plus the function that closes the span. When telemetry is off — or the connection was never opened,
 // as in the package's own unit tests — the context is the query's own and the closer does nothing, so
 // callers need no branch of their own.
-func (r *Query) startStatementSpan(resolverMode string) (context.Context, func(statement, table string, rows int64, err error)) {
+func (r *OrmBuilder) startStatementSpan(resolverMode string) (context.Context, func(statement, table string, rows int64, err error)) {
 	ctx := r.ctx
 	if ctx == nil {
 		ctx = context.Background()
@@ -138,7 +138,7 @@ func (r *Query) startStatementSpan(resolverMode string) (context.Context, func(s
 
 // statementTable names the table a statement addresses, for the span and the query log: the table the
 // caller named on the query, or the model's own when they named none.
-func (r *Query) statementTable() string {
+func (r *OrmBuilder) statementTable() string {
 	if table := r.declaredTable(); table != "" {
 		return table
 	}
@@ -158,7 +158,7 @@ func (r *Query) statementTable() string {
 
 // poolResolverMode reports which pool a statement ran on, for the span: a replica when the pool is the
 // connection's reader, the writer otherwise. A transaction always runs on the writer.
-func (r *Query) poolResolverMode(pool statementPool) string {
+func (r *OrmBuilder) poolResolverMode(pool statementPool) string {
 	if r.connection != nil && r.connection.Reader() != r.connection.Writer() && statementPool(r.connection.Reader()) == pool {
 		return resolverModeRead
 	}
@@ -172,7 +172,7 @@ func (r *Query) poolResolverMode(pool statementPool) string {
 }
 
 // queryRows runs a compiled read and returns the result set. Callers own the rows.
-func (r *Query) queryRows(statement string, bindings []any) (*sql.Rows, error) {
+func (r *OrmBuilder) queryRows(statement string, bindings []any) (*sql.Rows, error) {
 	pool, err := r.readPool()
 	if err != nil {
 		return nil, err
@@ -188,7 +188,7 @@ func (r *Query) queryRows(statement string, bindings []any) (*sql.Rows, error) {
 }
 
 // queryScalar runs a compiled read that yields one row, scanning its single column.
-func (r *Query) queryScalar(dest any, statement string, bindings []any) error {
+func (r *OrmBuilder) queryScalar(dest any, statement string, bindings []any) error {
 	pool, err := r.readPool()
 	if err != nil {
 		return err
@@ -199,7 +199,7 @@ func (r *Query) queryScalar(dest any, statement string, bindings []any) error {
 
 // writerScalar runs a single-row statement that has to observe a write which just went through
 // the writer — reading back an inserted key, for instance — so it never runs on the reader pool.
-func (r *Query) writerScalar(dest any, statement string, bindings []any) error {
+func (r *OrmBuilder) writerScalar(dest any, statement string, bindings []any) error {
 	pool, err := r.queryPool()
 	if err != nil {
 		return err
@@ -210,7 +210,7 @@ func (r *Query) writerScalar(dest any, statement string, bindings []any) error {
 
 // scanScalar runs a statement expected to yield one row on the given pool and scans its single
 // column into dest.
-func (r *Query) scanScalar(pool statementPool, dest any, statement string, bindings []any) error {
+func (r *OrmBuilder) scanScalar(pool statementPool, dest any, statement string, bindings []any) error {
 	ctx, end := r.startStatementSpan(r.poolResolverMode(pool))
 	begin := carbon.Now()
 	rows, err := pool.QueryContext(ctx, querybuilder.ReplacePlaceholders(statement, r.dbConfig.Driver), bindings...)
@@ -252,7 +252,7 @@ func (r *Query) scanScalar(pool statementPool, dest any, statement string, bindi
 }
 
 // execStatement runs a compiled statement that affects rows and reports how many it changed.
-func (r *Query) execStatement(statement string, bindings []any) (*contractsdb.Result, error) {
+func (r *OrmBuilder) execStatement(statement string, bindings []any) (*contractsdb.Result, error) {
 	// A statement the caller wrote still has to report a condition the query could not accept.
 	if r.conditions.err != nil {
 		return nil, r.conditions.err
@@ -310,7 +310,7 @@ func scanRowMap(rows *sql.Rows, columns []string) (map[string]any, error) {
 // scanRows decodes every row into dest, which is a pointer either to a struct or to a slice of
 // structs, and reports how many rows it decoded. Columns are matched to fields by name, so a model
 // needs no per-field tags for this path to fill it.
-func (r *Query) scanRows(rows *sql.Rows, dest any) (int, error) {
+func (r *OrmBuilder) scanRows(rows *sql.Rows, dest any) (int, error) {
 	destValue := reflect.ValueOf(dest)
 	if destValue.Kind() != reflect.Pointer || destValue.IsNil() {
 		return 0, errors.DatabaseUnsupportedType.Args(destValue.Kind(), "pointer")

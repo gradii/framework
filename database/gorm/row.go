@@ -19,7 +19,7 @@ var rowMapper = reflectx.NewMapperTagFunc("gorm", func(name string) string {
 
 type Row struct {
 	err   error
-	query *Query
+	query *OrmBuilder
 	row   map[string]any
 }
 

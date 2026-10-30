@@ -34,47 +34,47 @@ import (
 // inner subquery, a string operator (defaults to ">="), and an int count (defaults to 1). For
 // nested relations dot-notation is honoured: `Has("Books.Author")` is shorthand for
 // `WhereHas("Books", q -> q.Has("Author"))`.
-func (r *Query) Has(relation string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) Has(relation string, args ...any) contractsorm.Query {
 	return r.queueRelationExistence(relation, args, "and", false)
 }
 
 // OrHas adds a relationship count / exists condition to the query with an "or" conjunction.
-func (r *Query) OrHas(relation string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) OrHas(relation string, args ...any) contractsorm.Query {
 	return r.queueRelationExistence(relation, args, "or", false)
 }
 
 // DoesntHave adds a relationship absence condition to the query.
 // Equivalent to Has(rel, "<", 1).
-func (r *Query) DoesntHave(relation string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) DoesntHave(relation string, args ...any) contractsorm.Query {
 	return r.queueRelationExistence(relation, args, "and", true)
 }
 
 // OrDoesntHave adds a relationship absence condition with an "or" conjunction.
-func (r *Query) OrDoesntHave(relation string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) OrDoesntHave(relation string, args ...any) contractsorm.Query {
 	return r.queueRelationExistence(relation, args, "or", true)
 }
 
 // WhereHas adds a relationship count / exists condition to the query with where clauses.
 // Functionally identical to Has - the rename merely makes call sites that always pass a callback
 // read more naturally.
-func (r *Query) WhereHas(relation string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) WhereHas(relation string, args ...any) contractsorm.Query {
 	return r.queueRelationExistence(relation, args, "and", false)
 }
 
 // OrWhereHas adds a relationship count / exists condition with where clauses and an "or"
 // conjunction.
-func (r *Query) OrWhereHas(relation string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) OrWhereHas(relation string, args ...any) contractsorm.Query {
 	return r.queueRelationExistence(relation, args, "or", false)
 }
 
 // WhereDoesntHave adds a relationship absence condition to the query with where clauses.
-func (r *Query) WhereDoesntHave(relation string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) WhereDoesntHave(relation string, args ...any) contractsorm.Query {
 	return r.queueRelationExistence(relation, args, "and", true)
 }
 
 // OrWhereDoesntHave adds a relationship absence condition with where clauses and an "or"
 // conjunction.
-func (r *Query) OrWhereDoesntHave(relation string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) OrWhereDoesntHave(relation string, args ...any) contractsorm.Query {
 	return r.queueRelationExistence(relation, args, "or", true)
 }
 
@@ -84,45 +84,45 @@ func (r *Query) OrWhereDoesntHave(relation string, args ...any) contractsorm.Que
 //
 // Note: auto-discovery of distinct morph values via `types = ['*']` is not supported; an explicit
 // list of model instances is required.
-func (r *Query) HasMorph(relation string, types []any, args ...any) contractsorm.Query {
+func (r *OrmBuilder) HasMorph(relation string, types []any, args ...any) contractsorm.Query {
 	return r.queueMorphExistence(relation, types, args, "and", false)
 }
 
 // OrHasMorph adds a polymorphic relationship count / exists condition with an "or" conjunction.
-func (r *Query) OrHasMorph(relation string, types []any, args ...any) contractsorm.Query {
+func (r *OrmBuilder) OrHasMorph(relation string, types []any, args ...any) contractsorm.Query {
 	return r.queueMorphExistence(relation, types, args, "or", false)
 }
 
 // DoesntHaveMorph adds a polymorphic relationship absence condition.
-func (r *Query) DoesntHaveMorph(relation string, types []any, args ...any) contractsorm.Query {
+func (r *OrmBuilder) DoesntHaveMorph(relation string, types []any, args ...any) contractsorm.Query {
 	return r.queueMorphExistence(relation, types, args, "and", true)
 }
 
 // OrDoesntHaveMorph adds a polymorphic relationship absence condition with an "or" conjunction.
-func (r *Query) OrDoesntHaveMorph(relation string, types []any, args ...any) contractsorm.Query {
+func (r *OrmBuilder) OrDoesntHaveMorph(relation string, types []any, args ...any) contractsorm.Query {
 	return r.queueMorphExistence(relation, types, args, "or", true)
 }
 
 // WhereHasMorph adds a polymorphic existence condition with where clauses; callbacks may be
 // MorphRelationCallback for per-type scoping.
-func (r *Query) WhereHasMorph(relation string, types []any, args ...any) contractsorm.Query {
+func (r *OrmBuilder) WhereHasMorph(relation string, types []any, args ...any) contractsorm.Query {
 	return r.queueMorphExistence(relation, types, args, "and", false)
 }
 
 // OrWhereHasMorph adds a polymorphic existence condition with where clauses and an "or"
 // conjunction.
-func (r *Query) OrWhereHasMorph(relation string, types []any, args ...any) contractsorm.Query {
+func (r *OrmBuilder) OrWhereHasMorph(relation string, types []any, args ...any) contractsorm.Query {
 	return r.queueMorphExistence(relation, types, args, "or", false)
 }
 
 // WhereDoesntHaveMorph adds a polymorphic absence condition with where clauses.
-func (r *Query) WhereDoesntHaveMorph(relation string, types []any, args ...any) contractsorm.Query {
+func (r *OrmBuilder) WhereDoesntHaveMorph(relation string, types []any, args ...any) contractsorm.Query {
 	return r.queueMorphExistence(relation, types, args, "and", true)
 }
 
 // OrWhereDoesntHaveMorph adds a polymorphic absence condition with where clauses and an "or"
 // conjunction.
-func (r *Query) OrWhereDoesntHaveMorph(relation string, types []any, args ...any) contractsorm.Query {
+func (r *OrmBuilder) OrWhereDoesntHaveMorph(relation string, types []any, args ...any) contractsorm.Query {
 	return r.queueMorphExistence(relation, types, args, "or", true)
 }
 
@@ -135,7 +135,7 @@ func (r *Query) OrWhereDoesntHaveMorph(relation string, types []any, args ...any
 
 // WithAggregate adds a sub-select to include an aggregate value for a relationship.
 // fn must be one of: count, max, min, sum, avg, exists.
-func (r *Query) WithAggregate(relation, column, fn string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) WithAggregate(relation, column, fn string, args ...any) contractsorm.Query {
 	if !validAggregateFn(fn) {
 		return r.withError(errors.OrmRelationInvalidAggregate.Args(fn))
 	}
@@ -157,12 +157,12 @@ func (r *Query) WithAggregate(relation, column, fn string, args ...any) contract
 // WithCount adds sub-select queries to count the relations. Each entry may be either:
 //   - a string ("Books") - emits `(SELECT COUNT(*) FROM ...) AS books_count`
 //   - a contractsorm.RelationCount struct for scoped counts and/or custom alias
-func (r *Query) WithCount(relations ...any) contractsorm.Query {
+func (r *OrmBuilder) WithCount(relations ...any) contractsorm.Query {
 	current := r
 	for _, raw := range relations {
 		switch v := raw.(type) {
 		case string:
-			next, ok := current.WithAggregate(v, "*", "count").(*Query)
+			next, ok := current.WithAggregate(v, "*", "count").(*OrmBuilder)
 			if !ok {
 				return current
 			}
@@ -172,7 +172,7 @@ func (r *Query) WithCount(relations ...any) contractsorm.Query {
 			if v.Callback != nil {
 				args = append(args, v.Callback)
 			}
-			next, ok := current.WithAggregate(v.Name, "*", "count", args...).(*Query)
+			next, ok := current.WithAggregate(v.Name, "*", "count", args...).(*OrmBuilder)
 			if !ok {
 				return current
 			}
@@ -190,22 +190,22 @@ func (r *Query) WithCount(relations ...any) contractsorm.Query {
 }
 
 // WithMax adds sub-select queries to include the max of the relation's column.
-func (r *Query) WithMax(relation, column string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) WithMax(relation, column string, args ...any) contractsorm.Query {
 	return r.WithAggregate(relation, column, "max", args...)
 }
 
 // WithMin adds sub-select queries to include the min of the relation's column.
-func (r *Query) WithMin(relation, column string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) WithMin(relation, column string, args ...any) contractsorm.Query {
 	return r.WithAggregate(relation, column, "min", args...)
 }
 
 // WithSum adds sub-select queries to include the sum of the relation's column.
-func (r *Query) WithSum(relation, column string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) WithSum(relation, column string, args ...any) contractsorm.Query {
 	return r.WithAggregate(relation, column, "sum", args...)
 }
 
 // WithAvg adds sub-select queries to include the average of the relation's column.
-func (r *Query) WithAvg(relation, column string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) WithAvg(relation, column string, args ...any) contractsorm.Query {
 	return r.WithAggregate(relation, column, "avg", args...)
 }
 
@@ -213,10 +213,10 @@ func (r *Query) WithAvg(relation, column string, args ...any) contractsorm.Query
 // emitted as `CASE WHEN EXISTS (...) THEN 1 ELSE 0 END` for cross-dialect portability (SQL Server
 // has no boolean literal). The dest field may be either `bool` or an integer type - Go's
 // database/sql layer converts 0/1 ints to bool automatically.
-func (r *Query) WithExists(relations ...string) contractsorm.Query {
+func (r *OrmBuilder) WithExists(relations ...string) contractsorm.Query {
 	current := r
 	for _, rel := range relations {
-		next, ok := current.WithAggregate(rel, "*", "exists").(*Query)
+		next, ok := current.WithAggregate(rel, "*", "exists").(*OrmBuilder)
 		if !ok {
 			return current
 		}
@@ -234,7 +234,7 @@ func (r *Query) WithExists(relations ...string) contractsorm.Query {
 
 // With eagerly loads the given relationships using Goravel's own loader. Accepts the
 // union of fedaco's with(...) shapes; see the orm.Query interface comment for the full grammar.
-func (r *Query) With(args ...any) contractsorm.Query {
+func (r *OrmBuilder) With(args ...any) contractsorm.Query {
 	entries, err := parseEagerLoad(args)
 	if err != nil {
 		return r.withError(err)
@@ -248,7 +248,7 @@ func (r *Query) With(args ...any) contractsorm.Query {
 
 // Without removes the named relations from the eager-load list. Mirrors fedaco's
 // without(). Names must match exactly (including dot-paths, e.g. "Books.Author").
-func (r *Query) Without(relations ...string) contractsorm.Query {
+func (r *OrmBuilder) Without(relations ...string) contractsorm.Query {
 	if len(relations) == 0 || len(r.conditions.eagerLoad) == 0 {
 		return r
 	}
@@ -270,7 +270,7 @@ func (r *Query) Without(relations ...string) contractsorm.Query {
 
 // WithOnly clears the eager-load list, then adds the given relations. Mirrors fedaco's
 // withOnly(). Useful when a default-scoped query has eager loads you want to override.
-func (r *Query) WithOnly(args ...any) contractsorm.Query {
+func (r *OrmBuilder) WithOnly(args ...any) contractsorm.Query {
 	conditions := r.conditions
 	conditions.eagerLoad = nil
 	return r.setConditions(conditions).With(args...)
@@ -280,7 +280,7 @@ func (r *Query) WithOnly(args ...any) contractsorm.Query {
 // Internal: queueing
 // ---------------------------------------------------------------------------
 
-func (r *Query) queueRelationExistence(relation string, args []any, conjunction string, doesntHave bool) contractsorm.Query {
+func (r *OrmBuilder) queueRelationExistence(relation string, args []any, conjunction string, doesntHave bool) contractsorm.Query {
 	cb, op, count, err := parseRelationArgs(args)
 	if err != nil {
 		return r.withError(err)
@@ -300,7 +300,7 @@ func (r *Query) queueRelationExistence(relation string, args []any, conjunction 
 	return r.setConditions(conditions)
 }
 
-func (r *Query) queueMorphExistence(relation string, types []any, args []any, conjunction string, doesntHave bool) contractsorm.Query {
+func (r *OrmBuilder) queueMorphExistence(relation string, types []any, args []any, conjunction string, doesntHave bool) contractsorm.Query {
 	if len(types) == 0 {
 		return r.withError(errors.OrmRelationMorphTypesEmpty)
 	}
@@ -332,7 +332,7 @@ func (r *Query) queueMorphExistence(relation string, types []any, args []any, co
 // compileExistenceSubquery builds the correlated inner SELECT for a relation as a framework builder.
 // Callers render it with ToSelectSQL and inline the result, so no GORM statement carries the
 // subquery. The builder is nil when the relation kind is unsupported.
-func (r *Query) compileExistenceSubquery(desc *relationDescriptor, callback contractsorm.RelationCallback) (*querybuilder.Builder, error) {
+func (r *OrmBuilder) compileExistenceSubquery(desc *relationDescriptor, callback contractsorm.RelationCallback) (*querybuilder.Builder, error) {
 	builder := r.subqueryBuilder(desc.relatedTable)
 
 	switch desc.kind {
@@ -387,7 +387,7 @@ func (r *Query) compileExistenceSubquery(desc *relationDescriptor, callback cont
 
 // compileMorphExistenceSubquery is the morph-specific variant. The morph_type column is pinned on the
 // related table, inside the subquery, and the type comparison the caller needs lives in the subquery.
-func (r *Query) compileMorphExistenceSubquery(desc *relationDescriptor, morphValue string, callback contractsorm.RelationCallback) *querybuilder.Builder {
+func (r *OrmBuilder) compileMorphExistenceSubquery(desc *relationDescriptor, morphValue string, callback contractsorm.RelationCallback) *querybuilder.Builder {
 	builder := r.subqueryBuilder(desc.relatedTable)
 	for _, ref := range desc.references {
 		builder.WhereRaw(r.ident(ref.primaryTable, ref.primaryColumn)+" = "+r.ident(ref.foreignTable, ref.foreignColumn), nil, core.BooleanAnd)
@@ -403,7 +403,7 @@ func (r *Query) compileMorphExistenceSubquery(desc *relationDescriptor, morphVal
 
 // compileAggregateSubquery returns the framework builder for the inner SELECT of an aggregate. The
 // select expression is dictated by sub.function.
-func (r *Query) compileAggregateSubquery(desc *relationDescriptor, sub selectSub) (*querybuilder.Builder, error) {
+func (r *OrmBuilder) compileAggregateSubquery(desc *relationDescriptor, sub selectSub) (*querybuilder.Builder, error) {
 	inner, err := r.compileExistenceSubquery(desc, sub.callback)
 	if err != nil {
 		return nil, err
@@ -440,7 +440,7 @@ func (r *Query) compileAggregateSubquery(desc *relationDescriptor, sub selectSub
 // the statement carries, so what is decided here is only the clause: the same EXISTS optimisation,
 // negation and conjunction the GORM path hands over, and for the polymorphic variants the same set of
 // per-type clauses joined into one group.
-func (r *Query) applyRelations(builder *querybuilder.Builder) error {
+func (r *OrmBuilder) applyRelations(builder *querybuilder.Builder) error {
 	if len(r.conditions.relations) == 0 {
 		return nil
 	}
@@ -486,7 +486,7 @@ func (r *Query) applyRelations(builder *querybuilder.Builder) error {
 // applyMorphRelation adds a polymorphic existence condition. Each requested type is a table of its own,
 // so the types contribute one clause each to a single group, which the condition's conjunction then
 // attaches to the query.
-func (r *Query) applyMorphRelation(builder *querybuilder.Builder, parent any, item relationExistence, boolean string) error {
+func (r *OrmBuilder) applyMorphRelation(builder *querybuilder.Builder, parent any, item relationExistence, boolean string) error {
 	desc, err := resolveRelation(parent, item.relation)
 	if err != nil {
 		return err
@@ -519,7 +519,7 @@ func (r *Query) applyMorphRelation(builder *querybuilder.Builder, parent any, it
 // related table, and against the parent table for the inverse kind, whose column lives there. Either
 // way the type and its subquery are ANDed inside the group, so the group reads as one alternative per
 // type.
-func (r *Query) applyMorphTypeClause(builder *querybuilder.Builder, desc *relationDescriptor, typeModel any, item relationExistence) error {
+func (r *OrmBuilder) applyMorphTypeClause(builder *querybuilder.Builder, desc *relationDescriptor, typeModel any, item relationExistence) error {
 	relatedTable, err := tableNameFor(typeModel)
 	if err != nil {
 		return err
@@ -559,7 +559,7 @@ func (r *Query) applyMorphTypeClause(builder *querybuilder.Builder, desc *relati
 // type still declaring gorm.DeletedAt is left to GORM, exactly as on every other compiled path, while
 // a type carrying the framework's own soft-delete type gets its "not deleted" predicate inside the
 // subquery - the same per-type treatment Laravel's SoftDeletingScope gives the BelongsTo it builds.
-func (r *Query) compileMorphToExistenceSubquery(desc *relationDescriptor, relatedTable string, relatedModel any, callback contractsorm.RelationCallback) *querybuilder.Builder {
+func (r *OrmBuilder) compileMorphToExistenceSubquery(desc *relationDescriptor, relatedTable string, relatedModel any, callback contractsorm.RelationCallback) *querybuilder.Builder {
 	ownerKey := desc.morphOwnerKey
 	if ownerKey == "" {
 		ownerKey = "id"
@@ -618,7 +618,7 @@ func existenceKeyword(operator string, count int) string {
 // The column is named the way a caller writes one — unquoted, with a dot separating a table from its
 // column — because the compiler quotes each segment. A name that arrived already quoted would be
 // quoted again and the statement would not run.
-func (r *Query) relatedChild(table string, column string, values []any) *Query {
+func (r *OrmBuilder) relatedChild(table string, column string, values []any) *OrmBuilder {
 	// The child starts from no conditions of its own, as the fresh session it replaced did. Inheriting
 	// the receiver's would carry the parent query's where clause into the child and narrow it to the
 	// rows the parent matched.
@@ -637,7 +637,7 @@ func (r *Query) relatedChild(table string, column string, values []any) *Query {
 // would match a parent whose only related rows are soft-deleted. Only the framework's own soft-delete
 // type is handled: a related model still declaring gorm.DeletedAt is left to GORM, exactly as on every
 // other compiled path.
-func (r *Query) applySubquerySoftDelete(builder *querybuilder.Builder, table string, model any) {
+func (r *OrmBuilder) applySubquerySoftDelete(builder *querybuilder.Builder, table string, model any) {
 	if !usesFrameworkSoftDeleteModel(model) {
 		return
 	}
@@ -654,7 +654,7 @@ func (r *Query) applySubquerySoftDelete(builder *querybuilder.Builder, table str
 //
 // The name is bare, like every table name the ORM holds, and goes in through tableRef so the
 // grammar renders it with the dialect quoting and the connection prefix exactly once.
-func (r *Query) subqueryBuilder(table string) *querybuilder.Builder {
+func (r *OrmBuilder) subqueryBuilder(table string) *querybuilder.Builder {
 	builder := querybuilder.NewBuilder(r.queryGrammar)
 	builder.SetDriver(r.dbConfig.Driver)
 	builder.FromRaw(r.tableRef(table), nil)
@@ -671,14 +671,14 @@ func setSubquerySelect(builder *querybuilder.Builder, expression string) {
 // applyRelationScope runs a relation callback against a child query and translates its conditions onto
 // the subquery builder. The callback is handed a wrapper query, exactly as it was when the subquery
 // was assembled with GORM, but its clauses now land on the framework builder.
-func (r *Query) applyRelationScope(builder *querybuilder.Builder, callback contractsorm.RelationCallback) {
+func (r *OrmBuilder) applyRelationScope(builder *querybuilder.Builder, callback contractsorm.RelationCallback) {
 	if callback == nil {
 		return
 	}
 
 	child := r.fresh()
 
-	if scoped, ok := callback(child).(*Query); ok {
+	if scoped, ok := callback(child).(*OrmBuilder); ok {
 		scoped.applyWhere(builder)
 
 		return
@@ -687,7 +687,7 @@ func (r *Query) applyRelationScope(builder *querybuilder.Builder, callback contr
 	child.applyWhere(builder)
 }
 
-func (r *Query) parentModel() any {
+func (r *OrmBuilder) parentModel() any {
 	if r.conditions.model != nil {
 		return r.conditions.model
 	}
@@ -701,7 +701,7 @@ func (r *Query) parentModel() any {
 	return nil
 }
 
-func (r *Query) parentTable(parent any) string {
+func (r *OrmBuilder) parentTable(parent any) string {
 	if t, err := tableNameFor(parent); err == nil {
 		return t
 	}
@@ -799,4 +799,4 @@ func aggregateAlias(relation, fn, column string) string {
 }
 
 // Sanity: ensure *Query satisfies contractsorm.QueryWithRelations at compile time.
-var _ contractsorm.QueryWithRelations = (*Query)(nil)
+var _ contractsorm.QueryWithRelations = (*OrmBuilder)(nil)

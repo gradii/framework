@@ -14,11 +14,11 @@ import (
 // so the reported statement is the one that would actually run — dialect placeholders and all.
 type ToSql struct {
 	log   log.Log
-	query *Query
+	query *OrmBuilder
 	raw   bool
 }
 
-func NewToSql(query *Query, log log.Log, raw bool) *ToSql {
+func NewToSql(query *OrmBuilder, log log.Log, raw bool) *ToSql {
 	return &ToSql{
 		log:   log,
 		query: query,
@@ -54,7 +54,7 @@ func (r *ToSql) Create(value any) string {
 func (r *ToSql) Delete(dests ...any) string {
 	var (
 		dest  any
-		query *Query
+		query *OrmBuilder
 	)
 
 	if len(dests) > 0 {
@@ -102,14 +102,14 @@ func (r *ToSql) First(dest any) string {
 func (r *ToSql) ForceDelete(dests ...any) string {
 	var (
 		dest  any
-		query *Query
+		query *OrmBuilder
 	)
 
 	if len(dests) > 0 {
 		dest = dests[0]
-		query = r.query.dest(dest).WithTrashed().(*Query).addGlobalScopes().buildConditions()
+		query = r.query.dest(dest).WithTrashed().(*OrmBuilder).addGlobalScopes().buildConditions()
 	} else {
-		query = r.query.WithTrashed().(*Query).addGlobalScopes().buildConditions()
+		query = r.query.WithTrashed().(*OrmBuilder).addGlobalScopes().buildConditions()
 	}
 
 	statement, bindings, err := query.compileDelete()
@@ -128,8 +128,8 @@ func (r *ToSql) Pluck(column string, dest any) string {
 	query := r.query.dest(dest).addGlobalScopes().buildConditions()
 
 	// The column replaces whatever select list the query carried, which is what the executed form does.
-	query.builder.SetSelects([]any{column})
-	_ = query.builder.SetBindings(nil, "select")
+	query.query.SetSelects([]any{column})
+	_ = query.query.SetBindings(nil, "select")
 	query.conditions.raw = nil
 
 	statement, bindings, err := query.compileSelect()

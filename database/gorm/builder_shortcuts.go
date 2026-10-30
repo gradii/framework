@@ -27,22 +27,22 @@ import (
 // WhereKey constrains the query to the row(s) with the given primary key. Mirrors Builder::whereKey:
 // a model stands for its own key, a slice for several keys, and the column is qualified by the
 // model's table so a joined statement still compares the model's own id.
-func (r *Query) WhereKey(id any) contractsorm.Query {
+func (r *OrmBuilder) WhereKey(id any) contractsorm.Query {
 	return r.whereKey(id, false)
 }
 
 // WhereKeyNot excludes the row(s) with the given primary key. Mirrors Builder::whereKeyNot.
-func (r *Query) WhereKeyNot(id any) contractsorm.Query {
+func (r *OrmBuilder) WhereKeyNot(id any) contractsorm.Query {
 	return r.whereKey(id, true)
 }
 
 // Except excludes the given models by primary key. Mirrors Builder::except, which is whereKeyNot
 // over the models' keys.
-func (r *Query) Except(models any) contractsorm.Query {
+func (r *OrmBuilder) Except(models any) contractsorm.Query {
 	return r.whereKey(models, true)
 }
 
-func (r *Query) whereKey(id any, not bool) contractsorm.Query {
+func (r *OrmBuilder) whereKey(id any, not bool) contractsorm.Query {
 	// The column is table-qualified but left bare: the compiler quotes each segment itself, and a
 	// name that arrived already quoted would be quoted a second time.
 	column := r.qualifiedPrimaryKeyColumn()
@@ -74,7 +74,7 @@ func (r *Query) whereKey(id any, not bool) contractsorm.Query {
 
 // qualifiedPrimaryKeyColumn returns the model's first primary key column prefixed with its table,
 // unquoted ("users.id"), or "" when the model declares none.
-func (r *Query) qualifiedPrimaryKeyColumn() string {
+func (r *OrmBuilder) qualifiedPrimaryKeyColumn() string {
 	model := r.parentModel()
 	if model == nil {
 		return ""
@@ -92,7 +92,7 @@ func (r *Query) qualifiedPrimaryKeyColumn() string {
 // the model's schema so an untagged ID column counts as the key the way it does everywhere else in
 // the ORM; a slice of models or of scalars yields one key per element; and a scalar yields itself.
 // The second result reports whether the argument was a list, which chooses IN over equality.
-func (r *Query) keyValues(id any) ([]any, bool) {
+func (r *OrmBuilder) keyValues(id any) ([]any, bool) {
 	if id == nil {
 		return []any{nil}, false
 	}
@@ -130,17 +130,17 @@ func (r *Query) keyValues(id any) ([]any, bool) {
 
 // Latest orders by the column descending, defaulting to the model's created-at column. Mirrors
 // Builder::latest.
-func (r *Query) Latest(column ...string) contractsorm.Query {
+func (r *OrmBuilder) Latest(column ...string) contractsorm.Query {
 	return r.orderByTimestamp(column, "desc")
 }
 
 // Oldest orders by the column ascending, defaulting to the model's created-at column. Mirrors
 // Builder::oldest.
-func (r *Query) Oldest(column ...string) contractsorm.Query {
+func (r *OrmBuilder) Oldest(column ...string) contractsorm.Query {
 	return r.orderByTimestamp(column, "asc")
 }
 
-func (r *Query) orderByTimestamp(column []string, direction string) contractsorm.Query {
+func (r *OrmBuilder) orderByTimestamp(column []string, direction string) contractsorm.Query {
 	name := ""
 	if len(column) > 0 {
 		name = column[0]
@@ -158,7 +158,7 @@ func (r *Query) orderByTimestamp(column []string, direction string) contractsorm
 
 // createdAtColumn returns the column stamped only on insert, which is the model's created-at
 // column, or "" when the model declares none.
-func (r *Query) createdAtColumn() string {
+func (r *OrmBuilder) createdAtColumn() string {
 	schema := r.insertSchema()
 	if schema == nil {
 		return ""
@@ -175,7 +175,7 @@ func (r *Query) createdAtColumn() string {
 
 // updatedAtColumn returns the column stamped on update, which is the model's updated-at column,
 // or "" when the model declares none.
-func (r *Query) updatedAtColumn() string {
+func (r *OrmBuilder) updatedAtColumn() string {
 	schema := r.insertSchema()
 	if schema == nil {
 		return ""
@@ -194,17 +194,17 @@ func (r *Query) updatedAtColumn() string {
 
 // Value retrieves one column of the first row. Mirrors Builder::value, which is first([$column])
 // read back by the column's bare name.
-func (r *Query) Value(column string, dest any) error {
+func (r *OrmBuilder) Value(column string, dest any) error {
 	destValue := reflect.ValueOf(dest)
 	if destValue.Kind() != reflect.Pointer || destValue.IsNil() {
 		return errors.DatabaseUnsupportedType.Args(reflect.TypeOf(dest).String(), "pointer")
 	}
 
 	query := r.clone()
-	query.builder.SetSelects([]any{column})
-	_ = query.builder.SetBindings(nil, "select")
+	query.query.SetSelects([]any{column})
+	_ = query.query.SetBindings(nil, "select")
 	query.conditions.raw = nil
-	query.builder.Limit(1)
+	query.query.Limit(1)
 
 	scoped := query.addGlobalScopes().buildConditions()
 
@@ -225,7 +225,7 @@ func (r *Query) Value(column string, dest any) error {
 
 // Sole retrieves the one row the query matches. Mirrors BuildsQueries::sole: the statement is limited
 // to two rows, so no row and more than one row are each reported as their own error.
-func (r *Query) Sole(dest any) error {
+func (r *OrmBuilder) Sole(dest any) error {
 	destValue := reflect.ValueOf(dest)
 	if destValue.Kind() != reflect.Pointer || destValue.IsNil() {
 		return errors.DatabaseUnsupportedType.Args(reflect.TypeOf(dest).String(), "pointer")
@@ -234,7 +234,7 @@ func (r *Query) Sole(dest any) error {
 	rows := reflect.New(reflect.SliceOf(destValue.Elem().Type()))
 
 	query := r.clone()
-	query.builder.Limit(2)
+	query.query.Limit(2)
 	if err := query.Find(rows.Interface()); err != nil {
 		return err
 	}
@@ -253,12 +253,12 @@ func (r *Query) Sole(dest any) error {
 
 // FindMany retrieves the rows whose primary key is one of ids. Mirrors Builder::findMany: an empty
 // list reads nothing.
-func (r *Query) FindMany(dest any, ids []any, columns ...any) error {
+func (r *OrmBuilder) FindMany(dest any, ids []any, columns ...any) error {
 	if len(ids) == 0 {
 		return nil
 	}
 
-	query, ok := r.WhereKey(ids).(*Query)
+	query, ok := r.WhereKey(ids).(*OrmBuilder)
 	if !ok {
 		return errors.OrmQueryInvalidModel.Args(fmt.Sprintf("%T", r.WhereKey(ids)))
 	}
@@ -271,7 +271,7 @@ func (r *Query) FindMany(dest any, ids []any, columns ...any) error {
 // WithAttributes records attributes for every model the query creates and, unless asConditions is
 // false, adds each as a where equality. Mirrors Builder::withAttributes. The attributes may be a map
 // or a single column followed by its value; a trailing bool is asConditions.
-func (r *Query) WithAttributes(attributes any, args ...any) contractsorm.Query {
+func (r *OrmBuilder) WithAttributes(attributes any, args ...any) contractsorm.Query {
 	asConditions := true
 	mapping, ok := asColumnMap(attributes)
 	if !ok {
@@ -307,7 +307,7 @@ func (r *Query) WithAttributes(attributes any, args ...any) contractsorm.Query {
 // written by a shortcut compares the model's own column when the statement also joins another
 // table. A Go field name is resolved to its column first; a name that already carries a table, or a
 // query with no model, is left as written.
-func (r *Query) qualifyColumn(column string) string {
+func (r *OrmBuilder) qualifyColumn(column string) string {
 	if strings.Contains(column, ".") {
 		return column
 	}
@@ -323,7 +323,7 @@ func (r *Query) qualifyColumn(column string) string {
 // applyPendingAttributes writes the recorded attributes onto a model about to be created, as
 // newModelInstance merges $pendingAttributes into the attributes it is given. The caller's own
 // values win: an attribute the model already carries a non-zero value for is left alone.
-func (r *Query) applyPendingAttributes(dest any) error {
+func (r *OrmBuilder) applyPendingAttributes(dest any) error {
 	if len(r.conditions.pendingAttributes) == 0 || dest == nil {
 		return nil
 	}
@@ -383,17 +383,17 @@ func (r *Query) applyPendingAttributes(dest any) error {
 // Increment adds amount (default 1) to the column of every matching row, refreshing the model's
 // updated-at column and writing any extra values. Mirrors Builder::increment: args are an optional
 // amount followed by an optional map of extra columns.
-func (r *Query) Increment(column string, args ...any) (*contractsdb.Result, error) {
+func (r *OrmBuilder) Increment(column string, args ...any) (*contractsdb.Result, error) {
 	return r.step(column, "+", args)
 }
 
 // Decrement subtracts amount (default 1) from the column of every matching row, refreshing the
 // model's updated-at column and writing any extra values. Mirrors Builder::decrement.
-func (r *Query) Decrement(column string, args ...any) (*contractsdb.Result, error) {
+func (r *OrmBuilder) Decrement(column string, args ...any) (*contractsdb.Result, error) {
 	return r.step(column, "-", args)
 }
 
-func (r *Query) step(column, operator string, args []any) (*contractsdb.Result, error) {
+func (r *OrmBuilder) step(column, operator string, args []any) (*contractsdb.Result, error) {
 	for _, arg := range args {
 		if _, ok := asColumnMap(arg); ok {
 			continue
@@ -418,7 +418,7 @@ func (r *Query) step(column, operator string, args []any) (*contractsdb.Result, 
 // stepValues builds the assignment map an increment or decrement writes: the extra values, plus the
 // column rewritten to a raw `<column> <op> <amount>` expression. The arguments are the ones step has
 // already validated.
-func (r *Query) stepValues(column, operator string, args []any) map[string]any {
+func (r *OrmBuilder) stepValues(column, operator string, args []any) map[string]any {
 	amount := "1"
 	var extra map[string]any
 
@@ -462,7 +462,7 @@ func numericString(value any) (string, bool) {
 
 // Touch sets the model's updated-at column, or the named column, to now on every matching row.
 // Mirrors Builder::touch: a model without an updated-at column touches nothing and reports it.
-func (r *Query) Touch(column ...string) (*contractsdb.Result, error) {
+func (r *OrmBuilder) Touch(column ...string) (*contractsdb.Result, error) {
 	name := ""
 	if len(column) > 0 {
 		name = column[0]
@@ -480,7 +480,7 @@ func (r *Query) Touch(column ...string) (*contractsdb.Result, error) {
 // Upsert inserts the rows, updating the listed columns of a row whose uniqueBy columns already
 // exist. Mirrors Builder::upsert on a model: timestamps are added to every row, the created-at
 // column is never in the update list, and the updated-at column always is.
-func (r *Query) Upsert(values any, uniqueBy []string, update ...any) (*contractsdb.Result, error) {
+func (r *OrmBuilder) Upsert(values any, uniqueBy []string, update ...any) (*contractsdb.Result, error) {
 	query := r.addGlobalScopes().buildConditions()
 
 	records, err := query.insertRecords(values)
@@ -522,7 +522,7 @@ func (r *Query) Upsert(values any, uniqueBy []string, update ...any) (*contracts
 
 // addUpsertTimestamps stamps the model's timestamp columns onto every row, the way
 // addTimestampsToUpsertValues does: a value the caller supplied is kept.
-func (r *Query) addUpsertTimestamps(records []map[string]any) {
+func (r *OrmBuilder) addUpsertTimestamps(records []map[string]any) {
 	schema := r.insertSchema()
 	if schema == nil {
 		return
@@ -552,7 +552,7 @@ func (r *Query) addUpsertTimestamps(records []map[string]any) {
 // upsertUpdates resolves the update list the way addUpdatedAtToUpsertColumns does: no list means
 // every inserted column except created-at, an explicit list is used as given, and updated-at joins
 // either. An empty explicit list means insert only.
-func (r *Query) upsertUpdates(records []map[string]any, update []any) ([]core.UpsertUpdate, bool, error) {
+func (r *OrmBuilder) upsertUpdates(records []map[string]any, update []any) ([]core.UpsertUpdate, bool, error) {
 	schema := r.insertSchema()
 	createdAt := r.createdAtColumn()
 	updatedAt := r.updatedAtColumn()

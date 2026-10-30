@@ -16,7 +16,7 @@ import (
 // newCursorQuery builds a query over a model whose compiled statements are recorded by the in-package
 // stub driver, so a facade test can assert the SQL CursorPaginate emits without a live database. The
 // connection names MySQL, which is the grammar the identifiers below are pinned against.
-func newCursorQuery(t *testing.T, conditions Conditions) (*Query, *recordingSQLDriver) {
+func newCursorQuery(t *testing.T, conditions Conditions) (*OrmBuilder, *recordingSQLDriver) {
 	t.Helper()
 
 	recorder := &recordingSQLDriver{}
@@ -30,7 +30,7 @@ func newCursorQuery(t *testing.T, conditions Conditions) (*Query, *recordingSQLD
 // the perPage+1 probe limit, with no keyset predicate and no cursor.
 func TestCursorPaginateFirstPage(t *testing.T) {
 	query, recorder := newCursorQuery(t, Conditions{model: &relUser{}})
-	query = query.OrderBy("id").(*Query)
+	query = query.OrderBy("id").(*OrmBuilder)
 
 	var items []map[string]any
 
@@ -49,7 +49,7 @@ func TestCursorPaginateFirstPage(t *testing.T) {
 // single comparison for a one-column order, ahead of the ORDER BY and the probe limit.
 func TestCursorPaginateWithCursor(t *testing.T) {
 	query, recorder := newCursorQuery(t, Conditions{model: &relUser{}})
-	query = query.OrderBy("id").(*Query)
+	query = query.OrderBy("id").(*OrmBuilder)
 
 	encoded, err := querybuilder.NewCursor(querybuilder.CursorParameters{{Column: "id", Value: 5}}, true).Encode()
 	require.NoError(t, err)
@@ -69,7 +69,7 @@ func TestCursorPaginateWithCursor(t *testing.T) {
 // refused rather than silently restarting at the first page.
 func TestCursorPaginateRejectsAMalformedCursor(t *testing.T) {
 	query, _ := newCursorQuery(t, Conditions{model: &relUser{}})
-	query = query.OrderBy("id").(*Query)
+	query = query.OrderBy("id").(*OrmBuilder)
 
 	var items []map[string]any
 

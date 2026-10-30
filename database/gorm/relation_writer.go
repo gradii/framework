@@ -5,11 +5,11 @@ import (
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
 )
 
-// relationWriter binds (parent, name) to a Query session and forwards each write to the
+// relationWriter binds (parent, name) to an OrmBuilder session and forwards each write to the
 // matching *Relation-suffixed method on *Query. It implements contractsorm.RelationWriter so
 // callers can use a single chained entry — Query.Relation(parent, name) — for all writes.
 type relationWriter struct {
-	q      *Query
+	q      *OrmBuilder
 	parent any
 	name   string
 }
@@ -17,7 +17,7 @@ type relationWriter struct {
 // Relation returns a RelationWriter bound to the given parent and relation name. The returned
 // builder forwards all write operations to the receiver's session, so calls inside a Transaction
 // callback honor the transaction.
-func (r *Query) Relation(parent any, name string) contractsorm.RelationWriter {
+func (r *OrmBuilder) Relation(parent any, name string) contractsorm.RelationWriter {
 	return &relationWriter{q: r, parent: parent, name: name}
 }
 

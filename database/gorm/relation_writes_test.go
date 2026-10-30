@@ -99,8 +99,8 @@ var _ interface {
 	SaveManyRelation(parent any, relation string, children any) error
 	AssociateRelation(parent any, relation string, owner any) error
 	DissociateRelation(parent any, relation string) error
-} = (*Query)(nil)
-var _ contractsorm.Query = (*Query)(nil)
+} = (*OrmBuilder)(nil)
+var _ contractsorm.Query = (*OrmBuilder)(nil)
 
 // --- Sync / Toggle / UpdateExistingPivot ----------------------------------
 

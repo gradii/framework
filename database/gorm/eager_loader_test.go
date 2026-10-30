@@ -547,7 +547,7 @@ func TestRunEagerLoads_InvalidRelation(t *testing.T) {
 // The loader tests below pin the statement a loader builds and executes, so they must observe the
 // loader's own call site rather than a child the test rebuilt by hand. A loader compiles its child
 // and runs it through the connection pool (executor.go), which the nil writer stubWriter returns
-// cannot provide: it has no *sql.DB behind it. These helpers give the Query a real *sql.DB backed by
+// cannot provide: it has no *sql.DB behind it. These helpers give the OrmBuilder a real *sql.DB backed by
 // a recording driver, in the connector-with-a-stub-driver shape database/driver's tests use. Every
 // statement the loader executes is captured and an empty result set comes back, so the loader
 // completes its read path without a database and the assertion lands on the SQL the loader itself
@@ -735,9 +735,9 @@ func (c recordingConnector) Connect(context.Context) (driver.Conn, error) {
 }
 func (c recordingConnector) Driver() driver.Driver { return c.driver }
 
-// newRecordingRelQuery builds a Query shaped like newRelQueryWith, but whose connection pool records
+// newRecordingRelQuery builds an OrmBuilder shaped like newRelQueryWith, but whose connection pool records
 // the statements the loaders execute.
-func newRecordingRelQuery(t *testing.T, model any) (*Query, *recordingSQLDriver) {
+func newRecordingRelQuery(t *testing.T, model any) (*OrmBuilder, *recordingSQLDriver) {
 	t.Helper()
 
 	recordDriver := &recordingSQLDriver{}
@@ -837,7 +837,7 @@ func TestLoadBelongsTo_ChildQueryIsCompiled(t *testing.T) {
 		ref := desc.references[0]
 
 		child := q.relatedChild(desc.relatedTable, desc.relatedTable+"."+ref.primaryColumn, []any{uint(5)})
-		child.builder.SetSelects([]any{"name", ref.primaryColumn})
+		child.query.SetSelects([]any{"name", ref.primaryColumn})
 
 		compiled, bindings, err := child.compileSelect()
 		assert.NoError(t, err)
@@ -956,7 +956,7 @@ func TestLoadHasOneOrMany_ChildQueryIsCompiled(t *testing.T) {
 		ref := desc.references[0]
 
 		child := q.relatedChild(desc.relatedTable, desc.relatedTable+"."+ref.foreignColumn, []any{uint(3)})
-		child.builder.SetSelects([]any{"title", ref.foreignColumn})
+		child.query.SetSelects([]any{"title", ref.foreignColumn})
 
 		compiled, bindings, err := child.compileSelect()
 		assert.NoError(t, err)
@@ -1077,8 +1077,8 @@ func TestLoadMorph_ChildQueryIsCompiled(t *testing.T) {
 		ref := desc.references[0]
 
 		child := q.relatedChild(desc.relatedTable, desc.relatedTable+"."+ref.foreignColumn, []any{uint(9)}).
-			Where(desc.relatedTable+"."+desc.morphTypeColumn, desc.morphValue).(*Query)
-		child.builder.SetSelects([]any{"address", ref.foreignColumn, desc.morphTypeColumn})
+			Where(desc.relatedTable+"."+desc.morphTypeColumn, desc.morphValue).(*OrmBuilder)
+		child.query.SetSelects([]any{"address", ref.foreignColumn, desc.morphTypeColumn})
 
 		compiled, bindings, err := child.compileSelect()
 		assert.NoError(t, err)
@@ -1099,7 +1099,7 @@ func TestLoadMorph_ChildQueryIsCompiled(t *testing.T) {
 		ref := desc.references[0]
 
 		child := q.relatedChild(desc.relatedTable, desc.relatedTable+"."+ref.foreignColumn, []any{uint(9)}).
-			Where(desc.relatedTable+"."+desc.morphTypeColumn, desc.morphValue).(*Query)
+			Where(desc.relatedTable+"."+desc.morphTypeColumn, desc.morphValue).(*OrmBuilder)
 		assert.Nil(t, child.conditions.model)
 		assert.Nil(t, child.conditions.dest)
 		assert.False(t, child.conditions.withTrashed)
@@ -1290,7 +1290,7 @@ func TestLoadMorphTo_BucketChildQueryIsCompiled(t *testing.T) {
 		assert.NotNil(t, desc.onQuery)
 
 		child := q.relatedChild("morph_parent_like_posts", "morph_parent_like_posts.id", []any{uint(5)})
-		scoped, ok := desc.onQuery(child).(*Query)
+		scoped, ok := desc.onQuery(child).(*OrmBuilder)
 		assert.True(t, ok)
 		assert.Len(t, scoped.conditions.where, 2, "owner-key IN plus the relation scope")
 
@@ -1305,7 +1305,7 @@ func TestLoadMorphTo_BucketChildQueryIsCompiled(t *testing.T) {
 	t.Run("pruned select keeps the owner key", func(t *testing.T) {
 		q := newRelQueryWith(t, &morphImage{})
 		child := q.relatedChild("morph_parent_like_posts", "morph_parent_like_posts.id", []any{uint(5)})
-		child.builder.SetSelects([]any{"title", "id"})
+		child.query.SetSelects([]any{"title", "id"})
 
 		compiled, bindings, err := child.compileSelect()
 		assert.NoError(t, err)
@@ -1400,7 +1400,7 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 		assert.Empty(t, child.conditions.withoutGlobalScopes)
 		assert.Empty(t, child.conditions.scopes)
 		assert.Len(t, child.conditions.where, 1)
-		assert.Len(t, child.builder.Selects(), 2)
+		assert.Len(t, child.query.Selects(), 2)
 	})
 
 	t.Run("pivot read receives the relation scope and the hydration plan's columns", func(t *testing.T) {
@@ -1422,7 +1422,7 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 		chunk := []any{uint(1), uint(2)}
 
 		child := q.pivotChild(desc.pivotTable, desc.pivotTable+"."+desc.pivotParentRef.foreignColumn, chunk, cols)
-		scoped, ok := applyOnPivotQueryToQuery(q.queryGrammar, child, desc).(*Query)
+		scoped, ok := applyOnPivotQueryToQuery(q.queryGrammar, child, desc).(*OrmBuilder)
 		assert.True(t, ok)
 
 		compiled, bindings, err := scoped.compileSelect()
@@ -1450,7 +1450,7 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 		// The loader's list: the two FK columns first, then every column the plan reports. Because the
 		// plan reports the pivot struct's own columns, the FK columns appear a second time — exactly the
 		// list the loader used to hand to GORM's Select, and the compiled child must keep it: it sets the
-		// select list on the conditions directly, so nothing dedupes it the way Query.Select would.
+		// select list on the conditions directly, so nothing dedupes it the way OrmBuilder.Select would.
 		cols := []string{desc.pivotParentRef.foreignColumn, desc.pivotRelatedRef.foreignColumn}
 		cols = append(cols, plan.extraColumns...)
 		assert.Equal(t, []string{desc.pivotParentRef.foreignColumn, desc.pivotRelatedRef.foreignColumn}, cols[:2])
@@ -1493,7 +1493,7 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 
 		// The loader passes the related key as a required column, so it survives column pruning and
 		// the dictionary can be keyed off the related rows.
-		child.builder.SetSelects([]any{"name", desc.pivotRelatedRef.primaryColumn})
+		child.query.SetSelects([]any{"name", desc.pivotRelatedRef.primaryColumn})
 		pruned, prunedBindings, err := child.compileSelect()
 		assert.NoError(t, err)
 		assert.Equal(t, `select "name", "id" from "rel_roles" where "rel_roles"."id" in (?)`, pruned)
@@ -1889,7 +1889,7 @@ func TestLoadRelatedRows_PrunesToRequestedColumns(t *testing.T) {
 
 	t.Run("through With", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &relUser{})
-		q = q.With("Books:title").(*Query)
+		q = q.With("Books:title").(*OrmBuilder)
 		assert.True(t, q.conditions.eagerLoad[0].columns[0] == "title")
 
 		recorder.returnRows(`from "rel_users"`, []string{"id", "name"},

@@ -27,7 +27,7 @@ func renderOfManySQL(t *testing.T, desc *relationDescriptor, cfg *oneOfManyConfi
 	assert.NoError(t, err)
 
 	child := newRelQueryWith(t, desc.relatedModel)
-	child.builder.JoinRaw(join, args, "inner")
+	child.query.JoinRaw(join, args, "inner")
 
 	statement, _, err := child.compileSelect()
 	assert.NoError(t, err)
@@ -121,17 +121,17 @@ func TestOneOfManyJoin_NilCfg_NoOp(t *testing.T) {
 func TestQuery_OfManyShortcuts(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
 
-	latest := q.LatestOfMany().(*Query)
+	latest := q.LatestOfMany().(*OrmBuilder)
 	assert.NotNil(t, latest.conditions.oneOfMany)
 	assert.Equal(t, "MAX", latest.conditions.oneOfMany.aggregate)
 	assert.Equal(t, "id", latest.conditions.oneOfMany.column)
 
-	oldest := q.OldestOfMany("created_at").(*Query)
+	oldest := q.OldestOfMany("created_at").(*OrmBuilder)
 	assert.NotNil(t, oldest.conditions.oneOfMany)
 	assert.Equal(t, "MIN", oldest.conditions.oneOfMany.aggregate)
 	assert.Equal(t, "created_at", oldest.conditions.oneOfMany.column)
 
-	custom := q.OfMany("score", "AVG").(*Query)
+	custom := q.OfMany("score", "AVG").(*OrmBuilder)
 	assert.Equal(t, "AVG", custom.conditions.oneOfMany.aggregate)
 	assert.Equal(t, "score", custom.conditions.oneOfMany.column)
 }

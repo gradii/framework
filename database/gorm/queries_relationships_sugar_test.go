@@ -14,7 +14,7 @@ import (
 func compileSugar(t *testing.T, query contractsorm.Query) (string, []any) {
 	t.Helper()
 
-	statement, bindings, err := query.(*Query).compileSelect()
+	statement, bindings, err := query.(*OrmBuilder).compileSelect()
 	require.NoError(t, err)
 
 	return statement, bindings
@@ -73,7 +73,7 @@ func TestWhereRelationVariants(t *testing.T) {
 // QueriesRelationships::withWhereHas.
 func TestWithWhereHasConstrainsAndEagerLoads(t *testing.T) {
 	callback := func(q contractsorm.Query) contractsorm.Query { return q.Where("title", "Go") }
-	query := compiledQuery(t, &relUser{}, Conditions{}).WithWhereHas("Books", callback).(*Query)
+	query := compiledQuery(t, &relUser{}, Conditions{}).WithWhereHas("Books", callback).(*OrmBuilder)
 
 	statement, bindings, err := query.compileSelect()
 	require.NoError(t, err)
@@ -88,7 +88,7 @@ func TestWithWhereHasConstrainsAndEagerLoads(t *testing.T) {
 // A column list on the relation ("Books:id,title") applies to the eager load alone, as
 // Str::before($relation, ':') strips it from the whereHas.
 func TestWithWhereHasStripsTheColumnListFromTheExistenceCheck(t *testing.T) {
-	query := compiledQuery(t, &relUser{}, Conditions{}).WithWhereHas("Books:id,title").(*Query)
+	query := compiledQuery(t, &relUser{}, Conditions{}).WithWhereHas("Books:id,title").(*OrmBuilder)
 
 	statement, _, err := query.compileSelect()
 	require.NoError(t, err)
@@ -132,15 +132,15 @@ func TestWhereBelongsToDefaultsTheRelationToTheModelName(t *testing.T) {
 
 // An empty collection and a relation that is not a BelongsTo are refused, as the PHP method throws.
 func TestWhereBelongsToRefusesBadInput(t *testing.T) {
-	empty := compiledQuery(t, &relBook{}, Conditions{}).WhereBelongsTo([]*relUser{}, "Author").(*Query)
+	empty := compiledQuery(t, &relBook{}, Conditions{}).WhereBelongsTo([]*relUser{}, "Author").(*OrmBuilder)
 	_, _, err := empty.compileSelect()
 	assert.ErrorIs(t, err, errors.OrmWhereBelongsToEmpty)
 
-	notBelongsTo := compiledQuery(t, &relUser{}, Conditions{}).WhereBelongsTo(&relBook{ID: 1}, "Books").(*Query)
+	notBelongsTo := compiledQuery(t, &relUser{}, Conditions{}).WhereBelongsTo(&relBook{ID: 1}, "Books").(*OrmBuilder)
 	_, _, err = notBelongsTo.compileSelect()
 	assert.ErrorIs(t, err, errors.OrmWhereBelongsToNotBelongsTo)
 
-	unknown := compiledQuery(t, &relBook{}, Conditions{}).WhereBelongsTo(&relUser{ID: 7}, "Missing").(*Query)
+	unknown := compiledQuery(t, &relBook{}, Conditions{}).WhereBelongsTo(&relUser{ID: 7}, "Missing").(*OrmBuilder)
 	_, _, err = unknown.compileSelect()
 	assert.ErrorIs(t, err, errors.OrmRelationNotFound)
 }

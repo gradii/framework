@@ -8,7 +8,7 @@ import (
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
 )
 
-// This file pins the exact SQL produced when OnPivotQuery is wired up on the Query.Related(...)
+// This file pins the exact SQL produced when OnPivotQuery is wired up on the OrmBuilder.Related(...)
 // read path for Many2Many / MorphToMany -> new_relation.go:newMany2ManyQuery, by inspecting the
 // SQL Related() emits. The eager-load pivot reads that this file used to replicate through the
 // retired gorm chain are covered where they are built: eager_loader_test.go and

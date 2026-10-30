@@ -42,7 +42,7 @@ func testDialect(name string) contractsdriver.Dialect {
 	return baseTestDialect{}
 }
 
-func newDialectQuery(ctx context.Context, config config.Config, dbConfig contractsdatabase.Config, writer *sql.DB, tx *sql.Tx, grammar contractsdriver.Grammar, log log.Log, observers []contractsorm.ModelToObserver, conditions *Conditions, resolver contractstelemetry.Resolver, supplied ...databasedriver.QueryComponents) *Query {
+func newDialectQuery(ctx context.Context, config config.Config, dbConfig contractsdatabase.Config, writer *sql.DB, tx *sql.Tx, grammar contractsdriver.Grammar, log log.Log, observers []contractsorm.ModelToObserver, conditions *Conditions, resolver contractstelemetry.Resolver, supplied ...databasedriver.QueryComponents) *OrmBuilder {
 	if len(supplied) == 0 {
 		if dialect := testDialect(dbConfig.Driver); dialect != nil {
 			components, err := databasedriver.ResolveQueryComponents(dialect, contractsdriver.GrammarOptions{Driver: dbConfig.Driver, Prefix: dbConfig.Prefix})
@@ -52,5 +52,5 @@ func newDialectQuery(ctx context.Context, config config.Config, dbConfig contrac
 			supplied = append(supplied, components)
 		}
 	}
-	return NewQuery(ctx, config, dbConfig, writer, tx, grammar, log, observers, conditions, resolver, supplied...)
+	return NewOrmBuilder(ctx, config, dbConfig, writer, tx, grammar, log, observers, conditions, resolver, supplied...)
 }

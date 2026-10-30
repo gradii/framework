@@ -23,22 +23,22 @@ func TestRandomOrderFunction(t *testing.T) {
 // real driver grammars.
 func TestCompileSelect_LockRendering(t *testing.T) {
 	// lockForUpdate() renders the exclusive clause, sharedLock() the shared one.
-	sql, _, err := compiledQuery(t, &relUser{}, Conditions{}).LockForUpdate().(*Query).compileSelect()
+	sql, _, err := compiledQuery(t, &relUser{}, Conditions{}).LockForUpdate().(*OrmBuilder).compileSelect()
 	assert.NoError(t, err)
 	assert.Contains(t, sql, "for update")
 
-	sql, _, err = compiledQuery(t, &relUser{}, Conditions{}).SharedLock().(*Query).compileSelect()
+	sql, _, err = compiledQuery(t, &relUser{}, Conditions{}).SharedLock().(*OrmBuilder).compileSelect()
 	assert.NoError(t, err)
 	assert.Contains(t, sql, "lock in share mode")
 
 	// The two calls write the same lock slot, the way Laravel's lockForUpdate() and sharedLock() both
 	// call lock(): the later one wins, and a statement carries one lock clause.
-	sql, _, err = compiledQuery(t, &relUser{}, Conditions{}).LockForUpdate().SharedLock().(*Query).compileSelect()
+	sql, _, err = compiledQuery(t, &relUser{}, Conditions{}).LockForUpdate().SharedLock().(*OrmBuilder).compileSelect()
 	assert.NoError(t, err)
 	assert.Contains(t, sql, "share")
 	assert.NotContains(t, sql, "for update")
 
-	sql, _, err = compiledQuery(t, &relUser{}, Conditions{}).SharedLock().LockForUpdate().(*Query).compileSelect()
+	sql, _, err = compiledQuery(t, &relUser{}, Conditions{}).SharedLock().LockForUpdate().(*OrmBuilder).compileSelect()
 	assert.NoError(t, err)
 	assert.Contains(t, sql, "for update")
 	assert.NotContains(t, sql, "share")

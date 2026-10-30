@@ -221,9 +221,9 @@ func (r *Orm) currentQuery() contractsorm.Query {
 // a non-nil pointer to a struct. See contractsorm.Orm.Related for the per-kind shape.
 func (r *Orm) Related(parent any, relation string) contractsorm.Query {
 	q := r.Query()
-	gq, ok := q.(*gorm.Query)
+	gq, ok := q.(*gorm.OrmBuilder)
 	if !ok {
-		// Implementation invariant: r.query is always a *gorm.Query in this driver.
+		// Implementation invariant: r.query is always a *gorm.OrmBuilder in this driver.
 		// If a future driver implements contractsorm.Orm differently, that driver provides its
 		// own Related; this branch should never run in practice.
 		_ = q
@@ -235,7 +235,7 @@ func (r *Orm) Related(parent any, relation string) contractsorm.Query {
 // Relation returns a RelationWriter bound to (parent, name) for FK-safe write operations.
 // See contractsorm.Orm.Relation for usage.
 func (r *Orm) Relation(parent any, name string) contractsorm.RelationWriter {
-	gq, ok := r.Query().(*gorm.Query)
+	gq, ok := r.Query().(*gorm.OrmBuilder)
 	if !ok {
 		return nil
 	}

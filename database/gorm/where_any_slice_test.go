@@ -19,7 +19,7 @@ import (
 // mysql/sqlite a syntax error near "?").
 
 func TestWhereAny_ExpandsInSliceIntoOneBindingPerValue(t *testing.T) {
-	q := inQuery(t).WhereAny([]string{"name", "email"}, "IN", []any{"one", "two"}).(*Query)
+	q := inQuery(t).WhereAny([]string{"name", "email"}, "IN", []any{"one", "two"}).(*OrmBuilder)
 
 	sql, bindings := compileInClause(t, q)
 	assert.Equal(t, `select * from "rel_users" where ("name" in (?, ?) or "email" in (?, ?))`, sql)
@@ -27,7 +27,7 @@ func TestWhereAny_ExpandsInSliceIntoOneBindingPerValue(t *testing.T) {
 }
 
 func TestWhereAll_ExpandsInSliceIntoOneBindingPerValue(t *testing.T) {
-	q := inQuery(t).WhereAll([]string{"name", "email"}, "IN", []any{"one", "two"}).(*Query)
+	q := inQuery(t).WhereAll([]string{"name", "email"}, "IN", []any{"one", "two"}).(*OrmBuilder)
 
 	sql, bindings := compileInClause(t, q)
 	assert.Equal(t, `select * from "rel_users" where ("name" in (?, ?) and "email" in (?, ?))`, sql)
@@ -35,7 +35,7 @@ func TestWhereAll_ExpandsInSliceIntoOneBindingPerValue(t *testing.T) {
 }
 
 func TestWhereNone_ExpandsInSliceIntoOneBindingPerValue(t *testing.T) {
-	q := inQuery(t).WhereNone([]string{"name", "email"}, "IN", []any{"one", "two"}).(*Query)
+	q := inQuery(t).WhereNone([]string{"name", "email"}, "IN", []any{"one", "two"}).(*OrmBuilder)
 
 	sql, bindings := compileInClause(t, q)
 	assert.Equal(t, `select * from "rel_users" where not ("name" in (?, ?) or "email" in (?, ?))`, sql)
@@ -43,7 +43,7 @@ func TestWhereNone_ExpandsInSliceIntoOneBindingPerValue(t *testing.T) {
 }
 
 func TestWhereAny_ScalarOperatorIsUnchanged(t *testing.T) {
-	q := inQuery(t).Where("name", "zero").WhereAny([]string{"name", "email"}, "=", "x").(*Query)
+	q := inQuery(t).Where("name", "zero").WhereAny([]string{"name", "email"}, "=", "x").(*OrmBuilder)
 
 	sql, bindings := compileInClause(t, q)
 	assert.Equal(t, `select * from "rel_users" where "name" = ? and ("name" = ? or "email" = ?)`, sql)
@@ -57,7 +57,7 @@ func TestWhereAny_ScalarOperatorIsUnchanged(t *testing.T) {
 // across every route. Laravel's whereIn renders the same; verified against
 // .claude/laravel-oracle/oracle.php.
 func TestWhereAny_EmptyInSliceMatchesNothing(t *testing.T) {
-	q := inQuery(t).WhereAny([]string{"name"}, "IN", []any{}).(*Query)
+	q := inQuery(t).WhereAny([]string{"name"}, "IN", []any{}).(*OrmBuilder)
 
 	sql, bindings := compileInClause(t, q)
 	assert.Equal(t, `select * from "rel_users" where (0 = 1)`, sql)
@@ -65,7 +65,7 @@ func TestWhereAny_EmptyInSliceMatchesNothing(t *testing.T) {
 }
 
 func TestWhereAll_EmptyInSliceMatchesNothing(t *testing.T) {
-	q := inQuery(t).WhereAll([]string{"name"}, "IN", []any{}).(*Query)
+	q := inQuery(t).WhereAll([]string{"name"}, "IN", []any{}).(*OrmBuilder)
 
 	sql, bindings := compileInClause(t, q)
 	assert.Equal(t, `select * from "rel_users" where (0 = 1)`, sql)
@@ -73,7 +73,7 @@ func TestWhereAll_EmptyInSliceMatchesNothing(t *testing.T) {
 }
 
 func TestWhereNone_EmptyInSliceMatchesEverything(t *testing.T) {
-	q := inQuery(t).WhereNone([]string{"name"}, "IN", []any{}).(*Query)
+	q := inQuery(t).WhereNone([]string{"name"}, "IN", []any{}).(*OrmBuilder)
 
 	sql, bindings := compileInClause(t, q)
 	assert.Equal(t, `select * from "rel_users" where not (0 = 1)`, sql)
@@ -81,7 +81,7 @@ func TestWhereNone_EmptyInSliceMatchesEverything(t *testing.T) {
 }
 
 func TestWhereAny_EmptyNotInSliceMatchesEverything(t *testing.T) {
-	q := inQuery(t).WhereAny([]string{"name"}, "NOT IN", []any{}).(*Query)
+	q := inQuery(t).WhereAny([]string{"name"}, "NOT IN", []any{}).(*OrmBuilder)
 
 	sql, bindings := compileInClause(t, q)
 	assert.Equal(t, `select * from "rel_users" where (1 = 1)`, sql)

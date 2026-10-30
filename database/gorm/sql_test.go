@@ -19,7 +19,7 @@ import (
 // rather than handed to GORM.
 // rebindGrammar swaps the dialect a query compiles with. Production builds the builder once, in
 // NewQuery; these tests drive several dialects through one query, so they rebind it explicitly.
-func rebindGrammar(query *Query, driver string, grammar querybuilder.Grammar) *Query {
+func rebindGrammar(query *OrmBuilder, driver string, grammar querybuilder.Grammar) *OrmBuilder {
 	components := databasedriver.QueryComponents{Grammar: grammar, Processor: querybuilder.NewProcessor(driver)}
 	if dialect := testDialect(driver); dialect != nil {
 		components.Dialect = dialect
@@ -28,14 +28,14 @@ func rebindGrammar(query *Query, driver string, grammar querybuilder.Grammar) *Q
 	query.components = components
 	builder := querybuilder.NewBuilder(grammar, components.Processor)
 	builder.SetDriver(driver)
-	query.builder = builder
+	query.query = builder
 	query.queryGrammar = grammar
 	query.dbConfig.Driver = driver
 
 	return query
 }
 
-func compiledQuery(t *testing.T, model any, conditions Conditions) *Query {
+func compiledQuery(t *testing.T, model any, conditions Conditions) *OrmBuilder {
 	t.Helper()
 
 	conditions.model = model
@@ -46,7 +46,7 @@ func compiledQuery(t *testing.T, model any, conditions Conditions) *Query {
 func TestCompileSelect_WhereOrderLimit(t *testing.T) {
 	query := compiledQuery(t, &relUser{}, Conditions{
 		where: []contractsdriver.Where{{Query: "id", Args: []any{1}}},
-	}).OrderByRaw("id desc").Limit(10).(*Query)
+	}).OrderByRaw("id desc").Limit(10).(*OrmBuilder)
 
 	sql, bindings, err := query.compileSelect()
 	assert.NoError(t, err)
@@ -221,7 +221,7 @@ func TestUpdateAssignments_FromStruct(t *testing.T) {
 // TestUpdateAssignments_SelectAndOmitFilter checks the query's own column filter, which is how
 // Select("name").Update(model) writes one column.
 func TestUpdateAssignments_SelectAndOmitFilter(t *testing.T) {
-	selected := compiledQuery(t, &relUser{}, Conditions{}).Select("name").(*Query)
+	selected := compiledQuery(t, &relUser{}, Conditions{}).Select("name").(*OrmBuilder)
 
 	assignments, err := selected.updateAssignments(map[string]any{"id": 7, "name": "Jane"})
 	assert.NoError(t, err)
@@ -235,7 +235,7 @@ func TestUpdateAssignments_SelectAndOmitFilter(t *testing.T) {
 
 	// A column named outright is written even when it holds the zero value, which is what lets
 	// Select("name").Update(model) clear a column; every other column is left out when it is zero.
-	clearing := compiledQuery(t, &relUser{}, Conditions{}).Select("name").(*Query)
+	clearing := compiledQuery(t, &relUser{}, Conditions{}).Select("name").(*OrmBuilder)
 
 	assignments, err = clearing.updateAssignments(relUser{ID: 7})
 	require.NoError(t, err)
@@ -331,7 +331,7 @@ func TestCompiledStatement_SurfacesAQueuedCondition(t *testing.T) {
 // operator or value count is rejected: the helper cannot return an error, so the query carries it and
 // the statement compiled from that query reports it.
 func TestCompiledStatement_SurfacesAnUnusableCondition(t *testing.T) {
-	query := newRelQueryWith(t, &relUser{}).WhereAll([]string{"name"}, "=", 1, 2).(*Query)
+	query := newRelQueryWith(t, &relUser{}).WhereAll([]string{"name"}, "=", 1, 2).(*OrmBuilder)
 
 	_, _, err := query.compileSelect()
 	assert.ErrorIs(t, err, errors.DatabaseInvalidArgumentNumber)
@@ -346,7 +346,7 @@ func TestCompiledStatement_SurfacesAnUnusableCondition(t *testing.T) {
 // the oracle renders this chain as `select "name", count(avatar) as count from "users"`. Before this
 // fix the compile path chose between the two with an if/else and silently discarded the raw select.
 func TestCompileSelect_CombinesSelectAndSelectRaw(t *testing.T) {
-	query := newRelQueryWith(t, &relUser{}).Select("name").SelectRaw("count(avatar) as count").(*Query)
+	query := newRelQueryWith(t, &relUser{}).Select("name").SelectRaw("count(avatar) as count").(*OrmBuilder)
 
 	sql, _, err := query.compileSelect()
 	assert.NoError(t, err)
@@ -408,7 +408,7 @@ func TestCompileSelect_SelectAndSelectRawKeepCallOrder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			query := tt.build(newRelQueryWith(t, &relUser{})).(*Query)
+			query := tt.build(newRelQueryWith(t, &relUser{})).(*OrmBuilder)
 
 			sql, bindings, err := query.compileSelect()
 			require.NoError(t, err)
@@ -426,7 +426,7 @@ func TestCompileSelect_SelectAndSelectRawKeepCallOrder(t *testing.T) {
 // Fluent calls change the receiver, the way Laravel's builder does, so a second call on the same
 // query continues the first instead of branching from it. Isolation is what clone() is for.
 func TestCompileSelect_FluentCallsMutateTheReceiver(t *testing.T) {
-	base := compiledQuery(t, &getColumnsUser{}, Conditions{}).SelectRaw("a").SelectRaw("b").SelectRaw("c").(*Query)
+	base := compiledQuery(t, &getColumnsUser{}, Conditions{}).SelectRaw("a").SelectRaw("b").SelectRaw("c").(*OrmBuilder)
 
 	continued := base.SelectRaw("d")
 	assert.Same(t, base, continued)
@@ -461,8 +461,8 @@ func TestCompileSelect_CloneIsolatesBranches(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			base := compiledQuery(t, &getColumnsUser{}, Conditions{}).SelectRaw("a").SelectRaw("b").SelectRaw("c")
-			first := base.(*Query).clone().SelectRaw("q1_only")
-			second := test.second(base.(*Query).clone())
+			first := base.(*OrmBuilder).clone().SelectRaw("q1_only")
+			second := test.second(base.(*OrmBuilder).clone())
 
 			for _, branch := range []struct {
 				query contractsorm.Query
@@ -472,7 +472,7 @@ func TestCompileSelect_CloneIsolatesBranches(t *testing.T) {
 				{second, test.want},
 				{base, `select a, b, c from "users"`},
 			} {
-				statement, bindings, err := branch.query.(*Query).compileSelect()
+				statement, bindings, err := branch.query.(*OrmBuilder).compileSelect()
 				require.NoError(t, err)
 				assert.Equal(t, branch.want, statement)
 				assert.Empty(t, bindings)
@@ -484,7 +484,7 @@ func TestCompileSelect_CloneIsolatesBranches(t *testing.T) {
 // TestCompileSelect_SelectRawOnlyStillApplies pins that the raw select is still used when it is the
 // only selection, so the combine change did not disturb the SelectRaw-on-its-own path.
 func TestCompileSelect_SelectRawOnlyStillApplies(t *testing.T) {
-	query := newRelQueryWith(t, &relUser{}).SelectRaw("count(avatar) as count").(*Query)
+	query := newRelQueryWith(t, &relUser{}).SelectRaw("count(avatar) as count").(*OrmBuilder)
 
 	sql, _, err := query.compileSelect()
 	assert.NoError(t, err)
@@ -505,20 +505,20 @@ func TestCompileSelect_SelectResetsColumns(t *testing.T) {
 		{"default wildcard", nil, `select * from "users" where "id" = ?`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			statement, bindings, err := base.(*Query).clone().Select(test.columns...).(*Query).compileSelect()
+			statement, bindings, err := base.(*OrmBuilder).clone().Select(test.columns...).(*OrmBuilder).compileSelect()
 			require.NoError(t, err)
 			assert.Equal(t, test.want, statement)
 			assert.Equal(t, []any{9}, bindings)
 		})
 	}
 
-	statement, bindings, err := base.(*Query).compileSelect()
+	statement, bindings, err := base.(*OrmBuilder).compileSelect()
 	require.NoError(t, err)
 	assert.Equal(t, `select ? as old from "users" where "id" = ?`, statement)
 	assert.Equal(t, []any{1, 9}, bindings)
 
 	// Relation aggregates are select expressions too, so Select replaces them as well.
-	related := newRelQueryWith(t, &relUser{}).WithCount("Books").Select("name").(*Query)
+	related := newRelQueryWith(t, &relUser{}).WithCount("Books").Select("name").(*OrmBuilder)
 	statement, bindings, err = related.compileSelect()
 	require.NoError(t, err)
 	assert.Equal(t, `select "name" from "rel_users"`, statement)
@@ -549,7 +549,7 @@ func TestCompileSelect_DistinctKeepsSelection(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			query := test.selects(compiledQuery(t, &getColumnsUser{}, Conditions{})).Distinct().(*Query)
+			query := test.selects(compiledQuery(t, &getColumnsUser{}, Conditions{})).Distinct().(*OrmBuilder)
 			statement, bindings, err := query.compileSelect()
 			require.NoError(t, err)
 			assert.Equal(t, test.wantSQL, statement)

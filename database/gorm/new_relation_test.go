@@ -17,7 +17,7 @@ import (
 // SQL a caller really gets.
 func newRelationSQL(t *testing.T, q contractsorm.Query, dest any) string {
 	t.Helper()
-	gq, ok := q.(*Query)
+	gq, ok := q.(*OrmBuilder)
 	if !ok {
 		t.Fatalf("expected *gorm.Query, got %T", q)
 	}
@@ -72,7 +72,7 @@ func TestRelated_HasManyThrough(t *testing.T) {
 func TestRelated_NotPointer(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
 	rel := q.Related(relUser{ID: 1}, "Books") // value, not pointer
-	gq, ok := rel.(*Query)
+	gq, ok := rel.(*OrmBuilder)
 	assert.True(t, ok)
 	assert.True(t, errors.Is(gq.conditions.err, errors.OrmRelationParentNotPointer))
 }
@@ -80,7 +80,7 @@ func TestRelated_NotPointer(t *testing.T) {
 func TestRelated_NilParent(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
 	rel := q.Related(nil, "Books")
-	gq, ok := rel.(*Query)
+	gq, ok := rel.(*OrmBuilder)
 	assert.True(t, ok)
 	assert.True(t, errors.Is(gq.conditions.err, errors.OrmRelationParentNotPointer))
 }
@@ -90,7 +90,7 @@ func TestRelated_NilParent(t *testing.T) {
 func TestRelated_RelationNotFound(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
 	rel := q.Related(&relUser{ID: 1}, "DoesNotExist")
-	gq, ok := rel.(*Query)
+	gq, ok := rel.(*OrmBuilder)
 	assert.True(t, ok)
 	assert.True(t, errors.Is(gq.conditions.err, errors.OrmRelationNotFound))
 }
@@ -123,7 +123,7 @@ func TestRelated_MorphTo_UnregisteredType(t *testing.T) {
 
 	q := newRelQueryWith(t, &morphImage{})
 	rel := q.Related(&morphImage{ID: 1, ImageableID: 42, ImageableType: "unknown"}, "Imageable")
-	gq, ok := rel.(*Query)
+	gq, ok := rel.(*OrmBuilder)
 	assert.True(t, ok)
 	assert.True(t, errors.Is(gq.conditions.err, errors.OrmMorphTypeUnknown))
 }
@@ -134,10 +134,10 @@ func TestRelated_MorphTo_EmptyType_YieldsZeroRowQuery(t *testing.T) {
 
 	q := newRelQueryWith(t, &morphImage{})
 	rel := q.Related(&morphImage{ID: 1, ImageableID: 0, ImageableType: ""}, "Imageable")
-	gq, ok := rel.(*Query)
+	gq, ok := rel.(*OrmBuilder)
 	assert.True(t, ok)
 	// The zero-row guard compiles to a WHERE that cannot match.
-	stmt, _, err := gq.Table("any_table").(*Query).compileSelect()
+	stmt, _, err := gq.Table("any_table").(*OrmBuilder).compileSelect()
 	require.NoError(t, err)
 	assert.Contains(t, stmt, "1 = 0")
 }

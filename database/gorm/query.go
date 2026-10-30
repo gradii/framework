@@ -31,7 +31,7 @@ import (
 	"github.com/spf13/cast"
 )
 
-type Query struct {
+type OrmBuilder struct {
 	config       config.Config
 	ctx          context.Context
 	grammar      contractsdriver.Grammar
@@ -46,16 +46,16 @@ type Query struct {
 	// lock.
 	writer            *sql.DB
 	tx                *sql.Tx
-	queries           map[string]*Query
+	queries           map[string]*OrmBuilder
 	modelToObserver   []contractsorm.ModelToObserver
 	conditions        Conditions
 	dbConfig          contractsdatabase.Config
 	mutex             *sync.Mutex
 	telemetryResolver contractstelemetry.Resolver
-	builder           *querybuilder.Builder
+	query             *querybuilder.Builder
 }
 
-func NewQuery(
+func NewOrmBuilder(
 	ctx context.Context,
 	config config.Config,
 	dbConfig contractsdatabase.Config,
@@ -67,7 +67,7 @@ func NewQuery(
 	conditions *Conditions,
 	telemetryResolver contractstelemetry.Resolver,
 	supplied ...databasedriver.QueryComponents,
-) *Query {
+) *OrmBuilder {
 	components, initErr := databasedriver.ResolveQueryComponents(nil, contractsdriver.GrammarOptions{Driver: dbConfig.Driver, Prefix: dbConfig.Prefix})
 	if len(supplied) > 0 {
 		components = supplied[0].WithContext(ctx)
@@ -82,7 +82,7 @@ func NewQuery(
 	builder.SetDriver(dbConfig.Driver)
 	builder.SetError(initErr)
 
-	queryImpl := &Query{
+	queryImpl := &OrmBuilder{
 		config:            config,
 		ctx:               ctx,
 		dbConfig:          dbConfig,
@@ -94,9 +94,9 @@ func NewQuery(
 		log:               log,
 		logger:            queryLogger(config, log),
 		modelToObserver:   modelToObserver,
-		queries:           make(map[string]*Query),
+		queries:           make(map[string]*OrmBuilder),
 		telemetryResolver: telemetryResolver,
-		builder:           builder,
+		query:             builder,
 	}
 
 	if conditions != nil {
@@ -123,7 +123,7 @@ func queryLogger(config config.Config, log log.Log) contractslogger.Logger {
 
 // trace reports a compiled statement the ORM ran through the connection's logger, with its bindings
 // inlined, which is the form the query log captures. It is a no-op when the query carries no logger.
-func (r *Query) trace(begin *carbon.Carbon, statement string, bindings []any, rowsAffected int64, err error) {
+func (r *OrmBuilder) trace(begin *carbon.Carbon, statement string, bindings []any, rowsAffected int64, err error) {
 	if r.logger == nil {
 		return
 	}
@@ -131,7 +131,7 @@ func (r *Query) trace(begin *carbon.Carbon, statement string, bindings []any, ro
 	r.logger.Trace(r.ctx, begin, db.Explain(statement, bindings...), rowsAffected, err)
 }
 
-func BuildQuery(ctx context.Context, config config.Config, connection string, log log.Log, modelToObserver []contractsorm.ModelToObserver, telemetryResolver contractstelemetry.Resolver) (*Query, contractsdatabase.Config, error) {
+func BuildQuery(ctx context.Context, config config.Config, connection string, log log.Log, modelToObserver []contractsorm.ModelToObserver, telemetryResolver contractstelemetry.Resolver) (*OrmBuilder, contractsdatabase.Config, error) {
 	if connection == "" {
 		connection = config.GetString("database.default")
 	}
@@ -180,23 +180,23 @@ func BuildQuery(ctx context.Context, config config.Config, connection string, lo
 	if connectionHandle != nil && connectionHandle.SupportsServerVersion() {
 		components.VersionSource = connectionHandle.ServerVersion
 	}
-	query := NewQuery(ctx, config, dbConfig, writer, nil, driver.Grammar(), log, modelToObserver, nil, telemetryResolver, components)
+	query := NewOrmBuilder(ctx, config, dbConfig, writer, nil, driver.Grammar(), log, modelToObserver, nil, telemetryResolver, components)
 	query.connection = connectionHandle
 	return query, dbConfig, nil
 }
 
 // ConnectionIsCurrent lets the ORM facade evict a cached query after its logical connection was
 // purged through another facade. Queries constructed directly without a managed handle are valid.
-func (r *Query) ConnectionIsCurrent() bool {
+func (r *OrmBuilder) ConnectionIsCurrent() bool {
 	return r.connection == nil || r.connection.IsCurrent()
 }
 
 // DEPRECATED Use BeginTransaction instead.
-func (r *Query) Begin() (contractsorm.Query, error) {
+func (r *OrmBuilder) Begin() (contractsorm.Query, error) {
 	return r.BeginTransaction()
 }
 
-func (r *Query) BeginTransaction() (contractsorm.Query, error) {
+func (r *OrmBuilder) BeginTransaction() (contractsorm.Query, error) {
 	if r.InTransaction() {
 		return r, nil
 	}
@@ -220,7 +220,7 @@ func (r *Query) BeginTransaction() (contractsorm.Query, error) {
 	return r.new(tx), nil
 }
 
-func (r *Query) Commit() error {
+func (r *OrmBuilder) Commit() error {
 	if r.tx == nil {
 		return errors.OrmQueryTransactionNotStarted
 	}
@@ -228,11 +228,11 @@ func (r *Query) Commit() error {
 	return r.tx.Commit()
 }
 
-func (r *Query) Context() context.Context {
+func (r *OrmBuilder) Context() context.Context {
 	return r.ctx
 }
 
-func (r *Query) Count() (int64, error) {
+func (r *OrmBuilder) Count() (int64, error) {
 	query := buildSelectForCount(r)
 
 	sql, bindings, err := query.compileAggregate("count", countColumns(query))
@@ -248,10 +248,10 @@ func (r *Query) Count() (int64, error) {
 	return count, nil
 }
 
-func (r *Query) Create(value any) error {
+func (r *OrmBuilder) Create(value any) error {
 	query := r.dest(value).buildConditions()
 
-	if hasStringColumns(query.builder.Selects()) && len(query.conditions.omit) > 0 {
+	if hasStringColumns(query.query.Selects()) && len(query.conditions.omit) > 0 {
 		return errors.OrmQuerySelectAndOmitsConflict
 	}
 
@@ -260,7 +260,7 @@ func (r *Query) Create(value any) error {
 	return query.create(value)
 }
 
-func (r *Query) Cursor() chan contractsdb.Row {
+func (r *OrmBuilder) Cursor() chan contractsdb.Row {
 	query := r.addGlobalScopes().buildConditions()
 
 	cursorChan := make(chan contractsdb.Row)
@@ -314,14 +314,14 @@ func (r *Query) Cursor() chan contractsdb.Row {
 	return cursorChan
 }
 
-func (r *Query) DB() (*sql.DB, error) {
+func (r *OrmBuilder) DB() (*sql.DB, error) {
 	return r.writer, nil
 }
 
-func (r *Query) Delete(dests ...any) (*contractsdb.Result, error) {
+func (r *OrmBuilder) Delete(dests ...any) (*contractsdb.Result, error) {
 	var (
 		dest  any
-		query *Query
+		query *OrmBuilder
 	)
 
 	if len(dests) > 0 {
@@ -347,35 +347,35 @@ func (r *Query) Delete(dests ...any) (*contractsdb.Result, error) {
 	return res, nil
 }
 
-func (r *Query) Distinct(columns ...string) contractsorm.Query {
+func (r *OrmBuilder) Distinct(columns ...string) contractsorm.Query {
 	cols := make([]any, len(columns))
 	for i, column := range columns {
 		cols[i] = column
 	}
-	r.builder.Distinct(cols...)
+	r.query.Distinct(cols...)
 
 	return r
 }
 
-func (r *Query) Driver() string {
+func (r *OrmBuilder) Driver() string {
 	return r.dbConfig.Driver
 }
 
 // Exec runs a statement the caller wrote. The statement is passed through untouched apart from the
 // dialect's placeholder style, so a caller can use it for DDL and for anything the builder does not
 // cover.
-func (r *Query) Exec(statement string, values ...any) (*contractsdb.Result, error) {
+func (r *OrmBuilder) Exec(statement string, values ...any) (*contractsdb.Result, error) {
 	query := r.buildConditions()
 
 	return query.execStatement(statement, values)
 }
 
-func (r *Query) Exists() (bool, error) {
+func (r *OrmBuilder) Exists() (bool, error) {
 	query := r.addGlobalScopes().buildConditions()
 
 	// The statement selects rows and is limited to one, rather than selecting the literal 1: a
 	// literal would be wrapped as an identifier, which some dialects reject.
-	query.builder.Limit(1)
+	query.query.Limit(1)
 
 	statement, bindings, err := query.compileSelect()
 	if err != nil {
@@ -391,7 +391,7 @@ func (r *Query) Exists() (bool, error) {
 	return rows.Next(), nil
 }
 
-func (r *Query) Find(dest any, conds ...any) error {
+func (r *OrmBuilder) Find(dest any, conds ...any) error {
 	query := r.dest(dest).addGlobalScopes().buildConditions()
 
 	if err := filterFindConditions(conds...); err != nil {
@@ -425,12 +425,12 @@ func (r *Query) Find(dest any, conds ...any) error {
 //
 // A lone scalar addresses the model's primary key, which is the form the relation writers use; a
 // column with its value is passed through as a single condition.
-func (r *Query) withFindConditions(conds []any) *Query {
+func (r *OrmBuilder) withFindConditions(conds []any) *OrmBuilder {
 	if len(conds) == 0 {
 		return r
 	}
 
-	add := func(column string, args []any) *Query {
+	add := func(column string, args []any) *OrmBuilder {
 		conditions := r.conditions
 		conditions.where = append(conditions.where, contractsdriver.Where{Query: column, Args: args})
 
@@ -464,7 +464,7 @@ func (r *Query) withFindConditions(conds []any) *Query {
 	return r
 }
 
-func (r *Query) FindOrFail(dest any, conds ...any) error {
+func (r *OrmBuilder) FindOrFail(dest any, conds ...any) error {
 	query := r.dest(dest).addGlobalScopes().buildConditions()
 
 	if err := filterFindConditions(conds...); err != nil {
@@ -497,7 +497,7 @@ func (r *Query) FindOrFail(dest any, conds ...any) error {
 
 // FindOr retrieves the first row whose key matches id, or runs the callback when there is none,
 // mirroring Laravel's Builder::findOr. It is Find's read with FirstOr's missing-row behaviour.
-func (r *Query) FindOr(dest any, id any, callback func() error) error {
+func (r *OrmBuilder) FindOr(dest any, id any, callback func() error) error {
 	query := r.dest(dest).addGlobalScopes().buildConditions()
 
 	if err := filterFindConditions(id); err != nil {
@@ -528,7 +528,7 @@ func (r *Query) FindOr(dest any, id any, callback func() error) error {
 	return query.retrieved(dest)
 }
 
-func (r *Query) First(dest any) error {
+func (r *OrmBuilder) First(dest any) error {
 	_, err := r.firstRow(dest)
 
 	return err
@@ -537,7 +537,7 @@ func (r *Query) First(dest any) error {
 // firstRow runs the query as a single-row read, reporting whether a row was found and firing the
 // retrieved hook when it was. A statement that matched nothing is not an error: First reads it as an
 // empty destination, while the callers that care ask for the flag.
-func (r *Query) firstRow(dest any) (bool, error) {
+func (r *OrmBuilder) firstRow(dest any) (bool, error) {
 	query := r.dest(dest).addGlobalScopes().buildConditions()
 
 	statement, bindings, err := query.compileFirst()
@@ -562,7 +562,7 @@ func (r *Query) firstRow(dest any) (bool, error) {
 	return true, query.retrieved(dest)
 }
 
-func (r *Query) FirstOr(dest any, callback func() error) error {
+func (r *OrmBuilder) FirstOr(dest any, callback func() error) error {
 	found, err := r.firstRow(dest)
 	if err != nil {
 		return err
@@ -574,7 +574,7 @@ func (r *Query) FirstOr(dest any, callback func() error) error {
 	return nil
 }
 
-func (r *Query) FirstOrCreate(dest any, conds ...any) error {
+func (r *OrmBuilder) FirstOrCreate(dest any, conds ...any) error {
 	if len(conds) == 0 {
 		return errors.OrmQueryConditionRequired
 	}
@@ -591,7 +591,7 @@ func (r *Query) FirstOrCreate(dest any, conds ...any) error {
 	return r.Create(dest)
 }
 
-func (r *Query) FirstOrFail(dest any) error {
+func (r *OrmBuilder) FirstOrFail(dest any) error {
 	found, err := r.firstRow(dest)
 	if err != nil {
 		return err
@@ -605,23 +605,23 @@ func (r *Query) FirstOrFail(dest any) error {
 
 // FirstOrNew looks a model up and, finding none, prepares one instead of storing it: the destination
 // is filled from the query's own equalities and from the attributes, and nothing is written.
-func (r *Query) FirstOrNew(dest any, attributes any, values ...any) error {
+func (r *OrmBuilder) FirstOrNew(dest any, attributes any, values ...any) error {
 	_, err := r.firstOrInit(dest, attributes, values, nil)
 
 	return err
 }
 
-func (r *Query) ForceDelete(dests ...any) (*contractsdb.Result, error) {
+func (r *OrmBuilder) ForceDelete(dests ...any) (*contractsdb.Result, error) {
 	var (
 		dest  any
-		query *Query
+		query *OrmBuilder
 	)
 
 	if len(dests) > 0 {
 		dest = dests[0]
-		query = r.dest(dest).WithTrashed().(*Query).addGlobalScopes().buildConditions()
+		query = r.dest(dest).WithTrashed().(*OrmBuilder).addGlobalScopes().buildConditions()
 	} else {
-		query = r.WithTrashed().(*Query).addGlobalScopes().buildConditions()
+		query = r.WithTrashed().(*OrmBuilder).addGlobalScopes().buildConditions()
 	}
 
 	if err := query.forceDeleting(dest); err != nil {
@@ -648,7 +648,7 @@ func (r *Query) ForceDelete(dests ...any) (*contractsdb.Result, error) {
 // columns render into this statement's select list, but the query keeps the selection it already
 // had — and it only takes the columns when it had none — so a statement compiled afterwards is
 // unchanged.
-func (r *Query) Get(dest any, columns ...any) error {
+func (r *OrmBuilder) Get(dest any, columns ...any) error {
 	if len(columns) == 0 {
 		return r.Find(dest)
 	}
@@ -656,12 +656,12 @@ func (r *Query) Get(dest any, columns ...any) error {
 	// onceWithColumns temporarily installs the columns, runs the query, then restores the original
 	// selection. This is how Laravel's get($columns) works: it mutates $this->columns in place,
 	// executes, then writes the original back.
-	original := r.builder.Selects()
-	defer func() { r.builder.SetSelects(original) }()
+	original := r.query.Selects()
+	defer func() { r.query.SetSelects(original) }()
 
 	if !hasSelectColumns(r) {
 		for _, col := range columnsToStrings(columns) {
-			r.builder.AddSelect(col)
+			r.query.AddSelect(col)
 		}
 	}
 
@@ -692,11 +692,11 @@ func columnsToStrings(columns []any) []string {
 }
 
 // DEPRECATED Use GroupBy instead.
-func (r *Query) Group(column string) contractsorm.Query {
+func (r *OrmBuilder) Group(column string) contractsorm.Query {
 	return r.GroupBy(column)
 }
 
-func (r *Query) GroupBy(column ...string) contractsorm.Query {
+func (r *OrmBuilder) GroupBy(column ...string) contractsorm.Query {
 	if len(column) == 0 {
 		return r
 	}
@@ -705,34 +705,34 @@ func (r *Query) GroupBy(column ...string) contractsorm.Query {
 	for i, c := range column {
 		cols[i] = c
 	}
-	r.builder.GroupBy(cols...)
+	r.query.GroupBy(cols...)
 
 	return r
 }
 
-func (r *Query) Having(query any, args ...any) contractsorm.Query {
+func (r *OrmBuilder) Having(query any, args ...any) contractsorm.Query {
 	if value, ok := query.(string); ok && containsPlaceholder(value) {
-		r.builder.HavingRaw(value, args, core.BooleanAnd)
+		r.query.HavingRaw(value, args, core.BooleanAnd)
 	} else {
-		r.builder.Having(query, args...)
+		r.query.Having(query, args...)
 	}
 
 	return r
 }
 
-func (r *Query) Join(query string, args ...any) contractsorm.Query {
-	r.builder.JoinRaw(query, args, "inner")
+func (r *OrmBuilder) Join(query string, args ...any) contractsorm.Query {
+	r.query.JoinRaw(query, args, "inner")
 
 	return r
 }
 
-func (r *Query) Limit(limit int) contractsorm.Query {
-	r.builder.Limit(limit)
+func (r *OrmBuilder) Limit(limit int) contractsorm.Query {
+	r.query.Limit(limit)
 
 	return r
 }
 
-func (r *Query) OfMany(column, aggregate string) contractsorm.Query {
+func (r *OrmBuilder) OfMany(column, aggregate string) contractsorm.Query {
 	if column == "" {
 		column = "id"
 	}
@@ -744,7 +744,7 @@ func (r *Query) OfMany(column, aggregate string) contractsorm.Query {
 	return r.setConditions(conditions)
 }
 
-func (r *Query) LatestOfMany(column ...string) contractsorm.Query {
+func (r *OrmBuilder) LatestOfMany(column ...string) contractsorm.Query {
 	col := ""
 	if len(column) > 0 {
 		col = column[0]
@@ -752,7 +752,7 @@ func (r *Query) LatestOfMany(column ...string) contractsorm.Query {
 	return r.OfMany(col, "MAX")
 }
 
-func (r *Query) OldestOfMany(column ...string) contractsorm.Query {
+func (r *OrmBuilder) OldestOfMany(column ...string) contractsorm.Query {
 	col := ""
 	if len(column) > 0 {
 		col = column[0]
@@ -765,7 +765,7 @@ func (r *Query) OldestOfMany(column ...string) contractsorm.Query {
 // primary key supplies the keys the related query is constrained by, so the model's own table is
 // never re-read and a Load issued from an unconstrained query still attaches the receiver's own
 // relations rather than whichever row the table happens to return first.
-func (r *Query) Load(model any, relation string, args ...any) error {
+func (r *OrmBuilder) Load(model any, relation string, args ...any) error {
 	if relation == "" {
 		return errors.OrmQueryEmptyRelation
 	}
@@ -794,7 +794,7 @@ func (r *Query) Load(model any, relation string, args ...any) error {
 	return r.setConditions(conditions).applyEagerLoads(model)
 }
 
-func (r *Query) LoadMissing(model any, relation string, args ...any) error {
+func (r *OrmBuilder) LoadMissing(model any, relation string, args ...any) error {
 	destType := reflect.TypeOf(model)
 	if destType.Kind() != reflect.Pointer {
 		return errors.OrmQueryModelNotPointer
@@ -828,13 +828,13 @@ func (r *Query) LoadMissing(model any, relation string, args ...any) error {
 	return r.Load(model, relation, args...)
 }
 
-func (r *Query) LockForUpdate() contractsorm.Query {
-	r.builder.Lock(true)
+func (r *OrmBuilder) LockForUpdate() contractsorm.Query {
+	r.query.Lock(true)
 
 	return r
 }
 
-func (r *Query) Model(value any) contractsorm.Query {
+func (r *OrmBuilder) Model(value any) contractsorm.Query {
 	if r.conditions.model != nil {
 		return r
 	}
@@ -845,7 +845,7 @@ func (r *Query) Model(value any) contractsorm.Query {
 	return r.setConditions(conditions)
 }
 
-func (r *Query) Observe(model any, observer contractsorm.Observer) {
+func (r *OrmBuilder) Observe(model any, observer contractsorm.Observer) {
 	mutex := r.mutex
 	if mutex == nil {
 		mutex = &sync.Mutex{}
@@ -859,13 +859,13 @@ func (r *Query) Observe(model any, observer contractsorm.Observer) {
 	})
 }
 
-func (r *Query) Offset(offset int) contractsorm.Query {
-	r.builder.Offset(offset)
+func (r *OrmBuilder) Offset(offset int) contractsorm.Query {
+	r.query.Offset(offset)
 
 	return r
 }
 
-func (r *Query) Omit(columns ...string) contractsorm.Query {
+func (r *OrmBuilder) Omit(columns ...string) contractsorm.Query {
 	conditions := r.conditions
 	conditions.omit = columns
 
@@ -873,7 +873,7 @@ func (r *Query) Omit(columns ...string) contractsorm.Query {
 }
 
 // DEPRECATED: Use OrderByRaw instead
-func (r *Query) Order(value any) contractsorm.Query {
+func (r *OrmBuilder) Order(value any) contractsorm.Query {
 	return r.OrderByRaw(fmt.Sprintf("%s", value))
 }
 
@@ -881,37 +881,37 @@ func (r *Query) Order(value any) contractsorm.Query {
 // other direction is an error (errors.QueryOrderDirectionInvalid). A custom direction such as
 // "DESC NULLS LAST" goes through OrderByRaw, the only entry point that renders its argument
 // verbatim, so no caller-supplied string reaches the SQL unvalidated.
-func (r *Query) OrderBy(column string, direction ...string) contractsorm.Query {
+func (r *OrmBuilder) OrderBy(column string, direction ...string) contractsorm.Query {
 	orderDirection := "asc"
 	if len(direction) > 0 {
 		orderDirection = strings.ToLower(direction[0])
 	}
 	if orderDirection != "asc" && orderDirection != "desc" {
-		return r.withError(errors.QueryOrderDirectionInvalid).(*Query)
+		return r.withError(errors.QueryOrderDirectionInvalid).(*OrmBuilder)
 	}
 
 	return r.OrderByRaw(r.queryGrammar.Wrap(column) + " " + orderDirection)
 }
 
-func (r *Query) OrderByDesc(column string) contractsorm.Query {
+func (r *OrmBuilder) OrderByDesc(column string) contractsorm.Query {
 	return r.OrderByRaw(r.queryGrammar.Wrap(column) + " desc")
 }
 
-func (r *Query) OrderByRaw(raw string) contractsorm.Query {
-	r.builder.OrderByRaw(raw, nil)
+func (r *OrmBuilder) OrderByRaw(raw string) contractsorm.Query {
+	r.query.OrderByRaw(raw, nil)
 
 	return r
 }
 
-func (r *Query) InRandomOrder() contractsorm.Query {
+func (r *OrmBuilder) InRandomOrder() contractsorm.Query {
 	return r.OrderByRaw(randomOrderFunction(r.dbConfig.Driver))
 }
 
-func (r *Query) InTransaction() bool {
+func (r *OrmBuilder) InTransaction() bool {
 	return r.tx != nil
 }
 
-func (r *Query) OrWhere(query any, args ...any) contractsorm.Query {
+func (r *OrmBuilder) OrWhere(query any, args ...any) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
 		Query: query,
 		Args:  args,
@@ -923,7 +923,7 @@ func (r *Query) OrWhere(query any, args ...any) contractsorm.Query {
 // Laravel's Builder::paginate: a non-positive page and limit fall back to the defaults of page 1 and 15
 // rows, a total already carried by the caller is an override that skips the count, and a zero total skips
 // the page fetch (Laravel returns an empty collection when the count is zero).
-func (r *Query) Paginate(page, limit int, dest any, total *int64) error {
+func (r *OrmBuilder) Paginate(page, limit int, dest any, total *int64) error {
 	if page <= 0 {
 		page = 1
 	}
@@ -996,7 +996,7 @@ func emptyPaginatedDest(dest any) error {
 //
 // The statement runs exactly once and is never counted. Unlike Paginate there is no total; the page
 // carries only the rows and the cursors that reach its neighbours.
-func (r *Query) CursorPaginate(perPage int, cursor string, dest any) (contractsdb.CursorPaginator, error) {
+func (r *OrmBuilder) CursorPaginate(perPage int, cursor string, dest any) (contractsdb.CursorPaginator, error) {
 	anchor, err := decodeCursorAnchor(cursor)
 	if err != nil {
 		return contractsdb.CursorPaginator{}, err
@@ -1032,7 +1032,7 @@ func (r *Query) CursorPaginate(perPage int, cursor string, dest any) (contractsd
 // ("`id` asc"), which carries neither, so each such fragment is parsed back into the column and
 // direction it was written from; a fragment that is not a plain "column direction" pair is left as a
 // raw order and contributes no predicate.
-func (r *Query) cursorBuilder() (*querybuilder.Builder, error) {
+func (r *OrmBuilder) cursorBuilder() (*querybuilder.Builder, error) {
 	builder, err := r.newBuilder()
 	if err != nil {
 		return nil, err
@@ -1041,7 +1041,7 @@ func (r *Query) cursorBuilder() (*querybuilder.Builder, error) {
 	// The builder stores an order as a core.Order descriptor, not as a bare fragment: a raw order keeps
 	// its text in SQL, and an order written through OrderBy() keeps a column and a direction. The cursor
 	// parser works on the fragment text, so the descriptor is flattened back into one here.
-	stored := r.builder.State().Orders
+	stored := r.query.State().Orders
 	orders := make([]any, 0, len(stored))
 	for _, order := range stored {
 		if order.SQL != nil {
@@ -1130,7 +1130,7 @@ func decodeCursorAnchor(cursor string) (*querybuilder.Cursor, error) {
 
 // cursorRows runs the compiled statement once, collecting the page as column-keyed maps and decoding
 // the same rows into dest.
-func (r *Query) cursorRows(statement string, bindings []any, dest any) ([]map[string]any, error) {
+func (r *OrmBuilder) cursorRows(statement string, bindings []any, dest any) ([]map[string]any, error) {
 	rows, err := r.queryRows(statement, bindings)
 	if err != nil {
 		return nil, err
@@ -1230,7 +1230,7 @@ func cursorPaginatorPage(page querybuilder.CursorPaginator) contractsdb.CursorPa
 	return result
 }
 
-func (r *Query) Pluck(column string, dest any) error {
+func (r *OrmBuilder) Pluck(column string, dest any) error {
 	query := r.addGlobalScopes().buildConditions()
 
 	destValue := reflect.ValueOf(dest)
@@ -1238,8 +1238,8 @@ func (r *Query) Pluck(column string, dest any) error {
 		return errors.DatabaseUnsupportedType.Args(reflect.TypeOf(dest).String(), "pointer to slice")
 	}
 
-	query.builder.SetSelects([]any{column})
-	_ = query.builder.SetBindings(nil, "select")
+	query.query.SetSelects([]any{column})
+	_ = query.query.SetBindings(nil, "select")
 	query.conditions.raw = nil
 
 	statement, bindings, err := query.compileSelect()
@@ -1287,17 +1287,17 @@ func (r *Query) Pluck(column string, dest any) error {
 	return nil
 }
 
-func (r *Query) Raw(sql string, values ...any) contractsorm.Query {
+func (r *OrmBuilder) Raw(sql string, values ...any) contractsorm.Query {
 	conditions := r.conditions
 	conditions.raw = &Select{query: sql, args: values}
 
 	return r.setConditions(conditions)
 }
 
-func (r *Query) Restore(dests ...any) (*contractsdb.Result, error) {
+func (r *OrmBuilder) Restore(dests ...any) (*contractsdb.Result, error) {
 	var (
 		dest  any
-		query *Query
+		query *OrmBuilder
 	)
 
 	if len(dests) > 0 {
@@ -1335,7 +1335,7 @@ func (r *Query) Restore(dests ...any) (*contractsdb.Result, error) {
 	return res, nil
 }
 
-func (r *Query) Rollback() error {
+func (r *OrmBuilder) Rollback() error {
 	if r.tx == nil {
 		return errors.OrmQueryTransactionNotStarted
 	}
@@ -1343,15 +1343,15 @@ func (r *Query) Rollback() error {
 	return r.tx.Rollback()
 }
 
-func (r *Query) Save(dest any) error {
-	if hasStringColumns(r.builder.Selects()) && len(r.conditions.omit) > 0 {
+func (r *OrmBuilder) Save(dest any) error {
+	if hasStringColumns(r.query.Selects()) && len(r.conditions.omit) > 0 {
 		return errors.OrmQuerySelectAndOmitsConflict
 	}
 
 	id := databaseorm.GetID(dest)
 	update := id != nil
 
-	var query *Query
+	var query *OrmBuilder
 	if update {
 		query = r.dest(dest).addGlobalScopes().buildConditions()
 	} else {
@@ -1394,11 +1394,11 @@ func (r *Query) Save(dest any) error {
 	return nil
 }
 
-func (r *Query) SaveQuietly(value any) error {
+func (r *OrmBuilder) SaveQuietly(value any) error {
 	return r.WithoutEvents().Save(value)
 }
 
-func (r *Query) Scan(dest any) error {
+func (r *OrmBuilder) Scan(dest any) error {
 	query := r.dest(dest).buildConditions()
 
 	statement, bindings, err := query.compileSelect()
@@ -1420,7 +1420,7 @@ func (r *Query) Scan(dest any) error {
 	return nil
 }
 
-func (r *Query) Scopes(funcs ...func(contractsorm.Query) contractsorm.Query) contractsorm.Query {
+func (r *OrmBuilder) Scopes(funcs ...func(contractsorm.Query) contractsorm.Query) contractsorm.Query {
 	conditions := r.conditions
 	conditions.scopes = deep.Append(r.conditions.scopes, funcs...)
 
@@ -1428,7 +1428,7 @@ func (r *Query) Scopes(funcs ...func(contractsorm.Query) contractsorm.Query) con
 }
 
 // Select replaces the selected columns and their bindings, mirroring Laravel's select().
-func (r *Query) Select(columns ...string) contractsorm.Query {
+func (r *OrmBuilder) Select(columns ...string) contractsorm.Query {
 	r.conditions.selectSubs = nil
 	if len(columns) == 0 {
 		columns = []string{"*"}
@@ -1437,31 +1437,31 @@ func (r *Query) Select(columns ...string) contractsorm.Query {
 	for i, column := range columns {
 		cols[i] = column
 	}
-	r.builder.Select(cols...)
+	r.query.Select(cols...)
 
 	return r
 }
 
-func (r *Query) SelectRaw(query any, args ...any) contractsorm.Query {
-	r.builder.SelectRaw(fmt.Sprint(query), args)
+func (r *OrmBuilder) SelectRaw(query any, args ...any) contractsorm.Query {
+	r.query.SelectRaw(fmt.Sprint(query), args)
 
 	return r
 }
 
-func (r *Query) WithContext(ctx context.Context) contractsorm.Query {
+func (r *OrmBuilder) WithContext(ctx context.Context) contractsorm.Query {
 	query := *r
 	query.ctx = ctx
 	query.conditions = r.conditions.clone()
-	query.builder = r.builder.Clone()
+	query.query = r.query.Clone()
 	query.components = r.components.WithContext(ctx)
 	query.queryGrammar = query.components.Grammar
-	query.builder = query.builder.RebindGrammar(query.queryGrammar, query.components.Processor, query.dbConfig.Driver)
+	query.query = query.query.RebindGrammar(query.queryGrammar, query.components.Processor, query.dbConfig.Driver)
 
 	return &query
 }
 
-func (r *Query) SharedLock() contractsorm.Query {
-	r.builder.Lock(false)
+func (r *OrmBuilder) SharedLock() contractsorm.Query {
+	r.query.Lock(false)
 
 	return r
 }
@@ -1470,32 +1470,32 @@ func (r *Query) SharedLock() contractsorm.Query {
 // a read that must observe a write issued on the same connection is not served by a lagging replica.
 // It mirrors Laravel's Builder::useWritePdo(), which stores the flag the connection call reads as the
 // inverse of its $useReadPdo argument; in this port the executor's readPool honours it.
-func (r *Query) UseWritePdo() contractsorm.Query {
+func (r *OrmBuilder) UseWritePdo() contractsorm.Query {
 	conditions := r.conditions
 	conditions.useWritePdo = true
 
 	return r.setConditions(conditions)
 }
 
-func (r *Query) Sum(column string, dest any) error {
+func (r *OrmBuilder) Sum(column string, dest any) error {
 	return r.aggregate("sum", column, dest)
 }
 
-func (r *Query) Avg(column string, dest any) error {
+func (r *OrmBuilder) Avg(column string, dest any) error {
 	return r.aggregate("avg", column, dest)
 }
 
-func (r *Query) Min(column string, dest any) error {
+func (r *OrmBuilder) Min(column string, dest any) error {
 	return r.aggregate("min", column, dest)
 }
 
-func (r *Query) Max(column string, dest any) error {
+func (r *OrmBuilder) Max(column string, dest any) error {
 	return r.aggregate("max", column, dest)
 }
 
 // aggregate runs a single-column aggregate and scans its one value into dest, which GORM's own
 // Select(...).Row().Scan did before.
-func (r *Query) aggregate(function string, column string, dest any) error {
+func (r *OrmBuilder) aggregate(function string, column string, dest any) error {
 	destValue := reflect.ValueOf(dest)
 	if destValue.Kind() != reflect.Pointer {
 		return errors.DatabaseUnsupportedType.Args(destValue.Kind(), "pointer")
@@ -1514,7 +1514,7 @@ func (r *Query) aggregate(function string, column string, dest any) error {
 // Table points the query at a table by name. A string name is stored bare and the framework grammar
 // applies the connection prefix once when the statement is rendered; a querybuilder.Expression is
 // stored as given and rendered verbatim, for a caller naming a table that is already qualified.
-func (r *Query) Table(name any, args ...any) contractsorm.Query {
+func (r *OrmBuilder) Table(name any, args ...any) contractsorm.Query {
 	conditions := r.conditions
 	conditions.table = &Table{
 		name: name,
@@ -1524,15 +1524,15 @@ func (r *Query) Table(name any, args ...any) contractsorm.Query {
 	return r.setConditions(conditions)
 }
 
-func (r *Query) ToSql() contractsorm.ToSql {
+func (r *OrmBuilder) ToSql() contractsorm.ToSql {
 	return NewToSql(r, r.log, false)
 }
 
-func (r *Query) ToRawSql() contractsorm.ToSql {
+func (r *OrmBuilder) ToRawSql() contractsorm.ToSql {
 	return NewToSql(r, r.log, true)
 }
 
-func (r *Query) Update(column any, value ...any) (*contractsdb.Result, error) {
+func (r *OrmBuilder) Update(column any, value ...any) (*contractsdb.Result, error) {
 	query := r.addGlobalScopes().buildConditions()
 
 	if _, ok := column.(string); !ok && len(value) > 0 {
@@ -1580,7 +1580,7 @@ func (r *Query) Update(column any, value ...any) (*contractsdb.Result, error) {
 
 // UpdateOrCreate looks a model up, writing the values it was given either way: the found model is saved
 // with them, and a model that was not found is created carrying them.
-func (r *Query) UpdateOrCreate(dest any, attributes any, values any) error {
+func (r *OrmBuilder) UpdateOrCreate(dest any, attributes any, values any) error {
 	found, err := r.firstOrInit(dest, attributes, nil, []any{values})
 	if err != nil {
 		return err
@@ -1597,7 +1597,7 @@ func (r *Query) UpdateOrCreate(dest any, attributes any, values any) error {
 //
 // GORM expressed this as FirstOrInit plus Attrs and Assign; the rules are reproduced here so the three
 // methods above share one lookup.
-func (r *Query) firstOrInit(dest any, find any, attrs []any, assigns []any) (bool, error) {
+func (r *OrmBuilder) firstOrInit(dest any, find any, attrs []any, assigns []any) (bool, error) {
 	query := r.dest(dest)
 
 	if find != nil {
@@ -1639,7 +1639,7 @@ func (r *Query) firstOrInit(dest any, find any, attrs []any, assigns []any) (boo
 // foldFindCondition adds the lookup the FirstOr* family was given to the query's where clause, in the
 // shapes the callers use: a model, whose columns carrying a value are matched, a map, whose keys name
 // the columns, a column with its value, and a lone scalar, which is the primary key.
-func (r *Query) foldFindCondition(find any) (*Query, error) {
+func (r *OrmBuilder) foldFindCondition(find any) (*OrmBuilder, error) {
 	if mapping, ok := asColumnMap(find); ok {
 		conditions := r.conditions
 		for _, key := range slices.Sorted(maps.Keys(mapping)) {
@@ -1680,7 +1680,7 @@ func (r *Query) foldFindCondition(find any) (*Query, error) {
 
 // assignWhereValues copies the query's own equalities onto a model, which is how a model built by
 // FirstOrNew still carries the conditions it was looked up with.
-func (r *Query) assignWhereValues(dest any) error {
+func (r *OrmBuilder) assignWhereValues(dest any) error {
 	for _, item := range r.conditions.where {
 		column, ok := item.Query.(string)
 		if !ok || item.Type != contractsdriver.WhereTypeBase || len(item.Args) != 1 || containsPlaceholder(column) || isSlice(item.Args[0]) {
@@ -1697,7 +1697,7 @@ func (r *Query) assignWhereValues(dest any) error {
 
 // assignValue fills a model from the shapes the callers pass: a map, whose keys name the columns, or a
 // model, whose columns carrying a value are copied.
-func (r *Query) assignValue(dest any, value any) error {
+func (r *OrmBuilder) assignValue(dest any, value any) error {
 	if value == nil {
 		return nil
 	}
@@ -1736,7 +1736,7 @@ func (r *Query) assignValue(dest any, value any) error {
 
 // assignColumn writes one column of a model, looked up by its Go field name or by its column name. A
 // column the model does not carry is left alone.
-func (r *Query) assignColumn(dest any, name string, value any) error {
+func (r *OrmBuilder) assignColumn(dest any, name string, value any) error {
 	schema, err := parseSchema(dest)
 	if err != nil {
 		return err
@@ -1758,7 +1758,7 @@ func (r *Query) assignColumn(dest any, name string, value any) error {
 	return field.Set(r.ctx, reflected, value)
 }
 
-func (r *Query) When(condition bool, callback func(query contractsorm.Query) contractsorm.Query, falseCallback ...func(query contractsorm.Query) contractsorm.Query) contractsorm.Query {
+func (r *OrmBuilder) When(condition bool, callback func(query contractsorm.Query) contractsorm.Query, falseCallback ...func(query contractsorm.Query) contractsorm.Query) contractsorm.Query {
 	if condition {
 		return callback(r)
 	}
@@ -1770,17 +1770,17 @@ func (r *Query) When(condition bool, callback func(query contractsorm.Query) con
 	return r
 }
 
-func (r *Query) Where(query any, args ...any) contractsorm.Query {
+func (r *OrmBuilder) Where(query any, args ...any) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
 		Query: query,
 		Args:  args,
 	})
 }
 
-func (r *Query) WhereAll(columns []string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) WhereAll(columns []string, args ...any) contractsorm.Query {
 	op, value, err := utils.PrepareWhereOperatorAndValue(args...)
 	if err != nil {
-		return r.withError(err).(*Query)
+		return r.withError(err).(*OrmBuilder)
 	}
 
 	return r.addWhere(contractsdriver.Where{
@@ -1792,10 +1792,10 @@ func (r *Query) WhereAll(columns []string, args ...any) contractsorm.Query {
 	})
 }
 
-func (r *Query) WhereAny(columns []string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) WhereAny(columns []string, args ...any) contractsorm.Query {
 	op, value, err := utils.PrepareWhereOperatorAndValue(args...)
 	if err != nil {
-		return r.withError(err).(*Query)
+		return r.withError(err).(*OrmBuilder)
 	}
 
 	return r.addWhere(contractsdriver.Where{
@@ -1814,7 +1814,7 @@ func (r *Query) WhereAny(columns []string, args ...any) contractsorm.Query {
 // WhereIn forwards the column and the value list to the compiled builder's WhereIn, which expands
 // the slice to one placeholder per value inside the wrapped column (the shapes that still queue a
 // slice argument are the raw "col in ?" fragments the pivot and Find conditions build).
-func (r *Query) WhereIn(column string, values []any) contractsorm.Query {
+func (r *OrmBuilder) WhereIn(column string, values []any) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
 		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
 			builder.WhereIn(column, values, boolean, false)
@@ -1822,7 +1822,7 @@ func (r *Query) WhereIn(column string, values []any) contractsorm.Query {
 	})
 }
 
-func (r *Query) WhereJsonContains(column string, value any) contractsorm.Query {
+func (r *OrmBuilder) WhereJsonContains(column string, value any) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
 		Type:  contractsdriver.WhereTypeJsonContains,
 		Query: column,
@@ -1830,14 +1830,14 @@ func (r *Query) WhereJsonContains(column string, value any) contractsorm.Query {
 	})
 }
 
-func (r *Query) WhereJsonContainsKey(column string) contractsorm.Query {
+func (r *OrmBuilder) WhereJsonContainsKey(column string) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
 		Type:  contractsdriver.WhereTypeJsonContainsKey,
 		Query: column,
 	})
 }
 
-func (r *Query) WhereJsonDoesntContain(column string, value any) contractsorm.Query {
+func (r *OrmBuilder) WhereJsonDoesntContain(column string, value any) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
 		Type:  contractsdriver.WhereTypeJsonContains,
 		Query: column,
@@ -1846,7 +1846,7 @@ func (r *Query) WhereJsonDoesntContain(column string, value any) contractsorm.Qu
 	})
 }
 
-func (r *Query) WhereJsonDoesntContainKey(column string) contractsorm.Query {
+func (r *OrmBuilder) WhereJsonDoesntContainKey(column string) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
 		Type:  contractsdriver.WhereTypeJsonContainsKey,
 		Query: column,
@@ -1854,7 +1854,7 @@ func (r *Query) WhereJsonDoesntContainKey(column string) contractsorm.Query {
 	})
 }
 
-func (r *Query) WhereJsonLength(column string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) WhereJsonLength(column string, args ...any) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
 		Type:  contractsdriver.WhereTypeJsonLength,
 		Query: column,
@@ -1862,7 +1862,7 @@ func (r *Query) WhereJsonLength(column string, args ...any) contractsorm.Query {
 	})
 }
 
-func (r *Query) OrWhereIn(column string, values []any) contractsorm.Query {
+func (r *OrmBuilder) OrWhereIn(column string, values []any) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
 		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
 			builder.WhereIn(column, values, boolean, false)
@@ -1871,7 +1871,7 @@ func (r *Query) OrWhereIn(column string, values []any) contractsorm.Query {
 	})
 }
 
-func (r *Query) OrWhereJsonContains(column string, value any) contractsorm.Query {
+func (r *OrmBuilder) OrWhereJsonContains(column string, value any) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
 		Type:  contractsdriver.WhereTypeJsonContains,
 		Query: column,
@@ -1880,7 +1880,7 @@ func (r *Query) OrWhereJsonContains(column string, value any) contractsorm.Query
 	})
 }
 
-func (r *Query) OrWhereJsonContainsKey(column string) contractsorm.Query {
+func (r *OrmBuilder) OrWhereJsonContainsKey(column string) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
 		Type:  contractsdriver.WhereTypeJsonContainsKey,
 		Query: column,
@@ -1888,7 +1888,7 @@ func (r *Query) OrWhereJsonContainsKey(column string) contractsorm.Query {
 	})
 }
 
-func (r *Query) OrWhereJsonDoesntContain(column string, value any) contractsorm.Query {
+func (r *OrmBuilder) OrWhereJsonDoesntContain(column string, value any) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
 		Type:  contractsdriver.WhereTypeJsonContains,
 		Query: column,
@@ -1898,7 +1898,7 @@ func (r *Query) OrWhereJsonDoesntContain(column string, value any) contractsorm.
 	})
 }
 
-func (r *Query) OrWhereJsonDoesntContainKey(column string) contractsorm.Query {
+func (r *OrmBuilder) OrWhereJsonDoesntContainKey(column string) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
 		Type:  contractsdriver.WhereTypeJsonContainsKey,
 		Query: column,
@@ -1907,7 +1907,7 @@ func (r *Query) OrWhereJsonDoesntContainKey(column string) contractsorm.Query {
 	})
 }
 
-func (r *Query) OrWhereJsonLength(column string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) OrWhereJsonLength(column string, args ...any) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
 		Type:  contractsdriver.WhereTypeJsonLength,
 		Query: column,
@@ -1916,7 +1916,7 @@ func (r *Query) OrWhereJsonLength(column string, args ...any) contractsorm.Query
 	})
 }
 
-func (r *Query) WhereNotIn(column string, values []any) contractsorm.Query {
+func (r *OrmBuilder) WhereNotIn(column string, values []any) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
 		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
 			builder.WhereIn(column, values, boolean, true)
@@ -1924,7 +1924,7 @@ func (r *Query) WhereNotIn(column string, values []any) contractsorm.Query {
 	})
 }
 
-func (r *Query) OrWhereNotIn(column string, values []any) contractsorm.Query {
+func (r *OrmBuilder) OrWhereNotIn(column string, values []any) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
 		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
 			builder.WhereIn(column, values, boolean, true)
@@ -1935,7 +1935,7 @@ func (r *Query) OrWhereNotIn(column string, values []any) contractsorm.Query {
 
 // WhereBetween forwards to the compiled builder's WhereBetween, which wraps the column with the
 // grammar's quoting (Builder::whereBetween).
-func (r *Query) WhereBetween(column string, x, y any) contractsorm.Query {
+func (r *OrmBuilder) WhereBetween(column string, x, y any) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
 		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
 			builder.WhereBetween(column, []any{x, y}, boolean, false)
@@ -1943,7 +1943,7 @@ func (r *Query) WhereBetween(column string, x, y any) contractsorm.Query {
 	})
 }
 
-func (r *Query) WhereNotBetween(column string, x, y any) contractsorm.Query {
+func (r *OrmBuilder) WhereNotBetween(column string, x, y any) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
 		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
 			builder.WhereBetween(column, []any{x, y}, boolean, true)
@@ -1951,7 +1951,7 @@ func (r *Query) WhereNotBetween(column string, x, y any) contractsorm.Query {
 	})
 }
 
-func (r *Query) OrWhereBetween(column string, x, y any) contractsorm.Query {
+func (r *OrmBuilder) OrWhereBetween(column string, x, y any) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
 		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
 			builder.WhereBetween(column, []any{x, y}, boolean, false)
@@ -1960,7 +1960,7 @@ func (r *Query) OrWhereBetween(column string, x, y any) contractsorm.Query {
 	})
 }
 
-func (r *Query) OrWhereNotBetween(column string, x, y any) contractsorm.Query {
+func (r *OrmBuilder) OrWhereNotBetween(column string, x, y any) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
 		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
 			builder.WhereBetween(column, []any{x, y}, boolean, true)
@@ -1969,7 +1969,7 @@ func (r *Query) OrWhereNotBetween(column string, x, y any) contractsorm.Query {
 	})
 }
 
-func (r *Query) OrWhereNull(column string) contractsorm.Query {
+func (r *OrmBuilder) OrWhereNull(column string) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
 		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
 			builder.WhereNull(column, boolean, false)
@@ -1978,10 +1978,10 @@ func (r *Query) OrWhereNull(column string) contractsorm.Query {
 	})
 }
 
-func (r *Query) WhereNone(columns []string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) WhereNone(columns []string, args ...any) contractsorm.Query {
 	op, value, err := utils.PrepareWhereOperatorAndValue(args...)
 	if err != nil {
-		return r.withError(err).(*Query)
+		return r.withError(err).(*OrmBuilder)
 	}
 
 	return r.addWhere(contractsdriver.Where{
@@ -2042,7 +2042,7 @@ func sliceValues(value any) ([]any, bool) {
 	return values, true
 }
 
-func (r *Query) WhereNotNull(column string) contractsorm.Query {
+func (r *OrmBuilder) WhereNotNull(column string) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
 		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
 			builder.WhereNull(column, boolean, true)
@@ -2052,7 +2052,7 @@ func (r *Query) WhereNotNull(column string) contractsorm.Query {
 
 // WhereNull forwards to the compiled builder's WhereNull, which wraps the column; OrWhereNull and
 // WhereNotNull are the same forward with the connector and the negation.
-func (r *Query) WhereNull(column string) contractsorm.Query {
+func (r *OrmBuilder) WhereNull(column string) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
 		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
 			builder.WhereNull(column, boolean, false)
@@ -2060,14 +2060,14 @@ func (r *Query) WhereNull(column string) contractsorm.Query {
 	})
 }
 
-func (r *Query) WithoutEvents() contractsorm.Query {
+func (r *OrmBuilder) WithoutEvents() contractsorm.Query {
 	conditions := r.conditions
 	conditions.withoutEvents = true
 
 	return r.setConditions(conditions)
 }
 
-func (r *Query) WithoutGlobalScopes(names ...string) contractsorm.Query {
+func (r *OrmBuilder) WithoutGlobalScopes(names ...string) contractsorm.Query {
 	conditions := r.conditions
 
 	if len(names) == 0 {
@@ -2078,21 +2078,21 @@ func (r *Query) WithoutGlobalScopes(names ...string) contractsorm.Query {
 	return r.setConditions(conditions)
 }
 
-func (r *Query) WithTrashed() contractsorm.Query {
+func (r *OrmBuilder) WithTrashed() contractsorm.Query {
 	conditions := r.conditions
 	conditions.withTrashed = true
 
 	return r.setConditions(conditions)
 }
 
-func (r *Query) OnlyTrashed() contractsorm.Query {
+func (r *OrmBuilder) OnlyTrashed() contractsorm.Query {
 	conditions := r.conditions
 	conditions.onlyTrashed = true
 
 	return r.setConditions(conditions)
 }
 
-func (r *Query) addGlobalScopes() *Query {
+func (r *OrmBuilder) addGlobalScopes() *OrmBuilder {
 	if slices.Contains(r.conditions.withoutGlobalScopes, "*") {
 		return r
 	}
@@ -2133,41 +2133,41 @@ func (r *Query) addGlobalScopes() *Query {
 		globalScopes = append(globalScopes, nameToGlobalScopes[name])
 	}
 
-	return r.clone().Scopes(globalScopes...).(*Query)
+	return r.clone().Scopes(globalScopes...).(*OrmBuilder)
 }
 
 // whereForward returns the callback a where method queues in place of a descriptor: the method
 // declares its forward (Builder::whereBetween, Builder::whereNull, Builder::whereAny, ...) and the
 // callback runs against the compiled query builder with the connector the compiler computed. Go has
 // no __call, so every method states the forward itself instead of a shared dispatch switch.
-func (r *Query) whereForward(forward func(builder *querybuilder.Builder, boolean string)) any {
+func (r *OrmBuilder) whereForward(forward func(builder *querybuilder.Builder, boolean string)) any {
 	return forward
 }
 
-func (r *Query) addWhere(where contractsdriver.Where) contractsorm.Query {
+func (r *OrmBuilder) addWhere(where contractsdriver.Where) contractsorm.Query {
 	conditions := r.conditions
 	conditions.where = deep.Append(conditions.where, where)
 
 	return r.setConditions(conditions)
 }
 
-func (r *Query) buildConditions() *Query {
+func (r *OrmBuilder) buildConditions() *OrmBuilder {
 	// The query is no longer assembled into a GORM statement here. GORM used to build one and run
 	// it; the compiled path builds from the query's conditions, so the only thing left to do is
 	// rebind to the connection a model may declare and hand the query on.
 	query, err := r.refreshConnection()
 	if err != nil {
-		return r.withError(err).(*Query)
+		return r.withError(err).(*OrmBuilder)
 	}
 
 	return query
 }
 
-func (r *Query) clearConditions() {
+func (r *OrmBuilder) clearConditions() {
 	r.conditions = Conditions{}
 }
 
-func (r *Query) create(dest any) error {
+func (r *OrmBuilder) create(dest any) error {
 	// Laravel's create() goes through newModelInstance(), which merges $pendingAttributes into the
 	// attributes before the model is saved, so the values WithAttributes recorded reach the row and
 	// the saving/creating hooks see them.
@@ -2197,7 +2197,7 @@ func (r *Query) create(dest any) error {
 	return nil
 }
 
-func (r *Query) created(dest any) error {
+func (r *OrmBuilder) created(dest any) error {
 	if isSlice(dest) {
 		return nil
 	}
@@ -2207,7 +2207,7 @@ func (r *Query) created(dest any) error {
 	return err
 }
 
-func (r *Query) creating(dest any) (any, error) {
+func (r *OrmBuilder) creating(dest any) (any, error) {
 	if isSlice(dest) {
 		return dest, nil
 	}
@@ -2220,7 +2220,7 @@ func (r *Query) creating(dest any) (any, error) {
 // The destination can be replaced while the handlers run — an observer that changes an attribute on a
 // value it cannot address gets a copy — so the value is returned rather than only recorded, which is
 // how such a change reaches the statement being built.
-func (r *Query) event(event contractsorm.EventType, model, dest any) (any, error) {
+func (r *OrmBuilder) event(event contractsorm.EventType, model, dest any) (any, error) {
 	if r.conditions.withoutEvents {
 		return dest, nil
 	}
@@ -2234,7 +2234,7 @@ func (r *Query) event(event contractsorm.EventType, model, dest any) (any, error
 }
 
 // dispatch runs the handlers registered for one event.
-func (r *Query) dispatch(event contractsorm.EventType, model, dest any, instance *Event) error {
+func (r *OrmBuilder) dispatch(event contractsorm.EventType, model, dest any, instance *Event) error {
 	if model != nil {
 		if dispatchesEvents, exist := model.(contractsorm.DispatchesEvents); exist {
 			if dispatchesEvent, exists := dispatchesEvents.DispatchesEvents()[event]; exists {
@@ -2272,7 +2272,7 @@ func (r *Query) dispatch(event contractsorm.EventType, model, dest any, instance
 	return nil
 }
 
-func (r *Query) deleting(dest any) error {
+func (r *OrmBuilder) deleting(dest any) error {
 	if !hasID(dest) {
 		return nil
 	}
@@ -2282,7 +2282,7 @@ func (r *Query) deleting(dest any) error {
 	return err
 }
 
-func (r *Query) deleted(dest any) error {
+func (r *OrmBuilder) deleted(dest any) error {
 	if !hasID(dest) {
 		return nil
 	}
@@ -2297,7 +2297,7 @@ func (r *Query) deleted(dest any) error {
 //
 // Each scope starts from what the previous ones produced, which is how GORM chained them onto one
 // statement.
-func (r *Query) withScopesApplied() *Query {
+func (r *OrmBuilder) withScopesApplied() *OrmBuilder {
 	// Laravel's applyScopes() starts from "clone $this" and applies the scopes to the copy, so the
 	// receiver keeps its own scope list and a second compile from the same query does not append the
 	// scope's clauses a second time. This is the one place a clone is required rather than optional:
@@ -2307,7 +2307,7 @@ func (r *Query) withScopesApplied() *Query {
 	query.conditions.scopes = nil
 
 	for _, apply := range scopes {
-		scoped, ok := apply(query).(*Query)
+		scoped, ok := apply(query).(*OrmBuilder)
 		if !ok {
 			continue
 		}
@@ -2321,21 +2321,21 @@ func (r *Query) withScopesApplied() *Query {
 
 // withError returns a query carrying a condition that could not be accepted, for whichever statement
 // is compiled from it to report.
-func (r *Query) withError(err error) contractsorm.Query {
+func (r *OrmBuilder) withError(err error) contractsorm.Query {
 	conditions := r.conditions
 	conditions.err = err
 
 	return r.setConditions(conditions)
 }
 
-func (r *Query) dest(value any) *Query {
+func (r *OrmBuilder) dest(value any) *OrmBuilder {
 	conditions := r.conditions
 	conditions.dest = value
 
 	return r.setConditions(conditions)
 }
 
-func (r *Query) forceDeleting(dest any) error {
+func (r *OrmBuilder) forceDeleting(dest any) error {
 	if !hasID(dest) {
 		return nil
 	}
@@ -2345,7 +2345,7 @@ func (r *Query) forceDeleting(dest any) error {
 	return err
 }
 
-func (r *Query) forceDeleted(dest any) error {
+func (r *OrmBuilder) forceDeleted(dest any) error {
 	if !hasID(dest) {
 		return nil
 	}
@@ -2355,7 +2355,7 @@ func (r *Query) forceDeleted(dest any) error {
 	return err
 }
 
-func (r *Query) getModelConnection() string {
+func (r *OrmBuilder) getModelConnection() string {
 	var (
 		model any
 		err   error
@@ -2378,7 +2378,7 @@ func (r *Query) getModelConnection() string {
 	return connectionModel.Connection()
 }
 
-func (r *Query) getObserver(dest any) contractsorm.Observer {
+func (r *OrmBuilder) getObserver(dest any) contractsorm.Observer {
 	destType := reflect.TypeOf(dest)
 	if destType.Kind() == reflect.Pointer {
 		destType = destType.Elem()
@@ -2397,11 +2397,11 @@ func (r *Query) getObserver(dest any) contractsorm.Observer {
 	return nil
 }
 
-func (r *Query) new(tx *sql.Tx) *Query {
+func (r *OrmBuilder) new(tx *sql.Tx) *OrmBuilder {
 	query := r.fresh()
 	query.tx = tx
 	query.conditions = r.conditions.clone()
-	query.builder = r.builder.Clone()
+	query.query = r.query.Clone()
 
 	return query
 }
@@ -2409,13 +2409,13 @@ func (r *Query) new(tx *sql.Tx) *Query {
 // fresh builds the same query with no state of its own: no conditions, no clauses. It is the starting
 // point for a query that addresses a different table or exists only to carry one piece of state, such
 // as the per-row eager load the cursor path builds.
-func (r *Query) fresh() *Query {
-	query := NewQuery(r.ctx, r.config, r.dbConfig, r.writer, r.tx, r.grammar, r.log, r.modelToObserver, nil, r.telemetryResolver, r.components)
+func (r *OrmBuilder) fresh() *OrmBuilder {
+	query := NewOrmBuilder(r.ctx, r.config, r.dbConfig, r.writer, r.tx, r.grammar, r.log, r.modelToObserver, nil, r.telemetryResolver, r.components)
 	query.connection = r.connection
 	return query
 }
 
-func (r *Query) refreshConnection() (*Query, error) {
+func (r *OrmBuilder) refreshConnection() (*OrmBuilder, error) {
 	connection := r.getModelConnection()
 	if connection == "" || connection == r.dbConfig.Connection {
 		return r, nil
@@ -2430,7 +2430,7 @@ func (r *Query) refreshConnection() (*Query, error) {
 		}
 
 		if r.queries == nil {
-			r.queries = make(map[string]*Query)
+			r.queries = make(map[string]*OrmBuilder)
 		}
 		r.queries[connection] = query
 	}
@@ -2441,24 +2441,24 @@ func (r *Query) refreshConnection() (*Query, error) {
 	// that expected no RETURNING loses its key.
 	query = query.clone()
 	query.conditions = r.conditions.clone()
-	query.builder = r.builder.RebindGrammar(query.queryGrammar, query.components.Processor, query.dbConfig.Driver)
+	query.query = r.query.RebindGrammar(query.queryGrammar, query.components.Processor, query.dbConfig.Driver)
 
 	return query, nil
 }
 
-func (r *Query) restored(dest any) error {
+func (r *OrmBuilder) restored(dest any) error {
 	_, err := r.event(contractsorm.EventRestored, r.conditions.model, dest)
 
 	return err
 }
 
-func (r *Query) restoring(dest any) error {
+func (r *OrmBuilder) restoring(dest any) error {
 	_, err := r.event(contractsorm.EventRestoring, r.conditions.model, dest)
 
 	return err
 }
 
-func (r *Query) retrieved(dest any) error {
+func (r *OrmBuilder) retrieved(dest any) error {
 	if err := r.applyEagerLoads(dest); err != nil {
 		return err
 	}
@@ -2479,7 +2479,7 @@ func (r *Query) retrieved(dest any) error {
 // column from the value passed in, which is not what "updates value in a database" promises, and
 // creating a row is what Create and FirstOrCreate are for. A save whose key matches nothing writes
 // nothing.
-func (r *Query) save(value any) error {
+func (r *OrmBuilder) save(value any) error {
 	if databaseorm.GetID(value) == nil {
 		return r.execInsert(value)
 	}
@@ -2504,7 +2504,7 @@ func (r *Query) save(value any) error {
 	return r.assignSavedTimestamps(value, assignments)
 }
 
-func (r *Query) saved(dest any) (any, error) {
+func (r *OrmBuilder) saved(dest any) (any, error) {
 	if isSlice(dest) {
 		return dest, nil
 	}
@@ -2512,7 +2512,7 @@ func (r *Query) saved(dest any) (any, error) {
 	return r.event(contractsorm.EventSaved, r.conditions.model, dest)
 }
 
-func (r *Query) saving(dest any) (any, error) {
+func (r *OrmBuilder) saving(dest any) (any, error) {
 	if isSlice(dest) {
 		return dest, nil
 	}
@@ -2523,7 +2523,7 @@ func (r *Query) saving(dest any) (any, error) {
 // setConditions records the query's conditions and returns the query itself: a fluent call changes
 // the receiver, the way Laravel's builder does, rather than producing a new query. Callers that need
 // the original untouched clone() first.
-func (r *Query) setConditions(conditions Conditions) *Query {
+func (r *OrmBuilder) setConditions(conditions Conditions) *OrmBuilder {
 	r.conditions = conditions
 
 	return r
@@ -2533,7 +2533,7 @@ func (r *Query) setConditions(conditions Conditions) *Query {
 // but owns its conditions and its builder, so clauses written to it never reach the receiver. It is
 // what Orm.Query() hands a caller, mirroring Laravel's Connection::query(), which builds a new
 // Query\Builder on every call.
-func (r *Query) Clone() contractsorm.Query {
+func (r *OrmBuilder) Clone() contractsorm.Query {
 	return r.clone()
 }
 
@@ -2541,15 +2541,15 @@ func (r *Query) Clone() contractsorm.Query {
 // changing the copy leaves the original alone. It is the isolation primitive the execution paths use:
 // dest(), the global-scope folding and the temporary clauses a compiled statement needs all start
 // from a clone, which is what the copy-on-set semantics used to give them for free.
-func (r *Query) clone() *Query {
+func (r *OrmBuilder) clone() *OrmBuilder {
 	query := *r
 	query.conditions = r.conditions.clone()
-	query.builder = r.builder.Clone()
+	query.query = r.query.Clone()
 
 	return &query
 }
 
-func (r *Query) updating(dest any) (any, error) {
+func (r *OrmBuilder) updating(dest any) (any, error) {
 	if isSlice(dest) {
 		return dest, nil
 	}
@@ -2557,7 +2557,7 @@ func (r *Query) updating(dest any) (any, error) {
 	return r.event(contractsorm.EventUpdating, r.conditions.model, dest)
 }
 
-func (r *Query) updated(dest any) (any, error) {
+func (r *OrmBuilder) updated(dest any) (any, error) {
 	if isSlice(dest) {
 		return dest, nil
 	}
@@ -2570,14 +2570,14 @@ func (r *Query) updated(dest any) (any, error) {
 // GORM used to build and run this statement. It is compiled here instead, through the same grammar as
 // the ORM's reads. The values still arrive as the statement's destination holds them, because that is
 // where the updating event writes back an attribute an observer changed.
-func (r *Query) update(values any) (*contractsdb.Result, error) {
+func (r *OrmBuilder) update(values any) (*contractsdb.Result, error) {
 	return r.updateScoped(values, false)
 }
 
 // updateScoped compiles and runs an update, reporting how many rows it changed. A soft delete scopes
 // the statement the way a delete does rather than the way an update does.
-func (r *Query) updateScoped(values any, byDest bool) (*contractsdb.Result, error) {
-	if hasStringColumns(r.builder.Selects()) && len(r.conditions.omit) > 0 {
+func (r *OrmBuilder) updateScoped(values any, byDest bool) (*contractsdb.Result, error) {
+	if hasStringColumns(r.query.Selects()) && len(r.conditions.omit) > 0 {
 		return nil, errors.OrmQuerySelectAndOmitsConflict
 	}
 
@@ -2617,7 +2617,7 @@ func (r *Query) updateScoped(values any, byDest bool) (*contractsdb.Result, erro
 // generated key back after an insert. Each pair is keyed by database column, because that is what
 // updateAssignments resolved it to, so a Go field name or a raw column both land on the right field;
 // a column the model does not declare is left alone.
-func (r *Query) assignUpdatedValues(assignments map[string]any) error {
+func (r *OrmBuilder) assignUpdatedValues(assignments map[string]any) error {
 	model := r.conditions.model
 	if model == nil || len(assignments) == 0 {
 		return nil
@@ -2664,9 +2664,9 @@ func (r *Query) assignUpdatedValues(assignments map[string]any) error {
 // Counting a single selected column is what the caller asked for by selecting it. With DISTINCT it
 // becomes count(distinct column) rather than a leading DISTINCT over count(*), which would count every
 // row instead.
-func countColumns(query *Query) []any {
+func countColumns(query *OrmBuilder) []any {
 	var stringColumns []string
-	for _, item := range query.builder.Selects() {
+	for _, item := range query.query.Selects() {
 		if col, ok := item.(string); ok {
 			stringColumns = append(stringColumns, col)
 		}
@@ -2678,7 +2678,7 @@ func countColumns(query *Query) []any {
 	return []any{"*"}
 }
 
-func buildSelectForCount(query *Query) *Query {
+func buildSelectForCount(query *OrmBuilder) *OrmBuilder {
 
 	// A single select column that carries a rename ("name as n") cannot be counted as it stands — the
 	// count would come out count(name as n) — so the alias is trimmed back to its bare column first.
@@ -2686,15 +2686,15 @@ func buildSelectForCount(query *Query) *Query {
 	// With several select columns there is nothing to trim: the count ignores them and reduces the
 	// whole row with *.
 	// For example: Select("name as n").Count() counts the name column, while Select("name", "age as a").Count() counts *.
-	columns := selectStringColumns(query.builder.Selects())
+	columns := selectStringColumns(query.query.Selects())
 	if len(columns) == 1 && str.Of(columns[0]).Trim().Contains(" ") {
-		query.builder.SetSelects([]any{str.Of(columns[0]).Split(" ")[0]})
+		query.query.SetSelects([]any{str.Of(columns[0]).Split(" ")[0]})
 	}
 
 	// The count a paginator runs never orders or bounds the rows it counts: Laravel builds it on a
 	// clone without the orders, limit and offset (Builder::runPaginationCountQuery), so an ordered or
 	// limited query still counts every matching row.
-	query.builder.CloneWithout("orders", "limit", "offset")
+	query.query.CloneWithout("orders", "limit", "offset")
 
 	return query.addGlobalScopes().buildConditions()
 }
@@ -2842,9 +2842,9 @@ func hasID(dest any) bool {
 }
 
 // hasSelectColumns reports whether conditions has any selections (either column names or raw expressions).
-func hasSelectColumns(r *Query) bool {
-	if r.builder == nil {
+func hasSelectColumns(r *OrmBuilder) bool {
+	if r.query == nil {
 		return len(r.conditions.selectSubs) > 0
 	}
-	return len(r.builder.Selects()) > 0 || len(r.conditions.selectSubs) > 0
+	return len(r.query.Selects()) > 0 || len(r.conditions.selectSubs) > 0
 }

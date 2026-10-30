@@ -11,8 +11,8 @@ import (
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
 )
 
-// newRelQueryWith returns a Query whose conditions.model is preset, ready for build/compile tests.
-func newRelQueryWith(t *testing.T, model any) *Query {
+// newRelQueryWith returns an OrmBuilder whose conditions.model is preset, ready for build/compile tests.
+func newRelQueryWith(t *testing.T, model any) *OrmBuilder {
 	t.Helper()
 	db := stubWriter(t)
 	conditions := Conditions{model: model}

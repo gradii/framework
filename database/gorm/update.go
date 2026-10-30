@@ -22,7 +22,7 @@ import (
 // columns are written. The query's select and omit lists filter the result, and the model's automatic
 // update timestamp is stamped on, so a row records when it was written even though the caller only
 // named the columns they cared about.
-func (r *Query) updateAssignments(values any) (map[string]any, error) {
+func (r *OrmBuilder) updateAssignments(values any) (map[string]any, error) {
 	schema := r.updateSchema()
 	filter, restricted := r.selectAndOmitColumns(schema)
 
@@ -74,7 +74,7 @@ func (r *Query) updateAssignments(values any) (map[string]any, error) {
 
 // saveAssignments returns every column a model carries, zero values included, which is what makes Save
 // overwrite the row rather than merge into it. The query's Select and Omit lists still apply.
-func (r *Query) saveAssignments(value any) (map[string]any, error) {
+func (r *OrmBuilder) saveAssignments(value any) (map[string]any, error) {
 	schema := r.updateSchema()
 	filter, restricted := r.selectAndOmitColumns(schema)
 
@@ -129,7 +129,7 @@ func (r *Query) saveAssignments(value any) (map[string]any, error) {
 
 // updateSchema describes the model an update addresses, or nil when the query names none. A map-keyed
 // update still reaches a table through the query's own table, so a missing model is not an error.
-func (r *Query) updateSchema() *modelSchema {
+func (r *OrmBuilder) updateSchema() *modelSchema {
 	model := r.parentModel()
 	if model == nil {
 		return nil
@@ -150,12 +150,12 @@ func (r *Query) updateSchema() *modelSchema {
 // caller has already checked. Only Select restricts: naming columns narrows the update to them, while
 // omitting one withholds it and leaves every other column writable. A wildcard selects everything, so
 // it restricts nothing.
-func (r *Query) selectAndOmitColumns(schema *modelSchema) (map[string]bool, bool) {
+func (r *OrmBuilder) selectAndOmitColumns(schema *modelSchema) (map[string]bool, bool) {
 	columns := make(map[string]bool)
 	restricted := false
 	selectAll := false
 
-	for _, item := range r.builder.Selects() {
+	for _, item := range r.query.Selects() {
 		if column, ok := item.(string); ok {
 			if column == "*" {
 				selectAll = true

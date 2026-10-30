@@ -75,22 +75,22 @@ func (intKeyEntity) TableName() string { return "int_key_entities" }
 
 // newDialectQuery builds an ORM query over a model on a real driver dialect, optionally backed by a
 // recording pool. A nil writer is enough when the statement is only previewed.
-func newDialectQuery(t *testing.T, dialect contractsdriver.Dialect, driverName string, writer *sql.DB, model any) *databasegorm.Query {
+func newDialectQuery(t *testing.T, dialect contractsdriver.Dialect, driverName string, writer *sql.DB, model any) *databasegorm.OrmBuilder {
 	t.Helper()
 
 	components, err := databasedriver.ResolveQueryComponents(dialect, contractsdriver.GrammarOptions{Driver: driverName})
 	require.NoError(t, err)
 
 	conditions := databasegorm.Conditions{}
-	query := databasegorm.NewQuery(context.Background(), nil, contractsdatabase.Config{Driver: driverName},
+	query := databasegorm.NewOrmBuilder(context.Background(), nil, contractsdatabase.Config{Driver: driverName},
 		writer, nil, nil, nil, nil, &conditions, nil, components)
 
-	return query.Model(model).(*databasegorm.Query)
+	return query.Model(model).(*databasegorm.OrmBuilder)
 }
 
 // newRecordingDialectQuery builds the same query over a recording pool, so the statements the ORM
 // executes can be inspected with no database behind it.
-func newRecordingDialectQuery(t *testing.T, dialect contractsdriver.Dialect, driverName string, model any) (*databasegorm.Query, *dialectRecorder) {
+func newRecordingDialectQuery(t *testing.T, dialect contractsdriver.Dialect, driverName string, model any) (*databasegorm.OrmBuilder, *dialectRecorder) {
 	t.Helper()
 
 	recorder := &dialectRecorder{}
@@ -133,7 +133,7 @@ func TestInsertReportsTheModelsPrimaryKeyColumn(t *testing.T) {
 
 	t.Run("a query naming no model keeps the default key", func(t *testing.T) {
 		// No model, so no key column is known and Laravel's default "id" stands.
-		query := newDialectQuery(t, postgres.NewDialect(), postgres.Name, nil, &defaultKeyEntity{}).Table("insert_default_key_entities").(*databasegorm.Query)
+		query := newDialectQuery(t, postgres.NewDialect(), postgres.Name, nil, &defaultKeyEntity{}).Table("insert_default_key_entities").(*databasegorm.OrmBuilder)
 		statement := databasegorm.NewToSql(query, nil, false).Create(map[string]any{"name": "x"})
 
 		assert.Contains(t, statement, `returning "id"`)
@@ -222,11 +222,11 @@ func TestWithContextCompilesAgainstTheBranchesServerVersion(t *testing.T) {
 	require.NoError(t, err)
 	components.VersionSource = versionSource
 
-	query := databasegorm.NewQuery(sourceContext, nil, contractsdatabase.Config{Driver: mysql.Name, Prefix: "app_"},
-		nil, nil, nil, nil, nil, nil, nil, components).Table("users").Select("data->language").(*databasegorm.Query)
+	query := databasegorm.NewOrmBuilder(sourceContext, nil, contractsdatabase.Config{Driver: mysql.Name, Prefix: "app_"},
+		nil, nil, nil, nil, nil, nil, nil, components).Table("users").Select("data->language").(*databasegorm.OrmBuilder)
 
-	child := query.WithContext(mariaContext).(*databasegorm.Query)
-	for _, current := range []*databasegorm.Query{child, child.Clone().(*databasegorm.Query)} {
+	child := query.WithContext(mariaContext).(*databasegorm.OrmBuilder)
+	for _, current := range []*databasegorm.OrmBuilder{child, child.Clone().(*databasegorm.OrmBuilder)} {
 		assert.Equal(t, "select json_value(`data`, '$.\"language\"') from `app_users`", renderSelect(current))
 	}
 
@@ -234,7 +234,7 @@ func TestWithContextCompilesAgainstTheBranchesServerVersion(t *testing.T) {
 	assert.Equal(t, "select json_unquote(json_extract(`data`, '$.\"language\"')) from `app_users`", renderSelect(query))
 }
 
-func renderSelect(query *databasegorm.Query) string {
+func renderSelect(query *databasegorm.OrmBuilder) string {
 	return databasegorm.NewToSql(query, nil, false).Find(&[]dialectUser{})
 }
 

@@ -8,7 +8,7 @@ import (
 // Conditions holds the state that belongs to the ORM layer rather than to the SQL builder: the model
 // and destination a statement addresses, eager loads, relationship subqueries, scopes, soft-delete
 // switches and a few write-path filters. The SQL clauses themselves — select, where, join, group,
-// having, order, limit, offset, distinct and lock — live on the Query's persistent builder, the way
+// having, order, limit, offset, distinct and lock — live on the OrmBuilder's persistent builder, the way
 // Laravel keeps them on Query\Builder. Conditions deliberately has no second copy of them.
 type Conditions struct {
 	// err carries a condition that could not be accepted — an unusable operator or value — so the

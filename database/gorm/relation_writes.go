@@ -21,7 +21,7 @@ import (
 //
 // Supported kinds: HasOne, HasMany, MorphOne, MorphMany, Many2Many, MorphToMany, MorphedByMany.
 // Other kinds error with OrmRelationKindNotSupported.
-func (r *Query) SaveRelation(parent any, relation string, child any) error {
+func (r *OrmBuilder) SaveRelation(parent any, relation string, child any) error {
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
@@ -55,7 +55,7 @@ func (r *Query) SaveRelation(parent any, relation string, child any) error {
 
 // SaveManyRelation is the slice form of SaveRelation. children must be a slice or pointer-to-
 // slice of either pointer-to-struct or struct elements. Iterates and bails on first error.
-func (r *Query) SaveManyRelation(parent any, relation string, children any) error {
+func (r *OrmBuilder) SaveManyRelation(parent any, relation string, children any) error {
 	rv := reflect.ValueOf(children)
 	if rv.Kind() == reflect.Pointer {
 		rv = rv.Elem()
@@ -89,7 +89,7 @@ func (r *Query) SaveManyRelation(parent any, relation string, children any) erro
 
 // SaveRelationWithPivot is SaveRelation with caller-supplied pivot column values for the
 // BelongsToMany family. On HasOneOrMany kinds attrs is ignored (no pivot row).
-func (r *Query) SaveRelationWithPivot(parent any, relation string, child any, attrs map[string]any) error {
+func (r *OrmBuilder) SaveRelationWithPivot(parent any, relation string, child any, attrs map[string]any) error {
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
@@ -121,7 +121,7 @@ func (r *Query) SaveRelationWithPivot(parent any, relation string, child any, at
 
 // SaveManyRelationWithPivot is the slice form of SaveRelationWithPivot. attrsPerChild is keyed by
 // the related PK of each child; an entry may be nil to attach without extra columns.
-func (r *Query) SaveManyRelationWithPivot(parent any, relation string, children any, attrsPerChild map[any]map[string]any) error {
+func (r *OrmBuilder) SaveManyRelationWithPivot(parent any, relation string, children any, attrsPerChild map[any]map[string]any) error {
 	rv := reflect.ValueOf(children)
 	if rv.Kind() == reflect.Pointer {
 		rv = rv.Elem()
@@ -168,7 +168,7 @@ func (r *Query) SaveManyRelationWithPivot(parent any, relation string, children 
 // a struct.
 //
 // Public Query-level helper used by Orm.Associate.
-func (r *Query) AssociateRelation(parent any, relation string, owner any) error {
+func (r *OrmBuilder) AssociateRelation(parent any, relation string, owner any) error {
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
@@ -191,7 +191,7 @@ func (r *Query) AssociateRelation(parent any, relation string, owner any) error 
 
 // DissociateRelation clears parent's foreign key (and morph_type for MorphTo) and persists
 // parent. Supported kinds: BelongsTo, MorphTo.
-func (r *Query) DissociateRelation(parent any, relation string) error {
+func (r *OrmBuilder) DissociateRelation(parent any, relation string) error {
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
@@ -211,7 +211,7 @@ func (r *Query) DissociateRelation(parent any, relation string) error {
 
 // applyAssociate writes owner's PK into parent's FK column (and the morph_type column for
 // MorphTo, resolved from the morph map / MorphClass()), then persists parent.
-func (r *Query) applyAssociate(parent, owner any, desc *relationDescriptor, isMorph bool) error {
+func (r *OrmBuilder) applyAssociate(parent, owner any, desc *relationDescriptor, isMorph bool) error {
 	if err := r.mutateAssociate(parent, owner, desc, isMorph); err != nil {
 		return err
 	}
@@ -220,7 +220,7 @@ func (r *Query) applyAssociate(parent, owner any, desc *relationDescriptor, isMo
 
 // mutateAssociate is the pure-mutation half of applyAssociate. Writes owner's PK into parent's
 // FK column (and the morph_type column for MorphTo). No persistence.
-func (r *Query) mutateAssociate(parent, owner any, desc *relationDescriptor, isMorph bool) error {
+func (r *OrmBuilder) mutateAssociate(parent, owner any, desc *relationDescriptor, isMorph bool) error {
 	parentSchema, err := parseSchema(parent)
 	if err != nil {
 		return err
@@ -277,7 +277,7 @@ func (r *Query) mutateAssociate(parent, owner any, desc *relationDescriptor, isM
 
 // applyDissociate sets parent's FK to the zero value (and morph_type to "" for MorphTo), then
 // persists parent.
-func (r *Query) applyDissociate(parent any, desc *relationDescriptor, isMorph bool) error {
+func (r *OrmBuilder) applyDissociate(parent any, desc *relationDescriptor, isMorph bool) error {
 	if err := r.mutateDissociate(parent, desc, isMorph); err != nil {
 		return err
 	}
@@ -285,7 +285,7 @@ func (r *Query) applyDissociate(parent any, desc *relationDescriptor, isMorph bo
 }
 
 // mutateDissociate is the pure-mutation half of applyDissociate.
-func (r *Query) mutateDissociate(parent any, desc *relationDescriptor, isMorph bool) error {
+func (r *OrmBuilder) mutateDissociate(parent any, desc *relationDescriptor, isMorph bool) error {
 	parentSchema, err := parseSchema(parent)
 	if err != nil {
 		return err
@@ -328,7 +328,7 @@ func (r *Query) mutateDissociate(parent any, desc *relationDescriptor, isMorph b
 // inserts. dest must be a non-nil pointer to a struct of the related type.
 //
 // Public Query-level helper used by Orm.Create.
-func (r *Query) CreateRelation(parent any, relation string, dest any) error {
+func (r *OrmBuilder) CreateRelation(parent any, relation string, dest any) error {
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
@@ -362,7 +362,7 @@ func (r *Query) CreateRelation(parent any, relation string, dest any) error {
 
 // CreateManyRelation is the slice form of CreateRelation. dests must be a slice or a pointer to a
 // slice; iterates and calls CreateRelation per element, bailing on the first error.
-func (r *Query) CreateManyRelation(parent any, relation string, dests any) error {
+func (r *OrmBuilder) CreateManyRelation(parent any, relation string, dests any) error {
 	rv := reflect.ValueOf(dests)
 	if rv.Kind() == reflect.Pointer {
 		rv = rv.Elem()
@@ -385,7 +385,7 @@ func (r *Query) CreateManyRelation(parent any, relation string, dests any) error
 // FindOrNewRelation finds the related row with primary key id. If absent, fills dest with a new
 // instance of the related model and pre-sets the FK (and morph type) — but does NOT persist.
 // dest must be a pointer to a struct.
-func (r *Query) FindOrNewRelation(parent any, relation string, id any, dest any) error {
+func (r *OrmBuilder) FindOrNewRelation(parent any, relation string, id any, dest any) error {
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
@@ -426,7 +426,7 @@ func (r *Query) FindOrNewRelation(parent any, relation string, id any, dest any)
 
 // FirstOrNewRelation finds the first related row matching attrs. If absent, fills dest with a new
 // instance carrying attrs+values and pre-set FK — does NOT persist.
-func (r *Query) FirstOrNewRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any) error {
+func (r *OrmBuilder) FirstOrNewRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any) error {
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
@@ -460,7 +460,7 @@ func (r *Query) FirstOrNewRelation(parent any, relation string, attrs map[string
 }
 
 // FirstOrCreateRelation is FirstOrNewRelation that persists when no matching row exists.
-func (r *Query) FirstOrCreateRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any) error {
+func (r *OrmBuilder) FirstOrCreateRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any) error {
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
@@ -522,7 +522,7 @@ func (r *Query) FirstOrCreateRelation(parent any, relation string, attrs map[str
 
 // UpdateOrCreateRelation finds the first related row matching attrs (or creates one), then overlays
 // values onto it and persists. Always saves dest.
-func (r *Query) UpdateOrCreateRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any) error {
+func (r *OrmBuilder) UpdateOrCreateRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any) error {
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
@@ -604,7 +604,7 @@ func (r *Query) UpdateOrCreateRelation(parent any, relation string, attrs map[st
 // have a pivot row. Supported kinds: Many2Many, MorphToMany, MorphedByMany.
 //
 // Public Query-level helper used by Orm.Attach.
-func (r *Query) AttachRelation(parent any, relation string, ids []any) error {
+func (r *OrmBuilder) AttachRelation(parent any, relation string, ids []any) error {
 	desc, parentVal, err := r.resolvePivot(parent, relation, "Attach")
 	if err != nil {
 		return err
@@ -620,7 +620,7 @@ func (r *Query) AttachRelation(parent any, relation string, ids []any) error {
 }
 
 // AttachWithPivotRelation is Attach with per-row pivot column values.
-func (r *Query) AttachWithPivotRelation(parent any, relation string, idsWithAttrs map[any]map[string]any) error {
+func (r *OrmBuilder) AttachWithPivotRelation(parent any, relation string, idsWithAttrs map[any]map[string]any) error {
 	desc, parentVal, err := r.resolvePivot(parent, relation, "AttachWithPivot")
 	if err != nil {
 		return err
@@ -639,7 +639,7 @@ func (r *Query) AttachWithPivotRelation(parent any, relation string, idsWithAttr
 // inserts, updates and deletes compile through the framework builder instead of being handed to
 // GORM. The name is bare, like every table name the ORM holds, so the grammar applies the connection
 // prefix once when the statement is rendered.
-func (r *Query) pivotTableQuery(table string) *Query {
+func (r *OrmBuilder) pivotTableQuery(table string) *OrmBuilder {
 	child := r.fresh()
 	conditions := child.conditions
 	conditions.table = &Table{name: table}
@@ -650,13 +650,13 @@ func (r *Query) pivotTableQuery(table string) *Query {
 // pivotWhere appends one predicate to the query and returns it. An equality passes the dialect-quoted
 // column and a "?" placeholder; an IN list passes the unquoted qualified column with the id slice as
 // its single binding, which the compiler renders as a typed IN clause.
-func (r *Query) pivotWhere(query string, args ...any) *Query {
-	return r.addWhere(contractsdriver.Where{Query: query, Args: args}).(*Query)
+func (r *OrmBuilder) pivotWhere(query string, args ...any) *OrmBuilder {
+	return r.addWhere(contractsdriver.Where{Query: query, Args: args}).(*OrmBuilder)
 }
 
 // insertPivotRows inserts the given rows into the pivot table through the framework builder and runs
 // the statement on the connection pool. It replaces the GORM Create the pivot writers used.
-func (r *Query) insertPivotRows(table string, rows []map[string]any) error {
+func (r *OrmBuilder) insertPivotRows(table string, rows []map[string]any) error {
 	child := r.pivotTableQuery(table)
 
 	statement, bindings, err := child.pivotInsertStatement(rows)
@@ -673,7 +673,7 @@ func (r *Query) insertPivotRows(table string, rows []map[string]any) error {
 // per-id pivot attributes (AttachWithPivotRelation, and sync's attach map) let one row carry a column
 // another does not, and the grammar would otherwise key the whole statement off the first row and drop
 // the later column, losing its value on the rows that do not carry it in the same position.
-func (r *Query) pivotInsertStatement(rows []map[string]any) (string, []any, error) {
+func (r *OrmBuilder) pivotInsertStatement(rows []map[string]any) (string, []any, error) {
 	builder, err := r.newBuilder()
 	if err != nil {
 		return "", nil, err
@@ -693,7 +693,7 @@ func (r *Query) pivotInsertStatement(rows []map[string]any) (string, []any, erro
 //
 // idsWithAttrs is optional: when non-nil, attrs from this map are merged into each new row;
 // when nil, ids alone drive the insert.
-func (r *Query) doAttach(desc *relationDescriptor, parentVal any, ids []any, idsWithAttrs map[any]map[string]any) (int64, error) {
+func (r *OrmBuilder) doAttach(desc *relationDescriptor, parentVal any, ids []any, idsWithAttrs map[any]map[string]any) (int64, error) {
 	if len(ids) == 0 {
 		return 0, nil
 	}
@@ -724,7 +724,7 @@ func (r *Query) doAttach(desc *relationDescriptor, parentVal any, ids []any, ids
 // doAttachWithPivot is doAttach for the with-attrs entry shape (map keyed by id). Equivalent in
 // outcome to doAttach with the same attrs; kept separate to avoid materialising an ids slice
 // just to satisfy the doAttach signature when callers already have a map.
-func (r *Query) doAttachWithPivot(desc *relationDescriptor, parentVal any, idsWithAttrs map[any]map[string]any) (int64, error) {
+func (r *OrmBuilder) doAttachWithPivot(desc *relationDescriptor, parentVal any, idsWithAttrs map[any]map[string]any) (int64, error) {
 	if len(idsWithAttrs) == 0 {
 		return 0, nil
 	}
@@ -755,7 +755,7 @@ func (r *Query) doAttachWithPivot(desc *relationDescriptor, parentVal any, idsWi
 // DetachRelation removes pivot rows linking parent to the given ids. With nil/empty ids, removes
 // all pivot rows for parent (and morph type, for polymorphic). Returns the number of rows
 // removed.
-func (r *Query) DetachRelation(parent any, relation string, ids []any) (int64, error) {
+func (r *OrmBuilder) DetachRelation(parent any, relation string, ids []any) (int64, error) {
 	desc, parentVal, err := r.resolvePivot(parent, relation, "Detach")
 	if err != nil {
 		return 0, err
@@ -773,7 +773,7 @@ func (r *Query) DetachRelation(parent any, relation string, ids []any) (int64, e
 }
 
 // doDetach is the no-touch worker behind DetachRelation. Returns rows affected by the DELETE.
-func (r *Query) doDetach(desc *relationDescriptor, parentVal any, ids []any) (int64, error) {
+func (r *OrmBuilder) doDetach(desc *relationDescriptor, parentVal any, ids []any) (int64, error) {
 	q := r.pivotTableQuery(desc.pivotTable).
 		pivotWhere(fmt.Sprintf("%s = ?", r.ident(desc.pivotTable, desc.pivotParentRef.foreignColumn)), parentVal)
 	if desc.kind == relKindMorphToMany {
@@ -782,7 +782,7 @@ func (r *Query) doDetach(desc *relationDescriptor, parentVal any, ids []any) (in
 	if len(ids) > 0 {
 		q = q.pivotWhere(desc.pivotTable+"."+desc.pivotRelatedRef.foreignColumn, ids)
 	}
-	if scoped, ok := applyOnPivotQueryToQuery(r.queryGrammar, q, desc).(*Query); ok {
+	if scoped, ok := applyOnPivotQueryToQuery(r.queryGrammar, q, desc).(*OrmBuilder); ok {
 		q = scoped
 	}
 	res, err := q.execDelete()
@@ -795,7 +795,7 @@ func (r *Query) doDetach(desc *relationDescriptor, parentVal any, ids []any) (in
 // resolvePivot is the shared front-half for all pivot operations: validates parent, resolves the
 // descriptor, asserts a pivot-friendly kind, and reads the parent's PK that anchors every pivot
 // row. Returns the descriptor + parent's PK value.
-func (r *Query) resolvePivot(parent any, relation, op string) (*relationDescriptor, any, error) {
+func (r *OrmBuilder) resolvePivot(parent any, relation, op string) (*relationDescriptor, any, error) {
 	if !isValidParent(parent) {
 		return nil, nil, errors.OrmRelationParentNotPointer.Args(parent)
 	}
@@ -817,7 +817,7 @@ func (r *Query) resolvePivot(parent any, relation, op string) (*relationDescript
 // the related FK; for MorphToMany also includes the morph_type column. When the descriptor's
 // resolved created_at / updated_at columns are non-empty, stamps those columns with time.Now().
 // Caller-supplied attrs are merged on top — the caller wins on column-name conflicts.
-func (r *Query) basePivotRow(desc *relationDescriptor, parentVal, relatedID any, attrs map[string]any) map[string]any {
+func (r *OrmBuilder) basePivotRow(desc *relationDescriptor, parentVal, relatedID any, attrs map[string]any) map[string]any {
 	row := map[string]any{
 		desc.pivotParentRef.foreignColumn:  parentVal,
 		desc.pivotRelatedRef.foreignColumn: relatedID,
@@ -840,9 +840,9 @@ func (r *Query) basePivotRow(desc *relationDescriptor, parentVal, relatedID any,
 
 // existingPivotIDs returns the set of already-attached related ids among ids. Used by Attach to
 // skip duplicates.
-func (r *Query) existingPivotIDs(desc *relationDescriptor, parentVal any, ids []any) (map[string]struct{}, error) {
+func (r *OrmBuilder) existingPivotIDs(desc *relationDescriptor, parentVal any, ids []any) (map[string]struct{}, error) {
 	q := r.pivotTableQuery(desc.pivotTable)
-	q.builder.SetSelects([]any{desc.pivotRelatedRef.foreignColumn})
+	q.query.SetSelects([]any{desc.pivotRelatedRef.foreignColumn})
 	q = q.pivotWhere(fmt.Sprintf("%s = ?", r.ident(desc.pivotTable, desc.pivotParentRef.foreignColumn)), parentVal)
 	q = q.pivotWhere(desc.pivotTable+"."+desc.pivotRelatedRef.foreignColumn, ids)
 	if desc.kind == relKindMorphToMany {
@@ -861,9 +861,9 @@ func (r *Query) existingPivotIDs(desc *relationDescriptor, parentVal any, ids []
 
 // allPivotIDs returns the set of all currently-attached related ids for parent. Used by Sync /
 // Toggle to compute the diff.
-func (r *Query) allPivotIDs(desc *relationDescriptor, parentVal any) ([]any, error) {
+func (r *OrmBuilder) allPivotIDs(desc *relationDescriptor, parentVal any) ([]any, error) {
 	q := r.pivotTableQuery(desc.pivotTable)
-	q.builder.SetSelects([]any{desc.pivotRelatedRef.foreignColumn})
+	q.query.SetSelects([]any{desc.pivotRelatedRef.foreignColumn})
 	q = q.pivotWhere(fmt.Sprintf("%s = ?", r.ident(desc.pivotTable, desc.pivotParentRef.foreignColumn)), parentVal)
 	if desc.kind == relKindMorphToMany {
 		q = q.pivotWhere(fmt.Sprintf("%s = ?", r.ident(desc.pivotTable, desc.morphTypeColumn)), desc.morphValue)
@@ -883,22 +883,22 @@ func (r *Query) allPivotIDs(desc *relationDescriptor, parentVal any) ([]any, err
 // attaches new ones, leaves existing untouched. Returns the per-id outcome.
 //
 // Public Query-level helper used by Orm.Sync.
-func (r *Query) SyncRelation(parent any, relation string, ids []any) (*dbcontract.SyncResult, error) {
+func (r *OrmBuilder) SyncRelation(parent any, relation string, ids []any) (*dbcontract.SyncResult, error) {
 	return r.syncCore(parent, relation, ids, true /*detach*/, false /*toggle*/, "Sync")
 }
 
 // SyncWithoutDetachingRelation is SyncRelation minus the detach step.
-func (r *Query) SyncWithoutDetachingRelation(parent any, relation string, ids []any) (*dbcontract.SyncResult, error) {
+func (r *OrmBuilder) SyncWithoutDetachingRelation(parent any, relation string, ids []any) (*dbcontract.SyncResult, error) {
 	return r.syncCore(parent, relation, ids, false /*detach*/, false /*toggle*/, "SyncWithoutDetaching")
 }
 
 // ToggleRelation attaches missing entries and detaches existing ones.
-func (r *Query) ToggleRelation(parent any, relation string, ids []any) (*dbcontract.SyncResult, error) {
+func (r *OrmBuilder) ToggleRelation(parent any, relation string, ids []any) (*dbcontract.SyncResult, error) {
 	return r.syncCore(parent, relation, ids, false, true /*toggle*/, "Toggle")
 }
 
 // syncCore is the shared engine for Sync / SyncWithoutDetaching / Toggle.
-func (r *Query) syncCore(parent any, relation string, ids []any, detachMissing bool, toggle bool, op string) (*dbcontract.SyncResult, error) {
+func (r *OrmBuilder) syncCore(parent any, relation string, ids []any, detachMissing bool, toggle bool, op string) (*dbcontract.SyncResult, error) {
 	desc, parentVal, err := r.resolvePivot(parent, relation, op)
 	if err != nil {
 		return nil, err
@@ -984,13 +984,13 @@ func (r *Query) syncCore(parent any, relation string, ids []any, detachMissing b
 // related id; the map value is the column-name-to-value map applied to that pivot row. For
 // existing pivot rows with non-empty attrs, updates the pivot columns (reported in
 // SyncResult.Updated). Mirrors fedaco's sync(map).
-func (r *Query) SyncRelationWithPivot(parent any, relation string, idsWithAttrs map[any]map[string]any) (*dbcontract.SyncResult, error) {
+func (r *OrmBuilder) SyncRelationWithPivot(parent any, relation string, idsWithAttrs map[any]map[string]any) (*dbcontract.SyncResult, error) {
 	return r.syncCoreWithPivot(parent, relation, idsWithAttrs, true /*detach*/, false /*toggle*/, "SyncWithPivot")
 }
 
 // SyncRelationWithPivotValues applies the same pivot column values to all ids. Mirrors fedaco's
 // syncWithPivotValues.
-func (r *Query) SyncRelationWithPivotValues(parent any, relation string, ids []any, pivotValues map[string]any) (*dbcontract.SyncResult, error) {
+func (r *OrmBuilder) SyncRelationWithPivotValues(parent any, relation string, ids []any, pivotValues map[string]any) (*dbcontract.SyncResult, error) {
 	idsWithAttrs := make(map[any]map[string]any, len(ids))
 	for _, id := range ids {
 		idsWithAttrs[id] = pivotValues
@@ -999,19 +999,19 @@ func (r *Query) SyncRelationWithPivotValues(parent any, relation string, ids []a
 }
 
 // SyncWithoutDetachingRelationWithPivot is SyncRelationWithPivot minus the detach step.
-func (r *Query) SyncWithoutDetachingRelationWithPivot(parent any, relation string, idsWithAttrs map[any]map[string]any) (*dbcontract.SyncResult, error) {
+func (r *OrmBuilder) SyncWithoutDetachingRelationWithPivot(parent any, relation string, idsWithAttrs map[any]map[string]any) (*dbcontract.SyncResult, error) {
 	return r.syncCoreWithPivot(parent, relation, idsWithAttrs, false /*detach*/, false /*toggle*/, "SyncWithoutDetachingWithPivot")
 }
 
 // ToggleRelationWithPivot is ToggleRelation with per-ID pivot column values for newly attached rows.
-func (r *Query) ToggleRelationWithPivot(parent any, relation string, idsWithAttrs map[any]map[string]any) (*dbcontract.SyncResult, error) {
+func (r *OrmBuilder) ToggleRelationWithPivot(parent any, relation string, idsWithAttrs map[any]map[string]any) (*dbcontract.SyncResult, error) {
 	return r.syncCoreWithPivot(parent, relation, idsWithAttrs, false, true /*toggle*/, "ToggleWithPivot")
 }
 
 // syncCoreWithPivot is the shared engine for SyncWithPivot / SyncWithPivotValues /
 // SyncWithoutDetachingWithPivot / ToggleWithPivot. Similar to syncCore but accepts a map of IDs
 // to pivot attributes and updates existing pivot rows when attrs are non-empty.
-func (r *Query) syncCoreWithPivot(parent any, relation string, idsWithAttrs map[any]map[string]any, detachMissing bool, toggle bool, op string) (*dbcontract.SyncResult, error) {
+func (r *OrmBuilder) syncCoreWithPivot(parent any, relation string, idsWithAttrs map[any]map[string]any, detachMissing bool, toggle bool, op string) (*dbcontract.SyncResult, error) {
 	desc, parentVal, err := r.resolvePivot(parent, relation, op)
 	if err != nil {
 		return nil, err
@@ -1120,7 +1120,7 @@ func syncResultChanged(out *dbcontract.SyncResult) bool {
 // UpdateExistingPivotRelation updates pivot columns for an already-attached id. When
 // pivotTimestamps is enabled and attrs doesn't already set updated_at, injects time.Now() into
 // the update map. No-op (returns 0) if no matching pivot row exists.
-func (r *Query) UpdateExistingPivotRelation(parent any, relation string, id any, attrs map[string]any) (int64, error) {
+func (r *OrmBuilder) UpdateExistingPivotRelation(parent any, relation string, id any, attrs map[string]any) (int64, error) {
 	desc, parentVal, err := r.resolvePivot(parent, relation, "UpdateExistingPivot")
 	if err != nil {
 		return 0, err
@@ -1140,7 +1140,7 @@ func (r *Query) UpdateExistingPivotRelation(parent any, relation string, id any,
 // doUpdateExistingPivot is the no-touch worker behind UpdateExistingPivotRelation. Returns the
 // number of pivot rows actually updated. When the descriptor has a resolved updated_at column
 // and attrs doesn't already set it, injects time.Now() into the UPDATE map.
-func (r *Query) doUpdateExistingPivot(desc *relationDescriptor, parentVal any, id any, attrs map[string]any) (int64, error) {
+func (r *OrmBuilder) doUpdateExistingPivot(desc *relationDescriptor, parentVal any, id any, attrs map[string]any) (int64, error) {
 	if len(attrs) == 0 && desc.pivotUpdatedAtColumn == "" {
 		return 0, nil
 	}
@@ -1159,7 +1159,7 @@ func (r *Query) doUpdateExistingPivot(desc *relationDescriptor, parentVal any, i
 	if desc.kind == relKindMorphToMany {
 		q = q.pivotWhere(fmt.Sprintf("%s = ?", r.ident(desc.pivotTable, desc.morphTypeColumn)), desc.morphValue)
 	}
-	if scoped, ok := applyOnPivotQueryToQuery(r.queryGrammar, q, desc).(*Query); ok {
+	if scoped, ok := applyOnPivotQueryToQuery(r.queryGrammar, q, desc).(*OrmBuilder); ok {
 		q = scoped
 	}
 	statement, bindings, err := q.compileUpdate(updateMap)
@@ -1176,7 +1176,7 @@ func (r *Query) doUpdateExistingPivot(desc *relationDescriptor, parentVal any, i
 // setRelationFKOnChild reads parent's local key, then writes that value into child's FK column
 // (and the morph_type column for MorphOne/MorphMany). Mutates child in place; child must be a
 // pointer to a struct.
-func (r *Query) setRelationFKOnChild(parent, child any, desc *relationDescriptor) error {
+func (r *OrmBuilder) setRelationFKOnChild(parent, child any, desc *relationDescriptor) error {
 	if len(desc.references) == 0 {
 		return errors.OrmRelationUnsupported.Args(desc.name, desc.parentTable, "no references")
 	}
@@ -1211,7 +1211,7 @@ func (r *Query) setRelationFKOnChild(parent, child any, desc *relationDescriptor
 
 // applyAttrMap overlays attrs onto dest using GORM's parsed schema to map column names to struct
 // fields. dest must be a pointer to a struct. Skips columns that don't map to a field.
-func (r *Query) applyAttrMap(dest any, attrs map[string]any) error {
+func (r *OrmBuilder) applyAttrMap(dest any, attrs map[string]any) error {
 	if len(attrs) == 0 {
 		return nil
 	}
@@ -1241,7 +1241,7 @@ func (r *Query) applyAttrMap(dest any, attrs map[string]any) error {
 // and only when the operation actually affected pivot rows. The internal doAttach / doDetach /
 // doUpdateExistingPivot helpers do NOT touch — sync* paths chain multiple internal calls and
 // touch at most once at the end via this helper.
-func (r *Query) touchIfTouching(desc *relationDescriptor, parent any, parentVal any) error {
+func (r *OrmBuilder) touchIfTouching(desc *relationDescriptor, parent any, parentVal any) error {
 	if !desc.touches {
 		return nil
 	}

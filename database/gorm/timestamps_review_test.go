@@ -144,16 +144,16 @@ func TestTimestampShapesReviewAssignments(t *testing.T) {
 			t.Run("UpdateSelectAndOmit", func(t *testing.T) {
 				query := compiledQuery(t, tc.model(nil), Conditions{})
 				started := time.Now()
-				assignments, err := query.Select("label").(*Query).updateAssignments(map[string]any{"label": "selected"})
+				assignments, err := query.Select("label").(*OrmBuilder).updateAssignments(map[string]any{"label": "selected"})
 				require.NoError(t, err)
 				assertTimestampUnitNow(t, assignments["updated_at"], started)
-				omitted := query.Omit("updated_at").(*Query)
+				omitted := query.Omit("updated_at").(*OrmBuilder)
 				for _, prepare := range []func(any) (map[string]any, error){omitted.updateAssignments, omitted.saveAssignments} {
 					assignments, err := prepare(tc.model(nil))
 					require.NoError(t, err)
 					assert.NotContains(t, assignments, "updated_at")
 				}
-				records, err := query.Omit("created_at", "updated_at").(*Query).insertRecords(tc.model(nil))
+				records, err := query.Omit("created_at", "updated_at").(*OrmBuilder).insertRecords(tc.model(nil))
 				require.NoError(t, err)
 				require.Len(t, records, 1)
 				assert.NotContains(t, records[0], "created_at")
@@ -285,7 +285,7 @@ func TestTimestampShapesReviewExplicitTableDTO(t *testing.T) {
 		CreatedAt time.Time        `gorm:"column:created_at;autoCreateTime"`
 		UpdatedAt *carbon.DateTime `gorm:"column:updated_at;autoUpdateTime"`
 	}{ID: 1, Label: "dto"}
-	query := compiledQuery(t, dto, Conditions{}).Table("review_timestamps").(*Query)
+	query := compiledQuery(t, dto, Conditions{}).Table("review_timestamps").(*OrmBuilder)
 	started := time.Now()
 	records, err := query.insertRecords(dto)
 	require.NoError(t, err)

@@ -17,7 +17,7 @@ import (
 
 // usesFrameworkSoftDelete reports whether the model's soft-delete field is the framework's own
 // type, and therefore needs the predicate built by the compiled path rather than by GORM.
-func (r *Query) usesFrameworkSoftDelete() bool {
+func (r *OrmBuilder) usesFrameworkSoftDelete() bool {
 	return usesFrameworkSoftDeleteModel(r.parentModel())
 }
 

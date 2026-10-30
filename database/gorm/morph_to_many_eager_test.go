@@ -40,7 +40,7 @@ func TestLoadMorphToMany_ReadsAreCompiled(t *testing.T) {
 		// keys the hydration loop indexes — stay the FK names, and the morph-type predicate the
 		// descriptor carries.
 		child := q.pivotChild(desc.pivotTable, desc.pivotTable+"."+desc.pivotParentRef.foreignColumn, chunk, cols).
-			Where(desc.pivotTable+"."+desc.morphTypeColumn, desc.morphValue).(*Query)
+			Where(desc.pivotTable+"."+desc.morphTypeColumn, desc.morphValue).(*OrmBuilder)
 		compiled, bindings, err := child.compileSelect()
 		assert.NoError(t, err)
 		assert.Equal(t,
@@ -57,7 +57,7 @@ func TestLoadMorphToMany_ReadsAreCompiled(t *testing.T) {
 		assert.Empty(t, child.conditions.withoutGlobalScopes)
 		assert.Empty(t, child.conditions.scopes)
 		assert.Len(t, child.conditions.where, 2)
-		assert.Len(t, child.builder.Selects(), 2)
+		assert.Len(t, child.query.Selects(), 2)
 	})
 
 	t.Run("pivot read receives the relation scope", func(t *testing.T) {
@@ -78,8 +78,8 @@ func TestLoadMorphToMany_ReadsAreCompiled(t *testing.T) {
 		chunk := []any{uint(1), uint(2)}
 
 		child := q.pivotChild(desc.pivotTable, desc.pivotTable+"."+desc.pivotParentRef.foreignColumn, chunk, cols).
-			Where(desc.pivotTable+"."+desc.morphTypeColumn, desc.morphValue).(*Query)
-		scoped, ok := applyOnPivotQueryToQuery(q.queryGrammar, child, desc).(*Query)
+			Where(desc.pivotTable+"."+desc.morphTypeColumn, desc.morphValue).(*OrmBuilder)
+		scoped, ok := applyOnPivotQueryToQuery(q.queryGrammar, child, desc).(*OrmBuilder)
 		assert.True(t, ok)
 
 		compiled, bindings, err := scoped.compileSelect()

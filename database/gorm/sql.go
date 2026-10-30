@@ -23,7 +23,7 @@ import (
 //
 // A raw statement is used as given: the caller wrote the whole thing, so none of the query's own
 // clauses — including the soft-delete predicate — are applied to it.
-func (r *Query) compileSelect() (string, []any, error) {
+func (r *OrmBuilder) compileSelect() (string, []any, error) {
 	if raw := r.conditions.raw; raw != nil {
 		return fmt.Sprint(raw.query), raw.args, nil
 	}
@@ -43,14 +43,14 @@ func (r *Query) compileSelect() (string, []any, error) {
 
 // compileFirst renders the query as the single-row select First uses: the model's primary key
 // orders it when the caller asked for no order, and one row is returned.
-func (r *Query) compileFirst() (string, []any, error) {
-	if len(r.builder.State().Orders) == 0 {
+func (r *OrmBuilder) compileFirst() (string, []any, error) {
+	if len(r.query.State().Orders) == 0 {
 		if column := r.primaryKeyColumn(); column != "" {
-			r.builder.OrderByRaw(column, nil)
+			r.query.OrderByRaw(column, nil)
 		}
 	}
 
-	r.builder.Limit(1)
+	r.query.Limit(1)
 
 	sql, bindings, err := r.compileSelect()
 	if err != nil {
@@ -62,7 +62,7 @@ func (r *Query) compileFirst() (string, []any, error) {
 
 // primaryKeyColumnName returns the model's first primary key column, unqualified, or "" when the
 // model declares none.
-func (r *Query) primaryKeyColumnName() string {
+func (r *OrmBuilder) primaryKeyColumnName() string {
 	model := r.parentModel()
 	if model == nil {
 		return ""
@@ -78,7 +78,7 @@ func (r *Query) primaryKeyColumnName() string {
 
 // primaryKeyColumn returns the model's first primary key column, qualified by its table, or "" when
 // the model declares none.
-func (r *Query) primaryKeyColumn() string {
+func (r *OrmBuilder) primaryKeyColumn() string {
 	model := r.parentModel()
 	if model == nil {
 		return ""
@@ -93,7 +93,7 @@ func (r *Query) primaryKeyColumn() string {
 }
 
 // compileAggregate renders the query as an aggregate select, such as a count.
-func (r *Query) compileAggregate(function string, columns []any) (string, []any, error) {
+func (r *OrmBuilder) compileAggregate(function string, columns []any) (string, []any, error) {
 	builder, err := r.newBuilder()
 	if err != nil {
 		return "", nil, err
@@ -118,7 +118,7 @@ func (r *Query) compileAggregate(function string, columns []any) (string, []any,
 // and the model's global ones — are folded in first, so a scope's where is what the guard sees: GORM
 // built the scopes onto the statement and then checked it, and a scoped delete is safe for the same
 // reason an explicit one is.
-func (r *Query) compileDelete() (string, []any, error) {
+func (r *OrmBuilder) compileDelete() (string, []any, error) {
 	query := r.withScopesApplied()
 
 	builder, err := query.newBuilder()
@@ -139,13 +139,13 @@ func (r *Query) compileDelete() (string, []any, error) {
 }
 
 // compileUpdate renders the query as an update statement for the given values.
-func (r *Query) compileUpdate(values map[string]any) (string, []any, error) {
+func (r *OrmBuilder) compileUpdate(values map[string]any) (string, []any, error) {
 	return r.compileUpdateScoped(values, false)
 }
 
 // compileSoftDeleteUpdate renders the update a soft delete rewrites into, which is scoped the way a
 // delete is rather than the way an update is.
-func (r *Query) compileSoftDeleteUpdate(values map[string]any) (string, []any, error) {
+func (r *OrmBuilder) compileSoftDeleteUpdate(values map[string]any) (string, []any, error) {
 	return r.compileUpdateScoped(values, true)
 }
 
@@ -158,7 +158,7 @@ func (r *Query) compileSoftDeleteUpdate(values map[string]any) (string, []any, e
 //
 // The query's scopes — the caller's own and the model's global ones — are folded in before the guard,
 // as they are for a delete, so a scope's where satisfies it.
-func (r *Query) compileUpdateScoped(values map[string]any, byDest bool) (string, []any, error) {
+func (r *OrmBuilder) compileUpdateScoped(values map[string]any, byDest bool) (string, []any, error) {
 	query := r.withScopesApplied()
 
 	builder, err := query.newBuilder()
@@ -190,7 +190,7 @@ func (r *Query) compileUpdateScoped(values map[string]any, byDest bool) (string,
 // columns still come first and the row can be scanned into the model. Each alias is the one fixed when
 // the sub-select was queued: aggregateAlias' `<relation>_<fn>[_<column>]` shape, or the explicit alias
 // of a contractsorm.RelationCount, so the column comes back under the name the caller expects.
-func (r *Query) applySelectSubAggregates(builder *querybuilder.Builder) error {
+func (r *OrmBuilder) applySelectSubAggregates(builder *querybuilder.Builder) error {
 	if len(r.conditions.selectSubs) == 0 {
 		return nil
 	}
@@ -239,7 +239,7 @@ func (r *Query) applySelectSubAggregates(builder *querybuilder.Builder) error {
 // builder already holds the SQL clauses (select, join, where, group, having, order, limit, offset,
 // distinct, lock); this clones it and adds the ORM-specific parts that compile differently per
 // statement: table, where, relation-existence subqueries, soft-delete predicate, and select-subs.
-func (r *Query) newBuilder() (*querybuilder.Builder, error) {
+func (r *OrmBuilder) newBuilder() (*querybuilder.Builder, error) {
 	// A scope is a function the caller queued with Scopes, or one addGlobalScopes folded in from the
 	// model. They mutate the query, so they're applied first.
 	if len(r.conditions.scopes) > 0 {
@@ -259,7 +259,7 @@ func (r *Query) newBuilder() (*querybuilder.Builder, error) {
 
 	// Clone the persistent builder so compiling multiple statements from the same query doesn't
 	// accumulate state (soft-delete predicate, relation subqueries).
-	builder := r.builder.Clone()
+	builder := r.query.Clone()
 
 	if err := r.applyTable(builder); err != nil {
 		return nil, err
@@ -299,7 +299,7 @@ func (r *Query) newBuilder() (*querybuilder.Builder, error) {
 // type and the statement is not unscoped: "deleted_at IS NULL" by default, "deleted_at IS NOT NULL"
 // when OnlyTrashed asked for the trashed rows alone. WithTrashed drops the predicate entirely, so it
 // is only ignored here when OnlyTrashed has not overridden it.
-func (r *Query) applySoftDelete(builder *querybuilder.Builder) error {
+func (r *OrmBuilder) applySoftDelete(builder *querybuilder.Builder) error {
 	if (r.conditions.withTrashed && !r.conditions.onlyTrashed) || !r.usesFrameworkSoftDelete() {
 		return nil
 	}
@@ -331,7 +331,7 @@ func (r *Query) applySoftDelete(builder *querybuilder.Builder) error {
 
 // applyTable points the builder at the query's table, whether it was named directly or derived from
 // the model.
-func (r *Query) applyTable(builder *querybuilder.Builder) error {
+func (r *OrmBuilder) applyTable(builder *querybuilder.Builder) error {
 	if r.conditions.table != nil {
 		builder.From(r.conditions.table.name, "")
 
@@ -357,7 +357,7 @@ func (r *Query) applyTable(builder *querybuilder.Builder) error {
 // The shapes are the ones the ORM accepts: a raw fragment with its bindings, a column with its
 // value, a slice standing for an IN list, a callback producing a nested group, and the JSON
 // operators the conditions mark with a type.
-func (r *Query) applyWhere(builder *querybuilder.Builder) *querybuilder.Builder {
+func (r *OrmBuilder) applyWhere(builder *querybuilder.Builder) *querybuilder.Builder {
 	for _, item := range r.conditions.where {
 		boolean := core.BooleanAnd
 		if item.Or {
@@ -370,7 +370,7 @@ func (r *Query) applyWhere(builder *querybuilder.Builder) *querybuilder.Builder 
 	return builder
 }
 
-func (r *Query) applySingleWhere(builder *querybuilder.Builder, item contractsdriver.Where, boolean string) {
+func (r *OrmBuilder) applySingleWhere(builder *querybuilder.Builder, item contractsdriver.Where, boolean string) {
 	switch item.Type {
 	case contractsdriver.WhereTypeJsonContains:
 		builder.WhereJsonContains(fmt.Sprint(item.Query), firstArg(item.Args), boolean, item.IsNot)
@@ -456,8 +456,8 @@ func applySimpleWhere(builder *querybuilder.Builder, query any, args []any, bool
 
 // applyNestedWhere runs a callback against a child builder, so an `or` group the caller wrote keeps
 // its own grouping.
-func (r *Query) applyNestedWhere(callback func(contractsorm.Query) contractsorm.Query, builder *querybuilder.Builder) *querybuilder.Builder {
-	child := NewQuery(r.ctx, r.config, r.dbConfig, r.writer, r.tx, r.grammar, r.log, r.modelToObserver, nil, r.telemetryResolver, r.components)
+func (r *OrmBuilder) applyNestedWhere(callback func(contractsorm.Query) contractsorm.Query, builder *querybuilder.Builder) *querybuilder.Builder {
+	child := NewOrmBuilder(r.ctx, r.config, r.dbConfig, r.writer, r.tx, r.grammar, r.log, r.modelToObserver, nil, r.telemetryResolver, r.components)
 	child.queryGrammar = r.queryGrammar
 	child.conditions = r.conditions
 	child.conditions.where = nil
@@ -467,7 +467,7 @@ func (r *Query) applyNestedWhere(callback func(contractsorm.Query) contractsorm.
 
 	// The child compiles its own wheres onto the builder it was handed.
 	result := callback(child)
-	if nested, ok := result.(*Query); ok {
+	if nested, ok := result.(*OrmBuilder); ok {
 		// Builder::where()'s closure branch merges the nested query's eager loads into the parent
 		// (array_merge over the relation-keyed list) before handing its wheres to
 		// addNestedWhereQuery, so a with(...) written inside the closure still loads. The upsert is

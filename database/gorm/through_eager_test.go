@@ -97,7 +97,7 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 		assert.Empty(t, child.conditions.withoutGlobalScopes)
 		assert.Empty(t, child.conditions.scopes)
 		assert.Len(t, child.conditions.where, 1)
-		assert.Equal(t, []any{desc.firstKey, desc.secondLocalKey}, child.builder.Selects())
+		assert.Equal(t, []any{desc.firstKey, desc.secondLocalKey}, child.query.Selects())
 	})
 
 	t.Run("related read is compiled and keeps the related key when pruned", func(t *testing.T) {
@@ -117,7 +117,7 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 
 		// The loader passes the related key as a required column, so it survives column pruning and
 		// the dictionary can be keyed off the related rows.
-		child.builder.SetSelects([]any{"title", desc.secondKey})
+		child.query.SetSelects([]any{"title", desc.secondKey})
 		pruned, prunedBindings, err := child.compileSelect()
 		assert.NoError(t, err)
 		assert.Equal(t, `select "title", "rel_user_id" from "rel_posts" where "rel_posts"."rel_user_id" in (?)`, pruned)
@@ -135,7 +135,7 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 
 		chunk := []any{uint(1), uint(2)}
 		child := q.relatedChild(desc.relatedTable, desc.relatedTable+"."+desc.secondKey, chunk)
-		scoped, ok := desc.onQuery(child).(*Query)
+		scoped, ok := desc.onQuery(child).(*OrmBuilder)
 		assert.True(t, ok)
 
 		compiled, bindings, err := scoped.compileSelect()
@@ -338,7 +338,7 @@ func TestLoadThrough_HasOneBranch(t *testing.T) {
 // branch would have matched and assigned both.
 func TestLoadOneRelation_HasOneThroughFixture(t *testing.T) {
 	q, recorder := newRecordingRelQuery(t, &hasOneThroughCountry{})
-	q = q.With("FirstPost").(*Query)
+	q = q.With("FirstPost").(*OrmBuilder)
 
 	recorder.returnRows(`from "through_scope_countries"`, []string{"id", "name"},
 		[]driver.Value{int64(1), "Ada"},

@@ -77,7 +77,7 @@ func TestCapture_RelationSQL(t *testing.T) {
 	}
 	for _, c := range cases {
 		q, dest := c.build(t)
-		gq := q.(*Query)
+		gq := q.(*OrmBuilder)
 		stmt, _, cerr := gq.dest(dest).addGlobalScopes().compileSelect()
 		if cerr != nil {
 			if _, err := fmt.Fprintf(f, "[%s] ERROR: %v\n\n", c.name, cerr); err != nil {

@@ -20,7 +20,7 @@ type softDeleteUser struct {
 
 func (softDeleteUser) TableName() string { return "soft_users" }
 
-func softDeleteSQL(t *testing.T, q *Query, dest any) string {
+func softDeleteSQL(t *testing.T, q *OrmBuilder, dest any) string {
 	t.Helper()
 
 	statement, _, err := q.dest(dest).compileSelect()
@@ -36,7 +36,7 @@ func TestSoftDeletePredicate_AppliesToFrameworkType(t *testing.T) {
 }
 
 func TestSoftDeletePredicate_SkippedWhenWithTrashed(t *testing.T) {
-	q := newRelQueryWith(t, &softDeleteUser{}).WithTrashed().(*Query)
+	q := newRelQueryWith(t, &softDeleteUser{}).WithTrashed().(*OrmBuilder)
 
 	assert.NotContains(t, softDeleteSQL(t, q, &softDeleteUser{}), "deleted_at")
 }
@@ -44,7 +44,7 @@ func TestSoftDeletePredicate_SkippedWhenWithTrashed(t *testing.T) {
 // OnlyTrashed keeps a predicate, but inverts it: the default "IS NULL" is replaced by "IS NOT NULL",
 // exactly as Laravel's SoftDeletes::onlyTrashed drops the scope and adds whereNotNull(deleted_at).
 func TestSoftDeletePredicate_OnlyTrashedInvertsPredicate(t *testing.T) {
-	q := newRelQueryWith(t, &softDeleteUser{}).OnlyTrashed().(*Query)
+	q := newRelQueryWith(t, &softDeleteUser{}).OnlyTrashed().(*OrmBuilder)
 
 	sql := softDeleteSQL(t, q, &softDeleteUser{})
 	assert.Contains(t, sql, `"soft_users"."deleted_at" IS NOT NULL`)
@@ -54,7 +54,7 @@ func TestSoftDeletePredicate_OnlyTrashedInvertsPredicate(t *testing.T) {
 // OnlyTrashed wins over WithTrashed regardless of call order, matching Laravel where the whereNotNull
 // macro's predicate survives the scope removal both ways round.
 func TestSoftDeletePredicate_OnlyTrashedOverridesWithTrashed(t *testing.T) {
-	q := newRelQueryWith(t, &softDeleteUser{}).WithTrashed().(*Query).OnlyTrashed().(*Query)
+	q := newRelQueryWith(t, &softDeleteUser{}).WithTrashed().(*OrmBuilder).OnlyTrashed().(*OrmBuilder)
 
 	assert.Contains(t, softDeleteSQL(t, q, &softDeleteUser{}), `"soft_users"."deleted_at" IS NOT NULL`)
 }
@@ -62,7 +62,7 @@ func TestSoftDeletePredicate_OnlyTrashedOverridesWithTrashed(t *testing.T) {
 // A model carrying the framework's own type has its delete rewritten into an update that stamps
 // deleted_at, and the rewrite keeps the "not already deleted" predicate.
 func TestSoftDeleteOrDelete_RewritesFrameworkTypeToUpdate(t *testing.T) {
-	q := newRelQueryWith(t, &softDeleteUser{}).Where("id", 1).(*Query)
+	q := newRelQueryWith(t, &softDeleteUser{}).Where("id", 1).(*OrmBuilder)
 
 	column, ok := q.softDeleteColumn()
 	require.True(t, ok, "a delete of this model must be rewritten")
@@ -81,7 +81,7 @@ func TestSoftDeleteOrDelete_RewritesFrameworkTypeToUpdate(t *testing.T) {
 
 // Asking for the trashed rows too removes the row instead of stamping it.
 func TestSoftDeleteOrDelete_UnscopedStaysADelete(t *testing.T) {
-	q := newRelQueryWith(t, &softDeleteUser{}).Where("id", 1).(*Query).WithTrashed().(*Query)
+	q := newRelQueryWith(t, &softDeleteUser{}).Where("id", 1).(*OrmBuilder).WithTrashed().(*OrmBuilder)
 
 	_, ok := q.softDeleteColumn()
 	assert.False(t, ok, "an unscoped delete must not be rewritten")
@@ -97,7 +97,7 @@ func TestSoftDeleteOrDelete_UnscopedStaysADelete(t *testing.T) {
 // A delete with nothing naming its rows is refused rather than compiled into a statement that would
 // empty the table.
 func TestCompileDelete_RefusesEveryRow(t *testing.T) {
-	q := newRelQueryWith(t, &softDeleteUser{}).WithTrashed().(*Query)
+	q := newRelQueryWith(t, &softDeleteUser{}).WithTrashed().(*OrmBuilder)
 
 	_, _, err := q.compileDelete()
 	assert.ErrorIs(t, err, errors.OrmMissingWhereClause)

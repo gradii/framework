@@ -16,7 +16,7 @@ type eagerLoadEntry struct {
 	callback contractsorm.RelationCallback // nil for the synthetic noop entries that _addNestedWiths inserts
 }
 
-// parseEagerLoad normalises the variadic args accepted by Query.With into an ordered
+// parseEagerLoad normalises the variadic args accepted by OrmBuilder.With into an ordered
 // slice of eagerLoadEntry. Mirrors the union of fedaco's _parseWithRelations,
 // _addNestedWiths and _createSelectWithConstraint, expressed as Go runtime type-dispatch since Go
 // doesn't have TypeScript-style overloads.

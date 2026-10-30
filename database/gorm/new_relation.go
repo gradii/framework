@@ -9,18 +9,18 @@ import (
 	"github.com/gradii/framework/errors"
 )
 
-// Related is the public Query-level entry point. The Orm-level entry (Orm.Related) delegates
-// here. Returns a fresh Query pre-scoped to the related rows for parent.relation.
-func (r *Query) Related(parent any, relation string) contractsorm.Query {
+// Related is the public OrmBuilder-level entry point. The Orm-level entry (Orm.Related) delegates
+// here. Returns a fresh OrmBuilder pre-scoped to the related rows for parent.relation.
+func (r *OrmBuilder) Related(parent any, relation string) contractsorm.Query {
 	return r.newRelationQuery(parent, relation)
 }
 
-// newRelationQuery returns a fresh Query pre-scoped to the related rows for parent.relation.
+// newRelationQuery returns a fresh OrmBuilder pre-scoped to the related rows for parent.relation.
 // Mirrors fedaco's model.NewRelation('foo') for the read path. Caller can chain Where / OrderBy
-// / Get / etc. on the returned Query. Write operations live on RelationWriter (see Query.Relation).
+// / Get / etc. on the returned OrmBuilder. Write operations live on RelationWriter (see OrmBuilder.Relation).
 //
-// Public entry: Orm.Related delegates here on a fresh-session *Query.
-func (r *Query) newRelationQuery(parent any, relation string) contractsorm.Query {
+// Public entry: Orm.Related delegates here on a fresh-session *OrmBuilder.
+func (r *OrmBuilder) newRelationQuery(parent any, relation string) contractsorm.Query {
 	if !isValidParent(parent) {
 		return r.guardedQuery(errors.OrmRelationParentNotPointer.Args(parent))
 	}
@@ -50,7 +50,7 @@ func (r *Query) newRelationQuery(parent any, relation string) contractsorm.Query
 		return r.guardedQuery(errors.OrmRelationUnsupported.Args(relation, fmt.Sprintf("%T", parent), fmt.Sprintf("kind=%d", desc.kind)))
 	}
 	// Apply the relation's default scope on top of the per-kind constraints. Caller still gets
-	// a chainable Query and can layer further conditions via Where / OrderBy / etc.
+	// a chainable OrmBuilder and can layer further conditions via Where / OrderBy / etc.
 	if desc.onQuery != nil {
 		built = desc.onQuery(built)
 	}
@@ -60,7 +60,7 @@ func (r *Query) newRelationQuery(parent any, relation string) contractsorm.Query
 // --- per-kind builders -----------------------------------------------------
 
 // newHasOneOrManyQuery: SELECT * FROM <related> WHERE <related>.<id_col> = parent.<local_key>.
-func (r *Query) newHasOneOrManyQuery(parent any, desc *relationDescriptor) contractsorm.Query {
+func (r *OrmBuilder) newHasOneOrManyQuery(parent any, desc *relationDescriptor) contractsorm.Query {
 	if len(desc.references) == 0 {
 		return r.guardedQuery(errors.OrmRelationUnsupported.Args(desc.name, desc.parentTable, "no references"))
 	}
@@ -73,7 +73,7 @@ func (r *Query) newHasOneOrManyQuery(parent any, desc *relationDescriptor) contr
 }
 
 // newBelongsToQuery: SELECT * FROM <related> WHERE <related>.<owner_key> = parent.<fk_col>.
-func (r *Query) newBelongsToQuery(parent any, desc *relationDescriptor) contractsorm.Query {
+func (r *OrmBuilder) newBelongsToQuery(parent any, desc *relationDescriptor) contractsorm.Query {
 	if len(desc.references) == 0 {
 		return r.guardedQuery(errors.OrmRelationUnsupported.Args(desc.name, desc.parentTable, "no references"))
 	}
@@ -86,7 +86,7 @@ func (r *Query) newBelongsToQuery(parent any, desc *relationDescriptor) contract
 }
 
 // newMorphOneOrManyQuery: HasMany shape + WHERE <related>.<type_col> = desc.morphValue.
-func (r *Query) newMorphOneOrManyQuery(parent any, desc *relationDescriptor) contractsorm.Query {
+func (r *OrmBuilder) newMorphOneOrManyQuery(parent any, desc *relationDescriptor) contractsorm.Query {
 	if len(desc.references) == 0 {
 		return r.guardedQuery(errors.OrmRelationUnsupported.Args(desc.name, desc.parentTable, "no references"))
 	}
@@ -103,9 +103,9 @@ func (r *Query) newMorphOneOrManyQuery(parent any, desc *relationDescriptor) con
 // newMorphToQuery resolves the related model per-row from the parent's <type_col> via the morph
 // map, then issues SELECT * FROM <resolved> WHERE <resolved>.<owner_key> = parent.<id_col>.
 //
-// If the parent's *_type is empty or unregistered, the returned Query is guarded so subsequent
+// If the parent's *_type is empty or unregistered, the returned OrmBuilder is guarded so subsequent
 // Get / First yields no rows without a database round-trip.
-func (r *Query) newMorphToQuery(parent any, desc *relationDescriptor) contractsorm.Query {
+func (r *OrmBuilder) newMorphToQuery(parent any, desc *relationDescriptor) contractsorm.Query {
 	morphType, err := readParentColumn(r, parent, desc.morphTypeColumn)
 	if err != nil {
 		return r.guardedQuery(err)
@@ -136,7 +136,7 @@ func (r *Query) newMorphToQuery(parent any, desc *relationDescriptor) contractso
 //
 // Pivot columns are not surfaced — call sites that need them should add Select / a future
 // WithPivot helper.
-func (r *Query) newMany2ManyQuery(parent any, desc *relationDescriptor, isMorph bool) contractsorm.Query {
+func (r *OrmBuilder) newMany2ManyQuery(parent any, desc *relationDescriptor, isMorph bool) contractsorm.Query {
 	parentVal, err := readParentColumn(r, parent, desc.pivotParentRef.primaryColumn)
 	if err != nil {
 		return r.guardedQuery(err)
@@ -160,7 +160,7 @@ func (r *Query) newMany2ManyQuery(parent any, desc *relationDescriptor, isMorph 
 //	SELECT <related>.* FROM <related>
 //	INNER JOIN <through> ON <related>.<second_key> = <through>.<second_local_key>
 //	WHERE <through>.<first_key> = parent.<local_key>
-func (r *Query) newThroughQuery(parent any, desc *relationDescriptor) contractsorm.Query {
+func (r *OrmBuilder) newThroughQuery(parent any, desc *relationDescriptor) contractsorm.Query {
 	parentVal, err := readParentColumn(r, parent, desc.localKey)
 	if err != nil {
 		return r.guardedQuery(err)
@@ -174,28 +174,28 @@ func (r *Query) newThroughQuery(parent any, desc *relationDescriptor) contractso
 
 // --- helpers ---------------------------------------------------------------
 
-// relatedQuery returns a fresh Query bound to the given related model, sharing connection /
+// relatedQuery returns a fresh OrmBuilder bound to the given related model, sharing connection /
 // config / context with the receiver. Subsequent unqualified Where("col", v) calls default to
 // the related table's column space.
-func (r *Query) relatedQuery(related any) contractsorm.Query {
+func (r *OrmBuilder) relatedQuery(related any) contractsorm.Query {
 	q := r.fresh()
 	return q.Model(related)
 }
 
-// guardedQuery returns a fresh Query that reports err from whichever terminal runs on it, without a
+// guardedQuery returns a fresh OrmBuilder that reports err from whichever terminal runs on it, without a
 // database round-trip. The error travels on the query rather than on the connection handle.
-func (r *Query) guardedQuery(err error) contractsorm.Query {
+func (r *OrmBuilder) guardedQuery(err error) contractsorm.Query {
 	return r.fresh().withError(err)
 }
 
-// zeroRowQuery returns a Query whose Get/First yields no rows without a database round-trip —
+// zeroRowQuery returns an OrmBuilder whose Get/First yields no rows without a database round-trip —
 // the WHERE evaluates to a guaranteed-false condition.
-func (r *Query) zeroRowQuery() contractsorm.Query {
+func (r *OrmBuilder) zeroRowQuery() contractsorm.Query {
 	return r.fresh().Where("1 = 0")
 }
 
 // readParentColumn reads the value of the given DB column from parent via GORM's parsed schema.
-func readParentColumn(r *Query, parent any, dbColumn string) (any, error) {
+func readParentColumn(r *OrmBuilder, parent any, dbColumn string) (any, error) {
 	parentSchema, err := parseSchema(parent)
 	if err != nil {
 		return nil, err

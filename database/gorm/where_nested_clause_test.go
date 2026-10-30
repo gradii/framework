@@ -18,7 +18,7 @@ func TestWhere_ClosureNestsAndMergesEagerLoads(t *testing.T) {
 	query := newRelQueryWith(t, &relUser{}).
 		Where(func(nested contractsorm.Query) contractsorm.Query {
 			return nested.Where("id", 1).With("Books")
-		}).(*Query)
+		}).(*OrmBuilder)
 
 	query = query.dest(&[]relUser{}).addGlobalScopes().buildConditions()
 
@@ -35,7 +35,7 @@ func TestWhere_ClosureNestsAndMergesEagerLoads(t *testing.T) {
 // count guard Eloquent's addNestedWhereQuery has.
 func TestWhere_ClosureWithoutWheresLeavesNoGroup(t *testing.T) {
 	query := newRelQueryWith(t, &relUser{}).
-		Where(func(nested contractsorm.Query) contractsorm.Query { return nested.With("Books") }).(*Query)
+		Where(func(nested contractsorm.Query) contractsorm.Query { return nested.With("Books") }).(*OrmBuilder)
 
 	query = query.dest(&[]relUser{}).addGlobalScopes().buildConditions()
 

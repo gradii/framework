@@ -17,7 +17,7 @@ import (
 // upstream; the shapes here were measured against .claude/laravel-oracle/oracle.php).
 
 func TestWhereBetween_QuotesTheColumn(t *testing.T) {
-	q := inQuery(t).WhereBetween("1=1 OR id", 1, 2).(*Query)
+	q := inQuery(t).WhereBetween("1=1 OR id", 1, 2).(*OrmBuilder)
 
 	sql, bindings := compileInClause(t, q)
 	assert.Equal(t, `select * from "rel_users" where "1=1 OR id" between ? and ?`, sql)
@@ -25,14 +25,14 @@ func TestWhereBetween_QuotesTheColumn(t *testing.T) {
 }
 
 func TestWhereNotBetween_QuotesTheColumn(t *testing.T) {
-	q := inQuery(t).WhereNotBetween("1=1 OR id", 1, 2).(*Query)
+	q := inQuery(t).WhereNotBetween("1=1 OR id", 1, 2).(*OrmBuilder)
 
 	sql, _ := compileInClause(t, q)
 	assert.Equal(t, `select * from "rel_users" where "1=1 OR id" not between ? and ?`, sql)
 }
 
 func TestOrWhereBetween_KeepsTheOrConnector(t *testing.T) {
-	q := inQuery(t).Where("name", "zero").OrWhereBetween("1=1 OR id", 1, 2).(*Query)
+	q := inQuery(t).Where("name", "zero").OrWhereBetween("1=1 OR id", 1, 2).(*OrmBuilder)
 
 	sql, bindings := compileInClause(t, q)
 	assert.Equal(t, `select * from "rel_users" where "name" = ? or "1=1 OR id" between ? and ?`, sql)
@@ -40,35 +40,35 @@ func TestOrWhereBetween_KeepsTheOrConnector(t *testing.T) {
 }
 
 func TestWhereNull_QuotesTheColumn(t *testing.T) {
-	q := inQuery(t).WhereNull("1=1 OR id").(*Query)
+	q := inQuery(t).WhereNull("1=1 OR id").(*OrmBuilder)
 
 	sql, _ := compileInClause(t, q)
 	assert.Equal(t, `select * from "rel_users" where "1=1 OR id" is null`, sql)
 }
 
 func TestWhereNotNull_QuotesTheColumn(t *testing.T) {
-	q := inQuery(t).WhereNotNull("1=1 OR id").(*Query)
+	q := inQuery(t).WhereNotNull("1=1 OR id").(*OrmBuilder)
 
 	sql, _ := compileInClause(t, q)
 	assert.Equal(t, `select * from "rel_users" where "1=1 OR id" is not null`, sql)
 }
 
 func TestOrWhereNull_KeepsTheOrConnector(t *testing.T) {
-	q := inQuery(t).Where("name", "zero").OrWhereNull("1=1 OR id").(*Query)
+	q := inQuery(t).Where("name", "zero").OrWhereNull("1=1 OR id").(*OrmBuilder)
 
 	sql, _ := compileInClause(t, q)
 	assert.Equal(t, `select * from "rel_users" where "name" = ? or "1=1 OR id" is null`, sql)
 }
 
 func TestWhereAll_QuotesEveryColumn(t *testing.T) {
-	q := inQuery(t).WhereAll([]string{"name", "email"}, "=", "x").(*Query)
+	q := inQuery(t).WhereAll([]string{"name", "email"}, "=", "x").(*OrmBuilder)
 
 	sql, _ := compileInClause(t, q)
 	assert.Equal(t, `select * from "rel_users" where ("name" = ? and "email" = ?)`, sql)
 }
 
 func TestWhereAny_QuotesEveryColumn(t *testing.T) {
-	q := inQuery(t).WhereAny([]string{"name", "email"}, "=", "x").(*Query)
+	q := inQuery(t).WhereAny([]string{"name", "email"}, "=", "x").(*OrmBuilder)
 
 	sql, _ := compileInClause(t, q)
 	assert.Equal(t, `select * from "rel_users" where ("name" = ? or "email" = ?)`, sql)
@@ -77,28 +77,28 @@ func TestWhereAny_QuotesEveryColumn(t *testing.T) {
 // A single-column WhereNone renders the negated equals Laravel renders - not ("name" = ?) - rather
 // than the "<>" its fragment used to emit.
 func TestWhereNone_NegatesTheEquals(t *testing.T) {
-	q := inQuery(t).WhereNone([]string{"name"}, "=", "x").(*Query)
+	q := inQuery(t).WhereNone([]string{"name"}, "=", "x").(*OrmBuilder)
 
 	sql, _ := compileInClause(t, q)
 	assert.Equal(t, `select * from "rel_users" where not ("name" = ?)`, sql)
 }
 
 func TestWhereNone_NegatesTheWholeGroup(t *testing.T) {
-	q := inQuery(t).WhereNone([]string{"name", "email"}, "LIKE", "a").(*Query)
+	q := inQuery(t).WhereNone([]string{"name", "email"}, "LIKE", "a").(*OrmBuilder)
 
 	sql, _ := compileInClause(t, q)
 	assert.Equal(t, `select * from "rel_users" where not ("name" LIKE ? or "email" LIKE ?)`, sql)
 }
 
 func TestOrderBy_QuotesTheColumn(t *testing.T) {
-	q := inQuery(t).OrderBy("id; DROP TABLE users --").(*Query)
+	q := inQuery(t).OrderBy("id; DROP TABLE users --").(*OrmBuilder)
 
 	sql, _ := compileInClause(t, q)
 	assert.Equal(t, `select * from "rel_users" order by "id; DROP TABLE users --" asc`, sql)
 }
 
 func TestOrderBy_AcceptsEitherDirection(t *testing.T) {
-	q := inQuery(t).OrderBy("id", "DESC").(*Query)
+	q := inQuery(t).OrderBy("id", "DESC").(*OrmBuilder)
 
 	sql, _ := compileInClause(t, q)
 	assert.Equal(t, `select * from "rel_users" order by "id" desc`, sql)
@@ -107,12 +107,12 @@ func TestOrderBy_AcceptsEitherDirection(t *testing.T) {
 // A direction that is not asc or desc is rejected the way Laravel rejects it, instead of being
 // concatenated into the statement. OrderByRaw stays the escape hatch for a custom direction.
 func TestOrderBy_RejectsACustomDirection(t *testing.T) {
-	q := inQuery(t).OrderBy("id", "asc; DROP TABLE users --").(*Query)
+	q := inQuery(t).OrderBy("id", "asc; DROP TABLE users --").(*OrmBuilder)
 
 	_, _, err := q.dest(&[]map[string]any{}).addGlobalScopes().compileSelect()
 	assert.ErrorIs(t, err, errors.QueryOrderDirectionInvalid)
 
-	raw := inQuery(t).OrderByRaw("id DESC NULLS LAST").(*Query)
+	raw := inQuery(t).OrderByRaw("id DESC NULLS LAST").(*OrmBuilder)
 
 	sql, _ := compileInClause(t, raw)
 	assert.Equal(t, `select * from "rel_users" order by id DESC NULLS LAST`, sql)

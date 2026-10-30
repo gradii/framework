@@ -8,8 +8,8 @@ import (
 )
 
 // queryPivotQuery adapts a contractsorm.Query to the PivotQuery interface so OnPivotQuery
-// callbacks can be threaded through builder-level reads (e.g. Query.Related). Each Where* call
-// is rewritten with the pivot table qualifier before being appended to the underlying Query.
+// callbacks can be threaded through builder-level reads (e.g. OrmBuilder.Related). Each Where* call
+// is rewritten with the pivot table qualifier before being appended to the underlying OrmBuilder.
 type queryPivotQuery struct {
 	grammar   querybuilder.Grammar
 	q         contractsorm.Query

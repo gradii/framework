@@ -13,7 +13,7 @@ import (
 // the retired gorm chain, so its Where* predicates compile through the same path production uses.
 func pivotScopedQuery(t *testing.T, table string) *queryPivotQuery {
 	t.Helper()
-	base := newRelQueryWith(t, &relUser{}).Table(table).(*Query)
+	base := newRelQueryWith(t, &relUser{}).Table(table).(*OrmBuilder)
 
 	return newQueryPivotQuery(base.queryGrammar, base, table)
 }
@@ -79,15 +79,15 @@ func TestQueryPivotQuery_Chained_AccumulatesAllClauses(t *testing.T) {
 }
 
 func TestApplyOnPivotQueryToQuery_NilCallback_NoOp(t *testing.T) {
-	base := newRelQueryWith(t, &relUser{}).Table("rel_user_roles").(*Query)
+	base := newRelQueryWith(t, &relUser{}).Table("rel_user_roles").(*OrmBuilder)
 	desc := &relationDescriptor{pivotTable: "rel_user_roles", onPivotQuery: nil}
-	out, ok := applyOnPivotQueryToQuery(base.queryGrammar, base, desc).(*Query)
+	out, ok := applyOnPivotQueryToQuery(base.queryGrammar, base, desc).(*OrmBuilder)
 	assert.True(t, ok)
 	assert.Same(t, base, out, "nil callback must return the original query unchanged")
 }
 
 func TestApplyOnPivotQueryToQuery_AppliesCallback(t *testing.T) {
-	base := newRelQueryWith(t, &relUser{}).Table("rel_user_roles").(*Query)
+	base := newRelQueryWith(t, &relUser{}).Table("rel_user_roles").(*OrmBuilder)
 	desc := &relationDescriptor{
 		pivotTable: "rel_user_roles",
 		onPivotQuery: func(q contractsorm.PivotQuery) contractsorm.PivotQuery {
@@ -127,7 +127,7 @@ func TestDescriptor_OnPivotQuery_Many2Many(t *testing.T) {
 	assert.NotNil(t, desc.onPivotQuery, "Many2Many.OnPivotQuery must land on descriptor")
 
 	// Verify the callback actually runs.
-	base := q.Table("pivot_wire_user_roles").(*Query)
+	base := q.Table("pivot_wire_user_roles").(*OrmBuilder)
 	pq := newQueryPivotQuery(base.queryGrammar, base, "pivot_wire_user_roles")
 	desc.onPivotQuery(pq)
 	sql := newRelationSQL(t, pq.q, &[]map[string]any{})

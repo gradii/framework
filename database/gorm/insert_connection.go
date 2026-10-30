@@ -9,7 +9,7 @@ import (
 
 // insertConnection keeps model key conversion, transaction routing, and tracing in the ORM adapter.
 type insertConnection struct {
-	query     *Query
+	query     *OrmBuilder
 	pool      statementPool
 	result    sql.Result
 	statement string

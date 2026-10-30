@@ -338,7 +338,7 @@ func TestCompileExistenceSubquery_CallbackOrderByNotReflected(t *testing.T) {
 // builder, so a valid operator renders the comparison unchanged. Before, the string was concatenated
 // into the fragment.
 func TestHas_CountComparisonKeepsValidOperators(t *testing.T) {
-	q := newRelQueryWith(t, &relUser{}).Has("Books", ">", 3).(*Query)
+	q := newRelQueryWith(t, &relUser{}).Has("Books", ">", 3).(*OrmBuilder)
 
 	sql, bindings, err := q.dest(&[]relUser{}).addGlobalScopes().compileSelect()
 	require.NoError(t, err)
@@ -351,7 +351,7 @@ func TestHas_CountComparisonKeepsValidOperators(t *testing.T) {
 // Laravel's addWhereCountQuery inherits from Builder::where() (which drops the original count, as
 // Laravel does). Before, the operator was concatenated, so ">= 1) OR 1=1 --" reached the SQL.
 func TestHas_CountComparisonValidatesTheOperator(t *testing.T) {
-	q := newRelQueryWith(t, &relUser{}).Has("Books", ">= 1) OR 1=1 --", 3).(*Query)
+	q := newRelQueryWith(t, &relUser{}).Has("Books", ">= 1) OR 1=1 --", 3).(*OrmBuilder)
 
 	sql, bindings, err := q.dest(&[]relUser{}).addGlobalScopes().compileSelect()
 	require.NoError(t, err)

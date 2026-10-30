@@ -52,7 +52,7 @@ var testEventModel = TestEventModel{
 // newTestQuery builds a query over the fixture model with no selection filter of its own, so an
 // observer sees every column. The filter an observer consults lives on the query's builder and
 // conditions, which is what compiledQuery builds.
-func newTestQuery(t *testing.T) *Query {
+func newTestQuery(t *testing.T) *OrmBuilder {
 	t.Helper()
 
 	return compiledQuery(t, &testEventModel, Conditions{})
@@ -239,7 +239,7 @@ func (s *EventTestSuite) TestValidColumn() {
 		// The filter an observer sees is the query's own, which is the one the statement being built
 		// writes by.
 		event.query = compiledQuery(s.T(), &testEventModel, Conditions{})
-		event.query.builder.Select("name")
+		event.query.query.Select("name")
 		s.True(event.validColumn("Name"))
 		s.True(event.validColumn("name"))
 		s.False(event.validColumn("avatar"))
@@ -260,7 +260,7 @@ func (s *EventTestSuite) TestRawSelectDoesNotMakeZeroValuesValid() {
 		&TestEventModel{},
 		map[string]any{"name": "", "is_admin": false, "manage": 0},
 	} {
-		query := compiledQuery(s.T(), &testEventModel, Conditions{}).SelectRaw("count(*) as total").(*Query)
+		query := compiledQuery(s.T(), &testEventModel, Conditions{}).SelectRaw("count(*) as total").(*OrmBuilder)
 		event := NewEvent(query, &testEventModel, dest)
 
 		s.False(event.validValue("name", ""))
@@ -273,7 +273,7 @@ func (s *EventTestSuite) TestRawSelectDoesNotMakeZeroValuesValid() {
 		s.Equal(true, event.GetAttribute("is_admin"))
 
 		// Selecting a named column still makes an explicitly selected zero value writable.
-		event.query = query.Select("name").(*Query)
+		event.query = query.Select("name").(*OrmBuilder)
 		s.True(event.validValue("name", ""))
 		s.True(event.IsDirty("name"))
 		s.Equal("", event.GetAttribute("name"))

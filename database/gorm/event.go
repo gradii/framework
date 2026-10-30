@@ -16,10 +16,10 @@ type Event struct {
 	destOfMap   map[string]any
 	model       any
 	modelOfMap  map[string]any
-	query       *Query
+	query       *OrmBuilder
 }
 
-func NewEvent(query *Query, model, dest any) *Event {
+func NewEvent(query *OrmBuilder, model, dest any) *Event {
 	return &Event{
 		dest:  dest,
 		model: model,
@@ -240,8 +240,8 @@ func (e *Event) validColumn(name string) bool {
 	// The filter is read from the query's own conditions rather than from GORM's statement, so an
 	// observer sees exactly the columns the statement being built will write.
 	var selectColumns []string
-	if e.query.builder != nil {
-		selectColumns = selectStringColumns(e.query.builder.Selects())
+	if e.query.query != nil {
+		selectColumns = selectStringColumns(e.query.query.Selects())
 	}
 	omitColumns := e.query.conditions.omit
 	if len(selectColumns) > 0 && !hasWildcard(selectColumns) {
@@ -282,7 +282,7 @@ func (e *Event) validValue(name string, value any) bool {
 		return false
 	}
 
-	if hasStringColumns(e.query.builder.Selects()) {
+	if hasStringColumns(e.query.query.Selects()) {
 		return e.validColumn(name)
 	}
 

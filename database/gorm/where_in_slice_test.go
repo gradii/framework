@@ -20,7 +20,7 @@ import (
 
 // compileInClause renders q and returns the statement with its positional bindings. The destination
 // is a map slice so the projection stays "select *" and the table comes from the query itself.
-func compileInClause(t *testing.T, q *Query) (string, []any) {
+func compileInClause(t *testing.T, q *OrmBuilder) (string, []any) {
 	t.Helper()
 
 	sql, bindings, err := q.dest(&[]map[string]any{}).addGlobalScopes().compileSelect()
@@ -30,14 +30,14 @@ func compileInClause(t *testing.T, q *Query) (string, []any) {
 }
 
 // inQuery returns a query addressed at rel_users, the shape a caller has after Model/Table.
-func inQuery(t *testing.T) *Query {
+func inQuery(t *testing.T) *OrmBuilder {
 	t.Helper()
 
-	return newRelQueryWith(t, &relUser{}).Table("rel_users").(*Query)
+	return newRelQueryWith(t, &relUser{}).Table("rel_users").(*OrmBuilder)
 }
 
 func TestWhereIn_ExpandsSliceIntoOneBindingPerValue(t *testing.T) {
-	q := inQuery(t).WhereIn("name", []any{"one", "two"}).(*Query)
+	q := inQuery(t).WhereIn("name", []any{"one", "two"}).(*OrmBuilder)
 
 	sql, bindings := compileInClause(t, q)
 	assert.Equal(t, `select * from "rel_users" where "name" in (?, ?)`, sql)
@@ -45,7 +45,7 @@ func TestWhereIn_ExpandsSliceIntoOneBindingPerValue(t *testing.T) {
 }
 
 func TestOrWhereIn_ExpandsSliceIntoOneBindingPerValue(t *testing.T) {
-	q := inQuery(t).Where("name", "zero").OrWhereIn("name", []any{"one", "two"}).(*Query)
+	q := inQuery(t).Where("name", "zero").OrWhereIn("name", []any{"one", "two"}).(*OrmBuilder)
 
 	sql, bindings := compileInClause(t, q)
 	assert.Equal(t, `select * from "rel_users" where "name" = ? or "name" in (?, ?)`, sql)
@@ -53,7 +53,7 @@ func TestOrWhereIn_ExpandsSliceIntoOneBindingPerValue(t *testing.T) {
 }
 
 func TestWhereNotIn_ExpandsSliceIntoOneBindingPerValue(t *testing.T) {
-	q := inQuery(t).WhereNotIn("name", []any{"one", "two"}).(*Query)
+	q := inQuery(t).WhereNotIn("name", []any{"one", "two"}).(*OrmBuilder)
 
 	sql, bindings := compileInClause(t, q)
 	assert.Equal(t, `select * from "rel_users" where "name" not in (?, ?)`, sql)
@@ -61,7 +61,7 @@ func TestWhereNotIn_ExpandsSliceIntoOneBindingPerValue(t *testing.T) {
 }
 
 func TestOrWhereNotIn_ExpandsSliceIntoOneBindingPerValue(t *testing.T) {
-	q := inQuery(t).Where("name", "zero").OrWhereNotIn("name", []any{"one"}).(*Query)
+	q := inQuery(t).Where("name", "zero").OrWhereNotIn("name", []any{"one"}).(*OrmBuilder)
 
 	sql, bindings := compileInClause(t, q)
 	assert.Equal(t, `select * from "rel_users" where "name" = ? or "name" not in (?)`, sql)
@@ -71,7 +71,7 @@ func TestOrWhereNotIn_ExpandsSliceIntoOneBindingPerValue(t *testing.T) {
 // The sibling WhereIn / WhereNotIn routes already rendered an empty list as a constant rather than
 // "in ()"; these pin them so all routes agree (see the WhereAny/WhereAll/WhereNone empty pins).
 func TestWhereIn_EmptySliceMatchesNothing(t *testing.T) {
-	q := inQuery(t).WhereIn("name", []any{}).(*Query)
+	q := inQuery(t).WhereIn("name", []any{}).(*OrmBuilder)
 
 	sql, bindings := compileInClause(t, q)
 	assert.Equal(t, `select * from "rel_users" where 0 = 1`, sql)
@@ -79,7 +79,7 @@ func TestWhereIn_EmptySliceMatchesNothing(t *testing.T) {
 }
 
 func TestWhereNotIn_EmptySliceMatchesEverything(t *testing.T) {
-	q := inQuery(t).WhereNotIn("name", []any{}).(*Query)
+	q := inQuery(t).WhereNotIn("name", []any{}).(*OrmBuilder)
 
 	sql, bindings := compileInClause(t, q)
 	assert.Equal(t, `select * from "rel_users" where 1 = 1`, sql)

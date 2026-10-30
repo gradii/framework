@@ -22,7 +22,7 @@ type shortcutUser struct {
 
 func (shortcutUser) TableName() string { return "shortcut_users" }
 
-func compileShortcut(t *testing.T, query *Query) (string, []any) {
+func compileShortcut(t *testing.T, query *OrmBuilder) (string, []any) {
 	t.Helper()
 
 	statement, bindings, err := query.compileSelect()
@@ -49,7 +49,7 @@ func TestWhereKeyMatchesLaravelShapes(t *testing.T) {
 		{"model list", []*shortcutUser{{ID: 3}, {ID: 4}}, `select * from "shortcut_users" where "shortcut_users"."id" in (?, ?)`, []any{uint(3), uint(4)}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			query := compiledQuery(t, &shortcutUser{}, Conditions{}).WhereKey(test.id).(*Query)
+			query := compiledQuery(t, &shortcutUser{}, Conditions{}).WhereKey(test.id).(*OrmBuilder)
 
 			statement, bindings := compileShortcut(t, query)
 			assert.Equal(t, test.want, statement)
@@ -60,12 +60,12 @@ func TestWhereKeyMatchesLaravelShapes(t *testing.T) {
 
 // whereKeyNot is whereKey with the comparison negated: "!=" for a scalar, NOT IN for a list.
 func TestWhereKeyNotNegatesTheComparison(t *testing.T) {
-	scalar := compiledQuery(t, &shortcutUser{}, Conditions{}).WhereKeyNot(5).(*Query)
+	scalar := compiledQuery(t, &shortcutUser{}, Conditions{}).WhereKeyNot(5).(*OrmBuilder)
 	statement, bindings := compileShortcut(t, scalar)
 	assert.Equal(t, `select * from "shortcut_users" where "shortcut_users"."id" != ?`, statement)
 	assert.Equal(t, []any{5}, bindings)
 
-	list := compiledQuery(t, &shortcutUser{}, Conditions{}).WhereKeyNot([]any{1, 2}).(*Query)
+	list := compiledQuery(t, &shortcutUser{}, Conditions{}).WhereKeyNot([]any{1, 2}).(*OrmBuilder)
 	statement, bindings = compileShortcut(t, list)
 	assert.Equal(t, `select * from "shortcut_users" where "shortcut_users"."id" not in (?, ?)`, statement)
 	assert.Equal(t, []any{1, 2}, bindings)
@@ -74,17 +74,17 @@ func TestWhereKeyNotNegatesTheComparison(t *testing.T) {
 // except excludes the given models by their keys, which is whereKeyNot over modelKeys(). A value
 // slice and a pointer slice read the same keys.
 func TestExceptExcludesModelsByKey(t *testing.T) {
-	pointers := compiledQuery(t, &shortcutUser{}, Conditions{}).Except([]*shortcutUser{{ID: 3}, {ID: 4}}).(*Query)
+	pointers := compiledQuery(t, &shortcutUser{}, Conditions{}).Except([]*shortcutUser{{ID: 3}, {ID: 4}}).(*OrmBuilder)
 	statement, bindings := compileShortcut(t, pointers)
 	assert.Equal(t, `select * from "shortcut_users" where "shortcut_users"."id" not in (?, ?)`, statement)
 	assert.Equal(t, []any{uint(3), uint(4)}, bindings)
 
-	values := compiledQuery(t, &shortcutUser{}, Conditions{}).Except([]shortcutUser{{ID: 3}}).(*Query)
+	values := compiledQuery(t, &shortcutUser{}, Conditions{}).Except([]shortcutUser{{ID: 3}}).(*OrmBuilder)
 	statement, bindings = compileShortcut(t, values)
 	assert.Equal(t, `select * from "shortcut_users" where "shortcut_users"."id" not in (?)`, statement)
 	assert.Equal(t, []any{uint(3)}, bindings)
 
-	single := compiledQuery(t, &shortcutUser{}, Conditions{}).Except(&shortcutUser{ID: 7}).(*Query)
+	single := compiledQuery(t, &shortcutUser{}, Conditions{}).Except(&shortcutUser{ID: 7}).(*OrmBuilder)
 	statement, bindings = compileShortcut(t, single)
 	assert.Equal(t, `select * from "shortcut_users" where "shortcut_users"."id" != ?`, statement)
 	assert.Equal(t, []any{uint(7)}, bindings)
@@ -92,7 +92,7 @@ func TestExceptExcludesModelsByKey(t *testing.T) {
 
 // A query with no model has no key column to compare, which is reported rather than compiled.
 func TestWhereKeyRequiresAModel(t *testing.T) {
-	query := compiledQuery(t, nil, Conditions{}).WhereKey(1).(*Query)
+	query := compiledQuery(t, nil, Conditions{}).WhereKey(1).(*OrmBuilder)
 
 	_, _, err := query.compileSelect()
 	assert.ErrorIs(t, err, errors.OrmQueryPrimaryKeyNotFound)
@@ -103,15 +103,15 @@ func TestWhereKeyRequiresAModel(t *testing.T) {
 // latest() and oldest() order by created_at by default, descending and ascending; a column names a
 // different one. Mirrors Builder::latest / oldest, which read getCreatedAtColumn() ?? 'created_at'.
 func TestLatestAndOldestOrderByTheCreatedAtColumn(t *testing.T) {
-	latest := compiledQuery(t, &shortcutUser{}, Conditions{}).Latest().(*Query)
+	latest := compiledQuery(t, &shortcutUser{}, Conditions{}).Latest().(*OrmBuilder)
 	statement, _ := compileShortcut(t, latest)
 	assert.Equal(t, `select * from "shortcut_users" order by "created_at" desc`, statement)
 
-	oldest := compiledQuery(t, &shortcutUser{}, Conditions{}).Oldest().(*Query)
+	oldest := compiledQuery(t, &shortcutUser{}, Conditions{}).Oldest().(*OrmBuilder)
 	statement, _ = compileShortcut(t, oldest)
 	assert.Equal(t, `select * from "shortcut_users" order by "created_at" asc`, statement)
 
-	named := compiledQuery(t, &shortcutUser{}, Conditions{}).Latest("score").(*Query)
+	named := compiledQuery(t, &shortcutUser{}, Conditions{}).Latest("score").(*OrmBuilder)
 	statement, _ = compileShortcut(t, named)
 	assert.Equal(t, `select * from "shortcut_users" order by "score" desc`, statement)
 }
@@ -119,7 +119,7 @@ func TestLatestAndOldestOrderByTheCreatedAtColumn(t *testing.T) {
 // A model without a created-at column falls back to the literal "created_at", as Laravel does when
 // getCreatedAtColumn() is null.
 func TestLatestFallsBackToTheLiteralColumn(t *testing.T) {
-	query := compiledQuery(t, &relUser{}, Conditions{}).Latest().(*Query)
+	query := compiledQuery(t, &relUser{}, Conditions{}).Latest().(*OrmBuilder)
 
 	statement, _ := compileShortcut(t, query)
 	assert.Equal(t, `select * from "rel_users" order by "created_at" desc`, statement)
@@ -134,7 +134,7 @@ func TestValueSelectsTheColumnOfTheFirstRow(t *testing.T) {
 	recorder.returnRows(`select "name"`, []string{"name"}, []driver.Value{"Jane"})
 
 	var name string
-	require.NoError(t, query.Where("id", 1).(*Query).Value("name", &name))
+	require.NoError(t, query.Where("id", 1).(*OrmBuilder).Value("name", &name))
 
 	assert.Equal(t, "Jane", name)
 	assert.Equal(t, `select "name" from "users" where "id" = ? limit 1`, recorder.last(t).sql)
@@ -152,7 +152,7 @@ func TestValueLeavesDestAloneWhenNoRowMatches(t *testing.T) {
 	query, recorder := newGetColumnsQuery(t)
 
 	name := "unchanged"
-	require.NoError(t, query.Where("id", 999).(*Query).Value("name", &name))
+	require.NoError(t, query.Where("id", 999).(*OrmBuilder).Value("name", &name))
 
 	assert.Equal(t, "unchanged", name)
 	assert.Equal(t, `select "name" from "users" where "id" = ? limit 1`, recorder.last(t).sql)
@@ -213,13 +213,13 @@ func TestFindManyReadsByKeyAndSkipsAnEmptyList(t *testing.T) {
 // Model::qualifyColumn does, and records it for later creates. Mirrors Builder::withAttributes with
 // its default $asConditions = true.
 func TestWithAttributesAddsWheresAndRecordsTheAttributes(t *testing.T) {
-	mapped := compiledQuery(t, &shortcutUser{}, Conditions{}).WithAttributes(map[string]any{"name": "x", "score": 3}).(*Query)
+	mapped := compiledQuery(t, &shortcutUser{}, Conditions{}).WithAttributes(map[string]any{"name": "x", "score": 3}).(*OrmBuilder)
 	statement, bindings := compileShortcut(t, mapped)
 	assert.Equal(t, `select * from "shortcut_users" where "shortcut_users"."name" = ? and "shortcut_users"."score" = ?`, statement)
 	assert.Equal(t, []any{"x", 3}, bindings)
 	assert.Equal(t, map[string]any{"name": "x", "score": 3}, mapped.conditions.pendingAttributes)
 
-	pair := compiledQuery(t, &shortcutUser{}, Conditions{}).WithAttributes("name", "x").(*Query)
+	pair := compiledQuery(t, &shortcutUser{}, Conditions{}).WithAttributes("name", "x").(*OrmBuilder)
 	statement, bindings = compileShortcut(t, pair)
 	assert.Equal(t, `select * from "shortcut_users" where "shortcut_users"."name" = ?`, statement)
 	assert.Equal(t, []any{"x"}, bindings)
@@ -228,18 +228,18 @@ func TestWithAttributesAddsWheresAndRecordsTheAttributes(t *testing.T) {
 // A Go field name resolves to its column before it is qualified, and a name that already carries a
 // table is left as written, which is the str_contains($column, '.') guard in Model::qualifyColumn.
 func TestWithAttributesQualifiesTheColumnOnce(t *testing.T) {
-	field := compiledQuery(t, &shortcutUser{}, Conditions{}).WithAttributes("Score", 3).(*Query)
+	field := compiledQuery(t, &shortcutUser{}, Conditions{}).WithAttributes("Score", 3).(*OrmBuilder)
 	statement, _ := compileShortcut(t, field)
 	assert.Equal(t, `select * from "shortcut_users" where "shortcut_users"."score" = ?`, statement)
 
-	qualified := compiledQuery(t, &shortcutUser{}, Conditions{}).WithAttributes("other.name", "x").(*Query)
+	qualified := compiledQuery(t, &shortcutUser{}, Conditions{}).WithAttributes("other.name", "x").(*OrmBuilder)
 	statement, _ = compileShortcut(t, qualified)
 	assert.Equal(t, `select * from "shortcut_users" where "other"."name" = ?`, statement)
 }
 
 // $asConditions = false records the attributes without touching the where clause.
 func TestWithAttributesCanSkipTheConditions(t *testing.T) {
-	query := compiledQuery(t, &shortcutUser{}, Conditions{}).WithAttributes("name", "x", false).(*Query)
+	query := compiledQuery(t, &shortcutUser{}, Conditions{}).WithAttributes("name", "x", false).(*OrmBuilder)
 
 	statement, bindings := compileShortcut(t, query)
 	assert.Equal(t, `select * from "shortcut_users"`, statement)
@@ -250,7 +250,7 @@ func TestWithAttributesCanSkipTheConditions(t *testing.T) {
 // The recorded attributes reach a model the query creates, the way newModelInstance() merges
 // $pendingAttributes into the attributes it is given; a value the caller already set wins.
 func TestWithAttributesReachTheCreatedModel(t *testing.T) {
-	query := compiledQuery(t, &shortcutUser{}, Conditions{}).WithAttributes("name", "preset").(*Query)
+	query := compiledQuery(t, &shortcutUser{}, Conditions{}).WithAttributes("name", "preset").(*OrmBuilder)
 
 	blank := &shortcutUser{Score: 3}
 	require.NoError(t, query.applyPendingAttributes(blank))
@@ -286,7 +286,7 @@ func TestCreateWritesThePendingAttributes(t *testing.T) {
 // increment() and decrement() write a raw arithmetic assignment and stamp updated_at, as
 // Builder::increment does through addUpdatedAtColumn. The query's where clause scopes the rows.
 func TestIncrementAndDecrementCompileArithmeticAndStampUpdatedAt(t *testing.T) {
-	query := compiledQuery(t, &shortcutUser{}, Conditions{}).Where("id", 1).(*Query)
+	query := compiledQuery(t, &shortcutUser{}, Conditions{}).Where("id", 1).(*OrmBuilder)
 
 	values := query.stepValues("score", "+", []any{5, map[string]any{"name": "bumped"}})
 	assignments, err := query.updateAssignments(values)
@@ -309,7 +309,7 @@ func TestIncrementAndDecrementCompileArithmeticAndStampUpdatedAt(t *testing.T) {
 
 // A non-numeric amount is refused the way Builder::increment refuses it.
 func TestIncrementRefusesANonNumericAmount(t *testing.T) {
-	query := compiledQuery(t, &shortcutUser{}, Conditions{}).Where("id", 1).(*Query)
+	query := compiledQuery(t, &shortcutUser{}, Conditions{}).Where("id", 1).(*OrmBuilder)
 
 	_, err := query.Increment("score", "abc")
 	assert.ErrorIs(t, err, errors.OrmQueryIncrementNonNumeric)
@@ -321,7 +321,7 @@ func TestIncrementRefusesANonNumericAmount(t *testing.T) {
 // touch() sets updated_at to now, or the named column; a model without an updated-at column has
 // nothing to touch and says so. Mirrors Builder::touch.
 func TestTouchStampsTheUpdatedAtColumn(t *testing.T) {
-	query := compiledQuery(t, &shortcutUser{}, Conditions{}).Where("id", 1).(*Query)
+	query := compiledQuery(t, &shortcutUser{}, Conditions{}).Where("id", 1).(*OrmBuilder)
 	assert.Equal(t, "updated_at", query.updatedAtColumn())
 
 	assignments, err := query.updateAssignments(map[string]any{query.updatedAtColumn(): 123})
@@ -331,7 +331,7 @@ func TestTouchStampsTheUpdatedAtColumn(t *testing.T) {
 	assert.Equal(t, `update "shortcut_users" set "updated_at" = ? where "id" = ?`, statement)
 	assert.Equal(t, []any{123, 1}, bindings)
 
-	noTimestamps := compiledQuery(t, &relUser{}, Conditions{}).Where("id", 1).(*Query)
+	noTimestamps := compiledQuery(t, &relUser{}, Conditions{}).Where("id", 1).(*OrmBuilder)
 	_, err = noTimestamps.Touch()
 	assert.ErrorIs(t, err, errors.OrmQueryTimestampColumnNotFound)
 }

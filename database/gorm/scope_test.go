@@ -34,7 +34,7 @@ func TestCompileSelect_AppliesUserScopes(t *testing.T) {
 
 	scoped, ok := query.Scopes(func(scoped contractsorm.Query) contractsorm.Query {
 		return scoped.Where("name", "scoped")
-	}).(*Query)
+	}).(*OrmBuilder)
 	require.True(t, ok)
 
 	statement, bindings, err := scoped.compileSelect()
@@ -51,7 +51,7 @@ func TestCompileSelect_AppliesUserScopes(t *testing.T) {
 // apply, now that the compiled statement is the one that runs.
 func TestCompileSelect_SkipsExcludedGlobalScopes(t *testing.T) {
 	excluded, ok := compiledQuery(t, &ModelWithGlobalScopes{}, Conditions{}).
-		WithoutGlobalScopes("active").(*Query)
+		WithoutGlobalScopes("active").(*OrmBuilder)
 	require.True(t, ok)
 
 	statement, _, err := excluded.addGlobalScopes().compileSelect()
@@ -99,7 +99,7 @@ func TestCompileUpdate_AppliesGlobalScopes(t *testing.T) {
 func TestCompileDelete_ScopeWithoutWhereStillRefused(t *testing.T) {
 	query := compiledQuery(t, &relUser{}, Conditions{}).Scopes(func(scoped contractsorm.Query) contractsorm.Query {
 		return scoped.OrderBy("id")
-	}).(*Query)
+	}).(*OrmBuilder)
 
 	_, _, err := query.compileDelete()
 	assert.ErrorIs(t, err, errors.OrmMissingWhereClause)
