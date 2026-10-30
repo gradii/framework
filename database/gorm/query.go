@@ -877,10 +877,17 @@ func (r *Query) Order(value any) contractsorm.Query {
 	return r.OrderByRaw(fmt.Sprintf("%s", value))
 }
 
+// OrderBy adds an "order by" clause. The direction must be asc or desc, as Laravel requires; any
+// other direction is an error (errors.QueryOrderDirectionInvalid). A custom direction such as
+// "DESC NULLS LAST" goes through OrderByRaw, the only entry point that renders its argument
+// verbatim, so no caller-supplied string reaches the SQL unvalidated.
 func (r *Query) OrderBy(column string, direction ...string) contractsorm.Query {
 	orderDirection := "asc"
 	if len(direction) > 0 {
 		orderDirection = strings.ToLower(direction[0])
+	}
+	if orderDirection != "asc" && orderDirection != "desc" {
+		return r.withError(errors.QueryOrderDirectionInvalid).(*Query)
 	}
 
 	return r.OrderByRaw(r.queryGrammar.Wrap(column) + " " + orderDirection)
@@ -1776,21 +1783,11 @@ func (r *Query) WhereAll(columns []string, args ...any) contractsorm.Query {
 		return r.withError(err).(*Query)
 	}
 
-	var conditions []string
-	var conditionArgs []any
-	for _, column := range columns {
-		fragment, fragmentArgs := whereFragment(column, op, value)
-		conditions = append(conditions, fragment)
-		conditionArgs = append(conditionArgs, fragmentArgs...)
-	}
-
-	query := strings.Join(conditions, " AND ")
-	r = r.addWhere(contractsdriver.Where{
-		Query: query,
-		Args:  conditionArgs,
-	}).(*Query)
-
-	return r
+	return r.addWhere(contractsdriver.Where{
+		Type:  contractsdriver.WhereTypeAll,
+		Query: columns,
+		Args:  []any{op, value},
+	})
 }
 
 func (r *Query) WhereAny(columns []string, args ...any) contractsorm.Query {
@@ -1799,21 +1796,11 @@ func (r *Query) WhereAny(columns []string, args ...any) contractsorm.Query {
 		return r.withError(err).(*Query)
 	}
 
-	var conditions []string
-	var conditionArgs []any
-	for _, column := range columns {
-		fragment, fragmentArgs := whereFragment(column, op, value)
-		conditions = append(conditions, fragment)
-		conditionArgs = append(conditionArgs, fragmentArgs...)
-	}
-
-	query := fmt.Sprintf("(%s)", strings.Join(conditions, " OR "))
-	r = r.addWhere(contractsdriver.Where{
-		Query: query,
-		Args:  conditionArgs,
-	}).(*Query)
-
-	return r
+	return r.addWhere(contractsdriver.Where{
+		Type:  contractsdriver.WhereTypeAny,
+		Query: columns,
+		Args:  []any{op, value},
+	})
 }
 
 // WhereIn adds a "where column in (...)" clause. The column and the value list are added as one
@@ -1922,23 +1909,47 @@ func (r *Query) OrWhereNotIn(column string, values []any) contractsorm.Query {
 }
 
 func (r *Query) WhereBetween(column string, x, y any) contractsorm.Query {
-	return r.Where(fmt.Sprintf("%s BETWEEN ? AND ?", column), x, y)
+	return r.addWhere(contractsdriver.Where{
+		Type:  contractsdriver.WhereTypeBetween,
+		Query: column,
+		Args:  []any{x, y},
+	})
 }
 
 func (r *Query) WhereNotBetween(column string, x, y any) contractsorm.Query {
-	return r.Where(fmt.Sprintf("%s NOT BETWEEN ? AND ?", column), x, y)
+	return r.addWhere(contractsdriver.Where{
+		Type:  contractsdriver.WhereTypeBetween,
+		Query: column,
+		Args:  []any{x, y},
+		IsNot: true,
+	})
 }
 
 func (r *Query) OrWhereBetween(column string, x, y any) contractsorm.Query {
-	return r.OrWhere(fmt.Sprintf("%s BETWEEN ? AND ?", column), x, y)
+	return r.addWhere(contractsdriver.Where{
+		Type:  contractsdriver.WhereTypeBetween,
+		Query: column,
+		Args:  []any{x, y},
+		Or:    true,
+	})
 }
 
 func (r *Query) OrWhereNotBetween(column string, x, y any) contractsorm.Query {
-	return r.OrWhere(fmt.Sprintf("%s NOT BETWEEN ? AND ?", column), x, y)
+	return r.addWhere(contractsdriver.Where{
+		Type:  contractsdriver.WhereTypeBetween,
+		Query: column,
+		Args:  []any{x, y},
+		Or:    true,
+		IsNot: true,
+	})
 }
 
 func (r *Query) OrWhereNull(column string) contractsorm.Query {
-	return r.OrWhere(fmt.Sprintf("%s IS NULL", column))
+	return r.addWhere(contractsdriver.Where{
+		Type:  contractsdriver.WhereTypeNull,
+		Query: column,
+		Or:    true,
+	})
 }
 
 func (r *Query) WhereNone(columns []string, args ...any) contractsorm.Query {
@@ -1947,62 +1958,11 @@ func (r *Query) WhereNone(columns []string, args ...any) contractsorm.Query {
 		return r.withError(err).(*Query)
 	}
 
-	var conditions []string
-	var conditionArgs []any
-	for _, column := range columns {
-		if op == "=" {
-			conditions = append(conditions, fmt.Sprintf("%s <> ?", column))
-			conditionArgs = append(conditionArgs, value)
-
-			continue
-		}
-
-		fragment, fragmentArgs := whereFragment(column, op, value)
-		conditions = append(conditions, fmt.Sprintf("NOT (%s)", fragment))
-		conditionArgs = append(conditionArgs, fragmentArgs...)
-	}
-
-	query := strings.Join(conditions, " AND ")
-	r = r.addWhere(contractsdriver.Where{
-		Query: query,
-		Args:  conditionArgs,
-	}).(*Query)
-
-	return r
-}
-
-// whereFragment renders one raw "<column> <operator> ?" condition and the bindings it needs.
-//
-// An IN or NOT IN operator whose value is a slice expands to one placeholder and one binding per
-// element: the expansion gorm's clause builder used to apply here, and the same shape the compiler
-// gives the sibling WhereIn entry point. Without it the whole slice is bound to the single
-// placeholder, so the list is never expanded and the statement fails at every driver.
-//
-// An EMPTY slice has no placeholder to expand to: joining zero placeholders would emit the
-// malformed "column IN ()" that every driver rejects, so it renders the constants the compiler
-// already gives the sibling WhereIn / WhereNotIn - "0 = 1" for an empty IN (matches nothing) and
-// "1 = 1" for an empty NOT IN (matches everything), both matching Laravel and binding nothing.
-func whereFragment(column string, operator any, value any) (string, []any) {
-	if isInOperator(operator) {
-		if values, ok := sliceValues(value); ok {
-			if len(values) == 0 {
-				if isNotInOperator(operator) {
-					return "1 = 1", nil
-				}
-
-				return "0 = 1", nil
-			}
-
-			placeholders := make([]string, len(values))
-			for i := range placeholders {
-				placeholders[i] = "?"
-			}
-
-			return fmt.Sprintf("%s %v (%s)", column, operator, strings.Join(placeholders, ", ")), values
-		}
-	}
-
-	return fmt.Sprintf("%s %v ?", column, operator), []any{value}
+	return r.addWhere(contractsdriver.Where{
+		Type:  contractsdriver.WhereTypeNone,
+		Query: columns,
+		Args:  []any{op, value},
+	})
 }
 
 // isNotInOperator reports whether operator is NOT IN, ignoring case and surrounding space.
@@ -2055,11 +2015,18 @@ func sliceValues(value any) ([]any, bool) {
 }
 
 func (r *Query) WhereNotNull(column string) contractsorm.Query {
-	return r.Where(fmt.Sprintf("%s IS NOT NULL", column))
+	return r.addWhere(contractsdriver.Where{
+		Type:  contractsdriver.WhereTypeNull,
+		Query: column,
+		IsNot: true,
+	})
 }
 
 func (r *Query) WhereNull(column string) contractsorm.Query {
-	return r.Where(fmt.Sprintf("%s IS NULL", column))
+	return r.addWhere(contractsdriver.Where{
+		Type:  contractsdriver.WhereTypeNull,
+		Query: column,
+	})
 }
 
 func (r *Query) WithoutEvents() contractsorm.Query {

@@ -308,3 +308,14 @@ func TestDescriptor_PivotField_CustomMorphedByMany(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "InversePivot", desc.pivotField)
 }
+
+// An operator the builder does not know is swapped for "=" and bound as the value, the way Laravel's
+// wherePivot inherits Builder::where()'s handling. Before, the operator was concatenated into the
+// fragment, so a caller string like "= 1) OR 1=1 --" reached the statement verbatim.
+func TestQueryPivotQuery_Where_InvalidOperatorIsBoundNotConcatenated(t *testing.T) {
+	pq := pivotScopedQuery(t, "rel_user_roles")
+	pq.Where("scope", "= 1) OR 1=1 --", "x")
+	sql := newRelationSQL(t, pq.q, &[]map[string]any{})
+	assert.Contains(t, sql, `"rel_user_roles"."scope" = ?`)
+	assert.NotContains(t, sql, "OR 1=1")
+}

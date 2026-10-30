@@ -24,19 +24,24 @@ func (p *queryPivotQuery) qualified(column string) string {
 	return p.grammar.Wrap(p.tableName + "." + column)
 }
 
+// Where adds a `column op value` clause to the pivot query. The column is wrapped by the grammar and
+// the condition goes through the compiled builder, which validates the operator and swaps an unknown
+// one for "=" while binding it as the value - the handling Laravel's wherePivot inherits from
+// Builder::where(). Concatenating the operator into a fragment let a caller string reach the SQL.
 func (p *queryPivotQuery) Where(column string, args ...any) contractsorm.PivotQuery {
+	qualified := querybuilder.Expression{Value: p.qualified(column)}
+
 	switch len(args) {
 	case 1:
-		p.q = p.q.Where(fmt.Sprintf("%s = ?", p.qualified(column)), args[0])
+		p.q = p.q.Where(qualified, "=", args[0])
 	case 2:
-		op, ok := args[0].(string)
-		if !ok {
-			p.q = p.q.Where(fmt.Sprintf("%s = ?", p.qualified(column)), args[0]).
-				Where(fmt.Sprintf("%s = ?", p.qualified(column)), args[1])
-			return p
+		if op, ok := args[0].(string); ok {
+			p.q = p.q.Where(qualified, op, args[1])
+		} else {
+			p.q = p.q.Where(qualified, "=", args[0]).Where(qualified, "=", args[1])
 		}
-		p.q = p.q.Where(fmt.Sprintf("%s %s ?", p.qualified(column), op), args[1])
 	}
+
 	return p
 }
 

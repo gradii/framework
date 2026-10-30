@@ -589,7 +589,12 @@ func applyExistenceClause(builder *querybuilder.Builder, inner *querybuilder.Bui
 
 	setSubquerySelect(inner, "count(*)")
 	subquery, bindings := inner.ToSelectSQL()
-	builder.WhereRaw("("+subquery+") "+operator+" ?", append(bindings, count), boolean)
+	_ = builder.AddBinding(bindings, "where")
+	// The comparison goes through the builder's where path so the operator is validated and an
+	// unknown one is swapped for "=" and bound as the value, the handling Laravel's
+	// addWhereCountQuery inherits from Builder::where(); concatenating it put a caller string into
+	// the statement verbatim.
+	applySimpleWhere(builder, querybuilder.Expression{Value: "(" + subquery + ")"}, []any{operator, count}, boolean)
 }
 
 // existenceKeyword names the clause an existence condition becomes, negated when the condition asked

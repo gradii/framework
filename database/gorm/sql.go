@@ -392,6 +392,32 @@ func (r *Query) applySingleWhere(builder *querybuilder.Builder, item contractsdr
 		}
 
 		return
+	case contractsdriver.WhereTypeBetween:
+		builder.WhereBetween(item.Query, item.Args, boolean, item.IsNot)
+
+		return
+	case contractsdriver.WhereTypeNull:
+		builder.WhereNull(item.Query, boolean, item.IsNot)
+
+		return
+	case contractsdriver.WhereTypeAll:
+		if !applyInSliceGroup(builder, item, core.BooleanAnd, boolean) {
+			builder.WhereAll(toStrings(columnNames(item)), item.Args[0], item.Args[1], boolean)
+		}
+
+		return
+	case contractsdriver.WhereTypeAny:
+		if !applyInSliceGroup(builder, item, core.BooleanOr, boolean) {
+			builder.WhereAny(toStrings(columnNames(item)), item.Args[0], item.Args[1], boolean)
+		}
+
+		return
+	case contractsdriver.WhereTypeNone:
+		if !applyInSliceGroup(builder, item, core.BooleanOr, negated(boolean)) {
+			builder.WhereNone(toStrings(columnNames(item)), item.Args[0], item.Args[1], boolean)
+		}
+
+		return
 	}
 
 	switch query := item.Query.(type) {
@@ -400,8 +426,9 @@ func (r *Query) applySingleWhere(builder *querybuilder.Builder, item contractsdr
 		case len(item.Args) == 0:
 			builder.WhereRaw(query, nil, boolean)
 		case len(item.Args) == 1 && isSlice(item.Args[0]) && !isByteSlice(item.Args[0]) && containsPlaceholder(query):
-			// A raw fragment whose one placeholder is fed a slice is the ORM's "col in ?" shorthand
-			// (the pivot and WhereAny chains emit the same "… IN ?" shape). The GORM-backed builder
+			// A raw fragment whose one placeholder is fed a slice is the ORM's "col in ?" shorthand,
+			// which the pivot chain still emits (the grouped WhereAll/WhereAny/WhereNone entry points
+			// are typed conditions now and never reach this branch). The GORM-backed builder
 			// expanded the slice into one placeholder per value, wrapped in parentheses; binding the
 			// slice whole leaves one placeholder against N bindings, and the database rejects the
 			// statement. Expand it the same way, leaving every other fragment shape on the WhereRaw
@@ -528,4 +555,57 @@ func firstArg(args []any) any {
 	}
 
 	return args[0]
+}
+
+// applyInSliceGroup compiles an IN or NOT IN condition whose value is a slice for the WhereAll /
+// WhereAny / WhereNone family: one WhereIn per column, joined by inner and wrapped in one nested
+// group carrying group. Mirrors database/db's expandInGroup, and the empty list keeps the grammar's
+// "0 = 1" (matches nothing) and "1 = 1" (matches everything) constants. It reports false when the
+// condition is not an IN against a slice, so the caller falls back to the family's builder method.
+func applyInSliceGroup(builder *querybuilder.Builder, item contractsdriver.Where, inner, group string) bool {
+	if !isInOperator(item.Args[0]) {
+		return false
+	}
+	values, ok := sliceValues(item.Args[1])
+	if !ok {
+		return false
+	}
+
+	not := isNotInOperator(item.Args[0])
+	builder.WhereNested(func(b *querybuilder.Builder) *querybuilder.Builder {
+		for _, column := range columnNames(item) {
+			b.WhereIn(column, values, inner, not)
+		}
+
+		return b
+	}, group)
+
+	return true
+}
+
+// negated turns a condition's connector into the one its negated group needs: Laravel's whereNone
+// runs whereAny with ($boolean.' not'), so "and" becomes "and not" and "or" becomes "or not".
+func negated(boolean string) string {
+	if boolean == core.BooleanOr {
+		return core.BooleanOrNot
+	}
+
+	return core.BooleanAndNot
+}
+
+// columnNames reads the column list a group condition carries.
+func columnNames(item contractsdriver.Where) []string {
+	columns, _ := item.Query.([]string)
+
+	return columns
+}
+
+// toStrings converts a string slice to []any for the builder.
+func toStrings(values []string) []any {
+	out := make([]any, len(values))
+	for i, value := range values {
+		out[i] = value
+	}
+
+	return out
 }

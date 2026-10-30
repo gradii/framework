@@ -333,3 +333,29 @@ func TestCompileExistenceSubquery_CallbackOrderByNotReflected(t *testing.T) {
 	assert.Equal(t, `select 1 from "rel_books" where "rel_users"."id" = "rel_books"."user_id"`, sql)
 	assert.NotContains(t, strings.ToLower(sql), "order by")
 }
+
+// The operator a caller passes to Has / WhereHas reaches the count comparison through the compiled
+// builder, so a valid operator renders the comparison unchanged. Before, the string was concatenated
+// into the fragment.
+func TestHas_CountComparisonKeepsValidOperators(t *testing.T) {
+	q := newRelQueryWith(t, &relUser{}).Has("Books", ">", 3).(*Query)
+
+	sql, bindings, err := q.dest(&[]relUser{}).addGlobalScopes().compileSelect()
+	require.NoError(t, err)
+	assert.Contains(t, sql, `(select count(*) from "rel_books"`)
+	assert.Contains(t, sql, `) > ?`)
+	assert.Equal(t, []any{3}, bindings)
+}
+
+// An operator the builder does not know is swapped for "=" and bound as the value, the handling
+// Laravel's addWhereCountQuery inherits from Builder::where() (which drops the original count, as
+// Laravel does). Before, the operator was concatenated, so ">= 1) OR 1=1 --" reached the SQL.
+func TestHas_CountComparisonValidatesTheOperator(t *testing.T) {
+	q := newRelQueryWith(t, &relUser{}).Has("Books", ">= 1) OR 1=1 --", 3).(*Query)
+
+	sql, bindings, err := q.dest(&[]relUser{}).addGlobalScopes().compileSelect()
+	require.NoError(t, err)
+	assert.Contains(t, sql, `) = ?`)
+	assert.NotContains(t, sql, "OR 1=1")
+	assert.Equal(t, []any{">= 1) OR 1=1 --"}, bindings)
+}

@@ -175,7 +175,8 @@ type Query interface {
 	// Order specifies the order in which the results should be returned.
 	// DEPRECATED Use OrderByRaw instead.
 	Order(value any) Query
-	// OrderBy specifies the order should be ascending.
+	// OrderBy specifies the order should be ascending, or the given direction. The direction must be asc
+	// or desc, as Laravel requires; a custom direction such as "DESC NULLS LAST" goes through OrderByRaw.
 	OrderBy(column string, direction ...string) Query
 	// OrderByDesc specifies the order should be descending.
 	OrderByDesc(column string) Query
