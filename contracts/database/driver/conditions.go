@@ -3,12 +3,7 @@ package driver
 // WhereType type of where condition
 type WhereType int
 
-const (
-	WhereTypeBase WhereType = iota
-	WhereTypeJsonContains
-	WhereTypeJsonContainsKey
-	WhereTypeJsonLength
-)
+const WhereTypeBase WhereType = iota
 
 type Conditions struct {
 	CrossJoin     []Join

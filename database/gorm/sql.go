@@ -355,8 +355,8 @@ func (r *OrmBuilder) applyTable(builder *querybuilder.Builder) error {
 // applyWhere translates the conditions' where clauses onto the builder.
 //
 // The shapes are the ones the ORM accepts: a raw fragment with its bindings, a column with its
-// value, a slice standing for an IN list, a callback producing a nested group, and the JSON
-// operators the conditions mark with a type.
+// value, a slice standing for an IN list, a forward the where methods declare, and a callback
+// producing a nested group.
 func (r *OrmBuilder) applyWhere(builder *querybuilder.Builder) *querybuilder.Builder {
 	for _, item := range r.conditions.where {
 		boolean := core.BooleanAnd
@@ -371,32 +371,9 @@ func (r *OrmBuilder) applyWhere(builder *querybuilder.Builder) *querybuilder.Bui
 }
 
 func (r *OrmBuilder) applySingleWhere(builder *querybuilder.Builder, item contractsdriver.Where, boolean string) {
-	switch item.Type {
-	case contractsdriver.WhereTypeJsonContains:
-		builder.WhereJsonContains(fmt.Sprint(item.Query), firstArg(item.Args), boolean, item.IsNot)
-
-		return
-	case contractsdriver.WhereTypeJsonContainsKey:
-		builder.WhereJsonContainsKey(fmt.Sprint(item.Query), boolean, item.IsNot)
-
-		return
-	case contractsdriver.WhereTypeJsonLength:
-		// WhereJsonLength is the one shape with no boolean argument on the builder: its plain method
-		// is hard-wired to "and", so an OrWhereJsonLength used to compile to "and" and its clause
-		// could only match when the other side also matched. The builder's own orWhereJsonLength is
-		// the OR counterpart, so pick it when the condition carries the "or" connector.
-		if boolean == core.BooleanOr {
-			builder.OrWhereJsonLength(fmt.Sprint(item.Query), item.Args...)
-		} else {
-			builder.WhereJsonLength(fmt.Sprint(item.Query), item.Args...)
-		}
-
-		return
-	}
-
 	switch query := item.Query.(type) {
 	case func(*querybuilder.Builder, string):
-		// A forward queued by a where method (see Query.whereForward): the method declared the call,
+		// A forward queued by a where method (see OrmBuilder.whereForward): the method declared the call,
 		// so the compiler only supplies the builder and the connector.
 		query(builder, boolean)
 
@@ -537,15 +514,6 @@ func containsPlaceholder(query string) bool {
 	}
 
 	return false
-}
-
-// firstArg returns the first binding, or nil when there is none.
-func firstArg(args []any) any {
-	if len(args) == 0 {
-		return nil
-	}
-
-	return args[0]
 }
 
 // applyInSliceGroup compiles an IN or NOT IN condition whose value is a slice for the WhereAll /

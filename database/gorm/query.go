@@ -1822,43 +1822,57 @@ func (r *OrmBuilder) WhereIn(column string, values []any) contractsorm.Query {
 	})
 }
 
+// WhereJsonContains forwards to the compiled builder's WhereJsonContains, which prepares the JSON
+// value through the grammar before it is bound (Builder::whereJsonContains).
 func (r *OrmBuilder) WhereJsonContains(column string, value any) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
-		Type:  contractsdriver.WhereTypeJsonContains,
-		Query: column,
-		Args:  []any{value},
+		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
+			builder.WhereJsonContains(column, value, boolean, false)
+		}),
 	})
 }
 
+// WhereJsonContainsKey forwards to the compiled builder's WhereJsonContainsKey
+// (Builder::whereJsonContainsKey).
 func (r *OrmBuilder) WhereJsonContainsKey(column string) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
-		Type:  contractsdriver.WhereTypeJsonContainsKey,
-		Query: column,
+		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
+			builder.WhereJsonContainsKey(column, boolean, false)
+		}),
 	})
 }
 
+// WhereJsonDoesntContain is WhereJsonContains with the negation set (Builder::whereJsonDoesntContain).
 func (r *OrmBuilder) WhereJsonDoesntContain(column string, value any) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
-		Type:  contractsdriver.WhereTypeJsonContains,
-		Query: column,
-		Args:  []any{value},
-		IsNot: true,
+		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
+			builder.WhereJsonContains(column, value, boolean, true)
+		}),
 	})
 }
 
+// WhereJsonDoesntContainKey is WhereJsonContainsKey with the negation set
+// (Builder::whereJsonDoesntContainKey).
 func (r *OrmBuilder) WhereJsonDoesntContainKey(column string) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
-		Type:  contractsdriver.WhereTypeJsonContainsKey,
-		Query: column,
-		IsNot: true,
+		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
+			builder.WhereJsonContainsKey(column, boolean, true)
+		}),
 	})
 }
 
+// WhereJsonLength forwards to the compiled builder's JSON-length comparison
+// (Builder::whereJsonLength). The builder's WhereJsonLength is hard-wired to "and", so the OR
+// connector picks OrWhereJsonLength, its OR counterpart.
 func (r *OrmBuilder) WhereJsonLength(column string, args ...any) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
-		Type:  contractsdriver.WhereTypeJsonLength,
-		Query: column,
-		Args:  args,
+		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
+			if boolean == core.BooleanOr {
+				builder.OrWhereJsonLength(column, args...)
+			} else {
+				builder.WhereJsonLength(column, args...)
+			}
+		}),
 	})
 }
 
@@ -1873,46 +1887,50 @@ func (r *OrmBuilder) OrWhereIn(column string, values []any) contractsorm.Query {
 
 func (r *OrmBuilder) OrWhereJsonContains(column string, value any) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
-		Type:  contractsdriver.WhereTypeJsonContains,
-		Query: column,
-		Args:  []any{value},
-		Or:    true,
+		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
+			builder.WhereJsonContains(column, value, boolean, false)
+		}),
+		Or: true,
 	})
 }
 
 func (r *OrmBuilder) OrWhereJsonContainsKey(column string) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
-		Type:  contractsdriver.WhereTypeJsonContainsKey,
-		Query: column,
-		Or:    true,
+		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
+			builder.WhereJsonContainsKey(column, boolean, false)
+		}),
+		Or: true,
 	})
 }
 
 func (r *OrmBuilder) OrWhereJsonDoesntContain(column string, value any) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
-		Type:  contractsdriver.WhereTypeJsonContains,
-		Query: column,
-		Args:  []any{value},
-		IsNot: true,
-		Or:    true,
+		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
+			builder.WhereJsonContains(column, value, boolean, true)
+		}),
+		Or: true,
 	})
 }
 
 func (r *OrmBuilder) OrWhereJsonDoesntContainKey(column string) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
-		Type:  contractsdriver.WhereTypeJsonContainsKey,
-		Query: column,
-		IsNot: true,
-		Or:    true,
+		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
+			builder.WhereJsonContainsKey(column, boolean, true)
+		}),
+		Or: true,
 	})
 }
 
 func (r *OrmBuilder) OrWhereJsonLength(column string, args ...any) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
-		Type:  contractsdriver.WhereTypeJsonLength,
-		Query: column,
-		Args:  args,
-		Or:    true,
+		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
+			if boolean == core.BooleanOr {
+				builder.OrWhereJsonLength(column, args...)
+			} else {
+				builder.WhereJsonLength(column, args...)
+			}
+		}),
+		Or: true,
 	})
 }
 
