@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	contractsdriver "github.com/gradii/framework/contracts/database/driver"
-	contractsorm "github.com/gradii/framework/contracts/database/orm"
 	querybuilder "github.com/gradii/framework/database/query"
 	"github.com/gradii/framework/database/query/core"
 	"github.com/gradii/framework/errors"
@@ -354,9 +353,9 @@ func (r *OrmBuilder) applyTable(builder *querybuilder.Builder) error {
 
 // applyWhere translates the conditions' where clauses onto the builder.
 //
-// The shapes are the ones the ORM accepts: a raw fragment with its bindings, a column with its
-// value, a slice standing for an IN list, a forward the where methods declare, and a callback
-// producing a nested group.
+// The queue only carries what the ORM records internally: the raw fragments and column/value
+// pairs the pivot chain, the relation writers and Find's conditions append. The declared where
+// methods write straight to the query builder when they are called, the way Eloquent's do.
 func (r *OrmBuilder) applyWhere(builder *querybuilder.Builder) *querybuilder.Builder {
 	for _, item := range r.conditions.where {
 		boolean := core.BooleanAnd
@@ -371,45 +370,48 @@ func (r *OrmBuilder) applyWhere(builder *querybuilder.Builder) *querybuilder.Bui
 }
 
 func (r *OrmBuilder) applySingleWhere(builder *querybuilder.Builder, item contractsdriver.Where, boolean string) {
-	switch query := item.Query.(type) {
-	case func(*querybuilder.Builder, string):
-		// A forward queued by a where method (see OrmBuilder.whereForward): the method declared the call,
-		// so the compiler only supplies the builder and the connector.
-		query(builder, boolean)
+	applyWhereShape(builder, item.Query, item.Args, boolean, item.IsNot)
+}
+
+// applyWhereShape applies one condition to the builder in the shape the caller passed. The declared
+// where methods call it when they run, the way Eloquent's write through to $this->query; the
+// descriptor queue that remains (Find's conditions, the pivot chain, the relation writers) funnels
+// into it through applySingleWhere too.
+func applyWhereShape(builder *querybuilder.Builder, query any, args []any, boolean string, not bool) {
+	if column, ok := query.(string); ok {
+		applyRawOrColumnWhere(builder, column, args, boolean, not)
 
 		return
-	case string:
-		switch {
-		case len(item.Args) == 0:
-			builder.WhereRaw(query, nil, boolean)
-		case len(item.Args) == 1 && isSlice(item.Args[0]) && !isByteSlice(item.Args[0]) && containsPlaceholder(query):
-			// A raw fragment whose one placeholder is fed a slice is the ORM's "col in ?" shorthand,
-			// which the pivot chain still emits (the grouped WhereAll/WhereAny/WhereNone entry points
-			// are typed conditions now and never reach this branch). The GORM-backed builder
-			// expanded the slice into one placeholder per value, wrapped in parentheses; binding the
-			// slice whole leaves one placeholder against N bindings, and the database rejects the
-			// statement. Expand it the same way, leaving every other fragment shape on the WhereRaw
-			// path below.
-			//
-			// A byte slice is not a list: isSlice also matches []byte, but a caller binds bytes to the
-			// fragment's placeholder as one binary value, so it must keep the single placeholder and
-			// fall through to WhereRaw below. Laravel renders the same fragment with one placeholder,
-			// because a PHP string (its only byte-string type) is a single value (oracle.php).
-			expanded, bindings := expandPlaceholderSlice(query, item.Args[0])
-			builder.WhereRaw(expanded, bindings, boolean)
-		case containsPlaceholder(query):
-			builder.WhereRaw(query, item.Args, boolean)
-		case len(item.Args) == 1 && isSlice(item.Args[0]) && !isByteSlice(item.Args[0]):
-			builder.WhereIn(query, item.Args[0], boolean, item.IsNot)
-		default:
-			applySimpleWhere(builder, query, item.Args, boolean)
-		}
-	case func(contractsorm.Query) contractsorm.Query:
-		builder.WhereNested(func(nested *querybuilder.Builder) *querybuilder.Builder {
-			return r.applyNestedWhere(query, nested)
-		}, boolean)
+	}
+
+	applySimpleWhere(builder, query, args, boolean)
+}
+
+// applyRawOrColumnWhere routes a string condition: a fragment carrying a placeholder is rendered raw
+// (the shape Builder::whereRaw takes), a bare fragment with no bindings likewise, and anything else
+// is a column with its value.
+func applyRawOrColumnWhere(builder *querybuilder.Builder, column string, args []any, boolean string, not bool) {
+	switch {
+	case len(args) == 0:
+		builder.WhereRaw(column, nil, boolean)
+	case len(args) == 1 && isSlice(args[0]) && !isByteSlice(args[0]) && containsPlaceholder(column):
+		// A raw fragment whose one placeholder is fed a slice is the ORM's "col in ?" shorthand,
+		// which the pivot chain and Find's conditions queue. The builder expands the slice into one
+		// placeholder per value, wrapped in parentheses; binding the slice whole leaves one
+		// placeholder against N bindings, and the database rejects the statement.
+		//
+		// A byte slice is not a list: isSlice also matches []byte, but a caller binds bytes to the
+		// fragment's placeholder as one binary value, so it must keep the single placeholder and
+		// fall through to WhereRaw below. Laravel renders the same fragment with one placeholder,
+		// because a PHP string (its only byte-string type) is a single value (oracle.php).
+		expanded, bindings := expandPlaceholderSlice(column, args[0])
+		builder.WhereRaw(expanded, bindings, boolean)
+	case containsPlaceholder(column):
+		builder.WhereRaw(column, args, boolean)
+	case len(args) == 1 && isSlice(args[0]) && !isByteSlice(args[0]):
+		builder.WhereIn(column, args[0], boolean, not)
 	default:
-		applySimpleWhere(builder, item.Query, item.Args, boolean)
+		applySimpleWhere(builder, column, args, boolean)
 	}
 }
 
@@ -429,34 +431,6 @@ func applySimpleWhere(builder *querybuilder.Builder, query any, args []any, bool
 	default:
 		builder.Where(query, args...)
 	}
-}
-
-// applyNestedWhere runs a callback against a child builder, so an `or` group the caller wrote keeps
-// its own grouping.
-func (r *OrmBuilder) applyNestedWhere(callback func(contractsorm.Query) contractsorm.Query, builder *querybuilder.Builder) *querybuilder.Builder {
-	child := NewOrmBuilder(r.ctx, r.config, r.dbConfig, r.writer, r.tx, r.grammar, r.log, r.modelToObserver, nil, r.telemetryResolver, r.components)
-	child.queryGrammar = r.queryGrammar
-	child.conditions = r.conditions
-	child.conditions.where = nil
-	// Eloquent's nested query is newQueryWithoutRelationships(), so it starts with none of the
-	// parent's eager loads; anything the callback queues is merged back below.
-	child.conditions.eagerLoad = nil
-
-	// The child compiles its own wheres onto the builder it was handed.
-	result := callback(child)
-	if nested, ok := result.(*OrmBuilder); ok {
-		// Builder::where()'s closure branch merges the nested query's eager loads into the parent
-		// (array_merge over the relation-keyed list) before handing its wheres to
-		// addNestedWhereQuery, so a with(...) written inside the closure still loads. The upsert is
-		// the same one the With entry point uses when a relation is queued twice.
-		for _, entry := range nested.conditions.eagerLoad {
-			r.conditions.eagerLoad = upsertEagerLoadEntry(r.conditions.eagerLoad, entry, entry.callback != nil || entry.columns != nil)
-		}
-
-		return nested.applyWhere(builder)
-	}
-
-	return builder
 }
 
 // expandPlaceholderSlice rewrites the fragment's first binding placeholder into one placeholder per
@@ -540,16 +514,6 @@ func applyInSliceGroup(builder *querybuilder.Builder, columns []string, operator
 	}, group)
 
 	return true
-}
-
-// negated turns a condition's connector into the one its negated group needs: Laravel's whereNone
-// runs whereAny with ($boolean.' not'), so "and" becomes "and not" and "or" becomes "or not".
-func negated(boolean string) string {
-	if boolean == core.BooleanOr {
-		return core.BooleanOrNot
-	}
-
-	return core.BooleanAndNot
 }
 
 // toStrings converts a string slice to []any for the builder.

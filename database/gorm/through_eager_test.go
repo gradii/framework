@@ -96,7 +96,7 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 		assert.False(t, child.conditions.withTrashed)
 		assert.Empty(t, child.conditions.withoutGlobalScopes)
 		assert.Empty(t, child.conditions.scopes)
-		assert.Len(t, child.conditions.where, 1)
+		assert.Len(t, child.query.State().Wheres, 1)
 		assert.Equal(t, []any{desc.firstKey, desc.secondLocalKey}, child.query.Selects())
 	})
 

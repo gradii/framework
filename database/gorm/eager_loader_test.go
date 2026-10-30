@@ -864,7 +864,7 @@ func TestLoadBelongsTo_ChildQueryIsCompiled(t *testing.T) {
 		assert.False(t, child.conditions.withTrashed)
 		assert.Empty(t, child.conditions.withoutGlobalScopes)
 		assert.Empty(t, child.conditions.scopes)
-		assert.Len(t, child.conditions.where, 1)
+		assert.Len(t, child.query.State().Wheres, 1)
 	})
 }
 
@@ -983,7 +983,7 @@ func TestLoadHasOneOrMany_ChildQueryIsCompiled(t *testing.T) {
 		assert.False(t, child.conditions.withTrashed)
 		assert.Empty(t, child.conditions.withoutGlobalScopes)
 		assert.Empty(t, child.conditions.scopes)
-		assert.Len(t, child.conditions.where, 1)
+		assert.Len(t, child.query.State().Wheres, 1)
 	})
 }
 
@@ -1105,7 +1105,7 @@ func TestLoadMorph_ChildQueryIsCompiled(t *testing.T) {
 		assert.False(t, child.conditions.withTrashed)
 		assert.Empty(t, child.conditions.withoutGlobalScopes)
 		assert.Empty(t, child.conditions.scopes)
-		assert.Len(t, child.conditions.where, 2)
+		assert.Len(t, child.query.State().Wheres, 2)
 	})
 }
 
@@ -1292,7 +1292,7 @@ func TestLoadMorphTo_BucketChildQueryIsCompiled(t *testing.T) {
 		child := q.relatedChild("morph_parent_like_posts", "morph_parent_like_posts.id", []any{uint(5)})
 		scoped, ok := desc.onQuery(child).(*OrmBuilder)
 		assert.True(t, ok)
-		assert.Len(t, scoped.conditions.where, 2, "owner-key IN plus the relation scope")
+		assert.Len(t, scoped.query.State().Wheres, 2, "owner-key IN plus the relation scope")
 
 		compiled, bindings, err := scoped.compileSelect()
 		assert.NoError(t, err)
@@ -1324,7 +1324,7 @@ func TestLoadMorphTo_BucketChildQueryIsCompiled(t *testing.T) {
 		assert.False(t, child.conditions.withTrashed)
 		assert.Empty(t, child.conditions.withoutGlobalScopes)
 		assert.Empty(t, child.conditions.scopes)
-		assert.Len(t, child.conditions.where, 1)
+		assert.Len(t, child.query.State().Wheres, 1)
 	})
 }
 
@@ -1399,7 +1399,7 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 		assert.False(t, child.conditions.withTrashed)
 		assert.Empty(t, child.conditions.withoutGlobalScopes)
 		assert.Empty(t, child.conditions.scopes)
-		assert.Len(t, child.conditions.where, 1)
+		assert.Len(t, child.query.State().Wheres, 1)
 		assert.Len(t, child.query.Selects(), 2)
 	})
 

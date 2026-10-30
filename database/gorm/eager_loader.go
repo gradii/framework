@@ -729,6 +729,10 @@ func (r *OrmBuilder) loadThrough(parents []reflect.Value, parentModel any, desc 
 // its own, which is what the statement it replaced did, so a related model's global scopes do not apply
 // to an eager load — that is a question of its own, not part of this migration.
 func (r *OrmBuilder) runRelatedQueryCompiled(child *OrmBuilder, desc *relationDescriptor, entry eagerLoadEntry, requiredCols []string) ([]reflect.Value, error) {
+	// The chunk's IN constraint was written when the child was built; flush anything still queued so
+	// the scopes that follow keep their place, the order Eloquent builds eager-load constraints in.
+	child = child.flushWheres()
+
 	// The relation's own scope applies first, and the caller's callback layers on top of it.
 	if desc.onQuery != nil {
 		if scoped, ok := desc.onQuery(child).(*OrmBuilder); ok {

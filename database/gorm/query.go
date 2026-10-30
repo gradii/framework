@@ -911,12 +911,15 @@ func (r *OrmBuilder) InTransaction() bool {
 	return r.tx != nil
 }
 
+// OrWhere mirrors Eloquent's Builder::orWhere(), which is where() with the "or" connector.
 func (r *OrmBuilder) OrWhere(query any, args ...any) contractsorm.Query {
-	return r.addWhere(contractsdriver.Where{
-		Query: query,
-		Args:  args,
-		Or:    true,
-	})
+	if callback, ok := query.(func(contractsorm.Query) contractsorm.Query); ok && len(args) == 0 {
+		return r.addNestedWhereQuery(callback, core.BooleanOr)
+	}
+
+	applyWhereShape(r.query, query, args, core.BooleanOr, false)
+
+	return r
 }
 
 // Paginate retrieves one page of rows, writing the total into total when it is not nil. It mirrors
@@ -1770,245 +1773,192 @@ func (r *OrmBuilder) When(condition bool, callback func(query contractsorm.Query
 	return r
 }
 
+// Where mirrors Eloquent's Builder::where() (Builder.php:352-365). A callback with no operator runs
+// against a new query without relationships: its eager loads merge into this query and its wheres
+// join this query as one nested group. Every other condition is applied to the inner database/query
+// builder immediately, which owns the operator, the value and the raw-fragment grammar.
 func (r *OrmBuilder) Where(query any, args ...any) contractsorm.Query {
-	return r.addWhere(contractsdriver.Where{
-		Query: query,
-		Args:  args,
-	})
+	if callback, ok := query.(func(contractsorm.Query) contractsorm.Query); ok && len(args) == 0 {
+		return r.addNestedWhereQuery(callback, core.BooleanAnd)
+	}
+
+	applyWhereShape(r.query, query, args, core.BooleanAnd, false)
+
+	return r
 }
 
+// WhereAll adds one condition per column, joined by "and" inside a single nested group; an IN or
+// NOT IN against a slice expands to one WhereIn per column (Builder::whereAll).
 func (r *OrmBuilder) WhereAll(columns []string, args ...any) contractsorm.Query {
 	op, value, err := utils.PrepareWhereOperatorAndValue(args...)
 	if err != nil {
 		return r.withError(err).(*OrmBuilder)
 	}
 
-	return r.addWhere(contractsdriver.Where{
-		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
-			if !applyInSliceGroup(builder, columns, op, value, core.BooleanAnd, boolean) {
-				builder.WhereAll(toStrings(columns), op, value, boolean)
-			}
-		}),
-	})
+	if !applyInSliceGroup(r.query, columns, op, value, core.BooleanAnd, core.BooleanAnd) {
+		r.query.WhereAll(toStrings(columns), op, value, core.BooleanAnd)
+	}
+
+	return r
 }
 
+// WhereAny adds one condition per column, joined by "or" inside a single nested group
+// (Builder::whereAny).
 func (r *OrmBuilder) WhereAny(columns []string, args ...any) contractsorm.Query {
 	op, value, err := utils.PrepareWhereOperatorAndValue(args...)
 	if err != nil {
 		return r.withError(err).(*OrmBuilder)
 	}
 
-	return r.addWhere(contractsdriver.Where{
-		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
-			if !applyInSliceGroup(builder, columns, op, value, core.BooleanOr, boolean) {
-				builder.WhereAny(toStrings(columns), op, value, boolean)
-			}
-		}),
-	})
+	if !applyInSliceGroup(r.query, columns, op, value, core.BooleanOr, core.BooleanAnd) {
+		r.query.WhereAny(toStrings(columns), op, value, core.BooleanAnd)
+	}
+
+	return r
 }
 
-// WhereIn adds a "where column in (...)" clause. The column and the value list are added as one
-// condition carrying a slice argument, not as a raw "IN ?" fragment: the compiler reads a slice
-// argument as the IN list and expands it to one placeholder per value (Laravel binds whereIn the
-// same way). A raw fragment would bind the whole slice to a single placeholder.
-// WhereIn forwards the column and the value list to the compiled builder's WhereIn, which expands
-// the slice to one placeholder per value inside the wrapped column (the shapes that still queue a
-// slice argument are the raw "col in ?" fragments the pivot and Find conditions build).
+// WhereIn adds a "where column in (...)" clause by calling the inner query builder's WhereIn, which
+// expands the slice to one placeholder per value inside the wrapped column (Builder::whereIn). The
+// raw "col in ?" fragments the pivot and Find conditions queue compile through the descriptor path.
 func (r *OrmBuilder) WhereIn(column string, values []any) contractsorm.Query {
-	return r.addWhere(contractsdriver.Where{
-		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
-			builder.WhereIn(column, values, boolean, false)
-		}),
-	})
+	r.query.WhereIn(column, values, core.BooleanAnd, false)
+
+	return r
 }
 
-// WhereJsonContains forwards to the compiled builder's WhereJsonContains, which prepares the JSON
-// value through the grammar before it is bound (Builder::whereJsonContains).
+// WhereJsonContains calls the inner query builder's WhereJsonContains, which prepares the JSON value
+// through the grammar before it is bound (Builder::whereJsonContains).
 func (r *OrmBuilder) WhereJsonContains(column string, value any) contractsorm.Query {
-	return r.addWhere(contractsdriver.Where{
-		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
-			builder.WhereJsonContains(column, value, boolean, false)
-		}),
-	})
+	r.query.WhereJsonContains(column, value, core.BooleanAnd, false)
+
+	return r
 }
 
-// WhereJsonContainsKey forwards to the compiled builder's WhereJsonContainsKey
-// (Builder::whereJsonContainsKey).
+// WhereJsonContainsKey calls the inner query builder's WhereJsonContainsKey, which renders the
+// dialect's key-existence check (Builder::whereJsonContainsKey).
 func (r *OrmBuilder) WhereJsonContainsKey(column string) contractsorm.Query {
-	return r.addWhere(contractsdriver.Where{
-		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
-			builder.WhereJsonContainsKey(column, boolean, false)
-		}),
-	})
+	r.query.WhereJsonContainsKey(column, core.BooleanAnd, false)
+
+	return r
 }
 
 // WhereJsonDoesntContain is WhereJsonContains with the negation set (Builder::whereJsonDoesntContain).
 func (r *OrmBuilder) WhereJsonDoesntContain(column string, value any) contractsorm.Query {
-	return r.addWhere(contractsdriver.Where{
-		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
-			builder.WhereJsonContains(column, value, boolean, true)
-		}),
-	})
+	r.query.WhereJsonContains(column, value, core.BooleanAnd, true)
+
+	return r
 }
 
 // WhereJsonDoesntContainKey is WhereJsonContainsKey with the negation set
 // (Builder::whereJsonDoesntContainKey).
 func (r *OrmBuilder) WhereJsonDoesntContainKey(column string) contractsorm.Query {
-	return r.addWhere(contractsdriver.Where{
-		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
-			builder.WhereJsonContainsKey(column, boolean, true)
-		}),
-	})
+	r.query.WhereJsonContainsKey(column, core.BooleanAnd, true)
+
+	return r
 }
 
-// WhereJsonLength forwards to the compiled builder's JSON-length comparison
-// (Builder::whereJsonLength). The builder's WhereJsonLength is hard-wired to "and", so the OR
-// connector picks OrWhereJsonLength, its OR counterpart.
+// WhereJsonLength calls the inner query builder's JSON-length comparison (Builder::whereJsonLength);
+// OrWhereJsonLength is the same comparison with the "or" connector.
 func (r *OrmBuilder) WhereJsonLength(column string, args ...any) contractsorm.Query {
-	return r.addWhere(contractsdriver.Where{
-		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
-			if boolean == core.BooleanOr {
-				builder.OrWhereJsonLength(column, args...)
-			} else {
-				builder.WhereJsonLength(column, args...)
-			}
-		}),
-	})
+	r.query.WhereJsonLength(column, args...)
+
+	return r
 }
 
 func (r *OrmBuilder) OrWhereIn(column string, values []any) contractsorm.Query {
-	return r.addWhere(contractsdriver.Where{
-		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
-			builder.WhereIn(column, values, boolean, false)
-		}),
-		Or: true,
-	})
+	r.query.WhereIn(column, values, core.BooleanOr, false)
+
+	return r
 }
 
 func (r *OrmBuilder) OrWhereJsonContains(column string, value any) contractsorm.Query {
-	return r.addWhere(contractsdriver.Where{
-		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
-			builder.WhereJsonContains(column, value, boolean, false)
-		}),
-		Or: true,
-	})
+	r.query.WhereJsonContains(column, value, core.BooleanOr, false)
+
+	return r
 }
 
 func (r *OrmBuilder) OrWhereJsonContainsKey(column string) contractsorm.Query {
-	return r.addWhere(contractsdriver.Where{
-		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
-			builder.WhereJsonContainsKey(column, boolean, false)
-		}),
-		Or: true,
-	})
+	r.query.WhereJsonContainsKey(column, core.BooleanOr, false)
+
+	return r
 }
 
 func (r *OrmBuilder) OrWhereJsonDoesntContain(column string, value any) contractsorm.Query {
-	return r.addWhere(contractsdriver.Where{
-		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
-			builder.WhereJsonContains(column, value, boolean, true)
-		}),
-		Or: true,
-	})
+	r.query.WhereJsonContains(column, value, core.BooleanOr, true)
+
+	return r
 }
 
 func (r *OrmBuilder) OrWhereJsonDoesntContainKey(column string) contractsorm.Query {
-	return r.addWhere(contractsdriver.Where{
-		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
-			builder.WhereJsonContainsKey(column, boolean, true)
-		}),
-		Or: true,
-	})
+	r.query.WhereJsonContainsKey(column, core.BooleanOr, true)
+
+	return r
 }
 
 func (r *OrmBuilder) OrWhereJsonLength(column string, args ...any) contractsorm.Query {
-	return r.addWhere(contractsdriver.Where{
-		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
-			if boolean == core.BooleanOr {
-				builder.OrWhereJsonLength(column, args...)
-			} else {
-				builder.WhereJsonLength(column, args...)
-			}
-		}),
-		Or: true,
-	})
+	r.query.OrWhereJsonLength(column, args...)
+
+	return r
 }
 
+// WhereNotIn mirrors Builder::whereNotIn: the same call with the negation set.
 func (r *OrmBuilder) WhereNotIn(column string, values []any) contractsorm.Query {
-	return r.addWhere(contractsdriver.Where{
-		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
-			builder.WhereIn(column, values, boolean, true)
-		}),
-	})
+	r.query.WhereIn(column, values, core.BooleanAnd, true)
+
+	return r
 }
 
 func (r *OrmBuilder) OrWhereNotIn(column string, values []any) contractsorm.Query {
-	return r.addWhere(contractsdriver.Where{
-		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
-			builder.WhereIn(column, values, boolean, true)
-		}),
-		Or: true,
-	})
+	r.query.WhereIn(column, values, core.BooleanOr, true)
+
+	return r
 }
 
-// WhereBetween forwards to the compiled builder's WhereBetween, which wraps the column with the
-// grammar's quoting (Builder::whereBetween).
+// WhereBetween mirrors Builder::whereBetween: the inner builder wraps the column and binds the two
+// bounds in order.
 func (r *OrmBuilder) WhereBetween(column string, x, y any) contractsorm.Query {
-	return r.addWhere(contractsdriver.Where{
-		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
-			builder.WhereBetween(column, []any{x, y}, boolean, false)
-		}),
-	})
+	r.query.WhereBetween(column, []any{x, y}, core.BooleanAnd, false)
+
+	return r
 }
 
 func (r *OrmBuilder) WhereNotBetween(column string, x, y any) contractsorm.Query {
-	return r.addWhere(contractsdriver.Where{
-		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
-			builder.WhereBetween(column, []any{x, y}, boolean, true)
-		}),
-	})
+	r.query.WhereBetween(column, []any{x, y}, core.BooleanAnd, true)
+
+	return r
 }
 
 func (r *OrmBuilder) OrWhereBetween(column string, x, y any) contractsorm.Query {
-	return r.addWhere(contractsdriver.Where{
-		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
-			builder.WhereBetween(column, []any{x, y}, boolean, false)
-		}),
-		Or: true,
-	})
+	r.query.WhereBetween(column, []any{x, y}, core.BooleanOr, false)
+
+	return r
 }
 
 func (r *OrmBuilder) OrWhereNotBetween(column string, x, y any) contractsorm.Query {
-	return r.addWhere(contractsdriver.Where{
-		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
-			builder.WhereBetween(column, []any{x, y}, boolean, true)
-		}),
-		Or: true,
-	})
+	r.query.WhereBetween(column, []any{x, y}, core.BooleanOr, true)
+
+	return r
 }
 
 func (r *OrmBuilder) OrWhereNull(column string) contractsorm.Query {
-	return r.addWhere(contractsdriver.Where{
-		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
-			builder.WhereNull(column, boolean, false)
-		}),
-		Or: true,
-	})
+	r.query.WhereNull(column, core.BooleanOr, false)
+
+	return r
 }
 
+// WhereNone adds one condition per column, joined by "or" inside one negated group: the group
+// carries the "not" connector, as Builder::whereNone runs whereAny with it.
 func (r *OrmBuilder) WhereNone(columns []string, args ...any) contractsorm.Query {
 	op, value, err := utils.PrepareWhereOperatorAndValue(args...)
 	if err != nil {
 		return r.withError(err).(*OrmBuilder)
 	}
 
-	return r.addWhere(contractsdriver.Where{
-		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
-			if !applyInSliceGroup(builder, columns, op, value, core.BooleanOr, negated(boolean)) {
-				builder.WhereNone(toStrings(columns), op, value, boolean)
-			}
-		}),
-	})
+	if !applyInSliceGroup(r.query, columns, op, value, core.BooleanOr, core.BooleanAndNot) {
+		r.query.WhereNone(toStrings(columns), op, value, core.BooleanAnd)
+	}
+
+	return r
 }
 
 // isNotInOperator reports whether operator is NOT IN, ignoring case and surrounding space.
@@ -2061,21 +2011,17 @@ func sliceValues(value any) ([]any, bool) {
 }
 
 func (r *OrmBuilder) WhereNotNull(column string) contractsorm.Query {
-	return r.addWhere(contractsdriver.Where{
-		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
-			builder.WhereNull(column, boolean, true)
-		}),
-	})
+	r.query.WhereNull(column, core.BooleanAnd, true)
+
+	return r
 }
 
-// WhereNull forwards to the compiled builder's WhereNull, which wraps the column; OrWhereNull and
-// WhereNotNull are the same forward with the connector and the negation.
+// WhereNull mirrors Builder::whereNull; WhereNotNull and OrWhereNull are the same call with the
+// negation and the connector changed.
 func (r *OrmBuilder) WhereNull(column string) contractsorm.Query {
-	return r.addWhere(contractsdriver.Where{
-		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
-			builder.WhereNull(column, boolean, false)
-		}),
-	})
+	r.query.WhereNull(column, core.BooleanAnd, false)
+
+	return r
 }
 
 func (r *OrmBuilder) WithoutEvents() contractsorm.Query {
@@ -2154,12 +2100,42 @@ func (r *OrmBuilder) addGlobalScopes() *OrmBuilder {
 	return r.clone().Scopes(globalScopes...).(*OrmBuilder)
 }
 
-// whereForward returns the callback a where method queues in place of a descriptor: the method
-// declares its forward (Builder::whereBetween, Builder::whereNull, Builder::whereAny, ...) and the
-// callback runs against the compiled query builder with the connector the compiler computed. Go has
-// no __call, so every method states the forward itself instead of a shared dispatch switch.
-func (r *OrmBuilder) whereForward(forward func(builder *querybuilder.Builder, boolean string)) any {
-	return forward
+// addNestedWhereQuery runs a where callback the way Eloquent's Builder::where() does: the callback
+// receives a new query without relationships, its eager loads merge into this query (array_merge of
+// getEagerLoads()), and its wheres join this query's clause as one nested group through the inner
+// builder's AddNestedWhereQuery (Builder.php:352-365).
+func (r *OrmBuilder) addNestedWhereQuery(callback func(contractsorm.Query) contractsorm.Query, boolean string) contractsorm.Query {
+	child := r.newQueryWithoutRelationships()
+	result := callback(child)
+	nested := child
+	if returned, ok := result.(*OrmBuilder); ok {
+		nested = returned
+	}
+
+	// The upsert is the same one the With entry point uses when a relation is queued twice.
+	for _, entry := range nested.conditions.eagerLoad {
+		r.conditions.eagerLoad = upsertEagerLoadEntry(r.conditions.eagerLoad, entry, entry.callback != nil || entry.columns != nil)
+	}
+
+	// Anything the callback queued as a descriptor lands on the child's query first through
+	// flushWheres; the declared methods already wrote straight to it. AddNestedWhereQuery adds
+	// nothing when no where remains.
+	nested.flushWheres()
+
+	r.query.AddNestedWhereQuery(nested.query, boolean)
+
+	return r
+}
+
+// newQueryWithoutRelationships builds the query Eloquent's Builder::where() hands a closure: the
+// same model and connection, with none of this query's wheres or eager loads.
+func (r *OrmBuilder) newQueryWithoutRelationships() *OrmBuilder {
+	child := r.fresh()
+	child.conditions = r.conditions.clone()
+	child.conditions.where = nil
+	child.conditions.eagerLoad = nil
+
+	return child
 }
 
 func (r *OrmBuilder) addWhere(where contractsdriver.Where) contractsorm.Query {
@@ -2324,6 +2300,11 @@ func (r *OrmBuilder) withScopesApplied() *OrmBuilder {
 	scopes := query.conditions.scopes
 	query.conditions.scopes = nil
 
+	// Anything already queued lands on the builder before the scopes run, and each scope's clauses
+	// land before the next one's: the builder holds the single ordered where list, and a scope starts
+	// from what the previous ones produced.
+	query = query.flushWheres()
+
 	for _, apply := range scopes {
 		scoped, ok := apply(query).(*OrmBuilder)
 		if !ok {
@@ -2331,10 +2312,27 @@ func (r *OrmBuilder) withScopesApplied() *OrmBuilder {
 		}
 
 		scoped.conditions.scopes = nil
-		query = scoped
+		query = scoped.flushWheres()
 	}
 
 	return query
+}
+
+// flushWheres compiles the queued where descriptors onto the query's builder, in order, and clears
+// the queue. The builder holds the single ordered where list the statement compiles from — the way
+// Eloquent keeps every where on the underlying Query\Builder — so anything still queued when the
+// next clause is written must land first.
+func (r *OrmBuilder) flushWheres() *OrmBuilder {
+	if len(r.conditions.where) == 0 {
+		return r
+	}
+
+	r.applyWhere(r.query)
+
+	conditions := r.conditions
+	conditions.where = nil
+
+	return r.setConditions(conditions)
 }
 
 // withError returns a query carrying a condition that could not be accepted, for whichever statement

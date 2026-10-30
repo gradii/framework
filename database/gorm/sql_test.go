@@ -114,17 +114,13 @@ func TestCompileSelect_ExpandsSliceAlreadyInsideParens(t *testing.T) {
 }
 
 func TestCompileSelect_NestedCallbackIsGrouped(t *testing.T) {
-	query := compiledQuery(t, &relUser{}, Conditions{
-		where: []contractsdriver.Where{
-			{Query: "id", Args: []any{1}},
-			{
-				Or: true,
-				Query: func(child contractsorm.Query) contractsorm.Query {
-					return child.Where("name", "John")
-				},
-			},
-		},
-	})
+	query := newRelQueryWith(t, &relUser{}).
+		Where("id", 1).
+		OrWhere(func(child contractsorm.Query) contractsorm.Query {
+			return child.Where("name", "John")
+		}).(*OrmBuilder)
+
+	query = query.dest(&[]relUser{}).addGlobalScopes().buildConditions()
 
 	sql, bindings, err := query.compileSelect()
 	assert.NoError(t, err)

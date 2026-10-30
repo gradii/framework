@@ -70,11 +70,12 @@ func (r *OrmBuilder) execDelete() (*contractsdb.Result, error) {
 //
 // It deliberately ignores the soft-delete predicate: that one belongs to the model rather than to the
 // call, and is never recorded here — applySoftDelete adds it to the compiled builder — so it does not
-// make an otherwise unrestricted statement safe. A global scope's constraints are recorded here
-// before the guard runs (compileDelete and compileUpdateScoped fold the scopes in first), which is why
-// they do satisfy it.
+// make an otherwise unrestricted statement safe. The caller's wheres are read from the query builder,
+// global scopes included: compileDelete and compileUpdateScoped fold the scopes in first, which is
+// why their constraints do satisfy the guard. The conditions the ORM records internally count too.
 func (r *OrmBuilder) hasWhereConditions() bool {
-	return len(r.conditions.where) > 0 || len(r.conditions.relations) > 0 || r.conditions.raw != nil
+	return len(r.query.State().Wheres) > 0 || len(r.conditions.where) > 0 ||
+		len(r.conditions.relations) > 0 || r.conditions.raw != nil
 }
 
 // applyUpdateKeyWhere scopes an update to the row its model identifies.

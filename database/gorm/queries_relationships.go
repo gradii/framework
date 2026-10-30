@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"strings"
 
-	contractsdriver "github.com/gradii/framework/contracts/database/driver"
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
 	querybuilder "github.com/gradii/framework/database/query"
 	"github.com/gradii/framework/database/query/core"
@@ -612,8 +611,9 @@ func existenceKeyword(operator string, count int) string {
 // ---------------------------------------------------------------------------
 
 // relatedChild returns a child query addressing one table and matching a column against a list of
-// values. It is the shape every eager loader builds per chunk, expressed in the conditions the compiler
-// reads rather than as a statement handed to GORM.
+// values. It is the shape every eager loader builds per chunk: the constraint goes straight onto the
+// child's builder, the way Eloquent's addEagerConstraints writes it, so it keeps its place ahead of
+// anything a relation scope or callback adds.
 //
 // The column is named the way a caller writes one — unquoted, with a dot separating a table from its
 // column — because the compiler quotes each segment. A name that arrived already quoted would be
@@ -626,9 +626,11 @@ func (r *OrmBuilder) relatedChild(table string, column string, values []any) *Or
 
 	conditions := child.conditions
 	conditions.table = &Table{name: table}
-	conditions.where = append(conditions.where, contractsdriver.Where{Query: column, Args: []any{values}})
+	child = child.setConditions(conditions)
 
-	return child.setConditions(conditions)
+	child.query.WhereIn(column, values, core.BooleanAnd, false)
+
+	return child
 }
 
 // applySubquerySoftDelete adds the related model's "not soft deleted" predicate inside an existence
@@ -668,23 +670,34 @@ func setSubquerySelect(builder *querybuilder.Builder, expression string) {
 	builder.Select(querybuilder.Expression{Value: expression})
 }
 
-// applyRelationScope runs a relation callback against a child query and translates its conditions onto
-// the subquery builder. The callback is handed a wrapper query, exactly as it was when the subquery
-// was assembled with GORM, but its clauses now land on the framework builder.
+// applyRelationScope runs a relation callback and carries its where conditions onto the subquery
+// builder, in order after the correlation wheres. Non-where clauses the callback sets (an order by, a
+// limit) are deliberately not carried: Laravel emits them inside the subquery, but SQL Server rejects
+// ORDER BY in a subquery, and relation_sql_test.go pins the difference.
 func (r *OrmBuilder) applyRelationScope(builder *querybuilder.Builder, callback contractsorm.RelationCallback) {
 	if callback == nil {
 		return
 	}
 
-	child := r.fresh()
+	scoped := r.fresh()
+	if returned, ok := callback(scoped).(*OrmBuilder); ok {
+		scoped = returned
+	}
 
-	if scoped, ok := callback(child).(*OrmBuilder); ok {
-		scoped.applyWhere(builder)
+	scoped = scoped.flushWheres()
 
+	appendWhereClauses(builder, scoped.query)
+}
+
+// appendWhereClauses moves a child query's where clauses onto the subquery builder, bindings
+// included, so they keep their place after the clauses already on it.
+func appendWhereClauses(dst, src *querybuilder.Builder) {
+	if len(src.State().Wheres) == 0 {
 		return
 	}
 
-	child.applyWhere(builder)
+	dst.State().Wheres = append(dst.State().Wheres, src.State().Wheres...)
+	_ = dst.AddBinding(src.State().Bindings["where"], "where")
 }
 
 func (r *OrmBuilder) parentModel() any {

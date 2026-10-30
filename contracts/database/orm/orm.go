@@ -286,7 +286,10 @@ type Query interface {
 	UseWritePdo() Query
 	// When executes the callback if the condition is true, otherwise the falseCallback if it is given.
 	When(condition bool, callback func(query Query) Query, falseCallback ...func(query Query) Query) Query
-	// Where add a "where" clause to the query.
+	// Where adds a "where" clause to the query, mirroring Eloquent's Builder::where. A callback
+	// with no other arguments runs against a new query without relationships: its eager loads
+	// merge into this query and its wheres join this query as one nested group. Every other
+	// condition is applied to the underlying query builder as it is written.
 	Where(query any, args ...any) Query
 	// WhereAll adds a "where all columns match" clause to the query.
 	WhereAll(columns []string, args ...any) Query
