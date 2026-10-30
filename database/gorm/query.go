@@ -1784,9 +1784,11 @@ func (r *Query) WhereAll(columns []string, args ...any) contractsorm.Query {
 	}
 
 	return r.addWhere(contractsdriver.Where{
-		Type:  contractsdriver.WhereTypeAll,
-		Query: columns,
-		Args:  []any{op, value},
+		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
+			if !applyInSliceGroup(builder, columns, op, value, core.BooleanAnd, boolean) {
+				builder.WhereAll(toStrings(columns), op, value, boolean)
+			}
+		}),
 	})
 }
 
@@ -1797,9 +1799,11 @@ func (r *Query) WhereAny(columns []string, args ...any) contractsorm.Query {
 	}
 
 	return r.addWhere(contractsdriver.Where{
-		Type:  contractsdriver.WhereTypeAny,
-		Query: columns,
-		Args:  []any{op, value},
+		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
+			if !applyInSliceGroup(builder, columns, op, value, core.BooleanOr, boolean) {
+				builder.WhereAny(toStrings(columns), op, value, boolean)
+			}
+		}),
 	})
 }
 
@@ -1807,8 +1811,15 @@ func (r *Query) WhereAny(columns []string, args ...any) contractsorm.Query {
 // condition carrying a slice argument, not as a raw "IN ?" fragment: the compiler reads a slice
 // argument as the IN list and expands it to one placeholder per value (Laravel binds whereIn the
 // same way). A raw fragment would bind the whole slice to a single placeholder.
+// WhereIn forwards the column and the value list to the compiled builder's WhereIn, which expands
+// the slice to one placeholder per value inside the wrapped column (the shapes that still queue a
+// slice argument are the raw "col in ?" fragments the pivot and Find conditions build).
 func (r *Query) WhereIn(column string, values []any) contractsorm.Query {
-	return r.addWhere(contractsdriver.Where{Query: column, Args: []any{values}})
+	return r.addWhere(contractsdriver.Where{
+		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
+			builder.WhereIn(column, values, boolean, false)
+		}),
+	})
 }
 
 func (r *Query) WhereJsonContains(column string, value any) contractsorm.Query {
@@ -1852,7 +1863,12 @@ func (r *Query) WhereJsonLength(column string, args ...any) contractsorm.Query {
 }
 
 func (r *Query) OrWhereIn(column string, values []any) contractsorm.Query {
-	return r.addWhere(contractsdriver.Where{Query: column, Args: []any{values}, Or: true})
+	return r.addWhere(contractsdriver.Where{
+		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
+			builder.WhereIn(column, values, boolean, false)
+		}),
+		Or: true,
+	})
 }
 
 func (r *Query) OrWhereJsonContains(column string, value any) contractsorm.Query {
@@ -1901,54 +1917,64 @@ func (r *Query) OrWhereJsonLength(column string, args ...any) contractsorm.Query
 }
 
 func (r *Query) WhereNotIn(column string, values []any) contractsorm.Query {
-	return r.addWhere(contractsdriver.Where{Query: column, Args: []any{values}, IsNot: true})
+	return r.addWhere(contractsdriver.Where{
+		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
+			builder.WhereIn(column, values, boolean, true)
+		}),
+	})
 }
 
 func (r *Query) OrWhereNotIn(column string, values []any) contractsorm.Query {
-	return r.addWhere(contractsdriver.Where{Query: column, Args: []any{values}, Or: true, IsNot: true})
+	return r.addWhere(contractsdriver.Where{
+		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
+			builder.WhereIn(column, values, boolean, true)
+		}),
+		Or: true,
+	})
 }
 
+// WhereBetween forwards to the compiled builder's WhereBetween, which wraps the column with the
+// grammar's quoting (Builder::whereBetween).
 func (r *Query) WhereBetween(column string, x, y any) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
-		Type:  contractsdriver.WhereTypeBetween,
-		Query: column,
-		Args:  []any{x, y},
+		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
+			builder.WhereBetween(column, []any{x, y}, boolean, false)
+		}),
 	})
 }
 
 func (r *Query) WhereNotBetween(column string, x, y any) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
-		Type:  contractsdriver.WhereTypeBetween,
-		Query: column,
-		Args:  []any{x, y},
-		IsNot: true,
+		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
+			builder.WhereBetween(column, []any{x, y}, boolean, true)
+		}),
 	})
 }
 
 func (r *Query) OrWhereBetween(column string, x, y any) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
-		Type:  contractsdriver.WhereTypeBetween,
-		Query: column,
-		Args:  []any{x, y},
-		Or:    true,
+		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
+			builder.WhereBetween(column, []any{x, y}, boolean, false)
+		}),
+		Or: true,
 	})
 }
 
 func (r *Query) OrWhereNotBetween(column string, x, y any) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
-		Type:  contractsdriver.WhereTypeBetween,
-		Query: column,
-		Args:  []any{x, y},
-		Or:    true,
-		IsNot: true,
+		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
+			builder.WhereBetween(column, []any{x, y}, boolean, true)
+		}),
+		Or: true,
 	})
 }
 
 func (r *Query) OrWhereNull(column string) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
-		Type:  contractsdriver.WhereTypeNull,
-		Query: column,
-		Or:    true,
+		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
+			builder.WhereNull(column, boolean, false)
+		}),
+		Or: true,
 	})
 }
 
@@ -1959,9 +1985,11 @@ func (r *Query) WhereNone(columns []string, args ...any) contractsorm.Query {
 	}
 
 	return r.addWhere(contractsdriver.Where{
-		Type:  contractsdriver.WhereTypeNone,
-		Query: columns,
-		Args:  []any{op, value},
+		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
+			if !applyInSliceGroup(builder, columns, op, value, core.BooleanOr, negated(boolean)) {
+				builder.WhereNone(toStrings(columns), op, value, boolean)
+			}
+		}),
 	})
 }
 
@@ -2016,16 +2044,19 @@ func sliceValues(value any) ([]any, bool) {
 
 func (r *Query) WhereNotNull(column string) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
-		Type:  contractsdriver.WhereTypeNull,
-		Query: column,
-		IsNot: true,
+		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
+			builder.WhereNull(column, boolean, true)
+		}),
 	})
 }
 
+// WhereNull forwards to the compiled builder's WhereNull, which wraps the column; OrWhereNull and
+// WhereNotNull are the same forward with the connector and the negation.
 func (r *Query) WhereNull(column string) contractsorm.Query {
 	return r.addWhere(contractsdriver.Where{
-		Type:  contractsdriver.WhereTypeNull,
-		Query: column,
+		Query: r.whereForward(func(builder *querybuilder.Builder, boolean string) {
+			builder.WhereNull(column, boolean, false)
+		}),
 	})
 }
 
@@ -2103,6 +2134,14 @@ func (r *Query) addGlobalScopes() *Query {
 	}
 
 	return r.clone().Scopes(globalScopes...).(*Query)
+}
+
+// whereForward returns the callback a where method queues in place of a descriptor: the method
+// declares its forward (Builder::whereBetween, Builder::whereNull, Builder::whereAny, ...) and the
+// callback runs against the compiled query builder with the connector the compiler computed. Go has
+// no __call, so every method states the forward itself instead of a shared dispatch switch.
+func (r *Query) whereForward(forward func(builder *querybuilder.Builder, boolean string)) any {
+	return forward
 }
 
 func (r *Query) addWhere(where contractsdriver.Where) contractsorm.Query {

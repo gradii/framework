@@ -8,16 +8,6 @@ const (
 	WhereTypeJsonContains
 	WhereTypeJsonContainsKey
 	WhereTypeJsonLength
-	// WhereTypeBetween is "between" (or "not between" when IsNot is set): Query holds the column,
-	// Args its two bounds.
-	WhereTypeBetween
-	// WhereTypeNull is "is null" (or "is not null" when IsNot is set): Query holds the column.
-	WhereTypeNull
-	// WhereTypeAll, WhereTypeAny and WhereTypeNone repeat one condition across the columns in
-	// Query ([]string): Args holds the operator and the value.
-	WhereTypeAll
-	WhereTypeAny
-	WhereTypeNone
 )
 
 type Conditions struct {

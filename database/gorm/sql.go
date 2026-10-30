@@ -392,35 +392,15 @@ func (r *Query) applySingleWhere(builder *querybuilder.Builder, item contractsdr
 		}
 
 		return
-	case contractsdriver.WhereTypeBetween:
-		builder.WhereBetween(item.Query, item.Args, boolean, item.IsNot)
-
-		return
-	case contractsdriver.WhereTypeNull:
-		builder.WhereNull(item.Query, boolean, item.IsNot)
-
-		return
-	case contractsdriver.WhereTypeAll:
-		if !applyInSliceGroup(builder, item, core.BooleanAnd, boolean) {
-			builder.WhereAll(toStrings(columnNames(item)), item.Args[0], item.Args[1], boolean)
-		}
-
-		return
-	case contractsdriver.WhereTypeAny:
-		if !applyInSliceGroup(builder, item, core.BooleanOr, boolean) {
-			builder.WhereAny(toStrings(columnNames(item)), item.Args[0], item.Args[1], boolean)
-		}
-
-		return
-	case contractsdriver.WhereTypeNone:
-		if !applyInSliceGroup(builder, item, core.BooleanOr, negated(boolean)) {
-			builder.WhereNone(toStrings(columnNames(item)), item.Args[0], item.Args[1], boolean)
-		}
-
-		return
 	}
 
 	switch query := item.Query.(type) {
+	case func(*querybuilder.Builder, string):
+		// A forward queued by a where method (see Query.whereForward): the method declared the call,
+		// so the compiler only supplies the builder and the connector.
+		query(builder, boolean)
+
+		return
 	case string:
 		switch {
 		case len(item.Args) == 0:
@@ -481,10 +461,21 @@ func (r *Query) applyNestedWhere(callback func(contractsorm.Query) contractsorm.
 	child.queryGrammar = r.queryGrammar
 	child.conditions = r.conditions
 	child.conditions.where = nil
+	// Eloquent's nested query is newQueryWithoutRelationships(), so it starts with none of the
+	// parent's eager loads; anything the callback queues is merged back below.
+	child.conditions.eagerLoad = nil
 
 	// The child compiles its own wheres onto the builder it was handed.
 	result := callback(child)
 	if nested, ok := result.(*Query); ok {
+		// Builder::where()'s closure branch merges the nested query's eager loads into the parent
+		// (array_merge over the relation-keyed list) before handing its wheres to
+		// addNestedWhereQuery, so a with(...) written inside the closure still loads. The upsert is
+		// the same one the With entry point uses when a relation is queued twice.
+		for _, entry := range nested.conditions.eagerLoad {
+			r.conditions.eagerLoad = upsertEagerLoadEntry(r.conditions.eagerLoad, entry, entry.callback != nil || entry.columns != nil)
+		}
+
 		return nested.applyWhere(builder)
 	}
 
@@ -562,18 +553,18 @@ func firstArg(args []any) any {
 // group carrying group. Mirrors database/db's expandInGroup, and the empty list keeps the grammar's
 // "0 = 1" (matches nothing) and "1 = 1" (matches everything) constants. It reports false when the
 // condition is not an IN against a slice, so the caller falls back to the family's builder method.
-func applyInSliceGroup(builder *querybuilder.Builder, item contractsdriver.Where, inner, group string) bool {
-	if !isInOperator(item.Args[0]) {
+func applyInSliceGroup(builder *querybuilder.Builder, columns []string, operator, value any, inner, group string) bool {
+	if !isInOperator(operator) {
 		return false
 	}
-	values, ok := sliceValues(item.Args[1])
+	values, ok := sliceValues(value)
 	if !ok {
 		return false
 	}
 
-	not := isNotInOperator(item.Args[0])
+	not := isNotInOperator(operator)
 	builder.WhereNested(func(b *querybuilder.Builder) *querybuilder.Builder {
-		for _, column := range columnNames(item) {
+		for _, column := range columns {
 			b.WhereIn(column, values, inner, not)
 		}
 
@@ -591,13 +582,6 @@ func negated(boolean string) string {
 	}
 
 	return core.BooleanAndNot
-}
-
-// columnNames reads the column list a group condition carries.
-func columnNames(item contractsdriver.Where) []string {
-	columns, _ := item.Query.([]string)
-
-	return columns
 }
 
 // toStrings converts a string slice to []any for the builder.
