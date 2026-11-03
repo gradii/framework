@@ -1,6 +1,7 @@
 package morph_to_many
 
 import (
+	"context"
 	"database/sql"
 	"testing"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	databasedb "github.com/gradii/framework/database/db"
 	querybuilder "github.com/gradii/framework/database/query"
 )
 
@@ -345,4 +347,47 @@ func TestMorphToMany_QueryExpressionCanBePassedToDifferentPivotQueryBuilderClaus
 
 	tags := []morphToManyTag{}
 	assert.Equal(t, `select "tags".*, "taggables"."taggable_id" as "pivot_taggable_id", "taggables"."tag_id" as "pivot_tag_id", "taggables"."taggable_type" as "pivot_taggable_type" from "tags" inner join "taggables" ON "taggables"."tag_id" = "tags"."id" where "taggables"."taggable_id" = ? and "taggables"."taggable_type" = ? and CONCAT(foo, '_', bar) = ? and CONCAT(foo, '_', bar) = ? and CONCAT(foo, '_', bar) between ? and ? and CONCAT(foo, '_', bar) in (?) and CONCAT(foo, '_', bar) is null order by CONCAT(foo, '_', bar) asc`, relation.ToSql().Get(&tags))
+}
+
+// TestMorphToMany_EagerLimitPartitionsByThePivotParentKey ports the eager limit an Eloquent
+// `with('tags', fn ($q) => $q->limit(2))` compiles onto a MorphToMany relation. The eager read is
+// the joined relation query (the related table joined to the pivot, wearing the aliased pivot select
+// list), and the relation-level limit compiles Laravel's pivot-partitioned group limit —
+// row_number() over (partition by <qualified foreign pivot key>) — so each parent receives at most
+// two tags. Oracle (illuminate/database v12.55.1, executed against sqlite from
+// /tmp/eager-m2m-limit/probe.php, M1): the rewrite partitions by "taggables"."taggable_id" and keeps
+// the morph-type predicate inside it.
+func TestMorphToMany_EagerLimitPartitionsByThePivotParentKey(t *testing.T) {
+	query := newRelationQuery(t)
+	morphToManySchema(t, query)
+
+	post1 := morphToManySeedPost(t, query, 1)
+	post2 := morphToManySeedPost(t, query, 2)
+	_ = morphToManySeedTag(t, query, 1)
+	_ = morphToManySeedTag(t, query, 2)
+	_ = morphToManySeedTag(t, query, 3)
+
+	morphToManyAttach(t, query, &post1, uint(1), uint(2), uint(3))
+	morphToManyAttach(t, query, &post2, uint(1), uint(2), uint(3))
+
+	ctx := databasedb.EnableQueryLog(context.Background())
+	withContext, ok := cloneRelationQuery(t, query).(contractsorm.QueryWithContext)
+	require.True(t, ok, "the ORM query must support WithContext")
+
+	posts := []morphToManyPost{}
+	require.NoError(t, withContext.WithContext(ctx).Model(&morphToManyPost{}).OrderBy("id").
+		With("Tags", func(q contractsorm.Query) contractsorm.Query { return q.Limit(2) }).
+		Get(&posts))
+	require.Len(t, posts, 2)
+
+	// The pivot-partitioned group limit caps every parent at two tags — the eager read actually runs
+	// the derived table against sqlite.
+	require.Len(t, posts[0].Tags, 2)
+	require.Len(t, posts[1].Tags, 2)
+
+	logs := databasedb.GetQueryLog(ctx)
+	require.Len(t, logs, 2, "the parent read and the joined eager read")
+	assert.Equal(t,
+		`select * from (select "tags".*, "taggables"."taggable_id" as "pivot_taggable_id", "taggables"."tag_id" as "pivot_tag_id", "taggables"."taggable_type" as "pivot_taggable_type", row_number() over (partition by "taggables"."taggable_id") as "laravel_row" from "tags" inner join "taggables" ON "taggables"."tag_id" = "tags"."id" where "taggables"."taggable_id" in (1, 2) and "taggables"."taggable_type" = 'post') as "laravel_table" where "laravel_row" <= 2 order by "laravel_row"`,
+		logs[1].Query)
 }

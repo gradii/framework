@@ -535,134 +535,38 @@ func morphWithEntriesFor(desc *relationDescriptor, morphType string, nested []ea
 	return merged, nil
 }
 
-// loadMany2Many eager-loads a regular many-to-many relation through a pivot table. The pivot rows
-// and the related rows are both read through statements this package compiles itself, and the
-// pivot schema the loader matches against comes from the relation descriptor.
+// loadMany2Many eager-loads a regular many-to-many relation. The related rows are read the way the
+// relation read reads them — the related table joined to the pivot table and filtered on the
+// pivot's parent key, wearing the pivot-read select list (the related columns plus every pivot
+// column aliased pivot_<column>) — so a With callback's relation-level limit reaches
+// BelongsToMany::limit (vendor v12.55.1, BelongsToMany.php:1503) and compiles the pivot-partitioned
+// group limit: the row_number() over (partition by <qualified foreign pivot key>) derived table that
+// caps rows per parent. The rows are grouped per parent by the pivot parent key's alias, mirroring
+// BelongsToMany::match's `$model->pivot->getAttribute($this->foreignPivotKey)`. Oracle
+// (illuminate/database v12.55.1, executed against sqlite from /tmp/eager-m2m-limit/probe.php): B1
+// eager BtM limit(2) -> `select * from (select "m2m_roles".*, "m2m_role_user"."user_id" as
+// "pivot_user_id", "m2m_role_user"."role_id" as "pivot_role_id", "m2m_role_user"."note" as
+// "pivot_note", row_number() over (partition by "m2m_role_user"."user_id") as "laravel_row" from
+// "m2m_roles" inner join "m2m_role_user" on "m2m_roles"."id" = "m2m_role_user"."role_id" where
+// "m2m_role_user"."user_id" in (1, 2)) as "laravel_table" where "laravel_row" <= 2 order by
+// "laravel_row"`, counts [2, 2]; B1n the no-callback read is the same joined statement without the
+// rewrite.
 func (r *OrmBuilder) loadMany2Many(parents []reflect.Value, parentModel any, desc *relationDescriptor, entry eagerLoadEntry, nested []eagerLoadEntry) error {
-	parentSchema, err := parseSchema(parentModel)
-	if err != nil {
-		return err
-	}
-	parentField, ok := parentSchema.FieldsByDBName[desc.PivotParentRef.PrimaryColumn]
-	if !ok {
-		return errors.OrmRelationUnsupported.Args(entry.Relation, parentSchema.Name, "no parent field for "+desc.PivotParentRef.PrimaryColumn)
-	}
-
-	keys := extractKeys(r, parents, parentField)
-	if len(keys) == 0 {
-		return r.maybeRecurseEmpty(parents, entry.Relation, true, nested, nil)
-	}
-
-	pivotParentCol := desc.PivotParentRef.ForeignColumn
-	pivotRelatedCol := desc.PivotRelatedRef.ForeignColumn
-
-	// The related model's Pivot field, when it declares one, contributes extra pivot columns to the
-	// SELECT through the hydration plan. Struct-only: when the related model has no field by
-	// desc.pivotField, no pivot hydration happens.
-	relatedSchema, err := parseSchema(desc.RelatedModel)
-	if err != nil {
-		return err
-	}
-	pivotPlan, err := preparePivotHydration(r, desc)
-	if err != nil {
-		return err
-	}
-
-	// Build the pivot SELECT list: always include the two FK columns, plus the columns the
-	// hydration plan reports when the related model declares a Pivot field.
-	pivotSelectCols := []string{pivotParentCol, pivotRelatedCol}
-	if pivotPlan != nil {
-		pivotSelectCols = append(pivotSelectCols, pivotPlan.extraColumns...)
-	}
-
-	// The pivot rows are read through the compiled path: the child names the pivot table and the FK
-	// columns the way a caller writes them — unquoted, with the table qualifying the IN column — and
-	// the helper threads the descriptor's OnPivotQuery in before the statement is compiled.
-	pivotRows, err := r.runChunkedPivotQueryCompiled(keys, desc, func(chunk []any) *OrmBuilder {
-		return r.pivotChild(desc.PivotTable, desc.PivotTable+"."+pivotParentCol, chunk, pivotSelectCols)
-	})
-	if err != nil {
-		return err
-	}
-	if len(pivotRows) == 0 {
-		return r.maybeRecurseEmpty(parents, entry.Relation, true, nested, nil)
-	}
-
-	relatedKeysSet := make(map[string]any, len(pivotRows))
-	for _, p := range pivotRows {
-		k := dictKey(p[pivotRelatedCol])
-		if _, exists := relatedKeysSet[k]; !exists {
-			relatedKeysSet[k] = p[pivotRelatedCol]
-		}
-	}
-	relatedKeys := make([]any, 0, len(relatedKeysSet))
-	for _, v := range relatedKeysSet {
-		relatedKeys = append(relatedKeys, v)
-	}
-
-	rows, err := r.runChunkedRelatedQueryCompiled(relatedKeys, desc, entry, []string{desc.PivotRelatedRef.PrimaryColumn}, parentModel, func(chunk []any) *OrmBuilder {
-		return r.relatedChild(desc.RelatedTable, desc.RelatedTable+"."+desc.PivotRelatedRef.PrimaryColumn, chunk)
-	})
-	if err != nil {
-		return err
-	}
-
-	relatedPKField, ok := relatedSchema.FieldsByDBName[desc.PivotRelatedRef.PrimaryColumn]
-	if !ok {
-		return errors.OrmRelationUnsupported.Args(entry.Relation, relatedSchema.Name, "no related PK field for "+desc.PivotRelatedRef.PrimaryColumn)
-	}
-	relatedByID := make(map[string]reflect.Value, len(rows))
-	for _, row := range rows {
-		val, _ := relatedPKField.ValueOf(r.ctx, row.Elem())
-		relatedByID[dictKey(val)] = row
-	}
-
-	// Walk pivot rows and assemble per-parent dictionaries. When a Pivot field is in play we
-	// clone the related row per pivot row so each parent's pivot attributes land on its own
-	// instance — sharing a single row across parents would let one parent's pivot values
-	// silently overwrite another's. When there's no Pivot field we share the template row,
-	// since nothing parent-specific is being written onto it.
-	dict := make(map[string][]reflect.Value, len(parents))
-	nestedRows := rows
-	if pivotPlan != nil {
-		nestedRows = make([]reflect.Value, 0, len(pivotRows))
-	}
-	for _, p := range pivotRows {
-		parentKey := dictKey(p[pivotParentCol])
-		relatedKey := dictKey(p[pivotRelatedCol])
-		template, ok := relatedByID[relatedKey]
-		if !ok {
-			continue
-		}
-		row := template
-		if pivotPlan != nil {
-			row = cloneRelatedRow(template)
-			data := make(map[string]any, len(pivotPlan.extraColumns))
-			for _, col := range pivotPlan.extraColumns {
-				if val, ok := p[col]; ok {
-					data[col] = val
-				}
-			}
-			if err := writePivotField(r.ctx, row, data, pivotPlan); err != nil {
-				return err
-			}
-			nestedRows = append(nestedRows, row)
-		}
-		dict[parentKey] = append(dict[parentKey], row)
-	}
-
-	if err := r.assignToParents(parents, parentField, entry.Relation, dict, true, nil); err != nil {
-		return err
-	}
-
-	return r.recurseNested(nestedRows, nested)
+	return r.loadMany2ManyKind(parents, parentModel, desc, entry, nested, false)
 }
 
-// loadMorphToMany eager-loads polymorphic many-to-many. Mirrors loadMany2Many with one extra
-// pivot WHERE that pins the morph_type column to desc.morphValue. Both MorphToMany (forward) and
-// MorphedByMany (inverse) share this code path; the difference between them is captured in
-// desc.morphValue at descriptor-build time.
+// loadMorphToMany eager-loads polymorphic many-to-many. It shares its body with loadMany2Many; the
+// only difference is the pivot's morph-type predicate pinning desc.MorphValue, which keeps
+// MorphToMany (forward) and MorphedByMany (inverse) on the same path (the descriptor resolves the
+// value). Oracle M1 (/tmp/eager-m2m-limit/probe.php): eager MorphToMany limit(2) partitions by
+// "m2m_taggables"."taggable_id" and keeps `and "m2m_taggables"."taggable_type" = ?` inside the
+// rewrite.
 func (r *OrmBuilder) loadMorphToMany(parents []reflect.Value, parentModel any, desc *relationDescriptor, entry eagerLoadEntry, nested []eagerLoadEntry) error {
+	return r.loadMany2ManyKind(parents, parentModel, desc, entry, nested, true)
+}
+
+// loadMany2ManyKind is the shared body of the two many-to-many eager loaders.
+func (r *OrmBuilder) loadMany2ManyKind(parents []reflect.Value, parentModel any, desc *relationDescriptor, entry eagerLoadEntry, nested []eagerLoadEntry, isMorph bool) error {
 	parentSchema, err := parseSchema(parentModel)
 	if err != nil {
 		return err
@@ -677,112 +581,187 @@ func (r *OrmBuilder) loadMorphToMany(parents []reflect.Value, parentModel any, d
 		return r.maybeRecurseEmpty(parents, entry.Relation, true, nested, nil)
 	}
 
-	pivotParentCol := desc.PivotParentRef.ForeignColumn
-	pivotRelatedCol := desc.PivotRelatedRef.ForeignColumn
-
-	// Check if the related model has a Pivot field — if yes, we'll SELECT extra pivot columns
-	// using the desc.pivotUsing struct schema. struct-only: when desc.pivotUsing is nil, no pivot
-	// hydration happens regardless of whether the related model has a Pivot field.
-	relatedSchema, err := parseSchema(desc.RelatedModel)
-	if err != nil {
-		return err
-	}
-	pivotPlan, err := preparePivotHydration(r, desc)
+	// The related model's Pivot field, when it declares one, supplies the aliased pivot columns the
+	// joined read hydrates from — the select rewrite applyPivotReadSelect installs off the pivot-read
+	// config. Struct-only: no field by desc.pivotField means no pivot hydration.
+	plan, err := preparePivotHydration(r, desc)
 	if err != nil {
 		return err
 	}
 
-	// Build the pivot SELECT list: always include the two FK columns and the morph type column —
-	// MorphToMany::aliasedPivotColumns interleaves the morph type between the related key and the
-	// withPivot columns — plus the columns reported by the Using-struct hydration plan when present.
-	pivotSelectCols := []string{pivotParentCol, pivotRelatedCol}
-	if desc.MorphTypeColumn != "" {
-		pivotSelectCols = append(pivotSelectCols, desc.MorphTypeColumn)
-	}
-	if pivotPlan != nil {
-		pivotSelectCols = append(pivotSelectCols, pivotPlan.extraColumns...)
-	}
-
-	// The pivot rows are read through the compiled path. The child names the pivot table and the
-	// parent FK column the way a caller writes them — unquoted, with the table qualifying the IN
-	// column — and carries the morph-type predicate that separates a MorphToMany pivot read from a
-	// plain Many2Many one. The helper threads the descriptor's OnPivotQuery in before the statement
-	// is compiled, so the per-relation pivot scope reaches this read too.
-	pivotRows, err := r.runChunkedPivotQueryCompiled(keys, desc, func(chunk []any) *OrmBuilder {
-		return r.pivotChild(desc.PivotTable, desc.PivotTable+"."+pivotParentCol, chunk, pivotSelectCols).
-			Where(desc.PivotTable+"."+desc.MorphTypeColumn, desc.MorphValue).(*OrmBuilder)
-	})
+	rows, rowParents, err := r.runChunkedMany2ManyQueryCompiled(keys, desc, entry, parentModel, plan, isMorph)
 	if err != nil {
 		return err
 	}
-	if len(pivotRows) == 0 {
+	if len(rows) == 0 {
 		return r.maybeRecurseEmpty(parents, entry.Relation, true, nested, nil)
 	}
 
-	relatedKeysSet := make(map[string]any, len(pivotRows))
-	for _, p := range pivotRows {
-		k := dictKey(p[pivotRelatedCol])
-		if _, exists := relatedKeysSet[k]; !exists {
-			relatedKeysSet[k] = p[pivotRelatedCol]
-		}
-	}
-	relatedKeys := make([]any, 0, len(relatedKeysSet))
-	for _, v := range relatedKeysSet {
-		relatedKeys = append(relatedKeys, v)
-	}
-
-	rows, err := r.runChunkedRelatedQueryCompiled(relatedKeys, desc, entry, []string{desc.PivotRelatedRef.PrimaryColumn}, parentModel, func(chunk []any) *OrmBuilder {
-		return r.relatedChild(desc.RelatedTable, desc.RelatedTable+"."+desc.PivotRelatedRef.PrimaryColumn, chunk)
-	})
-	if err != nil {
-		return err
-	}
-
-	relatedPKField, ok := relatedSchema.FieldsByDBName[desc.PivotRelatedRef.PrimaryColumn]
-	if !ok {
-		return errors.OrmRelationUnsupported.Args(entry.Relation, relatedSchema.Name, "no related PK field for "+desc.PivotRelatedRef.PrimaryColumn)
-	}
-	relatedByID := make(map[string]reflect.Value, len(rows))
-	for _, row := range rows {
-		val, _ := relatedPKField.ValueOf(r.ctx, row.Elem())
-		relatedByID[dictKey(val)] = row
-	}
-
-	// See loadMany2Many for the rationale; same per-pivot cloning applies here.
+	// Each joined row is one pivot row, carrying its parent key under the pivot parent key's alias;
+	// grouping them per parent is Eloquent's match() by $model->pivot.
 	dict := make(map[string][]reflect.Value, len(parents))
-	nestedRows := rows
-	if pivotPlan != nil {
-		nestedRows = make([]reflect.Value, 0, len(pivotRows))
-	}
-	for _, p := range pivotRows {
-		parentKey := dictKey(p[pivotParentCol])
-		relatedKey := dictKey(p[pivotRelatedCol])
-		template, ok := relatedByID[relatedKey]
-		if !ok {
-			continue
-		}
-		row := template
-		if pivotPlan != nil {
-			row = cloneRelatedRow(template)
-			data := make(map[string]any, len(pivotPlan.extraColumns))
-			for _, col := range pivotPlan.extraColumns {
-				if val, ok := p[col]; ok {
-					data[col] = val
-				}
-			}
-			if err := writePivotField(r.ctx, row, data, pivotPlan); err != nil {
-				return err
-			}
-			nestedRows = append(nestedRows, row)
-		}
-		dict[parentKey] = append(dict[parentKey], row)
+	for index, row := range rows {
+		dict[rowParents[index]] = append(dict[rowParents[index]], row)
 	}
 
 	if err := r.assignToParents(parents, parentField, entry.Relation, dict, true, nil); err != nil {
 		return err
 	}
 
-	return r.recurseNested(nestedRows, nested)
+	return r.recurseNested(rows, nested)
+}
+
+// many2ManyJoinFragment renders the pivot join the many-to-many relation read and eager read share:
+// the pivot's related foreign key against the related table's related key — the port's join
+// rendering (the pivot-side operand first and the ON keyword upper-cased), the convention every
+// relation read in the repository shares (see database/gorm/relations/many2many_test.go).
+func (r *OrmBuilder) many2ManyJoinFragment(desc *relationDescriptor) string {
+	return r.tableRef(desc.PivotTable) + " ON " +
+		r.ident(desc.PivotTable, desc.PivotRelatedRef.ForeignColumn) + " = " +
+		r.ident(desc.RelatedTable, desc.PivotRelatedRef.PrimaryColumn)
+}
+
+// many2ManyEagerChild builds one chunk's child for the joined many-to-many eager read: the related
+// table joined to the pivot and filtered on the pivot's parent key against the chunk, wearing the
+// pivot-read select list and — for MorphToMany — the pivot's morph-type predicate. It mirrors the
+// relation read newMany2ManyQuery builds, with the parent key's `in (chunk)` where the relation
+// read's single-parent equality takes, and the eager constraint landing before the join the way
+// addEagerConstraints writes it.
+func (r *OrmBuilder) many2ManyEagerChild(desc *relationDescriptor, chunk []any, plan *pivotHydrationPlan, isMorph bool) *OrmBuilder {
+	child := r.relatedChild(desc.RelatedTable, desc.PivotTable+"."+desc.PivotParentRef.ForeignColumn, chunk)
+	child.query.JoinRaw(r.many2ManyJoinFragment(desc), nil, "inner")
+	child.conditions.pivotRead = &pivotReadConfig{
+		relatedTable:    desc.RelatedTable,
+		relatedKey:      desc.PivotRelatedRef.PrimaryColumn,
+		pivotTable:      desc.PivotTable,
+		foreignPivotKey: desc.PivotParentRef.ForeignColumn,
+		relatedPivotKey: desc.PivotRelatedRef.ForeignColumn,
+		morphTypeColumn: desc.MorphTypeColumn,
+		pivotField:      desc.PivotField,
+		plan:            plan,
+	}
+	if isMorph {
+		child = child.Where(desc.PivotTable+"."+desc.MorphTypeColumn, desc.MorphValue).(*OrmBuilder)
+	}
+
+	return child
+}
+
+// runChunkedMany2ManyQueryCompiled runs the joined many-to-many eager read once per chunk of parent
+// keys, returning the hydrated related rows together with each row's parent key — the value of the
+// pivot parent key's alias (pivot_<column>), so the loader groups the rows per parent.
+func (r *OrmBuilder) runChunkedMany2ManyQueryCompiled(keys []any, desc *relationDescriptor, entry eagerLoadEntry, protoParent any, plan *pivotHydrationPlan, isMorph bool) ([]reflect.Value, []string, error) {
+	chunks := chunkKeys(keys, r.chunkSize())
+	var rows []reflect.Value
+	var parents []string
+	for _, chunk := range chunks {
+		chunkRows, chunkParents, err := r.runMany2ManyQueryCompiled(r.many2ManyEagerChild(desc, chunk, plan, isMorph), desc, entry, protoParent)
+		if err != nil {
+			return nil, nil, err
+		}
+		rows = append(rows, chunkRows...)
+		parents = append(parents, chunkParents...)
+	}
+
+	return rows, parents, nil
+}
+
+// runMany2ManyQueryCompiled compiles and runs one joined many-to-many eager read. The relation's
+// pivot scope (OnPivotQuery) then its declaration scope (OnQuery) layer on top of the child the way
+// newMany2ManyQuery installs them; the caller's callback constrains the wrapped relation object
+// (eagerCallbackTarget), so its Limit reaches BelongsToMany::limit and compiles the pivot-partitioned
+// group limit. Each row is scanned into its related model — the pivot_-aliased columns hydrate the
+// model's declared Pivot field — and collected with the parent key the pivot parent key's alias
+// carries.
+func (r *OrmBuilder) runMany2ManyQueryCompiled(child *OrmBuilder, desc *relationDescriptor, entry eagerLoadEntry, protoParent any) ([]reflect.Value, []string, error) {
+	child = child.flushWheres()
+
+	if scoped, ok := applyOnPivotQueryToQuery(r.queryGrammar, child, desc).(*OrmBuilder); ok {
+		child = scoped
+	}
+
+	if desc.OnQuery != nil {
+		if scoped, ok := desc.OnQuery(child).(*OrmBuilder); ok {
+			child = scoped
+		}
+	}
+
+	if entry.Callback != nil {
+		if scoped, ok := ormBuilderOf(entry.Callback(r.eagerCallbackTarget(child, desc, protoParent, entry.Relation))); ok {
+			child = scoped
+		}
+	}
+
+	// The related key survives column pruning, so the model still hydrates its own identity.
+	if len(entry.Columns) > 0 {
+		cols := append([]string(nil), entry.Columns...)
+		for _, req := range []string{desc.PivotRelatedRef.PrimaryColumn} {
+			if !slices.ContainsFunc(cols, func(c string) bool {
+				if c == req {
+					return true
+				}
+				_, suffix, ok := strings.Cut(c, ".")
+				return ok && suffix == req
+			}) {
+				cols = append(cols, req)
+			}
+		}
+
+		selects := make([]any, 0, len(cols))
+		for _, col := range cols {
+			selects = append(selects, col)
+		}
+		child.query.SetSelects(selects)
+	}
+
+	statement, bindings, err := child.compileSelect()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	rows, err := child.queryRows(statement, bindings)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer errors.Ignore(rows.Close)
+
+	relatedType := indirectStructType(reflect.TypeOf(desc.RelatedModel))
+	if relatedType == nil {
+		return nil, nil, errors.OrmRelationUnsupported.Args(desc.Name, desc.ParentTable, "no related model")
+	}
+
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	parentAlias := "pivot_" + desc.PivotParentRef.ForeignColumn
+	var out []reflect.Value
+	var parents []string
+	for rows.Next() {
+		row, err := scanRowMap(rows, columns)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		element := reflect.New(relatedType)
+		if err := scanRow(row, element.Interface()); err != nil {
+			return nil, nil, err
+		}
+		if err := child.hydratePivotRow(row, element); err != nil {
+			return nil, nil, err
+		}
+		syncOriginal(element.Interface())
+
+		out = append(out, element)
+		parents = append(parents, dictKey(row[parentAlias]))
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+
+	return out, parents, nil
 }
 
 func (r *OrmBuilder) loadThrough(parents []reflect.Value, parentModel any, desc *relationDescriptor, entry eagerLoadEntry, nested []eagerLoadEntry, isMany bool) error {
@@ -895,20 +874,25 @@ func (r *OrmBuilder) loadThrough(parents []reflect.Value, parentModel any, desc 
 // from "gl_posts" where "gl_posts"."user_id" in (1, 2)) as "laravel_table" where "laravel_row" <= 2
 // order by "laravel_row"`; E2 compiles the same per-country rewrite for the through relation.
 //
+// BelongsToMany::limit (BelongsToMany.php:1503) carries the same branch (the plain limit for an
+// existing parent, the per-parent group limit otherwise, partitioned by the qualified foreign pivot
+// key) and MorphToMany inherits it. Oracle (/tmp/eager-m2m-limit/probe.php): B1 eager BtM limit(2)
+// compiles the pivot-partitioned rewrite over the joined relation read; B1n the no-callback read is
+// the same join without the rewrite.
+//
 // The Go callback keeps its Query signature, so the relation object — which embeds the builder — is
 // what it receives, and the caller unwraps the return value back to the child. Only the kinds whose
-// relation objects carry the branch are wrapped; a BelongsTo / MorphTo callback observes the same
-// query either way and keeps receiving the builder, and Many2Many / MorphToMany keep it because
-// their relation objects promote the builder's plain Limit — the pivot limit is not yet ported
-// (contracts/database/orm/orm.go:259), so Laravel's per-pivot group limit (BelongsToMany::limit,
-// BelongsToMany.php:1503) has no branch to reach here yet.
+// relation objects carry the branch are wrapped: the has-one/many and through kinds plus the
+// many-to-many kinds (their relation objects implement Limit/Take). A BelongsTo / MorphTo callback
+// observes the same query either way and keeps receiving the builder.
 func (r *OrmBuilder) eagerCallbackTarget(child *OrmBuilder, desc *relationDescriptor, protoParent any, relation string) contractsorm.Query {
 	if protoParent == nil {
 		return child
 	}
 
 	switch desc.Kind {
-	case relKindHasOne, relKindHasMany, relKindMorphOne, relKindMorphMany, relKindHasOneThrough, relKindHasManyThrough:
+	case relKindHasOne, relKindHasMany, relKindMorphOne, relKindMorphMany, relKindHasOneThrough, relKindHasManyThrough,
+		relKindMany2Many, relKindMorphToMany:
 		return relations.Wrap(child, protoParent, relation, relationInfoFromDescriptor(desc, child, protoParent), relationHooks(child, desc))
 	}
 
@@ -1939,25 +1923,6 @@ func preparePivotHydrationFor(relatedModel any, pivotField string) (*pivotHydrat
 		extraColumns:  cols,
 		fieldByColumn: byCol,
 	}, nil
-}
-
-// cloneRelatedRow returns a fresh pointer of the same concrete type as rv with rv's elem
-// field-by-field shallow-copied in. Used by the many-to-many eager loaders so each pivot row can
-// own its own related-row instance — necessary when a Pivot field is in play, since the same
-// related model can appear under multiple parents with parent-specific pivot attributes.
-//
-// Shallow copy is sufficient at this point in the load pipeline: scalar fields are value-typed,
-// the Pivot field is written separately per clone, and nested relation fields are zero-valued
-// until recurseNested runs (which then sets them per-clone).
-func cloneRelatedRow(rv reflect.Value) reflect.Value {
-	if rv.Kind() != reflect.Pointer {
-		dup := reflect.New(rv.Type()).Elem()
-		dup.Set(rv)
-		return dup
-	}
-	ptr := reflect.New(rv.Elem().Type())
-	ptr.Elem().Set(rv.Elem())
-	return ptr
 }
 
 // writePivotField copies the column values in data into rv's pivot struct field (named

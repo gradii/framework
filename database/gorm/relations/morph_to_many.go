@@ -126,6 +126,19 @@ func (m *morphToManyRelationQuery) Using(factory contractsorm.PivotFactory) cont
 	return m
 }
 
+// Take / Limit — BelongsToMany::take (:1492) / BelongsToMany::limit (:1503) inherited by the
+// MorphToMany leaf. The promoted base methods would return the embedded base object, dropping the
+// morph leaf from the chain; PHP's `return $this` keeps the MorphToMany instance, so the pair is
+// re-declared here for the same reason Using is overridden above.
+func (m *morphToManyRelationQuery) Take(value int) contractsorm.Query { return m.Limit(value) }
+
+// Limit — BelongsToMany::limit on the MorphToMany leaf.
+func (m *morphToManyRelationQuery) Limit(value int) contractsorm.Query {
+	m.belongsToManyRelationQuery.Limit(value)
+
+	return m
+}
+
 // Compile assertion: the leaf is the declared morph contract's implementation — only the morph
 // leaves satisfy the declared morph interfaces (see contracts/database/orm/relation_query.go);
 // the shared non-morph leaves narrow through the plain aliases only.

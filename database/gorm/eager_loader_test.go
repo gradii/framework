@@ -1348,10 +1348,11 @@ func (m2mPivotParent) Relations() map[string]contractsorm.Relation {
 	}
 }
 
-// TestLoadMany2Many_ReadsAreCompiled pins both queries loadMany2Many builds: the pivot-table read
-// and the related-rows read, each addressed through the package's child builders so the framework
-// compiler renders the statement instead of GORM. The loader is driven with parent keys too, so a
-// change to either half of its body fails the test.
+// TestLoadMany2Many_ReadsAreCompiled pins the child builders the many-to-many eager loader is built
+// from and the statement it runs: the joined relation read (the related table joined to the pivot,
+// wearing the aliased pivot select list), addressed through the package's child builders so the
+// framework compiler renders the statement instead of GORM. The loader is driven with parent keys
+// too, so a change to its body fails the test.
 //
 // The pivot read is the delicate one. Its columns come back as a column-keyed map that the hydration
 // loop indexes by the bare foreign-key names, and the relation's OnPivotQuery scope has to reach the
@@ -1513,10 +1514,11 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 
 		assert.NoError(t, q.loadMany2Many(nil, &relUser{}, desc, eagerLoadEntry{Relation: "Roles"}, nil))
 	})
-	// Drive the loader itself with parent keys. The recording driver hands back one pivot row,
-	// which is what makes loadMany2Many run its second read, so the assertion lands on the
-	// statements the loader built and executed rather than on children this test rebuilt by hand.
-	t.Run("loader reads the pivot table then the related table", func(t *testing.T) {
+	// Drive the loader itself with parent keys. The loader reads the related rows through the joined
+	// relation query — the shape the relation read reads — so one statement lands: the pivot join with
+	// the parent key's IN list, wearing the aliased pivot select list. The pivot_-aliased parent key
+	// groups each row back to its parent.
+	t.Run("loader reads the joined relation query", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &relUser{})
 		desc, err := relations.ResolveRelation(&relUser{}, "Roles")
 		assert.NoError(t, err)
@@ -1524,10 +1526,8 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 			return
 		}
 
-		// One pivot row links parent 1 to related 9; the loader then reads the related row for key 9.
-		recorder.returnRows(`from "`+desc.PivotTable+`"`,
-			[]string{desc.PivotParentRef.ForeignColumn, desc.PivotRelatedRef.ForeignColumn},
-			[]driver.Value{int64(1), int64(9)})
+		recorder.returnRows(`from "rel_roles"`, []string{"id", "name", "pivot_rel_user_id"},
+			[]driver.Value{int64(9), "admin", int64(1)})
 
 		parents := []reflect.Value{
 			reflect.ValueOf(&relUser{ID: 1}).Elem(),
@@ -1535,23 +1535,21 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 		}
 
 		assert.NoError(t, q.loadMany2Many(parents, &relUser{}, desc, eagerLoadEntry{Relation: "Roles"}, nil))
-		assert.Equal(t, 2, recorder.count(), "the loader reads the pivot table and then the related table")
+		assert.Equal(t, 1, recorder.count(), "the loader reads the related rows through the joined relation query")
 
-		pivot := recorder.at(t, 0)
+		joined := recorder.at(t, 0)
 		assert.Equal(t,
-			`select "rel_user_id", "rel_role_id" from "rel_user_roles" where "rel_user_roles"."rel_user_id" in (?, ?)`,
-			pivot.sql)
-		assert.Equal(t, driverBindings([]any{uint(1), uint(2)}), pivot.args)
+			`select "rel_roles".*, "rel_user_roles"."rel_user_id" as "pivot_rel_user_id", "rel_user_roles"."rel_role_id" as "pivot_rel_role_id" from "rel_roles" inner join "rel_user_roles" ON "rel_user_roles"."rel_role_id" = "rel_roles"."id" where "rel_user_roles"."rel_user_id" in (?, ?)`,
+			joined.sql)
+		assert.Equal(t, driverBindings([]any{uint(1), uint(2)}), joined.args)
 
-		related := recorder.at(t, 1)
-		assert.Equal(t, `select * from "rel_roles" where "rel_roles"."id" in (?)`, related.sql)
-		// The key comes off the pivot row as the driver-typed int64, not the uint the parents carried.
-		assert.Equal(t, []driver.Value{int64(9)}, related.args)
+		user := parents[0].Addr().Interface().(*relUser)
+		assert.Len(t, user.Roles, 1)
+		assert.Equal(t, "admin", user.Roles[0].Name)
 	})
 
-	// The relation's OnPivotQuery scope must reach the statement the loader actually runs, not just
-	// the child this test could rebuild: findMapsCompiled threads it in before compiling.
-	t.Run("loader's pivot read carries the relation scope", func(t *testing.T) {
+	// The relation's OnPivotQuery scope reaches the joined statement the loader actually runs.
+	t.Run("loader's joined read carries the relation scope", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &scopeUser{})
 		desc, err := relations.ResolveRelation(&scopeUser{}, "Roles")
 		assert.NoError(t, err)
@@ -1560,9 +1558,8 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 		}
 		assert.NotNil(t, desc.OnPivotQuery, "the fixture declares OnPivotQuery")
 
-		recorder.returnRows(`from "`+desc.PivotTable+`"`,
-			[]string{desc.PivotParentRef.ForeignColumn, desc.PivotRelatedRef.ForeignColumn},
-			[]driver.Value{int64(1), int64(9)})
+		recorder.returnRows(`from "scope_roles"`, []string{"id", "name", "pivot_scope_user_id"},
+			[]driver.Value{int64(9), "admin", int64(1)})
 
 		parents := []reflect.Value{
 			reflect.ValueOf(&scopeUser{ID: 1}).Elem(),
@@ -1571,17 +1568,12 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 
 		assert.NoError(t, q.loadMany2Many(parents, &scopeUser{}, desc, eagerLoadEntry{Relation: "Roles"}, nil))
 
-		pivot := recorder.at(t, 0)
+		joined := recorder.at(t, 0)
 		assert.Equal(t,
-			`select "scope_user_id", "scope_role_id" from "scope_user_roles" where "scope_user_roles"."scope_user_id" in (?, ?) and "scope_user_roles"."active" = ?`,
-			pivot.sql)
+			`select "scope_roles".*, "scope_user_roles"."scope_user_id" as "pivot_scope_user_id", "scope_user_roles"."scope_role_id" as "pivot_scope_role_id" from "scope_roles" inner join "scope_user_roles" ON "scope_user_roles"."scope_role_id" = "scope_roles"."id" where "scope_user_roles"."scope_user_id" in (?, ?) and "scope_user_roles"."active" = ?`,
+			joined.sql)
 		// The chunk's keys first, then the scope's own binding.
-		assert.Equal(t, []driver.Value{int64(1), int64(2), int64(1)}, pivot.args)
-
-		// The scope never dropped the row, so the loader still ran the related read off it.
-		related := recorder.at(t, 1)
-		assert.Equal(t, `select * from "scope_roles" where "scope_roles"."id" in (?)`, related.sql)
-		assert.Equal(t, []driver.Value{int64(9)}, related.args)
+		assert.Equal(t, []driver.Value{int64(1), int64(2), int64(1)}, joined.args)
 	})
 }
 
@@ -1710,10 +1702,11 @@ func TestLoadHasOneOrMany_AssignsHydratedRows(t *testing.T) {
 	})
 }
 
-// TestLoadMany2Many_HydratesPivotThroughTheLoader drives loadMany2Many end to end with canned pivot
-// and related rows, so the pivot-into-Pivot hydration path runs through the loader rather than
-// through writePivotField on its own: each parent's related row carries the pivot attributes of its
-// own pivot row, and two parents sharing one related row get distinct instances.
+// TestLoadMany2Many_HydratesPivotThroughTheLoader drives loadMany2Many end to end with canned
+// joined rows, so the pivot-into-Pivot hydration path runs through the loader: each joined row is one
+// pivot row, and the pivot_-aliased columns hydrate its own related instance, so two parents sharing
+// one related row get distinct instances carrying their own pivot attributes — Eloquent's match() by
+// $model->pivot.
 func TestLoadMany2Many_HydratesPivotThroughTheLoader(t *testing.T) {
 	q, recorder := newRecordingRelQuery(t, &pivotUser{})
 	desc, err := relations.ResolveRelation(&pivotUser{}, "Roles")
@@ -1727,17 +1720,12 @@ func TestLoadMany2Many_HydratesPivotThroughTheLoader(t *testing.T) {
 	pivotParentCol := desc.PivotParentRef.ForeignColumn
 	pivotRelatedCol := desc.PivotRelatedRef.ForeignColumn
 
-	// Both parents pivot-attach the same role 99, each with its own priority and notes. The pivot
-	// columns are the FK columns plus the Pivot struct's own fields, in the order the plan reports
-	// them — the same list the loader put in the SELECT above.
-	recorder.returnRows(`from "`+desc.PivotTable+`"`,
-		[]string{pivotParentCol, pivotRelatedCol, "user_id", "role_id", "priority", "notes"},
-		[]driver.Value{int64(1), int64(99), int64(1), int64(99), "high", "one"},
-		[]driver.Value{int64(2), int64(99), int64(2), int64(99), "low", "two"},
-	)
+	// Both parents pivot-attach the same role 99, each with its own priority and notes; the joined read
+	// returns one row per pivot row, the pivot columns aliased pivot_<column>.
 	recorder.returnRows(`from "`+desc.RelatedTable+`"`,
-		[]string{"id", "name"},
-		[]driver.Value{int64(99), "admin"},
+		[]string{"id", "name", "pivot_" + pivotParentCol, "pivot_" + pivotRelatedCol, "pivot_user_id", "pivot_role_id", "pivot_priority", "pivot_notes"},
+		[]driver.Value{int64(99), "admin", int64(1), int64(99), int64(1), int64(99), "high", "one"},
+		[]driver.Value{int64(99), "admin", int64(2), int64(99), int64(2), int64(99), "low", "two"},
 	)
 
 	user1 := &pivotUser{ID: 1}
@@ -1746,24 +1734,19 @@ func TestLoadMany2Many_HydratesPivotThroughTheLoader(t *testing.T) {
 
 	assert.NoError(t, q.loadMany2Many(parents, &pivotUser{}, desc, eagerLoadEntry{Relation: "Roles"}, nil))
 
-	assert.Equal(t, 2, recorder.count(), "the loader reads the pivot table and then the related table")
-	pivot := recorder.at(t, 0)
+	assert.Equal(t, 1, recorder.count(), "the loader reads the related rows through one joined statement")
+	joined := recorder.at(t, 0)
 	assert.Equal(t,
-		`select "`+pivotParentCol+`", "`+pivotRelatedCol+`", "user_id", "role_id", "priority", "notes" from "`+desc.PivotTable+
-			`" where "`+desc.PivotTable+`"."`+pivotParentCol+`" in (?, ?)`,
-		pivot.sql)
-	assert.Equal(t, driverBindings([]any{uint(1), uint(2)}), pivot.args)
-
-	related := recorder.at(t, 1)
-	assert.Equal(t, `select * from "`+desc.RelatedTable+`" where "`+desc.RelatedTable+`"."id" in (?)`, related.sql)
-	assert.Equal(t, []driver.Value{int64(99)}, related.args)
+		`select "role_with_pivots".*, "rel_user_pivot_roles"."pivot_user_id" as "pivot_pivot_user_id", "rel_user_pivot_roles"."role_with_pivot_id" as "pivot_role_with_pivot_id", "rel_user_pivot_roles"."user_id" as "pivot_user_id", "rel_user_pivot_roles"."role_id" as "pivot_role_id", "rel_user_pivot_roles"."priority" as "pivot_priority", "rel_user_pivot_roles"."notes" as "pivot_notes" from "role_with_pivots" inner join "rel_user_pivot_roles" ON "rel_user_pivot_roles"."role_with_pivot_id" = "role_with_pivots"."id" where "rel_user_pivot_roles"."pivot_user_id" in (?, ?)`,
+		joined.sql)
+	assert.Equal(t, driverBindings([]any{uint(1), uint(2)}), joined.args)
 
 	if !assert.Len(t, user1.Roles, 1) || !assert.Len(t, user2.Roles, 1) {
 		return
 	}
 	role1, role2 := user1.Roles[0], user2.Roles[0]
 	assert.Equal(t, "admin", role1.Name)
-	assert.NotSame(t, role1, role2, "each parent must get its own related-row instance when a Pivot field is in play")
+	assert.NotSame(t, role1, role2, "each joined row is its own related-row instance")
 	assert.Equal(t, "high", role1.Pivot.Priority)
 	assert.Equal(t, "one", role1.Pivot.Notes)
 	assert.Equal(t, "low", role2.Pivot.Priority)

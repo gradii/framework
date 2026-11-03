@@ -270,6 +270,81 @@ func (m *belongsToManyRelationQuery) AllRelatedIds(dest any) error {
 	return m.Builder.Pluck(m.info.PivotRelatedRef.ForeignColumn, dest)
 }
 
+// --- take / limit ---------------------------------------------------------------------------
+//
+// BelongsToMany::take (vendor v12.55.1, BelongsToMany.php:1492) and BelongsToMany::limit (:1503):
+//
+//	public function limit($value)
+//	{
+//	    if ($this->parent->exists) {
+//	        $this->query->limit($value);
+//	    } else {
+//	        $column = $this->getExistenceCompareKey();
+//
+//	        $grammar = $this->query->getQuery()->getGrammar();
+//
+//	        if ($grammar instanceof MySqlGrammar && $grammar->useLegacyGroupLimit($this->query->getQuery())) {
+//	            $column = 'pivot_'.last(explode('.', $column));
+//	        }
+//
+//	        $this->query->groupLimit($value, $column);
+//	    }
+//
+//	    return $this;
+//	}
+//
+// An existing parent keeps the plain query limit — the relation read's own `... where
+// "pivot"."parent_fk" = ? limit N`. A parent that does not exist — the prototype an eager-load
+// constraint runs the relation on (Relation::noConstraints(fn () => $this->getModel()
+// ->newInstance()->$name())) — caps the rows per parent instead, through the query builder's group
+// limit: the row_number() over (partition by <qualified foreign pivot key>) derived table, so
+// with(['roles' => fn ($q) => $q->limit(2)]) reads two roles for every parent. The partition column
+// is the qualified foreign pivot key (BelongsToMany::getExistenceCompareKey, BelongsToMany.php:1527,
+// `return $this->getQualifiedForeignPivotKeyName();`); on the legacy MySQL rewrite it becomes the
+// aliased pivot column ('pivot_'.last(explode('.', $column)), :1512). Oracle (illuminate/database
+// v12.55.1, executed against sqlite from /tmp/eager-m2m-limit/probe.php): B1 eager BtM limit(2) ->
+// `select * from (select "m2m_roles".*, "m2m_role_user"."user_id" as "pivot_user_id",
+// "m2m_role_user"."role_id" as "pivot_role_id", "m2m_role_user"."note" as "pivot_note",
+// row_number() over (partition by "m2m_role_user"."user_id") as "laravel_row" from "m2m_roles"
+// inner join "m2m_role_user" on "m2m_roles"."id" = "m2m_role_user"."role_id" where
+// "m2m_role_user"."user_id" in (1, 2)) as "laravel_table" where "laravel_row" <= 2 order by
+// "laravel_row"`, counts [2, 2]; B2 take(2) compiles the same rewrite; B3 a non-existing parent's
+// toBase() reports limit NULL and groupLimit ['value' => 2, 'column' => 'm2m_role_user.user_id'];
+// B4 an existing parent's relation read carries the plain `... where "m2m_role_user"."user_id" = ?
+// limit 2` with groupLimit NULL.
+
+// Take is the alias of Limit — BelongsToMany::take (BelongsToMany.php:1492).
+func (m *belongsToManyRelationQuery) Take(value int) contractsorm.Query {
+	return m.Limit(value)
+}
+
+// Limit sets the relation's limit — BelongsToMany::limit (BelongsToMany.php:1503): the plain query
+// limit for an existing parent, the per-parent group limit on getExistenceCompareKey() otherwise
+// (the aliased pivot column on the legacy MySQL rewrite). The relation object is returned, as
+// Laravel's `return $this`.
+func (m *belongsToManyRelationQuery) Limit(value int) contractsorm.Query {
+	if m.parentExists() {
+		m.rebuild(m.Builder.Limit(value))
+	} else {
+		column := m.GetExistenceCompareKey()
+		if m.Builder.UseLegacyGroupLimit() {
+			column = "pivot_" + lastColumnSegment(column)
+		}
+
+		m.rebuild(m.Builder.GroupLimit(value, column))
+	}
+
+	return m
+}
+
+// GetExistenceCompareKey gets the key the existence query compares the parent key against —
+// BelongsToMany::getExistenceCompareKey (vendor v12.55.1, BelongsToMany.php:1527,
+// `return $this->getQualifiedForeignPivotKeyName();`): the pivot's foreign key qualified with the
+// pivot table (oracle B3: 'm2m_role_user.user_id').
+func (m *belongsToManyRelationQuery) GetExistenceCompareKey() string {
+	return m.pivotQualified(m.info.PivotParentRef.ForeignColumn)
+}
+
 // --- the pivot-column query family ------------------------------------------
 //
 // The family mirrors Eloquent's BelongsToMany wherePivot surface: each method appends one clause

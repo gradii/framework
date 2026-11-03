@@ -9,11 +9,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestLoadMorphToMany_ReadsAreCompiled pins both queries loadMorphToMany builds: the pivot-table
-// read (with the extra morph-type predicate that separates it from a plain Many2Many read) and the
-// related-rows read. Both are addressed through the package's child builders, so the framework
-// compiler renders the statement instead of GORM. The loader is driven with parent keys too, so a
-// change to either half of its body fails the test.
+// TestLoadMorphToMany_ReadsAreCompiled pins the child builders the morph many-to-many eager loader is
+// built from and the statement it runs: the joined relation read (the related table joined to the
+// pivot, carrying the morph-type predicate that separates it from a plain Many2Many read, wearing the
+// aliased pivot select list), addressed through the package's child builders so the framework compiler
+// renders the statement instead of GORM. The loader is driven with parent keys too, so a change to its
+// body fails the test.
 //
 // The binding slice is asserted exactly, since its order and arity carry the chunk keys and the morph
 // value.
@@ -141,11 +142,10 @@ func TestLoadMorphToMany_ReadsAreCompiled(t *testing.T) {
 
 		assert.NoError(t, q.loadMorphToMany(nil, &morphPost{}, desc, eagerLoadEntry{Relation: "Tags"}, nil))
 	})
-	// Drive the loader itself with parent keys. The recording driver hands back one pivot row, which
-	// is what makes loadMorphToMany run its second read, so the assertion lands on the statements the
-	// loader built and executed: the pivot read carrying the morph-type predicate, then the related
-	// read. A change to either half of the loader's body fails the test.
-	t.Run("loader reads the pivot table then the related table", func(t *testing.T) {
+	// Drive the loader itself with parent keys. The loader reads the related rows through the joined
+	// relation query, so one statement lands: the pivot join carrying the morph-type predicate, wearing
+	// the aliased pivot select list.
+	t.Run("loader reads the joined relation query", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &morphPost{})
 		desc, err := relations.ResolveRelation(&morphPost{}, "Tags")
 		assert.NoError(t, err)
@@ -153,10 +153,8 @@ func TestLoadMorphToMany_ReadsAreCompiled(t *testing.T) {
 			return
 		}
 
-		// One pivot row links parent 1 to related 9; the loader then reads the related row for key 9.
-		recorder.returnRows(`from "taggables"`,
-			[]string{desc.PivotParentRef.ForeignColumn, desc.PivotRelatedRef.ForeignColumn},
-			[]driver.Value{int64(1), int64(9)})
+		recorder.returnRows(`from "morph_tags"`, []string{"id", "name", "pivot_taggable_id", "pivot_taggable_type"},
+			[]driver.Value{int64(9), "tag", int64(1), desc.MorphValue})
 
 		parents := []reflect.Value{
 			reflect.ValueOf(&morphPost{ID: 1}).Elem(),
@@ -164,25 +162,17 @@ func TestLoadMorphToMany_ReadsAreCompiled(t *testing.T) {
 		}
 
 		assert.NoError(t, q.loadMorphToMany(parents, &morphPost{}, desc, eagerLoadEntry{Relation: "Tags"}, nil))
-		assert.Equal(t, 2, recorder.count(), "the loader reads the pivot table and then the related table")
+		assert.Equal(t, 1, recorder.count(), "the loader reads the related rows through the joined relation query")
 
-		pivot := recorder.at(t, 0)
-		// The morph type column rides along with the two pivot keys — MorphToMany::aliasedPivotColumns
-		// interleaves it — so the hydrated pivot struct can carry it.
+		joined := recorder.at(t, 0)
 		assert.Equal(t,
-			`select "taggable_id", "morph_tag_id", "taggable_type" from "taggables" where "taggables"."taggable_id" in (?, ?) and "taggables"."taggable_type" = ?`,
-			pivot.sql)
-		assert.Equal(t, append(driverBindings([]any{uint(1), uint(2)}), desc.MorphValue), pivot.args)
-
-		related := recorder.at(t, 1)
-		assert.Equal(t, `select * from "morph_tags" where "morph_tags"."id" in (?)`, related.sql)
-		// The key comes off the pivot row as the driver-typed int64, not the uint the parents carried.
-		assert.Equal(t, []driver.Value{int64(9)}, related.args)
+			`select "morph_tags".*, "taggables"."taggable_id" as "pivot_taggable_id", "taggables"."morph_tag_id" as "pivot_morph_tag_id", "taggables"."taggable_type" as "pivot_taggable_type" from "morph_tags" inner join "taggables" ON "taggables"."morph_tag_id" = "morph_tags"."id" where "taggables"."taggable_id" in (?, ?) and "taggables"."taggable_type" = ?`,
+			joined.sql)
+		assert.Equal(t, append(driverBindings([]any{uint(1), uint(2)}), desc.MorphValue), joined.args)
 	})
 
-	// The relation's OnPivotQuery scope must reach the statement the loader actually runs, not just
-	// the child this test could rebuild: findMapsCompiled threads it in before compiling.
-	t.Run("loader's pivot read carries the relation scope", func(t *testing.T) {
+	// The relation's OnPivotQuery scope reaches the joined statement the loader actually runs.
+	t.Run("loader's joined read carries the relation scope", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &scopeMorphPost{})
 		desc, err := relations.ResolveRelation(&scopeMorphPost{}, "Tags")
 		assert.NoError(t, err)
@@ -191,9 +181,8 @@ func TestLoadMorphToMany_ReadsAreCompiled(t *testing.T) {
 		}
 		assert.NotNil(t, desc.OnPivotQuery, "the fixture declares OnPivotQuery")
 
-		recorder.returnRows(`from "taggables"`,
-			[]string{desc.PivotParentRef.ForeignColumn, desc.PivotRelatedRef.ForeignColumn},
-			[]driver.Value{int64(1), int64(9)})
+		recorder.returnRows(`from "scope_morph_tags"`, []string{"id", "name", "pivot_taggable_id", "pivot_taggable_type"},
+			[]driver.Value{int64(9), "tag", int64(1), desc.MorphValue})
 
 		parents := []reflect.Value{
 			reflect.ValueOf(&scopeMorphPost{ID: 1}).Elem(),
@@ -202,12 +191,10 @@ func TestLoadMorphToMany_ReadsAreCompiled(t *testing.T) {
 
 		assert.NoError(t, q.loadMorphToMany(parents, &scopeMorphPost{}, desc, eagerLoadEntry{Relation: "Tags"}, nil))
 
-		pivot := recorder.at(t, 0)
+		joined := recorder.at(t, 0)
 		assert.Equal(t,
-			`select "taggable_id", "scope_morph_tag_id", "taggable_type" from "taggables" where "taggables"."taggable_id" in (?, ?) and "taggables"."taggable_type" = ? and "taggables"."deleted_at" is null`,
-			pivot.sql)
-		// The chunk's keys and the morph value first, then the scope's own binding (none here: the
-		// scope is an `is null` predicate).
-		assert.Equal(t, append(driverBindings([]any{uint(1), uint(2)}), desc.MorphValue), pivot.args)
+			`select "scope_morph_tags".*, "taggables"."taggable_id" as "pivot_taggable_id", "taggables"."scope_morph_tag_id" as "pivot_scope_morph_tag_id", "taggables"."taggable_type" as "pivot_taggable_type" from "scope_morph_tags" inner join "taggables" ON "taggables"."scope_morph_tag_id" = "scope_morph_tags"."id" where "taggables"."taggable_id" in (?, ?) and "taggables"."taggable_type" = ? and "taggables"."deleted_at" is null`,
+			joined.sql)
+		assert.Equal(t, append(driverBindings([]any{uint(1), uint(2)}), desc.MorphValue), joined.args)
 	})
 }

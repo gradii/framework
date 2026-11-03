@@ -255,8 +255,9 @@ type Query interface {
 	// limit — the row_number() over (partition by <key>) derived table — for a parent that does
 	// not exist, returning the relation object (oracle
 	// /tmp/followup-take-grouplimit/take_grouplimit.php H1 / H7 / T1 / T5). The many-to-many
-	// object still promotes the builder's plain limit (BelongsToMany::take, BelongsToMany.php:1492,
-	// is not yet ported).
+	// object carries the same branch (BelongsToMany::take BelongsToMany.php:1492 / BelongsToMany
+	// ::limit :1503), partitioned by the qualified foreign pivot key; oracle
+	// /tmp/eager-m2m-limit/probe.php B2 / B4.
 	Take(limit int) Query
 	// Load loads a relationship for the model. args may be a callback or other
 	// shapes accepted by With (e.g. "Books:id,name" column pruning is supported by

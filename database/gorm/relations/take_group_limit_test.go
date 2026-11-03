@@ -239,6 +239,85 @@ func TestTakeGroupLimit_SeamReportsNoLegacyGroupLimitOnTheBaseGrammar(t *testing
 	assert.False(t, legacy.UseLegacyGroupLimit())
 }
 
+// --- many-to-many ----------------------------------------------------------------------------
+
+// TestTakeGroupLimit_Many2ManyExistingParentCompilesThePlainLimit pins BelongsToMany::limit's
+// existing-parent branch: the plain query limit on the pivot-joined relation read, with the group
+// limit unset. Oracle B4 (illuminate/database v12.55.1, executed against sqlite from
+// /tmp/eager-m2m-limit/probe.php): `$u1->roles()->limit(2)` reports toBase()->limit 2 (groupLimit
+// NULL) and compiles the plain `... where "m2m_role_user"."user_id" = ? limit 2`.
+func TestTakeGroupLimit_Many2ManyExistingParentCompilesThePlainLimit(t *testing.T) {
+	builder, recorder := newRelationTestBuilder(t)
+
+	require.NoError(t, builder.Related(&mmUser{ID: 7}, "Roles").Limit(2).Get(&[]mmRole{}))
+	require.NoError(t, builder.Related(&mmUser{ID: 7}, "Roles").Take(2).Get(&[]mmRole{}))
+
+	statements := recorder.take()
+	require.Len(t, statements, 2)
+	for _, statement := range statements {
+		assert.Equal(t, mmPlainReadBase+` limit 2`, statement.query)
+		assert.Equal(t, []any{int64(7)}, derefAll(statement.args))
+	}
+}
+
+// TestTakeGroupLimit_Many2ManyNewParentCompilesTheGroupLimit pins BelongsToMany::limit's
+// non-existing-parent branch (the prototype an eager-load constraint runs the relation on): the
+// pivot-partitioned group limit — row_number() over (partition by <qualified foreign pivot key>) —
+// with the plain limit unset. Oracle B1/B2/B3 (/tmp/eager-m2m-limit/probe.php): the eager BtM
+// limit(2) compiles `select * from (select "m2m_roles".*, <pivot aliases>, row_number() over
+// (partition by "m2m_role_user"."user_id") as "laravel_row" from "m2m_roles" inner join
+// "m2m_role_user" on ... where "m2m_role_user"."user_id" in (1, 2)) as "laravel_table" where
+// "laravel_row" <= 2 order by "laravel_row"`; the non-existing parent's toBase() reports limit
+// NULL and groupLimit ['value' => 2, 'column' => 'm2m_role_user.user_id']. The partition column is
+// getExistenceCompareKey(), the qualified foreign pivot key (BelongsToMany.php:1527).
+func TestTakeGroupLimit_Many2ManyNewParentCompilesTheGroupLimit(t *testing.T) {
+	builder, recorder := newRelationTestBuilder(t)
+
+	require.NoError(t, builder.Related(&mmUser{}, "Roles").Limit(2).Get(&[]mmRole{}))
+	require.NoError(t, builder.Related(&mmUser{}, "Roles").Take(2).Get(&[]mmRole{}))
+
+	statements := recorder.take()
+	require.Len(t, statements, 2)
+	for _, statement := range statements {
+		assert.Equal(t, `select * from (select "mm_roles".*, "mm_user_roles"."user_id" as "pivot_user_id", "mm_user_roles"."role_id" as "pivot_role_id", row_number() over (partition by "mm_user_roles"."user_id") as "laravel_row" from "mm_roles" inner join "mm_user_roles" ON "mm_user_roles"."role_id" = "mm_roles"."id" where "mm_user_roles"."user_id" = ?) as "laravel_table" where "laravel_row" <= 2 order by "laravel_row"`, statement.query)
+		assert.Equal(t, []any{int64(0)}, derefAll(statement.args))
+	}
+}
+
+// TestTakeGroupLimit_MorphToManyNewParentPartitionsByTheForeignPivotKey pins the morph sibling:
+// MorphToMany inherits BelongsToMany::limit, so it partitions by the qualified foreign pivot key
+// and keeps the morph-type predicate inside the rewrite. Oracle M1 (/tmp/eager-m2m-limit/probe.php):
+// `select * from (select "m2m_tags".*, <pivot aliases>, row_number() over (partition by
+// "m2m_taggables"."taggable_id") as "laravel_row" from "m2m_tags" inner join "m2m_taggables" on ...
+// where "m2m_taggables"."taggable_id" in (1) and "m2m_taggables"."taggable_type" = ?) as
+// "laravel_table" where "laravel_row" <= 2 order by "laravel_row"`.
+func TestTakeGroupLimit_MorphToManyNewParentPartitionsByTheForeignPivotKey(t *testing.T) {
+	builder, recorder := newRelationTestBuilder(t)
+
+	require.NoError(t, builder.Related(&mmPost{}, "Tags").Limit(2).Get(&[]mmTag{}))
+
+	statements := recorder.take()
+	require.Len(t, statements, 1)
+	assert.Equal(t, `select * from (select "mm_tags".*, "mm_taggables"."taggable_id" as "pivot_taggable_id", "mm_taggables"."tag_id" as "pivot_tag_id", "mm_taggables"."taggable_type" as "pivot_taggable_type", row_number() over (partition by "mm_taggables"."taggable_id") as "laravel_row" from "mm_tags" inner join "mm_taggables" ON "mm_taggables"."tag_id" = "mm_tags"."id" where "mm_taggables"."taggable_id" = ? and "mm_taggables"."taggable_type" = ?) as "laravel_table" where "laravel_row" <= 2 order by "laravel_row"`, statements[0].query)
+}
+
+// TestTakeGroupLimit_Many2ManyReturnsTheRelationAndExistenceKey pins the object surface: take() /
+// limit() return the relation itself (Laravel's `return $this`), and getExistenceCompareKey() is
+// the qualified foreign pivot key (oracle B3: 'm2m_role_user.user_id'). GetExistenceCompareKey is
+// asserted structurally — it is not on the BelongsToManyRelation contract (only HasOneOrMany's is),
+// the same way PHP declares it on BelongsToMany without a shared interface.
+func TestTakeGroupLimit_Many2ManyReturnsTheRelationAndExistenceKey(t *testing.T) {
+	builder, _ := newRelationTestBuilder(t)
+
+	relation := builder.Related(&mmUser{}, "Roles")
+	assert.Same(t, relation, relation.Limit(2), "Limit must hand back the relation object")
+	assert.Same(t, relation, relation.Take(2), "Take must hand back the relation object")
+
+	keyed, ok := relation.(interface{ GetExistenceCompareKey() string })
+	require.True(t, ok, "the many-to-many object carries getExistenceCompareKey")
+	assert.Equal(t, "mm_user_roles.user_id", keyed.GetExistenceCompareKey())
+}
+
 // derefAll unwraps every pointer binding so an assertion sees the bound values.
 func derefAll(values []any) []any {
 	out := make([]any, 0, len(values))
