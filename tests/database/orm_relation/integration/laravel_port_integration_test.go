@@ -14,7 +14,9 @@ package integration
 // listed again in the port's report:
 //
 //   - Chunk / ChunkById / Each / EachById exist on the ORM query (the raw database/db query has
-//     its own too), so the corpus's paging reads are ported below.
+//     its own too), so the corpus's paging reads are ported in full below; the two
+//     non-incrementing-key paging tests stay skipped on the single-connection harness (see
+//     integrationSkipChunkSecondConn).
 //   - fresh() / pivot refresh: the model and pivot refresh entry points exist (Query.Fresh /
 //     Query.Refresh, matched on the model key or the pivot's PivotKeys); only the Eloquent
 //     Collection flavour has no Go call form.
@@ -46,20 +48,16 @@ import (
 // --- skip reasons --------------------------------------------------------------
 
 const (
-	integrationSkipChunk                = "our ORM diverges: the ORM query exposes no Chunk (chunking lives on the raw database/db query, and Query.Related returns an orm.Query) — probe: the equivalent Model(...).OrderBy(...).Limit(...).Offset(...).Get reads the same rows, but Laravel's chunk($count, $callback) paging cannot run"
-	integrationSkipChunkById            = "our ORM diverges: the ORM query exposes no ChunkById — probe: the equivalent key-ordered Get reads the same rows, but Laravel's chunkById($count, $callback) paging cannot run"
-	integrationSkipEachById             = "our ORM diverges: the ORM query exposes no EachById — probe: the equivalent key-ordered Get reads the same rows, but Laravel's eachById($count, $callback) iteration cannot run"
-	integrationSkipChunkSecondConn      = "our ORM diverges: the ORM query exposes no ChunkById/EachById, and the corpus's non-incrementing model lives on a second connection the harness does not provide (newRelationQuery opens one sqlite database and the query has no on(...) switch)"
-	integrationSkipMultiConnection      = "the harness is single-connection: newRelationQuery opens one sqlite database and the ORM query exposes no per-query connection switching (no on('second_connection') equivalent), so the corpus's second connection cannot exist"
-	integrationSkipRelationFindOrCreate = "our ORM diverges: the relation FirstOrNew/FirstOrCreate never reach their not-found branch — probe: the relation first() reports a missing row as an empty destination with no error, so the overlay-and-create branch does not run (name stays \"\", user_id 0, no row written) where Laravel returns the attrs+values instance / creates it"
-	integrationSkipBindings             = "PHP-only assertion (no Go equivalent): the ORM query exposes no binding list (getBindings has no counterpart), so the question-mark/binding parity cannot be observed; oracle: has('postWithPhotos') compiles `select * from \"users\" where exists (select * from \"posts\" where \"users\".\"id\" = \"posts\".\"user_id\")` with no placeholders"
-	integrationSkipJSONFields           = "our ORM diverges: there is no json->path attribute write and no array cast on Go fields — probe: the update targets a pseudo-column a typed Go model does not have, and the json column comes back without a cast layer"
-	integrationSkipDateFormat           = "PHP-only assertion (no Go equivalent): per-model date formats (setDateFormat / fromDateTime) have no Go counterpart — Go models carry typed *carbon.DateTime fields"
-	integrationSkipToArray              = "PHP-only assertion (no Go equivalent): Go models have no toArray()/serializeDate() — timestamps are typed *carbon.DateTime fields, not serialized strings"
-	integrationSkipKeyCast              = "PHP-only assertion (no Go equivalent): Eloquent's runtime key casting has no Go counterpart — a Go model's key is statically typed"
-	integrationSkipFillAndInsert        = "our ORM diverges: the ORM exposes no fillAndInsert / fillAndInsertOrIgnore / fillAndInsertGetId batch-insert entry point (nor the HasUuids string sequence / JSON cast the corpus's variants rely on)"
-	integrationSkipWillFails            = "our ORM diverges: the corpus makes saveOrFail fail by assigning the string 'invalid' to the integer key — a Go model's key is statically typed (uint64), so the mid-transaction failure cannot be reproduced"
-	integrationSkipDefaultConnection    = "the harness is single-connection and the ORM query exposes no on(...) connection switching or fromQuery hydration entry point — probe: the corpus's second-connection read cannot be expressed"
+	integrationSkipChunkSecondConn   = "the harness is single-connection: the corpus's non-incrementing second model (EloquentTestNonIncrementingSecond, table non_incrementing_users - no key column) is declared on 'second_connection', and newRelationQuery opens one sqlite database; the ORM chunkById/eachById themselves exist and are exercised by the ported paging tests above"
+	integrationSkipMultiConnection   = "the harness is single-connection: newRelationQuery opens one sqlite database and the ORM query exposes no per-query connection switching (no on('second_connection') equivalent), so the corpus's second connection cannot exist"
+	integrationSkipBindings          = "PHP-only assertion (no Go equivalent): the ORM query exposes no binding list (getBindings has no counterpart), so the question-mark/binding parity cannot be observed; oracle: has('postWithPhotos') compiles `select * from \"users\" where exists (select * from \"posts\" where \"users\".\"id\" = \"posts\".\"user_id\")` with no placeholders"
+	integrationSkipJSONFields        = "our ORM diverges: there is no json->path attribute write and no array cast on Go fields — probe: the update targets a pseudo-column a typed Go model does not have, and the json column comes back without a cast layer"
+	integrationSkipDateFormat        = "PHP-only assertion (no Go equivalent): per-model date formats (setDateFormat / fromDateTime) have no Go counterpart — Go models carry typed *carbon.DateTime fields"
+	integrationSkipToArray           = "PHP-only assertion (no Go equivalent): Go models have no toArray()/serializeDate() — timestamps are typed *carbon.DateTime fields, not serialized strings"
+	integrationSkipKeyCast           = "PHP-only assertion (no Go equivalent): Eloquent's runtime key casting has no Go counterpart — a Go model's key is statically typed"
+	integrationSkipFillAndInsert     = "our ORM diverges: the ORM exposes no fillAndInsert / fillAndInsertOrIgnore / fillAndInsertGetId batch-insert entry point (nor the HasUuids string sequence / JSON cast the corpus's variants rely on)"
+	integrationSkipWillFails         = "our ORM diverges: the corpus makes saveOrFail fail by assigning the string 'invalid' to the integer key — a Go model's key is statically typed (uint64), so the mid-transaction failure cannot be reproduced"
+	integrationSkipDefaultConnection = "the harness is single-connection and the ORM query exposes no on(...) connection switching or fromQuery hydration entry point — probe: the corpus's second-connection read cannot be expressed"
 )
 
 // --- models --------------------------------------------------------------------
@@ -1272,47 +1270,265 @@ func TestIntegration_CreatingIncrementingModelBatchWithEmptyAttributes(t *testin
 }
 
 func TestIntegration_Chunk(t *testing.T) {
-	t.Skip(integrationSkipChunk + "; the corpus pages First/Second/Third through the callback")
+	query := newRelationQuery(t)
+	integrationSchema(t, query)
+
+	// Laravel: EloquentTestUser::insert([...]); EloquentTestUser::query()->orderBy('id',
+	// 'asc')->chunk(2, function ($users, $page) {...}). Two pages - {First, Second} then
+	// {Third}. Oracle (illuminate/database v12.55.1, sqlite): page one
+	// `select * from "users" order by "id" asc limit 2 offset 0`, page two the same at offset 2.
+	integrationSeedPagedUsers(t, query, 3)
+
+	chunks := 0
+	users := []integrationUser{}
+	require.NoError(t, cloneRelationQuery(t, query).Model(&integrationUser{}).OrderBy("id", "asc").Chunk(2, &users, func(page int) error {
+		switch page {
+		case 1:
+			require.Len(t, users, 2)
+			assert.Equal(t, "First", integrationDeref(users[0].Name))
+			assert.Equal(t, "Second", integrationDeref(users[1].Name))
+		case 2:
+			require.Len(t, users, 1)
+			assert.Equal(t, "Third", integrationDeref(users[0].Name))
+		default:
+			t.Fatalf("chunk callback ran for unexpected page %d", page)
+		}
+
+		chunks++
+
+		return nil
+	}))
+	assert.Equal(t, 2, chunks)
 }
 
 func TestIntegration_ChunksWithLimitsWhereLimitIsLessThanTotal(t *testing.T) {
-	t.Skip(integrationSkipChunk + "; the corpus pages under limit(2)")
+	query := newRelationQuery(t)
+	integrationSchema(t, query)
+
+	// Laravel: orderBy('id', 'asc')->limit(2)->chunk(2, ...) - a single page; the corpus fails
+	// the callback on any page after the first, so the walk stops once the limit is exhausted.
+	integrationSeedPagedUsers(t, query, 3)
+
+	chunks := 0
+	users := []integrationUser{}
+	require.NoError(t, cloneRelationQuery(t, query).Model(&integrationUser{}).OrderBy("id", "asc").Limit(2).Chunk(2, &users, func(page int) error {
+		assert.Equal(t, 1, page, "the corpus fails the callback on any page after the first")
+
+		require.Len(t, users, 2)
+		assert.Equal(t, "First", integrationDeref(users[0].Name))
+		assert.Equal(t, "Second", integrationDeref(users[1].Name))
+
+		chunks++
+
+		return nil
+	}))
+	assert.Equal(t, 1, chunks)
 }
 
 func TestIntegration_ChunksWithLimitsWhereLimitIsMoreThanTotal(t *testing.T) {
-	t.Skip(integrationSkipChunk + "; the corpus pages under limit(10)")
+	query := newRelationQuery(t)
+	integrationSchema(t, query)
+
+	// Laravel: orderBy('id', 'asc')->limit(10)->chunk(2, ...) - the limit exceeds the row count,
+	// so two pages come back and the walk ends on the short page.
+	integrationSeedPagedUsers(t, query, 3)
+
+	chunks := 0
+	users := []integrationUser{}
+	require.NoError(t, cloneRelationQuery(t, query).Model(&integrationUser{}).OrderBy("id", "asc").Limit(10).Chunk(2, &users, func(page int) error {
+		switch page {
+		case 1:
+			require.Len(t, users, 2)
+			assert.Equal(t, "First", integrationDeref(users[0].Name))
+			assert.Equal(t, "Second", integrationDeref(users[1].Name))
+		case 2:
+			require.Len(t, users, 1)
+			assert.Equal(t, "Third", integrationDeref(users[0].Name))
+		default:
+			t.Fatalf("chunk callback ran for unexpected page %d", page)
+		}
+
+		chunks++
+
+		return nil
+	}))
+	assert.Equal(t, 2, chunks)
 }
 
 func TestIntegration_ChunksWithOffset(t *testing.T) {
-	t.Skip(integrationSkipChunk + "; the corpus pages under offset(1)")
+	query := newRelationQuery(t)
+	integrationSchema(t, query)
+
+	// Laravel: orderBy('id', 'asc')->offset(1)->chunk(2, ...) - the offset skips First, so the
+	// single page holds {Second, Third}.
+	integrationSeedPagedUsers(t, query, 3)
+
+	chunks := 0
+	users := []integrationUser{}
+	require.NoError(t, cloneRelationQuery(t, query).Model(&integrationUser{}).OrderBy("id", "asc").Offset(1).Chunk(2, &users, func(page int) error {
+		assert.Equal(t, 1, page, "the corpus fails the callback on any page after the first")
+
+		require.Len(t, users, 2)
+		assert.Equal(t, "Second", integrationDeref(users[0].Name))
+		assert.Equal(t, "Third", integrationDeref(users[1].Name))
+
+		chunks++
+
+		return nil
+	}))
+	assert.Equal(t, 1, chunks)
 }
 
 func TestIntegration_ChunksWithOffsetWhereMoreThanTotal(t *testing.T) {
-	t.Skip(integrationSkipChunk + "; the corpus pages under offset(3) and expects zero chunks")
+	query := newRelationQuery(t)
+	integrationSchema(t, query)
+
+	// Laravel: orderBy('id', 'asc')->offset(3)->chunk(2, ...) - the offset exceeds the row count,
+	// so the callback never runs.
+	integrationSeedPagedUsers(t, query, 3)
+
+	chunks := 0
+	users := []integrationUser{}
+	require.NoError(t, cloneRelationQuery(t, query).Model(&integrationUser{}).OrderBy("id", "asc").Offset(3).Chunk(2, &users, func(int) error {
+		chunks++
+
+		return nil
+	}))
+	assert.Equal(t, 0, chunks)
 }
 
 func TestIntegration_ChunksWithLimitsAndOffsets(t *testing.T) {
-	t.Skip(integrationSkipChunk + "; the corpus pages under offset(2) + limit(3)")
+	query := newRelationQuery(t)
+	integrationSchema(t, query)
+
+	// Laravel: orderBy('id', 'asc')->offset(2)->limit(3)->chunk(2, ...) - pages {Third, Fourth}
+	// then {Fifth}; Sixth and Seventh fall outside the limit.
+	integrationSeedPagedUsers(t, query, 7)
+
+	chunks := 0
+	users := []integrationUser{}
+	require.NoError(t, cloneRelationQuery(t, query).Model(&integrationUser{}).OrderBy("id", "asc").Offset(2).Limit(3).Chunk(2, &users, func(page int) error {
+		switch page {
+		case 1:
+			require.Len(t, users, 2)
+			assert.Equal(t, "Third", integrationDeref(users[0].Name))
+			assert.Equal(t, "Fourth", integrationDeref(users[1].Name))
+		case 2:
+			require.Len(t, users, 1)
+			assert.Equal(t, "Fifth", integrationDeref(users[0].Name))
+		default:
+			t.Fatalf("chunk callback ran for unexpected page %d", page)
+		}
+
+		chunks++
+
+		return nil
+	}))
+	assert.Equal(t, 2, chunks)
 }
 
 func TestIntegration_ChunkByIdWithLimits(t *testing.T) {
-	t.Skip(integrationSkipChunkById + "; the corpus pages under limit(2)")
+	query := newRelationQuery(t)
+	integrationSchema(t, query)
+
+	// Laravel: limit(2)->chunkById(2, ...) - one page; the limit caps the page size and ends the
+	// walk.
+	integrationSeedPagedUsers(t, query, 3)
+
+	chunks := 0
+	users := []integrationUser{}
+	require.NoError(t, cloneRelationQuery(t, query).Model(&integrationUser{}).Limit(2).ChunkById(2, &users, func(page int) error {
+		assert.Equal(t, 1, page, "the corpus fails the callback on any page after the first")
+
+		require.Len(t, users, 2)
+		assert.Equal(t, "First", integrationDeref(users[0].Name))
+		assert.Equal(t, "Second", integrationDeref(users[1].Name))
+
+		chunks++
+
+		return nil
+	}))
+	assert.Equal(t, 1, chunks)
 }
 
 func TestIntegration_ChunkByIdWithOffsets(t *testing.T) {
-	t.Skip(integrationSkipChunkById + "; the corpus pages under offset(1)")
+	query := newRelationQuery(t)
+	integrationSchema(t, query)
+
+	// Laravel: offset(1)->chunkById(2, ...) - the offset applies to the first (and only) page, so
+	// the walk reads {Second, Third}.
+	integrationSeedPagedUsers(t, query, 3)
+
+	chunks := 0
+	users := []integrationUser{}
+	require.NoError(t, cloneRelationQuery(t, query).Model(&integrationUser{}).Offset(1).ChunkById(2, &users, func(page int) error {
+		assert.Equal(t, 1, page, "the corpus fails the callback on any page after the first")
+
+		require.Len(t, users, 2)
+		assert.Equal(t, "Second", integrationDeref(users[0].Name))
+		assert.Equal(t, "Third", integrationDeref(users[1].Name))
+
+		chunks++
+
+		return nil
+	}))
+	assert.Equal(t, 1, chunks)
 }
 
 func TestIntegration_ChunkByIdWithLimitsAndOffsets(t *testing.T) {
-	t.Skip(integrationSkipChunkById + "; the corpus pages under offset(2) + limit(3)")
+	query := newRelationQuery(t)
+	integrationSchema(t, query)
+
+	// Laravel: offset(2)->limit(3)->chunkById(2, ...) - pages {Third, Fourth} then {Fifth}.
+	integrationSeedPagedUsers(t, query, 7)
+
+	chunks := 0
+	users := []integrationUser{}
+	require.NoError(t, cloneRelationQuery(t, query).Model(&integrationUser{}).Offset(2).Limit(3).ChunkById(2, &users, func(page int) error {
+		switch page {
+		case 1:
+			require.Len(t, users, 2)
+			assert.Equal(t, "Third", integrationDeref(users[0].Name))
+			assert.Equal(t, "Fourth", integrationDeref(users[1].Name))
+		case 2:
+			require.Len(t, users, 1)
+			assert.Equal(t, "Fifth", integrationDeref(users[0].Name))
+		default:
+			t.Fatalf("chunkById callback ran for unexpected page %d", page)
+		}
+
+		chunks++
+
+		return nil
+	}))
+	assert.Equal(t, 2, chunks)
 }
 
+// TestIntegration_ChunkByIdWithNonIncrementingKey stays skipped: the corpus pages
+// EloquentTestNonIncrementingSecond (table non_incrementing_users, no key column, declared on
+// 'second_connection') - the harness opens one sqlite connection, so the second connection the
+// corpus's chunkById(2, cb, 'name') runs on does not exist.
 func TestIntegration_ChunkByIdWithNonIncrementingKey(t *testing.T) {
 	t.Skip(integrationSkipChunkSecondConn)
 }
 
+// TestIntegration_EachByIdWithNonIncrementingKey shares the skip above.
 func TestIntegration_EachByIdWithNonIncrementingKey(t *testing.T) {
 	t.Skip(integrationSkipChunkSecondConn)
+}
+
+// integrationSeedPagedUsers ports the corpus's EloquentTestUser::insert([...]) seed for the paging
+// tests: n rows named First..Seventh with matching emails, so id order equals name order.
+func integrationSeedPagedUsers(t *testing.T, query contractsorm.Query, n int) {
+	t.Helper()
+
+	names := []string{"First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh"}
+	for i := 0; i < n; i++ {
+		require.NoError(t, cloneRelationQuery(t, query).Model(&integrationUser{}).Create(map[string]any{
+			"name":  names[i],
+			"email": names[i] + "@example.com",
+		}))
+	}
 }
 
 func TestIntegration_Pluck(t *testing.T) {
@@ -1527,11 +1743,51 @@ func TestIntegration_BasicModelHydration(t *testing.T) {
 }
 
 func TestIntegration_FirstOrNewOnHasOneRelationShip(t *testing.T) {
-	t.Skip(integrationSkipRelationFindOrCreate)
+	query := newRelationQuery(t)
+	integrationSchema(t, query)
+
+	// Laravel: $user1->post()->firstOrNew(['name' => 'First Post'], ['name' => 'New Post']) - the
+	// relationship misses, so the values win and nothing is written.
+	user1 := integrationCreateUser(t, query, "taylorotwell@gmail.com")
+	post1 := integrationPost{}
+	require.NoError(t, cloneRelationQuery(t, query).Relation(&user1, "Post").FirstOrNew(
+		map[string]any{"name": "First Post"}, map[string]any{"name": "New Post"}, &post1))
+	assert.Equal(t, "New Post", post1.Name)
+
+	// A second parent already owns a matching post, so firstOrNew returns the found row as-is.
+	user2 := integrationCreateUser(t, query, "abigailotwell@gmail.com")
+	seeded := integrationPost{Name: "First Post"}
+	require.NoError(t, cloneRelationQuery(t, query).Relation(&user2, "Post").Create(&seeded))
+
+	post2 := integrationPost{}
+	require.NoError(t, cloneRelationQuery(t, query).Relation(&user2, "Post").FirstOrNew(
+		map[string]any{"name": "First Post"}, map[string]any{"name": "New Post"}, &post2))
+	assert.Equal(t, "First Post", post2.Name)
+	assert.Equal(t, seeded.ID, post2.ID)
 }
 
 func TestIntegration_FirstOrCreateOnHasOneRelationShip(t *testing.T) {
-	t.Skip(integrationSkipRelationFindOrCreate)
+	query := newRelationQuery(t)
+	integrationSchema(t, query)
+
+	// Laravel: $user1->post()->firstOrCreate(['name' => 'First Post'], ['name' => 'New Post']) -
+	// the relationship misses, so the row is created with the values applied.
+	user1 := integrationCreateUser(t, query, "taylorotwell@gmail.com")
+	post1 := integrationPost{}
+	require.NoError(t, cloneRelationQuery(t, query).Relation(&user1, "Post").FirstOrCreate(
+		map[string]any{"name": "First Post"}, map[string]any{"name": "New Post"}, &post1))
+	assert.Equal(t, "New Post", post1.Name)
+
+	// A second parent already owns a matching post, so firstOrCreate returns the found row.
+	user2 := integrationCreateUser(t, query, "abigailotwell@gmail.com")
+	seeded := integrationPost{Name: "First Post"}
+	require.NoError(t, cloneRelationQuery(t, query).Relation(&user2, "Post").Create(&seeded))
+
+	post2 := integrationPost{}
+	require.NoError(t, cloneRelationQuery(t, query).Relation(&user2, "Post").FirstOrCreate(
+		map[string]any{"name": "First Post"}, map[string]any{"name": "New Post"}, &post2))
+	assert.Equal(t, "First Post", post2.Name)
+	assert.Equal(t, seeded.ID, post2.ID)
 }
 
 func TestIntegration_HasOnSelfReferencingBelongsToManyRelationship(t *testing.T) {
