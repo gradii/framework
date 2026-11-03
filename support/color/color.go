@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	gookitcolor "github.com/gookit/color"
 	"github.com/pterm/pterm"
@@ -222,14 +223,26 @@ func CaptureOutput(f func(w io.Writer)) string {
 	return content
 }
 
+// colorMu serialises writes to the process-global color state owned by
+// pterm and gookit/color. Application.Run toggles color on every invocation
+// and Application.Call is safe for concurrent use, so without serialisation
+// concurrent runs would race on those globals.
+var colorMu sync.Mutex
+
 // Disable disables color output
 func Disable() {
+	colorMu.Lock()
+	defer colorMu.Unlock()
+
 	pterm.DisableColor()
 	gookitcolor.Enable = false
 }
 
 // Enable enables color output
 func Enable() {
+	colorMu.Lock()
+	defer colorMu.Unlock()
+
 	pterm.EnableColor()
 	gookitcolor.Enable = true
 }

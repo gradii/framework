@@ -32,6 +32,14 @@ func TestRun(t *testing.T) {
 	assert.Equal(t, int64(1), testCommand)
 }
 
+// TestRun_Concurrent pins that Application.Call is safe for concurrent use.
+// It is run under -race: every Call rebuilds the CLI command and its
+// --no-ansi flag (each Run gets a fresh urfave/cli flag instance) and the
+// color toggles are serialised, so concurrent dispatches no longer race on
+// library or package globals. Supported boundary: this covers concurrent
+// command dispatch; it does not cover printing through support/color while
+// another goroutine toggles ANSI, which is governed by the pterm/gookit
+// process globals rather than by this application.
 func TestRun_Concurrent(t *testing.T) {
 	testCommand1.Store(0)
 	testCommand2.Store(0)

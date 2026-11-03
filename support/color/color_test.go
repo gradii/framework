@@ -3,6 +3,7 @@ package color
 import (
 	"fmt"
 	"io"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -50,6 +51,22 @@ func TestColors(t *testing.T) {
 			assert.Equal(t, expectedLn, CaptureOutput(func(w io.Writer) { color.Printfln(format, testString) }))
 		})
 	}
+}
+
+// TestEnableDisableConcurrent pins that the process-global color toggles are
+// safe under concurrency. Application.Run calls Enable/Disable on every
+// invocation and Application.Call is documented as safe for concurrent use,
+// so concurrent toggles must not race on the shared pterm/gookit state.
+func TestEnableDisableConcurrent(t *testing.T) {
+	t.Cleanup(Enable)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 64; i++ {
+		wg.Add(2)
+		go func() { defer wg.Done(); Enable() }()
+		go func() { defer wg.Done(); Disable() }()
+	}
+	wg.Wait()
 }
 
 func TestDisableEnable(t *testing.T) {

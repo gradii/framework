@@ -198,7 +198,7 @@ func getFlagName(flag cli.Flag) string {
 }
 
 func handleNoANSI() {
-	if noANSI || env.IsNoANSI() {
+	if noANSI.Load() || env.IsNoANSI() {
 		color.Disable()
 	} else {
 		color.Enable()

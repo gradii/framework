@@ -8,6 +8,7 @@ import (
 	stdpath "path"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -20,15 +21,27 @@ import (
 	"github.com/gradii/framework/support/env"
 )
 
-var (
-	noANSI     bool
-	noANSIFlag = &cli.BoolFlag{
+// noANSI records whether the invocation currently being handled asked for
+// ANSI output to be disabled (a --no-ansi argument or the NO_ANSI
+// environment variable). Application.Call is safe for concurrent use, so
+// concurrent Run calls must not share plain mutable state: the decision is
+// published once per Run through an atomic and read back by handleNoANSI
+// during help/version rendering.
+var noANSI atomic.Bool
+
+// newNoANSIFlag builds a fresh --no-ansi flag. Every command() /
+// flagsToCliFlags call must use its own instance: urfave/cli v3 mutates a
+// flag's internal state (parsed value, multi-value parsing config, applied
+// marker and the Destination it points at) in place while running a
+// command, so sharing one package-level flag across concurrent Run calls
+// would race inside the library.
+func newNoANSIFlag() *cli.BoolFlag {
+	return &cli.BoolFlag{
 		Name:        "no-ansi",
-		Destination: &noANSI,
 		HideDefault: true,
 		Usage:       "Force disable ANSI output",
 	}
-)
+}
 
 type Application struct {
 	commands   []console.Command
@@ -93,7 +106,9 @@ func (r *Application) Register(commands []console.Command) {
 
 // Run a command. Args come from os.Args.
 func (r *Application) Run(args []string, exitIfArtisan bool) error {
-	if noANSI || env.IsNoANSI() || slices.Contains(args, "--no-ansi") {
+	noANSIRequested := env.IsNoANSI() || slices.Contains(args, "--no-ansi")
+	noANSI.Store(noANSIRequested)
+	if noANSIRequested {
 		color.Disable()
 	} else {
 		color.Enable()
@@ -156,7 +171,7 @@ func (r *Application) command() (*cli.Command, error) {
 	command := &cli.Command{}
 	command.CommandNotFound = commandNotFound
 	command.Commands = cliCommands
-	command.Flags = []cli.Flag{noANSIFlag}
+	command.Flags = []cli.Flag{newNoANSIFlag()}
 	command.Name = r.name
 	command.OnUsageError = onUsageError
 	command.Usage = r.usage
@@ -400,7 +415,7 @@ func flagsToCliFlags(flags []command.Flag) []cli.Flag {
 		cliFlags = append(cliFlags, helpFlag)
 	}
 
-	cliFlags = append(cliFlags, noANSIFlag)
+	cliFlags = append(cliFlags, newNoANSIFlag())
 
 	return cliFlags
 }
