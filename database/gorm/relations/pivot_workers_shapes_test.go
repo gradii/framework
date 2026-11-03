@@ -220,11 +220,11 @@ insert into "pw_parent_kids" ("kid_id", "parent_id", "role") values (?, ?, ?) | 
 select "kid_id" from "pw_parent_kids" where "pw_parent_kids"."parent_id" = ? | [7]
 insert into "pw_parent_kids" ("kid_id", "parent_id", "role") values (?, ?, ?) | [5 7 x]
 ## updateExistingPivot.kids result=0 err=<nil>
-update "pw_parent_kids" set "role" = ? where "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" = ? | [x 7 5]
+update "pw_parent_kids" set "role" = ? where "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" in (?) | [x 7 5]
 ## updateExistingPivot.tags result=0 err=<nil>
-update "pw_taggables" set "role" = ? where "pw_taggables"."taggable_id" = ? and "pw_taggables"."tag_id" = ? and "pw_taggables"."taggable_type" = ? | [x 7 5 pw_parents]
+update "pw_taggables" set "role" = ? where "pw_taggables"."taggable_id" = ? and "pw_taggables"."taggable_type" = ? and "pw_taggables"."tag_id" in (?) | [x 7 pw_parents 5]
 ## updateExistingPivot.scoped result=0 err=<nil>
-update "pw_parent_kids" set "role" = ? where "pw_parent_kids"."role" = ? and "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" = ? | [x admin 7 5]
+update "pw_parent_kids" set "role" = ? where "pw_parent_kids"."role" = ? and "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" in (?) | [x admin 7 5]
 ## updateExistingPivot.empty result=0 err=<nil>
 ## guard.valueParent result=<nil> err=Related: parent must be a non-nil pointer to a struct, got relations_test.pwParent
 ## guard.unknownRelation result=<nil> err=relation "Nope" not found on model *relations_test.pwParent
@@ -409,7 +409,7 @@ insert into "pw_parent_kids" ("kid_id", "parent_id", "role") values (?, ?, ?) | 
 ## syncWithPivotValues.fiveAndSix result=&{[5] [] [6]} err=<nil>
 select * from "pw_parent_kids" where "pw_parent_kids"."parent_id" = ? | [7]
 insert into "pw_parent_kids" ("kid_id", "parent_id", "role") values (?, ?, ?) | [5 7 x]
-update "pw_parent_kids" set "role" = ? where "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" = ? | [x 7 6]
+update "pw_parent_kids" set "role" = ? where "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" in (?) | [x 7 6]
 ## syncWithoutDetachingWithPivot.five result=&{[5] [] []} err=<nil>
 select * from "pw_parent_kids" where "pw_parent_kids"."parent_id" = ? | [7]
 insert into "pw_parent_kids" ("kid_id", "parent_id", "role") values (?, ?, ?) | [5 7 x]
@@ -433,9 +433,10 @@ insert into "pw_parent_kids" ("kid_id", "parent_id", "role") values (?, ?, ?) | 
 // record in input order; a syncWithPivotValues of three attached ids renders one UPDATE per
 // record in input order; a sync([]) renders one DELETE whose bindings follow the current read's
 // row order; toggle groups its surviving records into one INSERT whose rows follow the input
-// order. One carried divergence, owned by a later round item: the per-id UPDATE predicate
-// renders `kid_id = ?` where the oracle's newPivotStatementForId($id) renders `tag_id in (?)`
-// (candidate 24; flagged in the item report). The attach inserts carry no existence pre-read:
+// order. The per-id UPDATE predicate is Laravel's newPivotStatementForId($id): the related key
+// renders as a SINGLE-ELEMENT `in (?)` rather than an equality, and the morph-type predicate
+// sits between the parent key and the related key (round 7, candidate 24; oracle v12.55.1,
+// executed, /tmp/pivot_update_predicate_probe.php A/B). The attach inserts carry no existence pre-read:
 // round 6 (item attach-dedup) removed it — Laravel's attach has none (oracle v12.55.1, executed,
 // /tmp/attach_dedup_probe.php A1a/B0).
 //
@@ -616,21 +617,21 @@ func TestPivotWorkers_AttachNewInterleavesPerInputRecord(t *testing.T) {
 
 const pivotInterleaveShapes = `## syncWithPivotValues.twoNine result=&{[9] [] [2]} err=<nil>
 select * from "pw_parent_kids" where "pw_parent_kids"."parent_id" = ? | [7]
-update "pw_parent_kids" set "role" = ? where "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" = ? | [x 7 2]
+update "pw_parent_kids" set "role" = ? where "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" in (?) | [x 7 2]
 insert into "pw_parent_kids" ("kid_id", "parent_id", "role") values (?, ?, ?) | [9 7 x]
 ## syncWithPivotValues.nineTwo result=&{[9] [] [2]} err=<nil>
 select * from "pw_parent_kids" where "pw_parent_kids"."parent_id" = ? | [7]
 insert into "pw_parent_kids" ("kid_id", "parent_id", "role") values (?, ?, ?) | [9 7 x]
-update "pw_parent_kids" set "role" = ? where "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" = ? | [x 7 2]
+update "pw_parent_kids" set "role" = ? where "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" in (?) | [x 7 2]
 ## sync.nineTen result=&{[9 10] [] []} err=<nil>
 select * from "pw_parent_kids" where "pw_parent_kids"."parent_id" = ? | [7]
 insert into "pw_parent_kids" ("kid_id", "parent_id") values (?, ?) | [9 7]
 insert into "pw_parent_kids" ("kid_id", "parent_id") values (?, ?) | [10 7]
 ## syncWithPivotValues.threeExisting result=&{[] [] [2 3 4]} err=<nil>
 select * from "pw_parent_kids" where "pw_parent_kids"."parent_id" = ? | [7]
-update "pw_parent_kids" set "role" = ? where "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" = ? | [x 7 2]
-update "pw_parent_kids" set "role" = ? where "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" = ? | [x 7 3]
-update "pw_parent_kids" set "role" = ? where "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" = ? | [x 7 4]
+update "pw_parent_kids" set "role" = ? where "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" in (?) | [x 7 2]
+update "pw_parent_kids" set "role" = ? where "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" in (?) | [x 7 3]
+update "pw_parent_kids" set "role" = ? where "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" in (?) | [x 7 4]
 ## toggle.nineTenEleven result=&{[9 10 11] [] []} err=<nil>
 select "kid_id" from "pw_parent_kids" where "pw_parent_kids"."parent_id" = ? | [7]
 insert into "pw_parent_kids" ("kid_id", "parent_id") values (?, ?), (?, ?), (?, ?) | [9 7 10 7 11 7]
@@ -647,7 +648,7 @@ insert into "pw_parent_kids" ("kid_id", "parent_id", "role") values (?, ?, ?) | 
 insert into "pw_parent_kids" ("kid_id", "parent_id", "role") values (?, ?, ?) | [5 7 x]
 ## syncWithPivot.tieUintInt64 result=&{[] [] [9]} err=<nil>
 select * from "pw_parent_kids" where "pw_parent_kids"."parent_id" = ? | [7]
-update "pw_parent_kids" set "role" = ? where "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" = ? | [b 7 9]
+update "pw_parent_kids" set "role" = ? where "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" in (?) | [b 7 9]
 `
 
 // --- the updated-affected gate ----------------------------------------------------------------
@@ -769,5 +770,5 @@ func TestPivotWorkers_SyncUpdatedRequiresAnAffectedUpdate(t *testing.T) {
 	statements := recorder.take()
 	require.Len(t, statements, 2, "the current-ids read then the UPDATE — the statement still runs")
 	assert.Equal(t, `select * from "pw_parent_kids" where "pw_parent_kids"."parent_id" = ?`, statements[0].query)
-	assert.Equal(t, `update "pw_parent_kids" set "role" = ? where "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" = ?`, statements[1].query)
+	assert.Equal(t, `update "pw_parent_kids" set "role" = ? where "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" in (?)`, statements[1].query)
 }

@@ -307,5 +307,5 @@ func TestAccessors_BelongsToManyBareTimestampsWriteTheParentColumns(t *testing.T
 
 	statements = recorder.take()
 	require.Len(t, statements, 1)
-	assert.Equal(t, `update "bpt_role_user" set "note" = ?, "user_updated_at" = ? where "bpt_role_user"."user_id" = ? and "bpt_role_user"."role_id" = ?`, statements[0].query)
+	assert.Equal(t, `update "bpt_role_user" set "note" = ?, "user_updated_at" = ? where "bpt_role_user"."user_id" = ? and "bpt_role_user"."role_id" in (?)`, statements[0].query)
 }

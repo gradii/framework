@@ -307,7 +307,7 @@ func TestPivotWorkers_DoUpdateExistingPivot_ShapeAndTimestampInjection(t *testin
 	assert.EqualValues(t, 0, n)
 	statements := recorder.take()
 	require.Len(t, statements, 1)
-	assert.Equal(t, `update "pw_parent_kids" set "role" = ? where "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" = ?`, statements[0].query)
+	assert.Equal(t, `update "pw_parent_kids" set "role" = ? where "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" in (?)`, statements[0].query)
 	require.Len(t, statements[0].args, 3)
 	assert.Equal(t, "x", deref(statements[0].args[0]))
 	assert.EqualValues(t, 7, deref(statements[0].args[1]))
@@ -320,7 +320,7 @@ func TestPivotWorkers_DoUpdateExistingPivot_ShapeAndTimestampInjection(t *testin
 	require.NoError(t, err)
 	statements = recorder.take()
 	require.Len(t, statements, 1)
-	assert.Equal(t, `update "pw_parent_kids" set "updated_at" = ? where "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" = ?`, statements[0].query)
+	assert.Equal(t, `update "pw_parent_kids" set "updated_at" = ? where "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" in (?)`, statements[0].query)
 	assert.IsType(t, time.Time{}, deref(statements[0].args[0]))
 
 	// A caller-supplied updated_at wins over the injected clock.
@@ -330,7 +330,7 @@ func TestPivotWorkers_DoUpdateExistingPivot_ShapeAndTimestampInjection(t *testin
 	require.NoError(t, err)
 	statements = recorder.take()
 	require.Len(t, statements, 1)
-	assert.Equal(t, `update "pw_parent_kids" set "updated_at" = ? where "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" = ?`, statements[0].query)
+	assert.Equal(t, `update "pw_parent_kids" set "updated_at" = ? where "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" in (?)`, statements[0].query)
 	assert.Equal(t, fixed, deref(statements[0].args[0]))
 }
 

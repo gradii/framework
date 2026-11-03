@@ -883,6 +883,17 @@ func UpdateExistingPivotOrFail(b Builder, parent any, relation string, id any, a
 // DoUpdateExistingPivot is the no-touch worker behind UpdateExistingPivot. Returns the number of
 // pivot rows actually updated. When the relation has a resolved updated_at column and attrs
 // doesn't already set it, injects time.Now() into the UPDATE map.
+//
+// The predicate is Laravel's newPivotStatementForId($id) (InteractsWithPivotTable.php:567):
+// newPivotQuery()'s parent-key equality, the morph-type equality MorphToMany::newPivotQuery
+// appends (MorphToMany.php:146), then the related key as a SINGLE-ELEMENT whereIn
+// (`->whereIn($this->getQualifiedRelatedPivotKeyName(), $this->parseIds($id))`), which renders
+// `... and "<related>" in (?)` with one binding rather than an equality. Oracle v12.55.1,
+// executed, /tmp/pivot_update_predicate_probe.php A (plain) and B (morphToMany):
+// `update "op_post_tag" set "role" = ? where "op_post_tag"."post_id" = ? and "op_post_tag"."tag_id"
+// in (?)`; `update "op_taggables" set "role" = ? where "op_taggables"."taggable_id" = ? and
+// "taggable_type" = ? and "op_taggables"."tag_id" in (?)` — the morph-type predicate sits between
+// the parent key and the related key.
 func DoUpdateExistingPivot(b Builder, info RelationInfo, parentVal any, id any, attrs map[string]any) (int64, error) {
 	if len(attrs) == 0 && info.PivotUpdatedAtColumn == "" {
 		return 0, nil
@@ -896,13 +907,11 @@ func DoUpdateExistingPivot(b Builder, info RelationInfo, parentVal any, id any, 
 			updateMap[info.PivotUpdatedAtColumn] = time.Now()
 		}
 	}
-	wheres := []RowWhere{
-		pivotEquality(b, info, info.PivotParentRef.ForeignColumn, parentVal),
-		pivotEquality(b, info, info.PivotRelatedRef.ForeignColumn, id),
-	}
+	wheres := []RowWhere{pivotEquality(b, info, info.PivotParentRef.ForeignColumn, parentVal)}
 	if info.Kind == KindMorphToMany {
 		wheres = append(wheres, pivotEquality(b, info, info.MorphTypeColumn, info.MorphValue))
 	}
+	wheres = append(wheres, pivotInList(info, info.PivotRelatedRef.ForeignColumn, []any{id}))
 
 	return b.UpdateRows(info.PivotTable, wheres, info.OnPivotQuery, updateMap)
 }

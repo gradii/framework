@@ -120,7 +120,7 @@ func TestSeam_UpdateRows_IsByteIdenticalToUpdateExistingPivot(t *testing.T) {
 
 	wheres := []relations.RowWhere{
 		{Query: seam.Ident(info.PivotTable, info.PivotParentRef.ForeignColumn) + " = ?", Args: []any{uint(7)}},
-		{Query: seam.Ident(info.PivotTable, info.PivotRelatedRef.ForeignColumn) + " = ?", Args: []any{2}},
+		{Query: info.PivotTable + "." + info.PivotRelatedRef.ForeignColumn, Args: []any{[]any{2}}},
 	}
 	values := map[string]any{"note": "x", info.PivotUpdatedAtColumn: time.Now()}
 	_, err = seam.UpdateRows(info.PivotTable, wheres, info.OnPivotQuery, values)
@@ -131,6 +131,7 @@ func TestSeam_UpdateRows_IsByteIdenticalToUpdateExistingPivot(t *testing.T) {
 	assert.Equal(t, maskTimes(legacy), maskTimes(ported))
 	assert.Contains(t, ported[0].query, `update "seam_role_user" set "note" = ?, "updated_at" = ? where`)
 	assert.Contains(t, ported[0].query, `"seam_role_user"."active" = ?`)
+	assert.Contains(t, ported[0].query, `"seam_role_user"."role_id" in (?)`)
 }
 
 // TestSeam_InsertRows_IsByteIdenticalToAttach: AttachRelation inserts the rows (insertPivotRows
