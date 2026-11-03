@@ -335,9 +335,9 @@ func TestMany2Many_ExpressionColumnsOnTheSixHelpersMirrorsTheMorphCorpus(t *test
 
 // TestMany2Many_WithPivotValueNilPairsTheParentPivotKey pins the frozen contract's argument swap:
 // with a nil value the argument column pairs with the pivot's parent-side foreign key column (the
-// value becomes the clause's value). Laravel 12.55.1 throws InvalidArgumentException there — the
-// swap is pre-12 behavior the contract documents (oracle-probed message: "The provided value may
-// not be null.").
+// value becomes the clause's value), and the swapped pair is the one recorded for the pivot
+// construction. Laravel 12.55.1 throws InvalidArgumentException there — the swap is the frozen Go
+// contract's pre-12 shape (oracle-probed message: "The provided value may not be null.").
 func TestMany2Many_WithPivotValueNilPairsTheParentPivotKey(t *testing.T) {
 	builder, recorder := newRelationTestBuilder(t)
 
@@ -350,6 +350,12 @@ func TestMany2Many_WithPivotValueNilPairsTheParentPivotKey(t *testing.T) {
 	require.Len(t, statement.args, 2)
 	assert.EqualValues(t, 7, deref(statement.args[0]))
 	assert.EqualValues(t, "77", deref(statement.args[1]))
+
+	// The recorded pair is the applied one, so a pivot built from this relation merges it — the
+	// pair every other withPivotValue call records is the clause's pair too.
+	pivot, err := relation.NewPivot(nil, false)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"user_id": "77"}, pivot.Attributes())
 }
 
 // TestMany2Many_OrderByPivotExpressionInvalidDirectionRecordsTheOrderError: the expression path

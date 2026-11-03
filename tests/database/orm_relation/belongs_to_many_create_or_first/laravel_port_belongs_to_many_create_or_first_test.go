@@ -208,9 +208,18 @@ func TestBelongsToManyCreateOrFirst_CreateOrFirstMethodRetrievesExistingRelatedA
 	// attach trips the pivot's unique constraint (unlogged), and the second catch re-reads the row
 	// through the pivot-joined relation on the write PDO (probe: the pivot-joined select above
 	// with bindings [123,"foo"]) - the instance carries the hydrated pivot {source_id: 123,
-	// related_id: 456} and wasRecentlyCreated = false.
+	// related_id: 456} and wasRecentlyCreated = false. Re-measured for round 6 by
+	// /tmp/attach_dedup_probe.php D1 (illuminate/database v12.55.1, real sqlite): after the plain
+	// read-back the code attempts the pivot INSERT (no pre-read — Laravel's attach has none), it
+	// trips the pivot's unique index, and the write-PDO pivot-joined read returns the attached
+	// row. The Go-side instrument for the attempt is the query log: our logger records the failed
+	// statement, so an `insert into "pivot_table"` entry appears between the two selects
+	// (Laravel's failed statements are unlogged).
+	ctx := frameworkdb.EnableQueryLog(context.Background())
+	wc, ok := cloneRelationQuery(t, query).(contractsorm.QueryWithContext)
+	require.True(t, ok, "the ORM query must support WithContext")
 	var result belongsToManyCreateOrFirstRelated
-	require.NoError(t, cloneRelationQuery(t, query).Relation(source, "Related").CreateOrFirst(
+	require.NoError(t, wc.WithContext(ctx).Relation(source, "Related").CreateOrFirst(
 		map[string]any{"attr": "foo"}, map[string]any{"val": "bar"}, &result))
 
 	assert.Equal(t, uint64(456), result.ID)
@@ -220,6 +229,14 @@ func TestBelongsToManyCreateOrFirst_CreateOrFirstMethodRetrievesExistingRelatedA
 	pivots := belongsToManyCreateOrFirstPivotRows(t, query)
 	require.Len(t, pivots, 1)
 	assert.Equal(t, int64(1), belongsToManyCreateOrFirstCount(t, query), "no related row may be inserted on the violation path")
+
+	insertAt := -1
+	for i, l := range frameworkdb.GetQueryLog(ctx) {
+		if strings.HasPrefix(l.Query, `insert into "pivot_table"`) {
+			insertAt = i
+		}
+	}
+	assert.NotEqual(t, -1, insertAt, "the second catch attempts the pivot insert — no existence pre-read (round 6, oracle D1)")
 }
 
 func TestBelongsToManyCreateOrFirst_FirstOrCreateMethodRetrievesExistingRelatedAndAssociatesIt(t *testing.T) {
@@ -555,8 +572,12 @@ func TestBelongsToManyCreateOrFirst_UpdateOrCreateStatementOrder(t *testing.T) {
 	assert.Contains(t, logs[0].Query, `inner join "pivot_table"`, "the attached hit starts with the pivot-joined relation read")
 	assert.Equal(t, 1, updates(ctx), "an attached hit issues exactly one update")
 
-	// Unattached hit: the attach (pivot insert) precedes the single update.
+	// Unattached hit: the attach (pivot insert) precedes the single update. The attached phase
+	// already wrote val=baz onto the shared row, so the row is reset to the probe's seed state
+	// (val=bar): the update exists because the fill changes the row.
 	_, err := cloneRelationQuery(t, query).Exec(`delete from pivot_table`)
+	require.NoError(t, err)
+	_, err = cloneRelationQuery(t, query).Exec(`update "related_table" set "val" = 'bar' where "id" = 456`)
 	require.NoError(t, err)
 	ctx2, wq2 := ctxFor()
 	var unattached belongsToManyCreateOrFirstRelated
@@ -574,6 +595,24 @@ func TestBelongsToManyCreateOrFirst_UpdateOrCreateStatementOrder(t *testing.T) {
 	require.NotEqual(t, -1, updateAt, "the unattached hit must update")
 	assert.Less(t, insertAt, updateAt, "the attach precedes the update (probe updateOrCreate.unattached)")
 	assert.Equal(t, 1, updates(ctx2), "the unattached hit issues exactly one update")
+
+	// An unattached hit whose values change nothing: the attach still runs, but the fill/save
+	// stops at Model::save's isDirty gate — no trailing update (oracle, executed,
+	// /tmp/save11/btm_updateorcreate_probe.php C2: join select miss, plain select hit, pivot
+	// insert, and no update).
+	_, err = cloneRelationQuery(t, query).Exec(`delete from pivot_table`)
+	require.NoError(t, err)
+	ctx2b, wq2b := ctxFor()
+	var unchanged belongsToManyCreateOrFirstRelated
+	require.NoError(t, wq2b.Relation(source, "Related").UpdateOrCreate(map[string]any{"attr": "foo"}, map[string]any{"val": "baz"}, &unchanged))
+	assert.Equal(t, 0, updates(ctx2b), "an unattached hit whose values change nothing runs no update")
+	attachInserts := 0
+	for _, l := range frameworkdb.GetQueryLog(ctx2b) {
+		if strings.HasPrefix(l.Query, `insert into "pivot_table"`) {
+			attachInserts++
+		}
+	}
+	assert.Equal(t, 1, attachInserts, "the attach still runs")
 
 	// Miss: no update follows the create — wasRecentlyCreated = true skips the fill/save.
 	_, err = cloneRelationQuery(t, query).Exec(`delete from pivot_table`)

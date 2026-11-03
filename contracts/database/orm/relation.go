@@ -11,8 +11,8 @@ type RelationCallback func(query Query) Query
 // polymorphic convention).
 type MorphRelationCallback func(query Query, morphType string) Query
 
-// PivotQuery is a small builder surface for scoping the pivot-table SQL emitted by Sync / Attach
-// duplicate-skip / Detach / UpdateExistingPivot. It is intentionally narrower than the full Query
+// PivotQuery is a small builder surface for scoping the pivot-table SQL emitted by Sync / Detach /
+// UpdateExistingPivot. It is intentionally narrower than the full Query
 // interface — only the WHERE-style methods that make sense on a single-table pivot read/write are
 // exposed. Mirrors fedaco's `wherePivot` / `wherePivotIn` / `wherePivotNull` accumulators on
 // BelongsToMany.
@@ -350,9 +350,13 @@ type Many2Many struct {
 	// pivot columns. Use a non-default name when one related model serves multiple m2m relations
 	// with different pivot schemas (e.g. Role with both UserPivot and GroupPivot fields).
 	PivotField string
-	// PivotTimestamps enables auto-stamping of the pivot table's created_at / updated_at columns
-	// on Attach / Sync / Save (and updated_at on UpdateExistingPivot), using default column names.
-	// Most users don't need to set this flag explicitly — see "Detection priority" below.
+	// PivotTimestamps enables auto-stamping of the pivot table's timestamp columns on Attach /
+	// Sync / Save (and the updated side on UpdateExistingPivot) — the Go form of Laravel's
+	// relation-level withTimestamps(): the columns are the PARENT model's created-at / updated-at
+	// columns (Laravel's bare withTimestamps() leaves the names null, so BelongsToMany::createdAt
+	// resolves `$this->parent->getCreatedAtColumn() ?? Model::CREATED_AT`), "created_at" /
+	// "updated_at" when the parent declares none. Most users don't need to set this flag
+	// explicitly — see "Detection priority" below.
 	//
 	// Detection priority for pivot timestamps (highest first):
 	//
@@ -360,12 +364,15 @@ type Many2Many struct {
 	//      for any field name; column name is taken from the struct's GORM schema.
 	//   2. Pivot struct field named CreatedAt / UpdatedAt of type time.Time (Go/GORM convention).
 	//   3. PivotTimestamps: true. Fallback for when no Pivot struct is declared (or its struct
-	//      has no timestamp fields) but the underlying table still has created_at / updated_at
-	//      columns you want auto-filled. Uses default column names.
+	//      has no timestamp fields), filling each missing side with the parent model's
+	//      corresponding column.
 	//
 	// Customize column names via `gorm:"column:..."` on the Pivot struct field. There is
-	// intentionally no relation-level override — the Pivot struct is the single source of truth
-	// for column metadata.
+	// intentionally no relation-level column override in the declaration — the Pivot struct (or,
+	// for the PivotTimestamps: true fallback, the parent model) is the source of column metadata.
+	// Laravel's withTimestamps(false) disables only the created side (the omitted updated
+	// argument still resolves the parent's column); the Go flag's false covers the
+	// withTimestamps(false, false) shape — the pivot struct can name the updated column instead.
 	PivotTimestamps bool
 	OnQuery         RelationCallback
 	// OnPivotQuery scopes pivot-table SELECT / UPDATE / DELETE for Sync / Detach /
@@ -373,8 +380,10 @@ type Many2Many struct {
 	// auto-injected into Attach INSERT rows — pass them via Attach attrs if needed.
 	OnPivotQuery PivotCallback
 	// Touches, when true, causes Sync / Attach / Detach / Toggle / UpdateExistingPivot on this
-	// relation to bump the parent's `updated_at` after the pivot write completes (and only when
-	// the operation actually changed pivot rows). The bump is skipped while the parent's class
+	// relation to bump the parent's `updated_at` after the pivot write completes — Attach after
+	// every successful call, empty id list included (oracle v12.55.1, executed, C1); the other
+	// shells only when the operation actually changed pivot rows. The bump is skipped while the
+	// parent's class
 	// ignores touches (Model::isIgnoringTouch) — the gate Eloquent's per-pivot touch rides through
 	// Relation::touch. Mirrors fedaco's `touchIfTouching`. Silently no-ops when the parent's
 	// schema doesn't carry an updated_at field.

@@ -597,52 +597,66 @@ type tsCustomColumnRole struct {
 
 func (tsCustomColumnRole) TableName() string { return "ts_custom_column_roles" }
 
+// tsParentUser is a relation parent declaring custom timestamp columns — the Go form of a model
+// class overriding CREATED_AT / UPDATED_AT, the columns the PivotTimestamps fallback resolves
+// (Laravel's bare withTimestamps()).
+type tsParentUser struct {
+	ID        uint      `gorm:"column:id;primaryKey"`
+	CreatedAt time.Time `gorm:"autoCreateTime;column:user_created_at"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime;column:user_updated_at"`
+}
+
+func (tsParentUser) TableName() string { return "ts_parent_users" }
+
 func TestResolvePivotTimestamps_AutoCreateTimeTag(t *testing.T) {
-	created, updated, err := relations.ResolvePivotTimestamps(&tsTaggedRole{}, "Pivot", false)
+	created, updated, err := relations.ResolvePivotTimestamps(&relUser{}, &tsTaggedRole{}, "Pivot", false)
 	assert.NoError(t, err)
 	assert.Equal(t, "stamped", created)
 	assert.Equal(t, "edited", updated)
 }
 
 func TestResolvePivotTimestamps_Convention(t *testing.T) {
-	created, updated, err := relations.ResolvePivotTimestamps(&tsConventionRole{}, "Pivot", false)
+	created, updated, err := relations.ResolvePivotTimestamps(&relUser{}, &tsConventionRole{}, "Pivot", false)
 	assert.NoError(t, err)
 	assert.Equal(t, "created_at", created)
 	assert.Equal(t, "updated_at", updated)
 }
 
 func TestResolvePivotTimestamps_OnlyCreatedAt(t *testing.T) {
-	created, updated, err := relations.ResolvePivotTimestamps(&tsCreatedOnlyRole{}, "Pivot", false)
+	created, updated, err := relations.ResolvePivotTimestamps(&relUser{}, &tsCreatedOnlyRole{}, "Pivot", false)
 	assert.NoError(t, err)
 	assert.Equal(t, "created_at", created)
 	assert.Equal(t, "", updated, "no UpdatedAt field means don't auto-stamp on update")
 }
 
 func TestResolvePivotTimestamps_CustomColumnTag(t *testing.T) {
-	created, updated, err := relations.ResolvePivotTimestamps(&tsCustomColumnRole{}, "Pivot", false)
+	created, updated, err := relations.ResolvePivotTimestamps(&relUser{}, &tsCustomColumnRole{}, "Pivot", false)
 	assert.NoError(t, err)
 	assert.Equal(t, "made_on", created)
 	assert.Equal(t, "edited_at", updated)
 }
 
 func TestResolvePivotTimestamps_NoStruct_FallbackEnabled(t *testing.T) {
-	// roleWithoutPivot has no Pivot field — falls through to relation-level PivotTimestamps.
-	created, updated, err := relations.ResolvePivotTimestamps(&roleWithoutPivot{}, "Pivot", true)
+	// roleWithoutPivot has no Pivot field — falls through to PivotTimestamps. relUser declares no
+	// timestamp fields, so the fallback resolves Laravel's static::CREATED_AT / static::UPDATED_AT
+	// defaults.
+	created, updated, err := relations.ResolvePivotTimestamps(&relUser{}, &roleWithoutPivot{}, "Pivot", true)
 	assert.NoError(t, err)
 	assert.Equal(t, "created_at", created)
 	assert.Equal(t, "updated_at", updated)
 }
 
 func TestResolvePivotTimestamps_NoStruct_FallbackDisabled(t *testing.T) {
-	created, updated, err := relations.ResolvePivotTimestamps(&roleWithoutPivot{}, "Pivot", false)
+	created, updated, err := relations.ResolvePivotTimestamps(&relUser{}, &roleWithoutPivot{}, "Pivot", false)
 	assert.NoError(t, err)
 	assert.Equal(t, "", created)
 	assert.Equal(t, "", updated)
 }
 
 func TestResolvePivotTimestamps_StructHasOneCol_FallbackFillsOther(t *testing.T) {
-	// Struct provides only CreatedAt; PivotTimestamps: true fills updated_at default.
-	created, updated, err := relations.ResolvePivotTimestamps(&tsCreatedOnlyRole{}, "Pivot", true)
+	// Struct provides only CreatedAt; PivotTimestamps: true fills the updated side from the
+	// parent — relUser declares none, so Laravel's UPDATED_AT default.
+	created, updated, err := relations.ResolvePivotTimestamps(&relUser{}, &tsCreatedOnlyRole{}, "Pivot", true)
 	assert.NoError(t, err)
 	assert.Equal(t, "created_at", created, "struct-provided column wins")
 	assert.Equal(t, "updated_at", updated, "fallback fills the column the struct didn't provide")
@@ -932,4 +946,21 @@ func TestUpdateOrCreateRelation_Many2Many_Dispatches(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
 	err := q.UpdateOrCreateRelation(&relUser{ID: 7}, "Roles", map[string]any{"name": "admin"}, map[string]any{"name": "root"}, &relRole{})
 	assert.True(t, errors.Is(err, errors.DatabaseConnectionIsNil), "want the pool error, got %v", err)
+}
+
+func TestResolvePivotTimestamps_FallbackResolvesParentColumns(t *testing.T) {
+	// Bare withTimestamps(): the parent model's timestamp columns, custom names included (oracle
+	// v12.55.1, executed, /tmp/btm-pivot-ts-write-probe.php: bare withTimestamps() attaches
+	// 'user_created_at, user_updated_at').
+	created, updated, err := relations.ResolvePivotTimestamps(&tsParentUser{}, &roleWithoutPivot{}, "Pivot", true)
+	assert.NoError(t, err)
+	assert.Equal(t, "user_created_at", created)
+	assert.Equal(t, "user_updated_at", updated)
+
+	// A pivot struct naming one side keeps it; the fallback fills the other from the parent
+	// (Laravel's withTimestamps('pivot_created_at') — the mixed oracle D).
+	created, updated, err = relations.ResolvePivotTimestamps(&tsParentUser{}, &tsCreatedOnlyRole{}, "Pivot", true)
+	assert.NoError(t, err)
+	assert.Equal(t, "created_at", created, "struct-provided column wins")
+	assert.Equal(t, "user_updated_at", updated, "fallback fills the column the struct didn't provide from the parent")
 }

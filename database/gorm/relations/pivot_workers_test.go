@@ -109,41 +109,75 @@ func TestPivotWorkers_BasePivotRow_StampsResolvedTimestampsAndAttrsWin(t *testin
 	assert.True(t, hasUpdated, "updated_at only")
 }
 
-// --- ExistingPivotIDs / AllPivotIDs ------------------------------------------------------------
+// --- DoAttach / DoAttachWithPivot --------------------------------------------------------------
 
-func TestPivotWorkers_ExistingPivotIDs_ScopedReadShapes(t *testing.T) {
+// DoAttach performs no pivot-existence read: Laravel's attach has none — one INSERT carries every
+// id (InteractsWithPivotTable::attach :337). Oracle v12.55.1, executed,
+// /tmp/attach_dedup_probe.php: A1a/B0 logs are the single INSERT, no SELECT; A2 attach([1,1]) ->
+// one INSERT of two rows; B1/B2 a duplicate against an existing row raises the pivot's unique
+// constraint; C1 an empty attach is query-free here (the shell still touches; C1).
+func TestPivotWorkers_DoAttach_InsertsWithoutAnyExistenceRead(t *testing.T) {
 	builder, recorder := newRelationTestBuilder(t)
 	info := wwInfo(t, builder, &pwParent{ID: 7}, "Kids")
 
-	ids, err := relations.ExistingPivotIDs(builder, info, uint(7), []any{uint(5)})
+	n, err := relations.DoAttach(builder, info, uint(7), []any{uint(5), uint(6)}, nil)
 	require.NoError(t, err)
-	assert.Empty(t, ids, "the recording transport answers reads with no rows")
+	assert.EqualValues(t, 2, n)
 
 	statements := recorder.take()
-	require.Len(t, statements, 1)
-	assert.Equal(t, `select "kid_id" from "pw_parent_kids" where "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" in (?)`, statements[0].query)
-	require.Len(t, statements[0].args, 2)
-	assert.EqualValues(t, 7, deref(statements[0].args[0]))
-	assert.EqualValues(t, 5, deref(statements[0].args[1]))
+	require.Len(t, statements, 1, "the attach is a single INSERT — no pivot-existence read")
+	assert.Equal(t, `insert into "pw_parent_kids" ("kid_id", "parent_id") values (?, ?), (?, ?)`, statements[0].query)
+	require.Len(t, statements[0].args, 4)
+	assert.EqualValues(t, 5, deref(statements[0].args[0]))
+	assert.EqualValues(t, 7, deref(statements[0].args[1]))
+	assert.EqualValues(t, 6, deref(statements[0].args[2]))
+	assert.EqualValues(t, 7, deref(statements[0].args[3]))
 
-	builder, recorder = newRelationTestBuilder(t)
-	morph := wwInfo(t, builder, &pwParent{ID: 7}, "Tags")
-	_, err = relations.ExistingPivotIDs(builder, morph, uint(7), []any{uint(5)})
+	// A duplicate within one call is an insert record each (oracle A2: attach([1,1]) -> two rows).
+	n, err = relations.DoAttach(builder, info, uint(7), []any{uint(5), uint(5)}, nil)
 	require.NoError(t, err)
+	assert.EqualValues(t, 2, n)
 	statements = recorder.take()
 	require.Len(t, statements, 1)
-	assert.Equal(t, `select "tag_id" from "pw_taggables" where "pw_taggables"."taggable_id" = ? and "pw_taggables"."tag_id" in (?) and "pw_taggables"."taggable_type" = ?`, statements[0].query)
+	assert.Equal(t, `insert into "pw_parent_kids" ("kid_id", "parent_id") values (?, ?), (?, ?)`, statements[0].query)
 
-	builder, recorder = newRelationTestBuilder(t)
-	scoped := wwInfo(t, builder, &pwParent{ID: 7}, "Scoped")
-	_, err = relations.ExistingPivotIDs(builder, scoped, uint(7), []any{uint(5)})
+	// Empty ids stay a no-op: Laravel's insert([]) runs no statement.
+	n, err = relations.DoAttach(builder, info, uint(7), nil, nil)
 	require.NoError(t, err)
-	statements = recorder.take()
-	require.Len(t, statements, 1)
-	assert.True(t, len(statements[0].query) > 0)
-	assert.Contains(t, statements[0].query, `"pw_parent_kids"."role" = ?`, "the pivot scope is replayed into the existence read")
+	assert.EqualValues(t, 0, n)
+	assert.Empty(t, recorder.take())
 }
 
+// The map-shaped entry walks in sortedAttrsIDs order — a Go map carries no insertion order, and
+// the insert must not inherit Go's randomized iteration order.
+func TestPivotWorkers_DoAttachWithPivot_CanonicalRowOrderAndNoRead(t *testing.T) {
+	builder, recorder := newRelationTestBuilder(t)
+	info := wwInfo(t, builder, &pwParent{ID: 7}, "Kids")
+
+	n, err := relations.DoAttachWithPivot(builder, info, uint(7), map[any]map[string]any{
+		uint(6): {"role": "b"},
+		uint(5): {"role": "a"},
+	})
+	require.NoError(t, err)
+	assert.EqualValues(t, 2, n)
+
+	statements := recorder.take()
+	require.Len(t, statements, 1, "no existence read before the insert")
+	assert.Equal(t, `insert into "pw_parent_kids" ("kid_id", "parent_id", "role") values (?, ?, ?), (?, ?, ?)`, statements[0].query)
+	require.Len(t, statements[0].args, 6)
+	assert.EqualValues(t, 5, deref(statements[0].args[0]))
+	assert.EqualValues(t, 7, deref(statements[0].args[1]))
+	assert.Equal(t, "a", deref(statements[0].args[2]))
+	assert.EqualValues(t, 6, deref(statements[0].args[3]))
+	assert.EqualValues(t, 7, deref(statements[0].args[4]))
+	assert.Equal(t, "b", deref(statements[0].args[5]))
+}
+
+// --- AllPivotIDs -------------------------------------------------------------------------------
+
+// AllPivotIDs is the sync-family current-ids read: `select *` (Laravel getCurrentlyAttachedPivots),
+// the related key plucked from the column-keyed rows — oracle v12.55.1, executed,
+// /tmp/lalign_synccore_order_probe.php C1.
 func TestPivotWorkers_AllPivotIDs_ReadShapes(t *testing.T) {
 	builder, recorder := newRelationTestBuilder(t)
 	info := wwInfo(t, builder, &pwParent{ID: 7}, "Kids")
@@ -153,11 +187,37 @@ func TestPivotWorkers_AllPivotIDs_ReadShapes(t *testing.T) {
 	assert.Empty(t, ids)
 	statements := recorder.take()
 	require.Len(t, statements, 1)
-	assert.Equal(t, `select "kid_id" from "pw_parent_kids" where "pw_parent_kids"."parent_id" = ?`, statements[0].query)
+	assert.Equal(t, `select * from "pw_parent_kids" where "pw_parent_kids"."parent_id" = ?`, statements[0].query)
 
 	builder, recorder = newRelationTestBuilder(t)
 	morph := wwInfo(t, builder, &pwParent{ID: 7}, "Tags")
 	_, err = relations.AllPivotIDs(builder, morph, uint(7))
+	require.NoError(t, err)
+	statements = recorder.take()
+	require.Len(t, statements, 1)
+	assert.Equal(t, `select * from "pw_taggables" where "pw_taggables"."taggable_id" = ? and "pw_taggables"."taggable_type" = ?`, statements[0].query)
+}
+
+// --- TogglePivotIDs ---------------------------------------------------------------------------
+
+// TogglePivotIDs keeps toggle's read: the related key plucked at the query level —
+// `select "tag_id"` (InteractsWithPivotTable::toggle via newPivotQuery()->pluck
+// ($this->relatedPivotKey)) — where the sync-family read is AllPivotIDs' `select *`.
+// Oracle v12.55.1, executed, /tmp/lalign_synccore_order_probe.php C2.
+func TestPivotWorkers_TogglePivotIDs_ReadShapes(t *testing.T) {
+	builder, recorder := newRelationTestBuilder(t)
+	info := wwInfo(t, builder, &pwParent{ID: 7}, "Kids")
+
+	ids, err := relations.TogglePivotIDs(builder, info, uint(7))
+	require.NoError(t, err)
+	assert.Empty(t, ids)
+	statements := recorder.take()
+	require.Len(t, statements, 1)
+	assert.Equal(t, `select "kid_id" from "pw_parent_kids" where "pw_parent_kids"."parent_id" = ?`, statements[0].query)
+
+	builder, recorder = newRelationTestBuilder(t)
+	morph := wwInfo(t, builder, &pwParent{ID: 7}, "Tags")
+	_, err = relations.TogglePivotIDs(builder, morph, uint(7))
 	require.NoError(t, err)
 	statements = recorder.take()
 	require.Len(t, statements, 1)

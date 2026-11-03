@@ -24,7 +24,7 @@ import (
 // Four tests exercise PHP-only sugar with no Go counterpart and are skipped individually: the
 // relation-factory overrides, the pending through API, the stringy through API, and the
 // higher-order through API. One test (testAlwaysUnsetBelongsToRelationWhenReceivedModelId) is
-// skipped with a probe-backed divergence: the Go ORM keeps no dirty/clean model state and no
+// skipped with a probe-backed divergence: the Go ORM keeps no readable model-level dirty/clean API and no
 // relation cache (a relation is 'loaded' only as its destination field being non-nil), and
 // RelationWriter.Associate accepts only a model pointer — associating a raw id is rejected — and
 // persists the parent immediately.
@@ -146,7 +146,7 @@ func TestRelationships_AlwaysUnsetBelongsToRelationWhenReceivedModelId(t *testin
 	// uint64` (int, int64, float64 and string forms report their own type the same way) and the FK
 	// never changes. An explicit Load(&post, "Author") then reads the owner back, and no operation
 	// ever unsets it again; LoadMissing treats a populated destination field as loaded.
-	t.Skip("our ORM diverges: the Go ORM has no dirty/clean model state (no isDirty/isClean/syncOriginal) and no relation cache — a relation is 'loaded' only as its destination field being non-nil, nothing unsets that field, and RelationWriter.Associate accepts only a non-nil model pointer while persisting the parent immediately — so Laravel's associate-by-id is rejected outright and neither the dirty/clean assertions nor the 'always unset the loaded relation when the received value is a raw id' behaviour can be reproduced")
+	t.Skip("our ORM diverges: the Go ORM has no readable model-level dirty/clean API (the original snapshot is internal Save machinery) and no relation cache — a relation is 'loaded' only as its destination field being non-nil, nothing unsets that field, and RelationWriter.Associate accepts only a non-nil model pointer while persisting the parent immediately — so Laravel's associate-by-id is rejected outright and neither the dirty/clean assertions nor the 'always unset the loaded relation when the received value is a raw id' behaviour can be reproduced")
 }
 
 // TestRelationships_PendingHasThroughRelationship ports testPendingHasThroughRelationship: the

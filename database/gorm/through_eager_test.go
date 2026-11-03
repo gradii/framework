@@ -54,9 +54,12 @@ func (throughScopeCountry) Relations() map[string]contractsorm.Relation {
 }
 
 // TestLoadThrough_ReadsAreCompiled pins both queries loadThrough builds: the through-table read that
-// collects the second keys, and the related-rows read. Both are addressed through the package's child
-// builders, so the framework compiler renders the statement instead of GORM. The loader is driven with parent keys
-// too, so a change to either half of its body fails the test.
+// feeds the parent-to-second-key mapping, and the related-rows read — the related query joined to the
+// through table and wearing the through select list, the shape HasOneOrManyThrough::addEagerConstraints
+// filters (whereInEager targets getRelationQuery, which for a through relation is the joined query).
+// Both are addressed through the package's child builders, so the framework compiler renders the
+// statement instead of GORM. The loader is driven with parent keys too, so a change to either half of
+// its body fails the test.
 //
 // The binding slices are asserted exactly, since their order and arity carry the chunk keys.
 func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
@@ -110,10 +113,18 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 		}
 
 		chunk := []any{uint(7)}
-		child := q.relatedChild(desc.RelatedTable, desc.RelatedTable+"."+desc.SecondKey, chunk)
+		child := q.relatedChild(desc.RelatedTable, desc.ThroughTable+"."+desc.FirstKey, chunk)
+		child.query.JoinRaw(q.throughJoinFragment(desc), nil, "inner")
+		child.conditions.throughRead = &throughReadConfig{
+			relatedTable: desc.RelatedTable,
+			throughTable: desc.ThroughTable,
+			firstKey:     desc.FirstKey,
+		}
 		compiled, bindings, err := child.compileSelect()
 		assert.NoError(t, err)
-		assert.Equal(t, `select * from "rel_posts" where "rel_posts"."rel_user_id" in (?)`, compiled)
+		assert.Equal(t,
+			`select "rel_posts".*, "rel_users"."rel_country_id" as "laravel_through_key" from "rel_posts" inner join "rel_users" on "rel_users"."id" = "rel_posts"."rel_user_id" where "rel_users"."rel_country_id" in (?)`,
+			compiled)
 		assert.Equal(t, chunk, bindings)
 
 		// The loader passes the related key as a required column, so it survives column pruning and
@@ -121,7 +132,9 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 		child.query.SetSelects([]any{"title", desc.SecondKey})
 		pruned, prunedBindings, err := child.compileSelect()
 		assert.NoError(t, err)
-		assert.Equal(t, `select "title", "rel_user_id" from "rel_posts" where "rel_posts"."rel_user_id" in (?)`, pruned)
+		assert.Equal(t,
+			`select "title", "rel_user_id", "rel_users"."rel_country_id" as "laravel_through_key" from "rel_posts" inner join "rel_users" on "rel_users"."id" = "rel_posts"."rel_user_id" where "rel_users"."rel_country_id" in (?)`,
+			pruned)
 		assert.Equal(t, chunk, prunedBindings)
 	})
 
@@ -135,7 +148,13 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 		assert.NotNil(t, desc.OnQuery, "the fixture declares OnQuery")
 
 		chunk := []any{uint(1), uint(2)}
-		child := q.relatedChild(desc.RelatedTable, desc.RelatedTable+"."+desc.SecondKey, chunk)
+		child := q.relatedChild(desc.RelatedTable, desc.ThroughTable+"."+desc.FirstKey, chunk)
+		child.query.JoinRaw(q.throughJoinFragment(desc), nil, "inner")
+		child.conditions.throughRead = &throughReadConfig{
+			relatedTable: desc.RelatedTable,
+			throughTable: desc.ThroughTable,
+			firstKey:     desc.FirstKey,
+		}
 		scoped, ok := desc.OnQuery(child).(*OrmBuilder)
 		assert.True(t, ok)
 
@@ -143,7 +162,7 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 		assert.NoError(t, err)
 		// Order: the IN clause first, then the OnQuery scope's own predicate.
 		assert.Equal(t,
-			`select * from "rel_posts" where "rel_posts"."rel_user_id" in (?, ?) and "rel_posts"."published" = ?`,
+			`select "rel_posts".*, "rel_users"."through_scope_country_id" as "laravel_through_key" from "rel_posts" inner join "rel_users" on "rel_users"."id" = "rel_posts"."rel_user_id" where "rel_users"."through_scope_country_id" in (?, ?) and "rel_posts"."published" = ?`,
 			compiled)
 		assert.Equal(t, []any{uint(1), uint(2), 1}, bindings)
 
@@ -195,9 +214,12 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 		assert.Equal(t, driverBindings([]any{uint(1), uint(2)}), through.args)
 
 		related := recorder.at(t, 1)
-		assert.Equal(t, `select * from "rel_posts" where "rel_posts"."rel_user_id" in (?)`, related.sql)
-		// The key comes off the through row as the driver-typed int64, not the uint the parents carried.
-		assert.Equal(t, []driver.Value{int64(7)}, related.args)
+		assert.Equal(t,
+			`select "rel_posts".*, "rel_users"."rel_country_id" as "laravel_through_key" from "rel_posts" inner join "rel_users" on "rel_users"."id" = "rel_posts"."rel_user_id" where "rel_users"."rel_country_id" in (?, ?)`,
+			related.sql)
+		// The parent-key in-list is what constrains the related read — the through first key, not the
+		// second keys the through read collected.
+		assert.Equal(t, driverBindings([]any{uint(1), uint(2)}), related.args)
 	})
 
 	// The relation's OnQuery scope must reach the related statement the loader actually runs, layered
@@ -224,10 +246,10 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 
 		related := recorder.at(t, 1)
 		assert.Equal(t,
-			`select * from "rel_posts" where "rel_posts"."rel_user_id" in (?) and "rel_posts"."published" = ?`,
+			`select "rel_posts".*, "rel_users"."through_scope_country_id" as "laravel_through_key" from "rel_posts" inner join "rel_users" on "rel_users"."id" = "rel_posts"."rel_user_id" where "rel_users"."through_scope_country_id" in (?, ?) and "rel_posts"."published" = ?`,
 			related.sql)
-		// The second-key IN clause first, then the scope's own binding.
-		assert.Equal(t, []driver.Value{int64(7), int64(1)}, related.args)
+		// The parent-key in-list first, then the scope's own binding.
+		assert.Equal(t, driverBindings([]any{uint(1), uint(2), 1}), related.args)
 	})
 }
 
@@ -344,7 +366,9 @@ func TestLoadOneRelation_HasOneThroughFixture(t *testing.T) {
 	recorder.returnRows(`from "through_scope_countries"`, []string{"id", "name"},
 		[]driver.Value{int64(1), "Ada"},
 	)
-	recorder.returnRows(`"through_scope_country_id" in (?)`,
+	// Match the through read by its own FROM: the joined related read also mentions the through
+	// key, so a key-based matcher would swallow the through read's canned rows for it.
+	recorder.returnRows(`from "rel_users"`,
 		[]string{"through_scope_country_id", "id"},
 		[]driver.Value{int64(1), int64(7)},
 		[]driver.Value{int64(1), int64(8)},

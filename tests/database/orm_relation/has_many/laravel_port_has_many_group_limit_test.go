@@ -73,3 +73,42 @@ func TestHasMany_LimitOnANewParentCompilesTheGroupLimit(t *testing.T) {
 	require.Len(t, logs, 1)
 	assert.Equal(t, `select * from (select *, row_number() over (partition by "items"."foreign_key") as "laravel_row" from "items" where "items"."foreign_key" = 0 and "items"."foreign_key" is not null) as "laravel_table" where "laravel_row" <= 2 order by "laravel_row"`, logs[0].Query)
 }
+
+// TestHasMany_EagerLimitCompilesTheGroupLimit pins the eager form of the branch against the real
+// sqlite harness: the With callback runs on the relation object with a non-existing parent, so
+// limit(2) compiles the per-parent rewrite over the whole eager in-list rather than a global
+// limit. Oracle (illuminate/database v12.55.1, real sqlite, php .claude/laravel-oracle/oracle.php
+// /tmp/eager-callback-limit/eager_callback_limit.php E1):
+//
+//	GlUser::with(['posts' => fn ($q) => $q->limit(2)])->get() executes
+//	select * from (select *, row_number() over (partition by "gl_posts"."user_id") as "laravel_row"
+//	from "gl_posts" where "gl_posts"."user_id" in (1, 2)) as "laravel_table"
+//	where "laravel_row" <= 2 order by "laravel_row"
+//
+// and each user carries two posts.
+func TestHasMany_EagerLimitCompilesTheGroupLimit(t *testing.T) {
+	query := newRelationQuery(t)
+	hasManySchema(t, query)
+	user1 := hasManySeedUser(t, query, 1)
+	user2 := hasManySeedUser(t, query, 2)
+	for _, name := range []string{"a", "b", "c"} {
+		hasManySeedItem(t, query, &user1, hasManyItem{Name: name})
+		hasManySeedItem(t, query, &user2, hasManyItem{Name: name})
+	}
+
+	ctx := databasedb.EnableQueryLog(context.Background())
+	withContext, ok := cloneRelationQuery(t, query).(contractsorm.QueryWithContext)
+	require.True(t, ok, "the ORM query must support WithContext")
+
+	found := []hasManyUser{}
+	require.NoError(t, withContext.WithContext(ctx).Model(&hasManyUser{}).OrderBy("id").
+		With("Items", func(q contractsorm.Query) contractsorm.Query { return q.Limit(2) }).
+		Get(&found))
+	require.Len(t, found, 2)
+	assert.Len(t, found[0].Items, 2, "the eager callback's limit caps rows per parent")
+	assert.Len(t, found[1].Items, 2)
+
+	logs := databasedb.GetQueryLog(ctx)
+	require.Len(t, logs, 2)
+	assert.Equal(t, `select * from (select *, row_number() over (partition by "items"."foreign_key") as "laravel_row" from "items" where "items"."foreign_key" in (1, 2)) as "laravel_table" where "laravel_row" <= 2 order by "laravel_row"`, logs[1].Query)
+}

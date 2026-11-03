@@ -124,11 +124,13 @@ type Descriptor struct {
 	// PivotCreatedAtColumn is the pivot-table column to auto-stamp with the current time on
 	// INSERT. Empty string means "don't auto-stamp on INSERT". Resolved by the descriptor builder
 	// from (priority): Pivot struct's autoCreateTime field → Pivot struct's CreatedAt field →
-	// PivotTimestamps: true fallback (defaults to "created_at").
+	// PivotTimestamps: true fallback (the parent model's created-at column, "created_at" when the
+	// parent declares none).
 	PivotCreatedAtColumn string
 	// PivotUpdatedAtColumn is the pivot-table column to auto-stamp with the current time on
 	// INSERT and UPDATE. Empty string means "don't auto-stamp on INSERT/UPDATE". Same resolution
-	// rules as pivotCreatedAtColumn but using autoUpdateTime / UpdatedAt.
+	// rules as pivotCreatedAtColumn but using autoUpdateTime / UpdatedAt; the fallback resolves
+	// the parent model's updated-at column.
 	PivotUpdatedAtColumn string
 
 	// RelatedKeyType is the Go type of the related model's PK field — used by castKey to normalise
@@ -185,12 +187,13 @@ type Descriptor struct {
 
 	// OnPivotQuery is the per-relation default scope for pivot-table SELECT / UPDATE / DELETE,
 	// from Many2Many.OnPivotQuery / MorphToMany.OnPivotQuery / MorphedByMany.OnPivotQuery.
-	// Applied by existingPivotIDs, allPivotIDs, DetachRelation, UpdateExistingPivotRelation.
+	// Applied by allPivotIDs, DetachRelation, UpdateExistingPivotRelation.
 	OnPivotQuery contractsorm.PivotCallback
 
 	// Touches, when true, makes Sync / Attach / Detach / Toggle / UpdateExistingPivot bump the
-	// parent's updated_at after the pivot write succeeds (and only when pivot rows actually
-	// changed). Source: Many2Many.Touches / MorphToMany.Touches / MorphedByMany.Touches.
+	// parent's updated_at after the pivot write succeeds — Attach after every successful call,
+	// empty id list included (oracle v12.55.1, executed, C1); the other shells only when pivot rows
+	// actually changed. Source: Many2Many.Touches / MorphToMany.Touches / MorphedByMany.Touches.
 	Touches bool
 
 	// next link for Nested resolution (e.g. "Books.Author")
@@ -444,7 +447,7 @@ func descriptorFromMany2Many(parent any, parentTable, name string, rel contracts
 		return nil, err
 	}
 	pivotField := cmp.Or(rel.PivotField, "Pivot")
-	createdAtCol, updatedAtCol, err := ResolvePivotTimestamps(rel.Related, pivotField, rel.PivotTimestamps)
+	createdAtCol, updatedAtCol, err := ResolvePivotTimestamps(parent, rel.Related, pivotField, rel.PivotTimestamps)
 	if err != nil {
 		return nil, err
 	}
@@ -604,7 +607,7 @@ func BuildMorphPivotDescriptor(parent any, parentTable, name string, related any
 		return nil, err
 	}
 	pivotFieldName := cmp.Or(pivotField, "Pivot")
-	createdAtCol, updatedAtCol, err := ResolvePivotTimestamps(related, pivotFieldName, pivotTimestamps)
+	createdAtCol, updatedAtCol, err := ResolvePivotTimestamps(parent, related, pivotFieldName, pivotTimestamps)
 	if err != nil {
 		return nil, err
 	}
@@ -685,14 +688,29 @@ func relatedKeyFieldType(related any, columnName string) (reflect.Type, error) {
 // current time on INSERT (created) and INSERT/UPDATE (updated). Detection priority:
 //
 //  1. Pivot struct field with `gorm:"autoCreateTime"` / `gorm:"autoUpdateTime"` tag — column
-//     name from the field's GORM schema (respects `gorm:"column:..."`).
+//     name from the field's GORM schema (respects `gorm:"column:..."`). These are the Go form of
+//     the columns withTimestamps($createdAt, $updatedAt) names (BelongsToMany::$pivotCreatedAt /
+//     $pivotUpdatedAt).
 //  2. Pivot struct field named CreatedAt / UpdatedAt of type time.Time (GORM convention).
-//  3. fallbackEnabled (relation-level PivotTimestamps: true) — defaults to "created_at" /
-//     "updated_at" for whichever column the pivot struct didn't already provide.
+//  3. fallbackEnabled (relation-level PivotTimestamps: true) — the bare withTimestamps() form:
+//     Laravel leaves $pivotCreatedAt / $pivotUpdatedAt null, so createdAt() / updatedAt() resolve
+//     the PARENT model's columns (`$this->pivotCreatedAt ?? $this->parent->getCreatedAtColumn() ??
+//     Model::CREATED_AT`, BelongsToMany.php:1559-1571) and the pivot write stamps those into the
+//     pivot row. The parent's columns resolve the way Relation::createdAt / updatedAt resolve
+//     them — the first schema field stamped only on insert / stamped on update — with Laravel's
+//     static::CREATED_AT / static::UPDATED_AT defaults "created_at" / "updated_at" when the
+//     parent declares none. Oracle v12.55.1, executed, /tmp/btm-pivot-ts-probe.php (reads) and
+//     /tmp/btm-pivot-ts-write-probe.php (writes): withTimestamps() reports and stamps the parent
+//     class's 'user_created_at' / 'user_updated_at'; updateExistingPivot rewrites the parent's
+//     updated column alone; a parent that declares no timestamp fields stamps the literal
+//     created_at / updated_at.
 //
 // Empty string for either column means "don't auto-stamp on that op". The pivot struct does not
-// need to declare both — declaring only CreatedAt is fine and disables update-side stamping.
-func ResolvePivotTimestamps(relatedModel any, pivotFieldName string, fallbackEnabled bool) (createdCol, updatedCol string, err error) {
+// need to declare both — declaring only CreatedAt is fine and, without the fallback, disables
+// update-side stamping; with fallbackEnabled the undeclared side resolves the parent's column
+// (the Go form of Laravel's withTimestamps('pivot_created_at'), which stamps the parent's
+// updated column too).
+func ResolvePivotTimestamps(parentModel any, relatedModel any, pivotFieldName string, fallbackEnabled bool) (createdCol, updatedCol string, err error) {
 	if !descriptorSeamInstalled() {
 		return "", "", errors.OrmRelationDescriptorSeamMissing
 	}
@@ -723,16 +741,47 @@ func ResolvePivotTimestamps(relatedModel any, pivotFieldName string, fallbackEna
 			}
 		}
 	}
-	// Priority 3: relation-level fallback. Only fills columns the pivot struct didn't provide.
-	if fallbackEnabled {
+	// Priority 3: relation-level fallback — the parent model's own timestamp columns, for
+	// whichever side the pivot struct did not provide.
+	if fallbackEnabled && (createdCol == "" || updatedCol == "") {
+		parentCreated, parentUpdated, parentErr := parentTimestampColumns(parentModel)
+		if parentErr != nil {
+			return "", "", parentErr
+		}
 		if createdCol == "" {
-			createdCol = "created_at"
+			createdCol = parentCreated
 		}
 		if updatedCol == "" {
-			updatedCol = "updated_at"
+			updatedCol = parentUpdated
 		}
 	}
 	return createdCol, updatedCol, nil
+}
+
+// parentTimestampColumns reads a model's own created-at / updated-at columns — the resolution
+// Relation::createdAt / Relation::updatedAt perform on the parent
+// (`$this->parent->getCreatedAtColumn() ?? Model::CREATED_AT`): the first schema field stamped
+// only on insert is the created column, the first field stamped on update the updated one, and
+// Laravel's static::CREATED_AT / static::UPDATED_AT defaults when the model declares none. The
+// scan is the seam's "stamped" reading of database/gorm's schemaCreatedAtColumn /
+// schemaUpdatedAtColumn — the same resolution the accessor path performs through the bound model
+// hooks.
+func parentTimestampColumns(model any) (createdCol, updatedCol string, err error) {
+	schema, err := descriptorSeam.ParseModel(model)
+	if err != nil {
+		return "", "", err
+	}
+
+	for _, f := range schema.Columns() {
+		if f.AutoCreateTime && !f.AutoUpdateTime && createdCol == "" {
+			createdCol = f.DBName
+		}
+		if f.AutoUpdateTime && updatedCol == "" {
+			updatedCol = f.DBName
+		}
+	}
+
+	return cmp.Or(createdCol, "created_at"), cmp.Or(updatedCol, "updated_at"), nil
 }
 
 // alphabeticalPivotName returns the Eloquent-convention default pivot table for a Many2Many

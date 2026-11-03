@@ -134,8 +134,9 @@ type RelationInfo struct {
 	// PivotCreatedAtColumn / PivotUpdatedAtColumn name the pivot-table columns the pivot writes
 	// stamp with the current time — both on insert, the updated one on update —
 	// desc.pivotCreatedAtColumn / desc.pivotUpdatedAtColumn, resolved at declaration from the
-	// Pivot struct's automatic timestamp fields or PivotTimestamps: true. "" leaves the column
-	// unstamped (BelongsToMany::$withTimestamps false).
+	// Pivot struct's automatic timestamp fields, with PivotTimestamps: true filling a missing
+	// side from the parent model's timestamp columns (Laravel's bare withTimestamps()). ""
+	// leaves the column unstamped (BelongsToMany::$withTimestamps false).
 	PivotCreatedAtColumn string
 	PivotUpdatedAtColumn string
 	// RelatedKeyType is the Go type of the related model's primary key — desc.relatedKeyType —
@@ -339,7 +340,7 @@ type Builder interface {
 	// way UpdateRows assembles its update and run through execDelete. Reports the rows affected.
 	DeleteRows(table string, wheres []RowWhere, scope contractsorm.PivotCallback) (int64, error)
 	// SelectRows reads the given columns of table into column-keyed maps — W7, the
-	// existingPivotIDs / allPivotIDs read: the select list set on the fresh builder, each RowWhere
+	// allPivotIDs read: the select list set on the fresh builder, each RowWhere
 	// appended in order, the pivot scope replayed and the statement read through findMapsCompiled.
 	SelectRows(table string, columns []string, wheres []RowWhere, scope contractsorm.PivotCallback) ([]map[string]any, error)
 	// IsIgnoringTouch reports whether a model's class ignores touches — database/orm's

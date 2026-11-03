@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	querybuilder "github.com/gradii/framework/database/query"
 )
 
 // The pivot-construction surface's projection-level pins (item decide-light-using): Using /
@@ -17,7 +18,8 @@ import (
 // override's attribute merge. Every value was measured by the oracle (php
 // .claude/laravel-oracle/oracle.php /tmp/decide-light-using/using_probe.php, illuminate/database
 // v12.55.1, sqlite; output /tmp/decide-light-using/using_probe.out); the real-descriptor half
-// lives in using_test.go.
+// lives in using_test.go; the WithPivotValue-merge pins extend the probe through
+// /tmp/reverify429/pv_probe.php.
 
 type usingUnitUser struct{ ID uint }
 type usingUnitRole struct{ ID uint }
@@ -232,4 +234,108 @@ func TestUsing_MorphConstructionOverride(t *testing.T) {
 	}).NewPivot(map[string]any{"tag_id": 9}, false)
 	require.NoError(t, err)
 	assert.Same(t, foreign, foreignResult)
+}
+
+// usingUnitRecordedMany2ManyRelation is usingUnitMany2ManyRelation with the WithPivotValue-recorded
+// pairs seeded onto the relation's list directly — the projection-level stand-in for a relation
+// whose WithPivotValue ran (that call needs a builder; the real path is pinned in using_test.go).
+func usingUnitRecordedMany2ManyRelation(parent any, recorded ...pivotValue) *belongsToManyRelationQuery {
+	rel := usingUnitMany2ManyRelation(parent).(*belongsToManyRelationQuery)
+	rel.pivotValues = append(rel.pivotValues, recorded...)
+
+	return rel
+}
+
+func TestUsing_NewPivotMergesRecordedPivotValues(t *testing.T) {
+	parent := &usingUnitUser{ID: 7}
+	rel := usingUnitRecordedMany2ManyRelation(parent, pivotValue{column: "level", value: "pv"})
+
+	// Oracle C21 (illuminate/database v12.55.1, executed, /tmp/reverify429/pv_probe.php — the
+	// decide-light-using probe extended for this item): the recorded values merge into newPivot's
+	// attributes FIRST — IWPT:629 `array_merge(array_column($this->pivotValues, 'value',
+	// 'column'), $attributes)` — `C21 base attrs => ['level' => 'pv']`, `C21 base dirty => []`
+	// (fromAttributes syncs the original bag).
+	pivot, err := rel.NewPivot(nil, false)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"level": "pv"}, pivot.(*Pivot).Attributes())
+	assert.False(t, pivot.(*Pivot).IsDirty())
+
+	// `C21 caller wins => ['level' => 'caller']` with `C21 caller extra => ['level' => 'pv',
+	// 'other' => 'x']` — the caller's attributes win, extra keys stay, and the caller's bag is
+	// never mutated.
+	caller := map[string]any{"level": "caller", "other": "x"}
+	overridden, err := rel.NewPivot(caller, false)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"level": "caller", "other": "x"}, overridden.(*Pivot).Attributes())
+	assert.Equal(t, map[string]any{"level": "caller", "other": "x"}, caller)
+
+	// The recorded default also merges into a caller bag that does NOT carry the column, and
+	// the bag still comes back untouched — `C21 caller extra => ['level' => 'pv', 'other' =>
+	// 'x']` (the sparse caller's map itself gains nothing).
+	sparse := map[string]any{"other": "x"}
+	sparseResult, err := rel.NewPivot(sparse, false)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"level": "pv", "other": "x"}, sparseResult.(*Pivot).Attributes())
+	assert.Equal(t, map[string]any{"other": "x"}, sparse)
+
+	// `C21 duplicate last wins => ['level' => 'b']` — array_column keeps the last recorded pair.
+	dup, err := usingUnitRecordedMany2ManyRelation(parent,
+		pivotValue{column: "level", value: "a"},
+		pivotValue{column: "level", value: "b"},
+	).NewPivot(nil, false)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"level": "b"}, dup.(*Pivot).Attributes())
+
+	// `C21 base existing attrs => ['level' => 'pv']` — NewExistingPivot rides the same merge.
+	existing, err := rel.NewExistingPivot(nil)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"level": "pv"}, existing.(*Pivot).Attributes())
+	assert.True(t, existing.(*Pivot).Exists())
+
+	// `C21 using-class attrs => ['level' => 'pv']` / `C21 using-class dirty => ['level' => 'pv']`
+	// — the Using factory receives the merged bag; fromRawAttributes keeps it dirty while !exists.
+	capture := &usingUnitCapture{}
+	viaFactory, err := rel.Using(func(p any, attributes map[string]any, table string, exists bool) (contractsorm.PivotModel, error) {
+		capture.capture(p, attributes, table, exists)
+
+		return FromRawAttributes(nil, p, attributes, table, exists)
+	}).NewPivot(nil, false)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"level": "pv"}, capture.attributes)
+	assert.Equal(t, map[string]any{"level": "pv"}, viaFactory.(*Pivot).GetDirty())
+
+	// A non-string recorded column is skipped by the merge: PHP's array_column raises TypeError on
+	// one (oracle v12.55.1, executed: `C21 expression attrs threw => [TypeError, "Cannot access
+	// offset of type Illuminate\Database\Query\Expression on array"]`), so the Go merge drops
+	// the entry instead of failing the construction.
+	unmergeable, err := usingUnitRecordedMany2ManyRelation(parent,
+		pivotValue{column: querybuilder.Expression{Value: "CONCAT(foo, '_', bar)"}, value: "pv"},
+	).NewPivot(nil, false)
+	require.NoError(t, err)
+	assert.Empty(t, unmergeable.(*Pivot).Attributes())
+
+	// Nothing recorded: the caller's bag passes through untouched.
+	fresh, err := usingUnitMany2ManyRelation(parent).NewPivot(nil, false)
+	require.NoError(t, err)
+	assert.Empty(t, fresh.(*Pivot).Attributes())
+}
+
+func TestUsing_MorphNewPivotIgnoresRecordedPivotValues(t *testing.T) {
+	// Oracle C21: MorphToMany::newPivot (:160) merges only the morph type/value pair — never the
+	// recorded withPivotValue pairs — `C21 morph attrs => ['taggable_type' => 'PvPost']`,
+	// `C21 morph dirty => []`, `C21 morph caller attrs => ['taggable_type' => 'PvPost', 'level' =>
+	// 'caller']`. The recording still lands on the relation (the promoted WithPivotValue writes
+	// the shared base object); the morph construction must not consume it.
+	rel := usingUnitMorphRelation(&usingUnitUser{ID: 7})
+	typed := rel.(*morphToManyRelationQuery)
+	typed.pivotValues = append(typed.pivotValues, pivotValue{column: "level", value: "pv"})
+
+	pivot, err := rel.NewPivot(nil, false)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"taggable_type": "unit_post"}, pivot.(*MorphPivot).Attributes())
+	assert.False(t, pivot.(*MorphPivot).IsDirty())
+
+	overridden, err := rel.NewPivot(map[string]any{"level": "caller"}, false)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"taggable_type": "unit_post", "level": "caller"}, overridden.(*MorphPivot).Attributes())
 }

@@ -3,6 +3,7 @@ package db
 import (
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/gradii/framework/contracts/database/db"
 	querybuilder "github.com/gradii/framework/database/query"
@@ -247,6 +248,7 @@ func (r *Query) applyAfterQuery(dest any) error {
 		return errors.DatabaseUnsupportedType.Args(fmt.Sprintf("%T", dest), "non-nil pointer")
 	}
 	result := r.builder.Processor().ProcessSelect(target.Elem().Interface())
+	r.withoutGroupLimitKeys(result)
 	result = r.builder.ApplyAfterQueryCallbacks(result)
 	value := reflect.ValueOf(result)
 	if !value.IsValid() {
@@ -258,4 +260,42 @@ func (r *Query) applyAfterQuery(dest any) error {
 		return nil
 	}
 	return errors.DatabaseUnsupportedType.Args(fmt.Sprintf("%T", result), target.Elem().Type().String())
+}
+
+// withoutGroupLimitKeys mirrors Builder::withoutGroupLimitKeys() (illuminate/database v12.55.1,
+// Query/Builder.php:3516): the group-limit rewrite appends bookkeeping columns to the derived
+// table's select list — the numbering column, and, on the legacy MySQL rewrite, the @laravel_group
+// session-variable columns MySQL names after their expressions — and get() removes them from the
+// materialized rows before the after-query callbacks run. Laravel guards the strip with
+// isset($this->groupLimit); the Go port reads the same presence flag, GroupLimitSet. The column is
+// always a string in the Go state, so Laravel's is_string check is trivially true. Struct
+// destinations never carry the columns, so only map destinations are rewritten.
+func (r *Query) withoutGroupLimitKeys(result any) {
+	if !r.builder.State().GroupLimitSet {
+		return
+	}
+
+	column := r.builder.State().GroupLimitColumn
+	if index := strings.LastIndex(column, "."); index != -1 {
+		column = column[index+1:]
+	}
+
+	keys := []string{
+		"laravel_row",
+		"@laravel_group := " + r.grammar.Wrap(column),
+		"@laravel_group := " + r.grammar.Wrap("pivot_"+column),
+	}
+
+	switch rows := result.(type) {
+	case []map[string]any:
+		for _, row := range rows {
+			for _, key := range keys {
+				delete(row, key)
+			}
+		}
+	case map[string]any:
+		for _, key := range keys {
+			delete(rows, key)
+		}
+	}
 }

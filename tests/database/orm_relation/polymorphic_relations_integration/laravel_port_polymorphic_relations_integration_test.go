@@ -189,8 +189,8 @@ func polyRelationCreateTag(t *testing.T, query contractsorm.Query) polyRelationT
 	return tag
 }
 
-// polyRelationAttach ports $parent->tags()->attach($id): writes one pivot row (the morph type from
-// the parent's MorphClass) and skips an id already attached.
+// polyRelationAttach ports $parent->tags()->attach($id): writes one pivot row per id (the morph
+// type from the parent's MorphClass); no pivot-existence read runs (round 6, item attach-dedup).
 func polyRelationAttach(t *testing.T, query contractsorm.Query, parent any, id uint) {
 	t.Helper()
 

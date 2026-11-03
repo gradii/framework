@@ -40,9 +40,9 @@ import (
 // Our compiled statements differ in shape — the lookup drops the nested group and adds the ORM's
 // tie-breaker order ("select * from "table" where "attr" = ? order by "table"."id" limit 1"), the
 // insert renders sorted columns and carries count explicitly ("insert into "table" ("attr", "count",
-// "created_at", "updated_at", "val") values (?, ?, ?, ?, ?)"), and Save has no dirty tracking, so it
-// overwrites every column ("update "table" set "attr" = ?, "count" = ?, "created_at" = ?,
-// "updated_at" = ?, "val" = ? where "id" = ?") — so the port asserts the corpus's outcomes (loaded
+// "created_at", "updated_at", "val") values (?, ?, ?, ?, ?)"), and Save writes the dirty-only update the oracle measured ("update "table" set "val" = ?,
+// "updated_at" = ? where "id" = ?" — the loaded row's unchanged columns stay out of the
+// statement) — so the port asserts the corpus's outcomes (loaded
 // rows, mutated attributes) rather than its SQL text; the resulting row state is identical.
 //
 // # createOrFirst and the "record created just now" race, on a real database
@@ -67,19 +67,20 @@ import (
 //     id 1, wasRecentlyCreated false, val bar, one stored row; updateOrCreate => the same, then
 //     update "table" set "val" = ?, "updated_at" = ? where "id" = ?, val baz.
 //
-// # Divergence that forces skips
+// # incrementOrCreate, ported
 //
-//   - The ORM Query contract has no IncrementOrCreate. Laravel's is firstOrCreate($attributes,
-//     [$column => $default]) followed, unless wasRecentlyCreated, by increment($column, $step,
-//     $extra); FirstOrCreate and Increment exist separately on the Go contract, but FirstOrCreate
-//     does not report whether it created the row, so the method cannot be composed from the public
-//     surface — an API gap (feasible to add), not a PHP-only assertion. The four incrementOrCreate
-//     tests stay skipped with that reason; the race their "just now" variant needs is reproducible
-//     (above), only the method is missing.
-
-// builderCreateOrFirstSkipIncrementOrCreate covers the incrementOrCreate tests: the method does not
-// exist on the ORM query.
-const builderCreateOrFirstSkipIncrementOrCreate = "our ORM diverges: the Query contract has no IncrementOrCreate (Laravel Builder::incrementOrCreate = firstOrCreate($attributes, [$column => $default]) then, unless wasRecentlyCreated, increment($column, $step, $extra); oracle on a real sqlite database: a found row compiles `update \"table\" set \"count\" = \"count\" + 1, \"updated_at\" = ? where \"id\" = ?` and leaves count 2, a miss inserts (\"attr\", \"count\", \"updated_at\", \"created_at\") with count 1, step: 2 + extra compiles `set \"count\" = \"count\" + 2, \"val\" = ?, ...`); FirstOrCreate and Increment exist separately but FirstOrCreate does not report whether it created the row, so the method cannot be composed from the public contract — an API gap, not a PHP-only assertion"
+// Query.IncrementOrCreate ports Builder::incrementOrCreate — firstOrCreate($attributes, [$column =>
+// $default]) and, unless the row was just created, Model::increment's step: the column moves in
+// memory and the extra values fill before the updating event, the scope-less update keyed on the
+// model compiles the raw `<column> + <step>` expression, the extras and the refreshed updated-at
+// stamp, the updated event runs, and the incremented column re-baselines in the original bag, so a
+// later Save writes the extras and updated_at alone. Laravel's wasRecentlyCreated signal rides
+// FirstOrCreate internally (firstOrCreateWithCreated); a Go model carries no such flag. Oracle
+// v12.55.1, executed: /tmp/cof_builder_probe.php (found => count+1 + updated_at, count 2; miss =>
+// insert count=1, no update after it; step+extra => count+2 and val in one update),
+// /tmp/cof_builder_race_probe.php (the creating-event race re-select => count 2),
+// /tmp/cof_inc_mem_probe.php (the in-memory count/val sync, the stale in-memory updated_at, and a
+// later save writing the extras alone), /tmp/cof_inc_events_probe.php (updating and updated alone).
 
 // --- model -------------------------------------------------------------------
 
@@ -163,6 +164,18 @@ func builderCreateOrFirstSeedRow(t *testing.T, query contractsorm.Query, attr, v
 	return row
 }
 
+// builderCreateOrFirstSeedIncrementRow writes the row the incrementOrCreate found-path tests start
+// from: attr foo at the given count — the corpus's mocked select returns id 123, attr foo, count 1
+// (val "bar" only in the extra-values case).
+func builderCreateOrFirstSeedIncrementRow(t *testing.T, query contractsorm.Query, val string, count int) builderCreateOrFirstTable {
+	t.Helper()
+
+	row := builderCreateOrFirstTable{Attr: "foo", Val: val, Count: count}
+	require.NoError(t, cloneRelationQuery(t, query).Create(&row))
+
+	return row
+}
+
 // armBuilderCreateOrFirstRace installs the corpus's concurrent writer for one test: when the racing
 // model's insert is about to run, the writer creates the row (attr foo, the given val, timestamps at
 // the frozen clock) through its own handle, so the insert then trips the unique index.
@@ -171,6 +184,20 @@ func armBuilderCreateOrFirstRace(t *testing.T, query contractsorm.Query, val str
 
 	builderCreateOrFirstRacingWriter = func() error {
 		row := builderCreateOrFirstTable{Attr: "foo", Val: val}
+
+		return cloneRelationQuery(t, query).Create(&row)
+	}
+	t.Cleanup(func() { builderCreateOrFirstRacingWriter = nil })
+}
+
+// armBuilderCreateOrFirstRaceIncrement is armBuilderCreateOrFirstRace for the incrementOrCreate
+// just-now test: the corpus's re-select returns the row the racing writer created with count 1 (the
+// failed insert carried the count default), so the planted row carries that count.
+func armBuilderCreateOrFirstRaceIncrement(t *testing.T, query contractsorm.Query) {
+	t.Helper()
+
+	builderCreateOrFirstRacingWriter = func() error {
+		row := builderCreateOrFirstTable{Attr: "foo", Count: 1}
 
 		return cloneRelationQuery(t, query).Create(&row)
 	}
@@ -366,9 +393,9 @@ func TestBuilderCreateOrFirst_UpdateOrCreateMethodUpdatesExistingRecord(t *testi
 	builderCreateOrFirstAssertFrozen(t, now, updated.CreatedAt, "updated.created_at")
 	builderCreateOrFirstAssertFrozen(t, now, updated.UpdatedAt, "updated.updated_at")
 
-	// Laravel's save() compiles 'update "table" set "val" = ?, "updated_at" = ? where "id" = ?' (dirty
-	// tracking); our Save has no dirty tracking and overwrites every column, but the loaded model
-	// carries the row's own values, so the stored row ends up in the same state.
+	// Laravel's save() compiles 'update "table" set "val" = ?, "updated_at" = ? where "id" = ?'; the
+	// port's Save now runs the same dirty-only update — the loaded model's unchanged columns stay
+	// out of the statement — so the stored row ends up in the same state.
 	stored := builderCreateOrFirstReload(t, query, existing.ID)
 	assert.Equal(t, "foo", stored.Attr)
 	assert.Equal(t, "baz", stored.Val)
@@ -431,27 +458,107 @@ func TestBuilderCreateOrFirst_UpdateOrCreateMethodUpdatesRecordCreatedJustNow(t 
 }
 
 func TestBuilderCreateOrFirst_IncrementOrCreateMethodIncrementsExistingRecord(t *testing.T) {
-	// Laravel: incrementOrCreate(['attr' => 'foo'], 'count') finds the row and increments count with
-	// the raw expression '"count" + 1', leaving val bar and refreshing updated_at.
-	t.Skip(builderCreateOrFirstSkipIncrementOrCreate)
+	now := freezeBuilderCreateOrFirstClock(t)
+	query := newRelationQuery(t)
+	builderCreateOrFirstSchema(t, query)
+
+	// Laravel: the mocked select returns id 123, attr foo, count 1, and the mocked raw('"count" + 1')
+	// plus update pin the increment; oracle on a real sqlite database: select (hit), then
+	// `update "table" set "count" = "count" + 1, "updated_at" = ? where "id" = ?` — count 2, one
+	// stored row, wasRecentlyCreated false.
+	existing := builderCreateOrFirstSeedIncrementRow(t, query, "", 1)
+
+	incremented := builderCreateOrFirstTable{}
+	require.NoError(t, cloneRelationQuery(t, query).Model(&incremented).IncrementOrCreate(&incremented, map[string]any{"attr": "foo"}, "count"))
+
+	assert.Equal(t, existing.ID, incremented.ID)
+	assert.Equal(t, "foo", incremented.Attr)
+	assert.Equal(t, 2, incremented.Count, "the model must carry the stepped count, Laravel's in-memory $instance->count")
+	builderCreateOrFirstAssertFrozen(t, now, incremented.CreatedAt, "incremented.created_at")
+	builderCreateOrFirstAssertFrozen(t, now, incremented.UpdatedAt, "incremented.updated_at")
+
+	stored := builderCreateOrFirstReload(t, query, existing.ID)
+	assert.Equal(t, 2, stored.Count, "the raw expression must have stepped the stored row")
+	assert.Equal(t, int64(1), builderCreateOrFirstCount(t, query))
 }
 
 func TestBuilderCreateOrFirst_IncrementOrCreateMethodCreatesNewRecord(t *testing.T) {
+	now := freezeBuilderCreateOrFirstClock(t)
+	query := newRelationQuery(t)
+	builderCreateOrFirstSchema(t, query)
+
+	assert.Equal(t, int64(0), builderCreateOrFirstCount(t, query), "the table starts empty")
+
 	// Laravel: incrementOrCreate(['attr' => 'foo']) finds nothing and creates the row with count
-	// defaulted to 1 (the insert carries attr, count and the timestamps).
-	t.Skip(builderCreateOrFirstSkipIncrementOrCreate)
+	// defaulted to 1 — oracle: insert into "table" ("attr", "count", "updated_at", "created_at")
+	// values (?, ?, ?, ?) binding count 1, and no update after it — wasRecentlyCreated true. The
+	// real database assigns id 1; the generated key being read back is the observable the corpus's
+	// 123 stands for.
+	created := builderCreateOrFirstTable{}
+	require.NoError(t, cloneRelationQuery(t, query).Model(&created).IncrementOrCreate(&created, map[string]any{"attr": "foo"}))
+
+	assert.NotZero(t, created.ID, "Create must read the generated key back")
+	assert.Equal(t, "foo", created.Attr)
+	assert.Equal(t, 1, created.Count, "the column default must ride the create")
+	builderCreateOrFirstAssertFrozen(t, now, created.CreatedAt, "created.created_at")
+	builderCreateOrFirstAssertFrozen(t, now, created.UpdatedAt, "created.updated_at")
+
+	stored := builderCreateOrFirstReload(t, query, created.ID)
+	assert.Equal(t, 1, stored.Count, "a record that was just created must not be stepped")
+	assert.Equal(t, int64(1), builderCreateOrFirstCount(t, query))
 }
 
 func TestBuilderCreateOrFirst_IncrementOrCreateMethodIncrementParametersArePassed(t *testing.T) {
-	// Laravel: incrementOrCreate(['attr' => 'foo'], step: 2, extra: ['val' => 'baz']) increments by
-	// the given step and writes the extra column in the same update.
-	t.Skip(builderCreateOrFirstSkipIncrementOrCreate)
+	now := freezeBuilderCreateOrFirstClock(t)
+	query := newRelationQuery(t)
+	builderCreateOrFirstSchema(t, query)
+
+	// Laravel: incrementOrCreate(['attr' => 'foo'], step: 2, extra: ['val' => 'baz']) steps by the
+	// given 2 and writes the extra column in the same update — oracle:
+	// `update "table" set "count" = "count" + 2, "val" = ?, "updated_at" = ? where "id" = ?`,
+	// count 3, val baz. The named arguments translate positionally: the default stays 1, the step
+	// is 2.
+	existing := builderCreateOrFirstSeedIncrementRow(t, query, "bar", 1)
+
+	stepped := builderCreateOrFirstTable{}
+	require.NoError(t, cloneRelationQuery(t, query).Model(&stepped).IncrementOrCreate(&stepped, map[string]any{"attr": "foo"}, 1, 2, map[string]any{"val": "baz"}))
+
+	assert.Equal(t, existing.ID, stepped.ID)
+	assert.Equal(t, "foo", stepped.Attr)
+	assert.Equal(t, "baz", stepped.Val, "the extra values must be filled onto the model")
+	assert.Equal(t, 3, stepped.Count)
+	builderCreateOrFirstAssertFrozen(t, now, stepped.CreatedAt, "stepped.created_at")
+	builderCreateOrFirstAssertFrozen(t, now, stepped.UpdatedAt, "stepped.updated_at")
+
+	stored := builderCreateOrFirstReload(t, query, existing.ID)
+	assert.Equal(t, 3, stored.Count, "the step must be the given 2, not the default 1")
+	assert.Equal(t, "baz", stored.Val, "the extra column must be written by the same update")
+	assert.Equal(t, int64(1), builderCreateOrFirstCount(t, query))
 }
 
 func TestBuilderCreateOrFirst_IncrementOrCreateMethodRetrievesRecordCreatedJustNow(t *testing.T) {
-	// Laravel: the select misses, the insert of attr + count default throws and is caught into a
-	// re-select of the just-created row, which is then incremented by the raw expression (oracle with
-	// the creating-event racing writer: count 2, wasRecentlyCreated false). The race itself is
-	// reproducible here — see the FirstOrCreate just-now port — only the method is missing.
-	t.Skip(builderCreateOrFirstSkipIncrementOrCreate + "; the just-now race is reproducible with the racing model above, so the method is the only gap")
+	now := freezeBuilderCreateOrFirstClock(t)
+	query := newRelationQuery(t)
+	builderCreateOrFirstSchema(t, query)
+
+	// Laravel: the select misses, the insert (attr plus the count default) throws and is caught into
+	// a re-select of the row created just now — count 1, wasRecentlyCreated false — which is then
+	// stepped by the raw expression. The port arms the same race from the racing model's creating
+	// event (see the file comment); oracle with the same listener: select (miss), insert
+	// (violation), select (hit, count 1), `update "table" set "count" = "count" + 1,
+	// "updated_at" = ? where "id" = ?` => count 2, one stored row.
+	armBuilderCreateOrFirstRaceIncrement(t, query)
+
+	found := builderCreateOrFirstRacingTable{}
+	require.NoError(t, cloneRelationQuery(t, query).Model(&found).IncrementOrCreate(&found, map[string]any{"attr": "foo"}))
+
+	assert.NotZero(t, found.ID, "the re-select must hand back the racing writer's row")
+	assert.Equal(t, "foo", found.Attr)
+	assert.Equal(t, 2, found.Count, "the just-created row must be stepped, not treated as a create")
+	builderCreateOrFirstAssertFrozen(t, now, found.CreatedAt, "found.created_at")
+	builderCreateOrFirstAssertFrozen(t, now, found.UpdatedAt, "found.updated_at")
+
+	stored := builderCreateOrFirstReload(t, query, found.ID)
+	assert.Equal(t, 2, stored.Count)
+	assert.Equal(t, int64(1), builderCreateOrFirstCount(t, query), "only the racing writer's row may exist")
 }

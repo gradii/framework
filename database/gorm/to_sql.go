@@ -176,13 +176,26 @@ func (r *ToSql) Save(dest any) string {
 		return r.render(statement, bindings, err)
 	}
 
-	// A model that carries a key is written column by column, addressed by that key, which is the
-	// statement Save runs.
+	// A model that carries a key is written by the columns that changed since the model was loaded —
+	// plus the save-time updated_at — addressed by that key: the statement Save runs. The original
+	// bag the preview reads is the one hydration captured in this process (see model_original.go),
+	// so a model built by hand previews the whole-struct write Save would run for it.
+	//
+	// Save runs no statement at all while the model is clean — the update, and with it the
+	// updateTimestamps stamp, is the dirty branch of Model::save — so there is nothing to preview.
+	if !isDirty(dest) {
+		return ""
+	}
+
 	query := r.query.dest(dest).addGlobalScopes().buildConditions()
 
 	assignments, err := query.saveAssignments(dest)
 	if err != nil {
 		return r.render("", nil, err)
+	}
+
+	if len(assignments) == 0 {
+		return ""
 	}
 
 	statement, bindings, err := query.compileUpdateScoped(assignments, true)

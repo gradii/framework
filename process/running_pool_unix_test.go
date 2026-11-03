@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
 
 	contractsprocess "github.com/gradii/framework/contracts/process"
@@ -24,14 +25,17 @@ func TestRunningPool_BasicFunctions_Unix(t *testing.T) {
 		{
 			name: "PIDs returns process IDs",
 			setup: func(p contractsprocess.Pool) {
-				p.Command("sh", "-c", "sleep 0.2").As("a")
-				p.Command("sh", "-c", "sleep 0.2").As("b")
+				p.Command("sh", "-c", "sleep 1").As("a")
+				p.Command("sh", "-c", "sleep 1").As("b")
 			},
 			validate: func(t *testing.T, rp contractsprocess.RunningPool) {
-				// Give processes time to start
-				time.Sleep(50 * time.Millisecond)
-
-				pids := rp.PIDs()
+				// Poll until processes are registered: spawning runs on the pool's worker goroutines,
+				// so a fixed sleep is racy under load.
+				var pids map[string]int
+				require.Eventually(t, func() bool {
+					pids = rp.PIDs()
+					return pids["a"] != 0 && pids["b"] != 0
+				}, 10*time.Second, 50*time.Millisecond, "processes should have non-zero PIDs")
 				assert.Len(t, pids, 2)
 				assert.NotEqual(t, 0, pids["a"])
 				assert.NotEqual(t, 0, pids["b"])

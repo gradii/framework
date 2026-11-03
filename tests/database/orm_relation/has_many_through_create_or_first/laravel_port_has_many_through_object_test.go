@@ -45,9 +45,9 @@ import (
 //     nests it (`and ("attr" = ?)`); the same truth table on an and-only list;
 //   - every first-family compile (the lookup and the promoted first()) carries the framework's
 //     deterministic `order by "<related>"."<key>"` beside `limit 1`, where Laravel's has none;
-//   - the insert and the save update emit every non-key column in sorted order: the through
-//     create stamps pivot_id 0 where Laravel's attribute-bag insert omits the column, and the
-//     hit update rewrites every column where Eloquent updates the dirty ones only;
+//   - the insert emits every non-key column in sorted order (the hit update now matches Eloquent's
+//     dirty-only shape): the through create stamps pivot_id 0 where Laravel's attribute-bag insert
+//     omits the column;
 //   - the query log records the lost race's failed insert attempt; Laravel's log skips a
 //     statement that threw. The entries stay in execution order.
 
@@ -326,5 +326,9 @@ func TestHasManyThroughObject_UpdateOrCreateHitUpdatesTheRecord(t *testing.T) {
 	logs := databasedb.GetQueryLog(ctx)
 	require.Len(t, logs, 2, "the hit is the lookup select plus the update")
 	assert.Equal(t, `select "child".*, "pivot"."parent_id" as "laravel_through_key" from "child" inner join "pivot" on "pivot"."id" = "child"."pivot_id" where "pivot"."parent_id" = 123 and "attr" = 'foo' order by "child"."id" limit 1`, logs[0].Query)
-	assert.Equal(t, `update "child" set "attr" = 'foo', "created_at" = '2023-01-01 00:00:00', "pivot_id" = 456, "updated_at" = '2023-01-01 00:00:00', "val" = 'baz' where "id" = 789`, logs[1].Query)
+	// The dirty-only update (Model::performUpdate; oracle re-measured for this item at
+	// /tmp/save11/through_update_probe.php: `update "child" set "val" = ?, "updated_at" = ? where
+	// "id" = ?`): only the filled val changed, updated_at is stamped at save time, and the loaded
+	// row's attr / created_at / pivot_id stay out of the statement.
+	assert.Equal(t, `update "child" set "updated_at" = '2023-01-01 00:00:00', "val" = 'baz' where "id" = 789`, logs[1].Query)
 }

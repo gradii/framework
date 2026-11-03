@@ -336,7 +336,15 @@ func (r *OrmBuilder) scanRows(rows *sql.Rows, dest any) (int, error) {
 		count++
 
 		if !intoSlice {
-			return 1, r.scanStreamedRow(rows, columns, dest)
+			if err := r.scanStreamedRow(rows, columns, dest); err != nil {
+				return 0, err
+			}
+
+			// The row just hydrated the model, so its current values become its original bag — the
+			// Go form of setRawAttributes(..., sync: true) during a find (see model_original.go).
+			syncOriginal(dest)
+
+			return 1, nil
 		}
 
 		// A slice of values is filled in place; a slice of pointers is given a value per row, because
@@ -366,6 +374,10 @@ func (r *OrmBuilder) scanRows(rows *sql.Rows, dest any) (int, error) {
 
 	if intoSlice {
 		destValue.Elem().Set(target)
+
+		// Every element of the returned slice was hydrated from a row, so each becomes its own
+		// original bag (see model_original.go).
+		syncOriginal(target.Interface())
 
 		return count, nil
 	}

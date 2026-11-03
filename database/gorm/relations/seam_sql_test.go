@@ -133,25 +133,20 @@ func TestSeam_UpdateRows_IsByteIdenticalToUpdateExistingPivot(t *testing.T) {
 	assert.Contains(t, ported[0].query, `"seam_role_user"."active" = ?`)
 }
 
-// TestSeam_SelectRowsAndInsertRows_AreByteIdenticalToAttach: AttachRelation reads the existing
-// ids (existingPivotIDs) and inserts the new rows (insertPivotRows via basePivotRow); SelectRows
-// and InsertRows reproduce both statements.
-func TestSeam_SelectRowsAndInsertRows_AreByteIdenticalToAttach(t *testing.T) {
+// TestSeam_InsertRows_IsByteIdenticalToAttach: AttachRelation inserts the rows (insertPivotRows
+// via basePivotRow); round 6 (item attach-dedup) removed the existence pre-read it used to run
+// first — Laravel's attach has none (oracle v12.55.1, executed, /tmp/attach_dedup_probe.php
+// A1a/B0: the attach log is the single INSERT) — so the seam's read half no longer participates
+// in attach; SelectRows stays pinned against the sync read in
+// TestSeam_SelectRows_IsByteIdenticalToSyncRead below.
+func TestSeam_InsertRows_IsByteIdenticalToAttach(t *testing.T) {
 	builder, recorder := newRelationTestBuilder(t)
 	var seam relations.Builder = builder
 	info := seamRelationInfo(t, seam)
 
 	require.NoError(t, builder.AttachRelation(&seamSQLUser{ID: 7}, "Roles", []any{3}))
 	legacy := recorder.take()
-	require.Len(t, legacy, 2, "attach reads the existing ids, then inserts")
-
-	wheres := []relations.RowWhere{
-		{Query: seam.Ident(info.PivotTable, info.PivotParentRef.ForeignColumn) + " = ?", Args: []any{uint(7)}},
-		{Query: info.PivotTable + "." + info.PivotRelatedRef.ForeignColumn, Args: []any{[]any{3}}},
-	}
-	rows, err := seam.SelectRows(info.PivotTable, []string{info.PivotRelatedRef.ForeignColumn}, wheres, info.OnPivotQuery)
-	require.NoError(t, err)
-	assert.Empty(t, rows, "the recording transport answers every read with no rows")
+	require.Len(t, legacy, 1, "the attach is the single INSERT — no existence read")
 
 	now := time.Now()
 	require.NoError(t, seam.InsertRows(info.PivotTable, []map[string]any{{
@@ -161,17 +156,17 @@ func TestSeam_SelectRowsAndInsertRows_AreByteIdenticalToAttach(t *testing.T) {
 		info.PivotUpdatedAtColumn:          now,
 	}}))
 	ported := recorder.take()
-	require.Len(t, ported, 2)
+	require.Len(t, ported, 1)
 
 	assert.Equal(t, maskTimes(legacy), maskTimes(ported))
-	assert.Contains(t, ported[0].query, `from "seam_role_user" where`)
-	assert.Contains(t, ported[0].query, `"seam_role_user"."active" = ?`, "the read replays the pivot scope")
-	assert.Contains(t, ported[1].query, `insert into "seam_role_user" (`)
-	assert.NotContains(t, ported[1].query, "active", "the insert replays no pivot scope — Laravel's attach does not either")
+	assert.Contains(t, ported[0].query, `insert into "seam_role_user" (`)
+	assert.NotContains(t, ported[0].query, "active", "the insert replays no pivot scope — Laravel's attach does not either")
 }
 
-// TestSeam_SelectRows_IsByteIdenticalToSyncRead: an empty sync runs exactly allPivotIDs — the
-// parent-only read, no in-list — which SelectRows reproduces.
+// TestSeam_SelectRows_IsByteIdenticalToSyncRead: an empty sync runs exactly the sync current-ids
+// read — `select *` (Laravel getCurrentlyAttachedPivots; oracle v12.55.1, executed,
+// /tmp/lalign_synccore_order_probe.php C1), the parent-only predicate, no in-list — which
+// SelectRows reproduces with a nil column list.
 func TestSeam_SelectRows_IsByteIdenticalToSyncRead(t *testing.T) {
 	builder, recorder := newRelationTestBuilder(t)
 	var seam relations.Builder = builder
@@ -185,7 +180,7 @@ func TestSeam_SelectRows_IsByteIdenticalToSyncRead(t *testing.T) {
 	wheres := []relations.RowWhere{
 		{Query: seam.Ident(info.PivotTable, info.PivotParentRef.ForeignColumn) + " = ?", Args: []any{uint(7)}},
 	}
-	_, err = seam.SelectRows(info.PivotTable, []string{info.PivotRelatedRef.ForeignColumn}, wheres, info.OnPivotQuery)
+	_, err = seam.SelectRows(info.PivotTable, nil, wheres, info.OnPivotQuery)
 	require.NoError(t, err)
 	ported := recorder.take()
 	require.Len(t, ported, 1)

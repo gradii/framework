@@ -3,6 +3,7 @@ package relations
 import (
 	"fmt"
 	"reflect"
+	"sort"
 	"strconv"
 	"time"
 
@@ -30,7 +31,13 @@ import (
 // oracle-pinned statement — pivotWhere's two fragment shapes, the BasePivotRow stamps, the
 // attach / detach / sync statements — compiles byte for byte. The sync cores detach before they
 // attach, Laravel's order (InteractsWithPivotTable::sync :123 detach, :133 attachNew; ::toggle
-// :39 detach, :50 attach).
+// :39 detach, :50 attach). Round-6 item syncwithpivot-interleave: the attach phases walk the
+// records in input order — attachNew's attach($id) / updateExistingPivot($id) per record
+// (InteractsWithPivotTable::attachNew :234) — so updates and inserts interleave per record and
+// every phase iterates deterministically; see SyncCore / SyncCoreWithPivot.
+// Round-6 item sync-read-columns: the sync-family current-ids read is Laravel's
+// getCurrentlyAttachedPivots — `select *`, the related key plucked from the rows — while toggle
+// keeps the query-level related-key pluck; see AllPivotIDs / TogglePivotIDs.
 
 // --- the shared front-half ---------------------------------------------------------------------
 
@@ -126,23 +133,27 @@ func RelationTransaction(b Builder, fn func(session Builder) error) error {
 
 // --- attach ------------------------------------------------------------------------------------
 
-// Attach inserts pivot rows linking parent to each id in ids. Skips ids that already have a pivot
-// row. Supported kinds: Many2Many, MorphToMany, MorphedByMany. The body of the AttachRelation
-// shell (RelationWriter.Attach, contracts/database/orm/relation_writer.go:134).
+// Attach inserts pivot rows linking parent to each id in ids — one row per id, duplicates
+// included, with no pivot-existence read: Laravel's attach hands every record straight to the
+// pivot insert (vendor v12.55.1, InteractsWithPivotTable.php:337, the insert at :345-347) and
+// touches the parent after a successful insert (:350-351 — even for an empty id list, whose
+// insert is a no-op; oracle v12.55.1, executed,
+// /tmp/attach_dedup_probe.php C1). A duplicate either creates a second pivot row (no unique
+// index) or trips the pivot's unique constraint, whose error propagates (oracle A1a/A1b/B0 logs
+// are exactly one INSERT with no SELECT; A1b duplicates to rows [1,1,2,2]; B1/B2 raise
+// Illuminate\Database\UniqueConstraintViolationException; B3 attachOrFail -> begin,rollback).
+// Supported kinds: Many2Many, MorphToMany, MorphedByMany. The body of the AttachRelation shell
+// (RelationWriter.Attach, contracts/database/orm/relation_writer.go:134).
 func Attach(b Builder, parent any, relation string, ids []any) error {
 	info, parentVal, err := ResolvePivot(b, parent, relation, "Attach")
 	if err != nil {
 		return err
 	}
-	affected, err := DoAttach(b, info, parentVal, ids, nil)
-	if err != nil {
+	if _, err := DoAttach(b, info, parentVal, ids, nil); err != nil {
 		return err
 	}
-	if affected > 0 {
-		return TouchIfTouching(b, info, parent, parentVal)
-	}
 
-	return nil
+	return TouchIfTouching(b, info, parent, parentVal)
 }
 
 // AttachOrFail is Attach inside a transaction — InteractsWithPivotTable::attachOrFail
@@ -158,26 +169,31 @@ func AttachOrFail(b Builder, parent any, relation string, ids []any) error {
 	})
 }
 
-// AttachWithPivot is Attach with per-row pivot column values.
+// AttachWithPivot is Attach with per-row pivot column values. The rows follow the canonical
+// attrs-key order (a Go map carries no insertion order — sortedAttrsIDs); like Attach it never
+// reads the pivot table first, and the parent is touched after a successful insert (oracle C1/C2).
 func AttachWithPivot(b Builder, parent any, relation string, idsWithAttrs map[any]map[string]any) error {
 	info, parentVal, err := ResolvePivot(b, parent, relation, "AttachWithPivot")
 	if err != nil {
 		return err
 	}
-	affected, err := DoAttachWithPivot(b, info, parentVal, idsWithAttrs)
-	if err != nil {
+	if _, err := DoAttachWithPivot(b, info, parentVal, idsWithAttrs); err != nil {
 		return err
 	}
-	if affected > 0 {
-		return TouchIfTouching(b, info, parent, parentVal)
-	}
 
-	return nil
+	return TouchIfTouching(b, info, parent, parentVal)
 }
 
 // DoAttach is the shared work-horse for Attach / AttachWithPivot. It does not trigger
-// TouchIfTouching — callers (the public entries, and SyncCore) own when to touch. Returns the
-// number of newly-inserted pivot rows; zero when every id was already attached.
+// TouchIfTouching — callers (the public entries, and the sync cores) own when to touch.
+//
+// It performs no pivot-existence read: Laravel's attach has none — one INSERT carries every id
+// (InteractsWithPivotTable::attach :337, `newPivotStatement()->insert(formatAttachRecords(...))`),
+// duplicates within one call included (oracle v12.55.1, executed, /tmp/attach_dedup_probe.php A2:
+// attach([1,1]) -> one INSERT of two rows). A duplicate against an existing pivot row is either a
+// second row (no unique index — A1b) or the pivot's unique-constraint violation, propagated as
+// the insert's error (B1/B2). Returns the number of rows handed to the insert; zero only for an
+// empty id list, whose insert Laravel no-ops (attach([]) still touches the parent — C1).
 //
 // idsWithAttrs is optional: when non-nil, attrs from this map are merged into each new row;
 // when nil, ids alone drive the insert.
@@ -185,23 +201,13 @@ func DoAttach(b Builder, info RelationInfo, parentVal any, ids []any, idsWithAtt
 	if len(ids) == 0 {
 		return 0, nil
 	}
-	existing, err := ExistingPivotIDs(b, info, parentVal, ids)
-	if err != nil {
-		return 0, err
-	}
 	rows := make([]map[string]any, 0, len(ids))
 	for _, id := range ids {
-		if _, dup := existing[DictionaryKey(id)]; dup {
-			continue
-		}
 		var attrs map[string]any
 		if idsWithAttrs != nil {
 			attrs = idsWithAttrs[id]
 		}
 		rows = append(rows, BasePivotRow(info, parentVal, id, attrs))
-	}
-	if len(rows) == 0 {
-		return 0, nil
 	}
 	if err := b.InsertRows(info.PivotTable, rows); err != nil {
 		return 0, err
@@ -211,29 +217,16 @@ func DoAttach(b Builder, info RelationInfo, parentVal any, ids []any, idsWithAtt
 }
 
 // DoAttachWithPivot is DoAttach for the with-attrs entry shape (map keyed by id). Equivalent in
-// outcome to DoAttach with the same attrs; kept separate to avoid materialising an ids slice
-// just to satisfy the DoAttach signature when callers already have a map.
+// outcome to DoAttach with the same attrs; the rows follow sortedAttrsIDs order — Laravel's
+// attach([id => attrs]) keeps the PHP array's insertion order, which a Go map cannot carry, so
+// the walk is canonicalized the way the sync cores' map entries are.
 func DoAttachWithPivot(b Builder, info RelationInfo, parentVal any, idsWithAttrs map[any]map[string]any) (int64, error) {
 	if len(idsWithAttrs) == 0 {
 		return 0, nil
 	}
-	ids := make([]any, 0, len(idsWithAttrs))
-	for id := range idsWithAttrs {
-		ids = append(ids, id)
-	}
-	existing, err := ExistingPivotIDs(b, info, parentVal, ids)
-	if err != nil {
-		return 0, err
-	}
-	rows := make([]map[string]any, 0, len(ids))
-	for id, attrs := range idsWithAttrs {
-		if _, dup := existing[DictionaryKey(id)]; dup {
-			continue
-		}
-		rows = append(rows, BasePivotRow(info, parentVal, id, attrs))
-	}
-	if len(rows) == 0 {
-		return 0, nil
+	rows := make([]map[string]any, 0, len(idsWithAttrs))
+	for _, id := range sortedAttrsIDs(idsWithAttrs) {
+		rows = append(rows, BasePivotRow(info, parentVal, id, idsWithAttrs[id]))
 	}
 	if err := b.InsertRows(info.PivotTable, rows); err != nil {
 		return 0, err
@@ -282,36 +275,35 @@ func pivotInList(info RelationInfo, column string, ids []any) RowWhere {
 	return RowWhere{Query: info.PivotTable + "." + column, Args: []any{ids}}
 }
 
-// ExistingPivotIDs returns the set of already-attached related ids among ids. Used by Attach to
-// skip duplicates.
-func ExistingPivotIDs(b Builder, info RelationInfo, parentVal any, ids []any) (map[string]struct{}, error) {
-	wheres := []RowWhere{
-		pivotEquality(b, info, info.PivotParentRef.ForeignColumn, parentVal),
-		pivotInList(info, info.PivotRelatedRef.ForeignColumn, ids),
-	}
-	if info.Kind == KindMorphToMany {
-		wheres = append(wheres, pivotEquality(b, info, info.MorphTypeColumn, info.MorphValue))
-	}
-	rows, err := b.SelectRows(info.PivotTable, []string{info.PivotRelatedRef.ForeignColumn}, wheres, info.OnPivotQuery)
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[string]struct{}, len(rows))
-	for _, row := range rows {
-		out[DictionaryKey(row[info.PivotRelatedRef.ForeignColumn])] = struct{}{}
-	}
-
-	return out, nil
+// AllPivotIDs returns the set of all currently-attached related ids for parent — the sync-family
+// current-ids read. Laravel's sync reads the pivot rows with `select *` — getCurrentlyAttachedPivots
+// (InteractsWithPivotTable.php:591) runs get() over the fresh pivot query — and plucks the
+// related key from the returned rows (::sync :114); the statement carries no select list.
+// Oracle v12.55.1, executed, /tmp/lalign_synccore_order_probe.php C1:
+// `select * from "op_post_tag" where "op_post_tag"."post_id" = ?`.
+func AllPivotIDs(b Builder, info RelationInfo, parentVal any) ([]any, error) {
+	return pivotIDsFrom(b, info, parentVal, nil)
 }
 
-// AllPivotIDs returns the set of all currently-attached related ids for parent. Used by Sync /
-// Toggle to compute the diff.
-func AllPivotIDs(b Builder, info RelationInfo, parentVal any) ([]any, error) {
+// TogglePivotIDs returns the currently-attached related ids toggle's diff runs on. toggle plucks
+// the related key at the query level — `select "tag_id"` — via
+// newPivotQuery()->pluck($this->relatedPivotKey) (InteractsWithPivotTable::toggle :34).
+// Oracle v12.55.1, executed, /tmp/lalign_synccore_order_probe.php C2:
+// `select "tag_id" from "op_post_tag" where "op_post_tag"."post_id" = ?`.
+func TogglePivotIDs(b Builder, info RelationInfo, parentVal any) ([]any, error) {
+	return pivotIDsFrom(b, info, parentVal, []string{info.PivotRelatedRef.ForeignColumn})
+}
+
+// pivotIDsFrom is the statement the two current-ids reads share: the parent predicate (and the
+// morph-type predicate for MorphToMany) with the pivot scope replayed, then the read with the
+// caller's select list — nil for the sync read, whose `select *` rows are plucked for the related
+// key like Laravel plucks it from the pivot models.
+func pivotIDsFrom(b Builder, info RelationInfo, parentVal any, columns []string) ([]any, error) {
 	wheres := []RowWhere{pivotEquality(b, info, info.PivotParentRef.ForeignColumn, parentVal)}
 	if info.Kind == KindMorphToMany {
 		wheres = append(wheres, pivotEquality(b, info, info.MorphTypeColumn, info.MorphValue))
 	}
-	rows, err := b.SelectRows(info.PivotTable, []string{info.PivotRelatedRef.ForeignColumn}, wheres, info.OnPivotQuery)
+	rows, err := b.SelectRows(info.PivotTable, columns, wheres, info.OnPivotQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -481,13 +473,86 @@ func ToggleOrFail(b Builder, parent any, relation string, ids []any) (*dbcontrac
 	return out, nil
 }
 
-// SyncCore is the shared engine for Sync / SyncWithoutDetaching / Toggle.
+// orderedRecordIDs reduces an id list to the ordered record list Laravel's formatRecordsList
+// produces: one entry per distinct id, in first-appearance order — a repeated id keeps its first
+// position (a PHP array key cannot move), its attributes being looked up for that key.
+func orderedRecordIDs(ids []any) []any {
+	if len(ids) < 2 {
+		return ids
+	}
+	seen := make(map[string]struct{}, len(ids))
+	records := make([]any, 0, len(ids))
+	for _, id := range ids {
+		key := DictionaryKey(id)
+		if _, duplicate := seen[key]; duplicate {
+			continue
+		}
+		seen[key] = struct{}{}
+		records = append(records, id)
+	}
+
+	return records
+}
+
+// sortedAttrsIDs returns the ids of a map-shaped pivot entry in a deterministic order: ascending
+// numerically when the ids are numbers — the related primary key case — and by canonical
+// dictionary key otherwise. Laravel's sync takes an ordered id list; the fedaco-style map form is
+// the Go boundary, where the map carries no order, so the record walk runs in this canonical
+// order; ties between Go types carrying the same logical id break by type name, so the walk is
+// total and never inherits Go's randomized map iteration order (verifier, round 6). The
+// slice-shaped SyncWithPivotValues keeps the caller's exact order.
+func sortedAttrsIDs(idsWithAttrs map[any]map[string]any) []any {
+	ids := make([]any, 0, len(idsWithAttrs))
+	for id := range idsWithAttrs {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool {
+		left, leftNumber := pivotKeyNumber(ids[i])
+		right, rightNumber := pivotKeyNumber(ids[j])
+		if leftNumber && rightNumber && left != right {
+			return left < right
+		}
+		if leftKey, rightKey := DictionaryKey(ids[i]), DictionaryKey(ids[j]); leftKey != rightKey {
+			return leftKey < rightKey
+		}
+
+		// The same logical id reached through two Go types (uint(9) and int64(9) both key "9"):
+		// a Go map can hold both where a PHP array could not, so order by type name — the walk
+		// must not inherit Go's randomized map iteration order (verifier, round 6).
+		return fmt.Sprintf("%T", ids[i]) < fmt.Sprintf("%T", ids[j])
+	})
+
+	return ids
+}
+
+// pivotKeyNumber reports whether v reduces to a number for the ascending map-key order, using the
+// same conversions CastKey performs, numeric strings included.
+func pivotKeyNumber(v any) (float64, bool) {
+	number, ok := CastKey(v, reflect.TypeFor[float64]()).(float64)
+
+	return number, ok
+}
+
+// SyncCore is the shared engine for Sync / SyncWithoutDetaching / Toggle. The ordered record list
+// — ids reduced to distinct values in first-appearance order, Laravel's formatRecordsList — drives
+// every phase: the detach list follows the current read's order (array_diff), and the attach phase
+// walks the records in the caller's input order. Sync / SyncWithoutDetaching attach one record at
+// a time, attachNew's attach($id) per record; Toggle hands the whole surviving list to one attach
+// call, which groups its rows in a single INSERT (InteractsWithPivotTable::attachNew :234,
+// ::toggle :50). Oracle v12.55.1, executed, /tmp/lalign_synccore_order_probe.php B3-B7.
 func SyncCore(b Builder, parent any, relation string, ids []any, detachMissing bool, toggle bool, op string) (*dbcontract.SyncResult, error) {
 	info, parentVal, err := ResolvePivot(b, parent, relation, op)
 	if err != nil {
 		return nil, err
 	}
-	current, err := AllPivotIDs(b, info, parentVal)
+	// The current-ids read: toggle plucks the related key at the query level, the sync-family
+	// cores read `select *` (Laravel getCurrentlyAttachedPivots; oracle C1/C2).
+	var current []any
+	if toggle {
+		current, err = TogglePivotIDs(b, info, parentVal)
+	} else {
+		current, err = AllPivotIDs(b, info, parentVal)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -495,21 +560,22 @@ func SyncCore(b Builder, parent any, relation string, ids []any, detachMissing b
 	for _, id := range current {
 		currentSet[DictionaryKey(id)] = id
 	}
-	wantSet := make(map[string]any, len(ids))
-	for _, id := range ids {
-		wantSet[DictionaryKey(id)] = id
+	records := orderedRecordIDs(ids)
+	wantSet := make(map[string]struct{}, len(records))
+	for _, id := range records {
+		wantSet[DictionaryKey(id)] = struct{}{}
 	}
 
 	out := &dbcontract.SyncResult{}
 	switch {
 	case toggle:
-		// Anything in `ids` that exists -> detach; anything that doesn't -> attach.
-		var attachIDs, detachIDs []any
-		for k, v := range wantSet {
-			if _, exists := currentSet[k]; exists {
-				detachIDs = append(detachIDs, v)
-			} else {
-				attachIDs = append(attachIDs, v)
+		// Anything in `records` that exists -> detach; anything that doesn't -> attach. The
+		// detach list keeps the current read's order (array_intersect preserves its first
+		// array), the attach list the input record order.
+		var detachIDs []any
+		for _, id := range current {
+			if _, inRecords := wantSet[DictionaryKey(id)]; inRecords {
+				detachIDs = append(detachIDs, id)
 			}
 		}
 		// Detach before attach — Laravel's toggle removes the intersection first
@@ -519,7 +585,15 @@ func SyncCore(b Builder, parent any, relation string, ids []any, detachMissing b
 				return nil, err
 			}
 		}
+		var attachIDs []any
+		for _, id := range records {
+			if _, attached := currentSet[DictionaryKey(id)]; !attached {
+				attachIDs = append(attachIDs, id)
+			}
+		}
 		if len(attachIDs) > 0 {
+			// The surviving records go to one attach call, sharing one INSERT in input order
+			// (oracle B5/B5b).
 			if _, err := DoAttach(b, info, parentVal, attachIDs, nil); err != nil {
 				return nil, err
 			}
@@ -529,12 +603,13 @@ func SyncCore(b Builder, parent any, relation string, ids []any, detachMissing b
 	default:
 		if detachMissing {
 			// Detach first — Laravel's sync runs detach before attachNew
-			// (InteractsWithPivotTable::sync :123 detach, :133 attachNew). Detach anything in
-			// `currentSet` that isn't in `wantSet`.
+			// (InteractsWithPivotTable::sync :123 detach, :133 attachNew). The detach list is
+			// array_diff($current, records): the current read's order, ids the records keep
+			// removed (oracle B6).
 			var detachIDs []any
-			for k, v := range currentSet {
-				if _, keep := wantSet[k]; !keep {
-					detachIDs = append(detachIDs, v)
+			for _, id := range current {
+				if _, keep := wantSet[DictionaryKey(id)]; !keep {
+					detachIDs = append(detachIDs, id)
 				}
 			}
 			if len(detachIDs) > 0 {
@@ -545,19 +620,19 @@ func SyncCore(b Builder, parent any, relation string, ids []any, detachMissing b
 			out.Detached = CastKeys(detachIDs, info.RelatedKeyType)
 		}
 
-		// Attach anything in `wantSet` that isn't yet attached.
-		var attachIDs []any
-		for k, v := range wantSet {
-			if _, exists := currentSet[k]; !exists {
-				attachIDs = append(attachIDs, v)
+		// Attach anything in `records` that isn't yet attached, one record at a time in input
+		// order — attachNew's attach($id) per record (oracle B3; B7 shows an existing record with
+		// no attributes emitting no statement).
+		for _, id := range records {
+			if _, attached := currentSet[DictionaryKey(id)]; attached {
+				continue
 			}
-		}
-		if len(attachIDs) > 0 {
-			if _, err := DoAttach(b, info, parentVal, attachIDs, nil); err != nil {
+			if _, err := DoAttach(b, info, parentVal, []any{id}, nil); err != nil {
 				return nil, err
 			}
+			out.Attached = append(out.Attached, id)
 		}
-		out.Attached = CastKeys(attachIDs, info.RelatedKeyType)
+		out.Attached = CastKeys(out.Attached, info.RelatedKeyType)
 	}
 
 	if SyncResultChanged(out) {
@@ -571,21 +646,23 @@ func SyncCore(b Builder, parent any, relation string, ids []any, detachMissing b
 
 // SyncWithPivot is Sync with per-ID pivot column values. The map key is the related id; the map
 // value is the column-name-to-value map applied to that pivot row. For existing pivot rows with
-// non-empty attrs, updates the pivot columns (reported in SyncResult.Updated). Mirrors fedaco's
-// sync(map).
+// non-empty attrs, updates the pivot columns; the id is reported in SyncResult.Updated only when
+// the update affected a row (attachNew's truthy gate). Mirrors fedaco's
+// sync(map); a Go map carries no order, so the records walk in sortedAttrsIDs order.
 func SyncWithPivot(b Builder, parent any, relation string, idsWithAttrs map[any]map[string]any) (*dbcontract.SyncResult, error) {
-	return SyncCoreWithPivot(b, parent, relation, idsWithAttrs, true /*detach*/, false /*toggle*/, "SyncWithPivot")
+	return SyncCoreWithPivot(b, parent, relation, sortedAttrsIDs(idsWithAttrs), idsWithAttrs, true /*detach*/, false /*toggle*/, "SyncWithPivot")
 }
 
-// SyncWithPivotValues applies the same pivot column values to all ids. Mirrors fedaco's
-// syncWithPivotValues.
+// SyncWithPivotValues applies the same pivot column values to all ids, preserving the caller's
+// id order — Laravel's syncWithPivotValues maps the parsed ids to the shared values and the
+// record walk follows that list (InteractsWithPivotTable::syncWithPivotValues :183).
 func SyncWithPivotValues(b Builder, parent any, relation string, ids []any, pivotValues map[string]any) (*dbcontract.SyncResult, error) {
 	idsWithAttrs := make(map[any]map[string]any, len(ids))
 	for _, id := range ids {
 		idsWithAttrs[id] = pivotValues
 	}
 
-	return SyncCoreWithPivot(b, parent, relation, idsWithAttrs, true /*detach*/, false /*toggle*/, "SyncWithPivotValues")
+	return SyncCoreWithPivot(b, parent, relation, ids, idsWithAttrs, true /*detach*/, false /*toggle*/, "SyncWithPivotValues")
 }
 
 // SyncWithPivotValuesOrFail is SyncWithPivotValues inside a transaction —
@@ -611,23 +688,37 @@ func SyncWithPivotValuesOrFail(b Builder, parent any, relation string, ids []any
 
 // SyncWithoutDetachingWithPivot is SyncWithPivot minus the detach step.
 func SyncWithoutDetachingWithPivot(b Builder, parent any, relation string, idsWithAttrs map[any]map[string]any) (*dbcontract.SyncResult, error) {
-	return SyncCoreWithPivot(b, parent, relation, idsWithAttrs, false /*detach*/, false /*toggle*/, "SyncWithoutDetachingWithPivot")
+	return SyncCoreWithPivot(b, parent, relation, sortedAttrsIDs(idsWithAttrs), idsWithAttrs, false /*detach*/, false /*toggle*/, "SyncWithoutDetachingWithPivot")
 }
 
 // ToggleWithPivot is Toggle with per-ID pivot column values for newly attached rows.
 func ToggleWithPivot(b Builder, parent any, relation string, idsWithAttrs map[any]map[string]any) (*dbcontract.SyncResult, error) {
-	return SyncCoreWithPivot(b, parent, relation, idsWithAttrs, false, true /*toggle*/, "ToggleWithPivot")
+	return SyncCoreWithPivot(b, parent, relation, sortedAttrsIDs(idsWithAttrs), idsWithAttrs, false, true /*toggle*/, "ToggleWithPivot")
 }
 
 // SyncCoreWithPivot is the shared engine for SyncWithPivot / SyncWithPivotValues /
-// SyncWithoutDetachingWithPivot / ToggleWithPivot. Similar to SyncCore but accepts a map of IDs
-// to pivot attributes and updates existing pivot rows when attrs are non-empty.
-func SyncCoreWithPivot(b Builder, parent any, relation string, idsWithAttrs map[any]map[string]any, detachMissing bool, toggle bool, op string) (*dbcontract.SyncResult, error) {
+// SyncWithoutDetachingWithPivot / ToggleWithPivot. ids is the ordered record list — the caller's
+// input order for SyncWithPivotValues, sortedAttrsIDs order for the map-shaped entries —
+// idsWithAttrs the per-id pivot attributes. The record walk mirrors attachNew
+// (InteractsWithPivotTable::attachNew :234): each record is visited in input order and either its
+// pivot row is updated — an existing record with non-empty attrs, its id reported only when the
+// update affected a row (:251) — or it is inserted, one statement at that position; Toggle keeps
+// the grouped single INSERT for its surviving records
+// (::toggle :50). Oracle v12.55.1, executed, /tmp/lalign_synccore_order_probe.php B1/B2
+// (update-then-insert for [2,9], insert-then-update for [9,2]) and B4/B5.
+func SyncCoreWithPivot(b Builder, parent any, relation string, ids []any, idsWithAttrs map[any]map[string]any, detachMissing bool, toggle bool, op string) (*dbcontract.SyncResult, error) {
 	info, parentVal, err := ResolvePivot(b, parent, relation, op)
 	if err != nil {
 		return nil, err
 	}
-	current, err := AllPivotIDs(b, info, parentVal)
+	// The current-ids read: toggle plucks the related key at the query level, the sync-family
+	// cores read `select *` (Laravel getCurrentlyAttachedPivots; oracle C1/C2).
+	var current []any
+	if toggle {
+		current, err = TogglePivotIDs(b, info, parentVal)
+	} else {
+		current, err = AllPivotIDs(b, info, parentVal)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -635,22 +726,22 @@ func SyncCoreWithPivot(b Builder, parent any, relation string, idsWithAttrs map[
 	for _, id := range current {
 		currentSet[DictionaryKey(id)] = id
 	}
-	wantSet := make(map[string]any, len(idsWithAttrs))
-	for id := range idsWithAttrs {
-		wantSet[DictionaryKey(id)] = id
+	records := orderedRecordIDs(ids)
+	wantSet := make(map[string]struct{}, len(records))
+	for _, id := range records {
+		wantSet[DictionaryKey(id)] = struct{}{}
 	}
 
 	out := &dbcontract.SyncResult{}
 	switch {
 	case toggle:
-		// Anything in `idsWithAttrs` that exists -> detach; anything that doesn't -> attach with attrs.
+		// Anything in `records` that exists -> detach; anything that doesn't -> attach with its
+		// attrs. Same orders as SyncCore's toggle: the detach list follows the current read, the
+		// attach rows the input record order.
 		var detachIDs []any
-		attachMap := make(map[any]map[string]any)
-		for k, v := range wantSet {
-			if _, exists := currentSet[k]; exists {
-				detachIDs = append(detachIDs, v)
-			} else {
-				attachMap[v] = idsWithAttrs[v]
+		for _, id := range current {
+			if _, inRecords := wantSet[DictionaryKey(id)]; inRecords {
+				detachIDs = append(detachIDs, id)
 			}
 		}
 		// Detach before attach — Laravel's toggle removes the intersection first
@@ -660,25 +751,29 @@ func SyncCoreWithPivot(b Builder, parent any, relation string, idsWithAttrs map[
 				return nil, err
 			}
 		}
-		if len(attachMap) > 0 {
-			if _, err := DoAttachWithPivot(b, info, parentVal, attachMap); err != nil {
-				return nil, err
-			}
-			for id := range attachMap {
-				out.Attached = append(out.Attached, id)
+		var attachIDs []any
+		for _, id := range records {
+			if _, attached := currentSet[DictionaryKey(id)]; !attached {
+				attachIDs = append(attachIDs, id)
 			}
 		}
-		out.Attached = CastKeys(out.Attached, info.RelatedKeyType)
+		if len(attachIDs) > 0 {
+			// One attach call, one INSERT, rows in input order (oracle B5).
+			if _, err := DoAttach(b, info, parentVal, attachIDs, idsWithAttrs); err != nil {
+				return nil, err
+			}
+		}
+		out.Attached = CastKeys(attachIDs, info.RelatedKeyType)
 		out.Detached = CastKeys(detachIDs, info.RelatedKeyType)
 	default:
 		if detachMissing {
 			// Detach first — Laravel's sync runs detach before attachNew
-			// (InteractsWithPivotTable::sync :123 detach, :133 attachNew). Detach anything in
-			// `currentSet` that isn't in `wantSet`.
+			// (InteractsWithPivotTable::sync :123 detach, :133 attachNew). The detach list is
+			// array_diff($current, records) in the current read's order (oracle B6).
 			var detachIDs []any
-			for k, v := range currentSet {
-				if _, keep := wantSet[k]; !keep {
-					detachIDs = append(detachIDs, v)
+			for _, id := range current {
+				if _, keep := wantSet[DictionaryKey(id)]; !keep {
+					detachIDs = append(detachIDs, id)
 				}
 			}
 			if len(detachIDs) > 0 {
@@ -689,33 +784,40 @@ func SyncCoreWithPivot(b Builder, parent any, relation string, idsWithAttrs map[
 			out.Detached = CastKeys(detachIDs, info.RelatedKeyType)
 		}
 
-		// Attach anything in `wantSet` that isn't yet attached; update existing if attrs non-empty.
-		attachMap := make(map[any]map[string]any)
-		var updateIDs []any
-		for k, v := range wantSet {
-			if _, exists := currentSet[k]; !exists {
-				attachMap[v] = idsWithAttrs[v]
-			} else {
-				// Already attached — if attrs non-empty, update the pivot row.
-				attrs := idsWithAttrs[v]
+		// attachNew walks the records in input order: an existing record with non-empty attrs is
+		// updated at its position, a missing one inserted there, each as its own statement
+		// (oracle B1 [2,9] update-then-insert; B2 [9,2] insert-then-update; B4 one update per
+		// existing record).
+		for _, id := range records {
+			key := DictionaryKey(id)
+			if _, attached := currentSet[key]; attached {
+				// Already attached — if attrs non-empty, attempt the update and report the id
+				// only when the update affected a row. attachNew records the id on a truthy
+				// updateExistingPivot return — `count($attributes) > 0 &&
+				// $this->updateExistingPivot($id, $attributes, $touch)`
+				// (InteractsWithPivotTable::attachNew :251) — so a 0-row update (a skipped
+				// statement, a lost race, a changed-rows driver's same-value write) leaves the
+				// change set empty. Oracle v12.55.1, executed,
+				// /tmp/lalign_updated_affected_probe.php U1/U4.
+				attrs := idsWithAttrs[id]
 				if len(attrs) > 0 {
-					if _, err := DoUpdateExistingPivot(b, info, parentVal, v, attrs); err != nil {
+					affected, err := DoUpdateExistingPivot(b, info, parentVal, id, attrs)
+					if err != nil {
 						return nil, err
 					}
-					updateIDs = append(updateIDs, v)
+					if affected > 0 {
+						out.Updated = append(out.Updated, id)
+					}
 				}
+				continue
 			}
-		}
-		if len(attachMap) > 0 {
-			if _, err := DoAttachWithPivot(b, info, parentVal, attachMap); err != nil {
+			if _, err := DoAttach(b, info, parentVal, []any{id}, idsWithAttrs); err != nil {
 				return nil, err
 			}
-			for id := range attachMap {
-				out.Attached = append(out.Attached, id)
-			}
+			out.Attached = append(out.Attached, id)
 		}
 		out.Attached = CastKeys(out.Attached, info.RelatedKeyType)
-		out.Updated = CastKeys(updateIDs, info.RelatedKeyType)
+		out.Updated = CastKeys(out.Updated, info.RelatedKeyType)
 	}
 
 	if SyncResultChanged(out) {

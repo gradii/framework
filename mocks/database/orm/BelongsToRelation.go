@@ -3231,6 +3231,64 @@ func (_c *BelongsToRelation_Increment_Call) RunAndReturn(run func(string, ...int
 	return _c
 }
 
+// IncrementOrCreate provides a mock function with given fields: dest, attributes, args
+func (_m *BelongsToRelation) IncrementOrCreate(dest interface{}, attributes interface{}, args ...interface{}) error {
+	var _ca []interface{}
+	_ca = append(_ca, dest, attributes)
+	_ca = append(_ca, args...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for IncrementOrCreate")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(interface{}, interface{}, ...interface{}) error); ok {
+		r0 = rf(dest, attributes, args...)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// BelongsToRelation_IncrementOrCreate_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'IncrementOrCreate'
+type BelongsToRelation_IncrementOrCreate_Call struct {
+	*mock.Call
+}
+
+// IncrementOrCreate is a helper method to define mock.On call
+//   - dest interface{}
+//   - attributes interface{}
+//   - args ...interface{}
+func (_e *BelongsToRelation_Expecter) IncrementOrCreate(dest interface{}, attributes interface{}, args ...interface{}) *BelongsToRelation_IncrementOrCreate_Call {
+	return &BelongsToRelation_IncrementOrCreate_Call{Call: _e.mock.On("IncrementOrCreate",
+		append([]interface{}{dest, attributes}, args...)...)}
+}
+
+func (_c *BelongsToRelation_IncrementOrCreate_Call) Run(run func(dest interface{}, attributes interface{}, args ...interface{})) *BelongsToRelation_IncrementOrCreate_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]interface{}, len(args)-2)
+		for i, a := range args[2:] {
+			if a != nil {
+				variadicArgs[i] = a.(interface{})
+			}
+		}
+		run(args[0].(interface{}), args[1].(interface{}), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *BelongsToRelation_IncrementOrCreate_Call) Return(_a0 error) *BelongsToRelation_IncrementOrCreate_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *BelongsToRelation_IncrementOrCreate_Call) RunAndReturn(run func(interface{}, interface{}, ...interface{}) error) *BelongsToRelation_IncrementOrCreate_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Is provides a mock function with given fields: model
 func (_m *BelongsToRelation) Is(model interface{}) bool {
 	ret := _m.Called(model)

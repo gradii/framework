@@ -77,8 +77,16 @@ func (r *OrmBuilder) updateAssignments(values any) (map[string]any, error) {
 	return assignments, nil
 }
 
-// saveAssignments returns every column a model carries, zero values included, which is what makes Save
-// overwrite the row rather than merge into it. The query's Select and Omit lists still apply.
+// saveAssignments returns the columns a Save writes, mirroring Model::save's update path.
+//
+// Eloquent updates an existing model with getDirtyForUpdate — the attributes changed since the last
+// syncOriginal, the freshly stamped updated_at included — and with nothing at all when that set is
+// empty (Model.php:1215 `$saved = $this->isDirty() ? ... : true`; :1294 `if (count($dirty) > 0)`).
+// The Go port reads the same set: a model whose loaded values were captured (see
+// model_original.go) contributes its changed columns only, while a model with no captured bag is
+// the empty-original case — every field reads dirty and the whole struct is written the way Save
+// always wrote it. The query's Select and Omit lists still filter the result, and a column named
+// outright by Select is written even when it did not change, the port's column-scoped write.
 func (r *OrmBuilder) saveAssignments(value any) (map[string]any, error) {
 	schema := r.updateSchema()
 	filter, restricted := r.selectAndOmitColumns(schema)
@@ -114,6 +122,7 @@ func (r *OrmBuilder) saveAssignments(value any) (map[string]any, error) {
 
 	assignments := make(map[string]any)
 	if schema != nil {
+		dirty := getDirty(schema, value)
 		for _, field := range schema.Fields {
 			if field.primaryKey {
 				continue
@@ -122,13 +131,30 @@ func (r *OrmBuilder) saveAssignments(value any) (map[string]any, error) {
 				continue
 			}
 
-			fieldValue, _ := field.BindingValueOf(r.ctx, reflected)
-			assignments[field.DBName] = fieldValue
+			if fieldValue, changed := dirty[field.DBName]; changed {
+				assignments[field.DBName] = modelColumnBinding(schema, field.DBName, fieldValue)
+
+				// The Go zero value stands for an unset — Eloquent's null — automatic timestamp,
+				// and Eloquent binds null; a raw zero time.Time would bind as '0000-00-00' on
+				// MySQL, so the column is written as SQL NULL.
+				if (field.AutoCreateTime != 0 || field.AutoUpdateTime != 0) && zeroTimestamp(fieldValue) {
+					assignments[field.DBName] = nil
+				}
+
+				continue
+			}
+
+			// A column named outright by Select is written whatever it holds, which is how
+			// Select("name").Save(model) clears a column.
+			if columnSelected(filter, field.DBName) {
+				current, _ := field.ValueOf(r.ctx, reflected)
+				assignments[field.DBName] = modelColumnBinding(schema, field.DBName, current)
+			}
 		}
 	}
 
 	if r.usesTimestamps(value) {
-		if err := addAutoUpdateTime(assignments, filter, restricted, schema, true); err != nil {
+		if err := r.saveAutoUpdateTime(assignments, filter, restricted, schema, value, reflected); err != nil {
 			return nil, err
 		}
 	}
@@ -290,6 +316,67 @@ func addAutoUpdateTime(assignments map[string]any, filter map[string]bool, restr
 		}
 		assignments[field.DBName] = stamp
 	}
+	return nil
+}
+
+// saveAutoUpdateTime stamps the automatic update timestamp on a model save's assignment set,
+// mirroring HasTimestamps::updateTimestamps (HasTimestamps.php:67) inside performUpdate: the
+// timestamp takes the save-time value unless the model's own updated_at is dirty, in which case the
+// caller's value is written instead. Oracle v12.55.1, executed (/tmp/save11/semantics_probe.php): a
+// loaded-and-changed model stamps 2026-11-03 01:02:03 although the loaded value was 2020-01-01
+// (case 1); a caller-set updated_at is written untouched, alone (3a) or beside other changes (3b);
+// a loaded NULL is stamped on a dirty save (3c); a clean model never reaches this — the save skips
+// the update entirely (case 2).
+func (r *OrmBuilder) saveAutoUpdateTime(assignments map[string]any, filter map[string]bool, restricted bool, schema *modelSchema, model any, reflected reflect.Value) error {
+	if schema == nil {
+		return nil
+	}
+
+	original, hasOriginal := originalStateOf(model)
+	now := carbon.Now().StdTime()
+
+	for _, field := range schema.Fields {
+		if field.AutoUpdateTime == 0 {
+			continue
+		}
+		if !columnIncluded(filter, restricted, field.DBName, true) {
+			continue
+		}
+
+		current, _ := field.ValueOf(r.ctx, reflected)
+
+		dirty := false
+		if snapshot, known := original[field.DBName]; hasOriginal && known {
+			dirty = !originalIsEquivalent(current, snapshot)
+		} else {
+			// No bag, or a column it never carried: the Go zero value stands in for an unset
+			// attribute, and Eloquent leaves an unset updated_at to updateTimestamps — which stamps.
+			dirty = !zeroTimestamp(current)
+		}
+
+		if dirty {
+			// Laravel's updateTimestamps leaves a dirty timestamp alone; it still joins the update
+			// even when a Select list did not name it, the automatic-timestamp write rule. A zero
+			// value is the Go form of Eloquent's null timestamp and binds SQL NULL, never a raw
+			// '0000-00-00' time.
+			if _, present := assignments[field.DBName]; !present {
+				if zeroTimestamp(current) {
+					assignments[field.DBName] = nil
+				} else {
+					assignments[field.DBName] = modelColumnBinding(schema, field.DBName, current)
+				}
+			}
+
+			continue
+		}
+
+		stamp, err := field.timestampValue(now)
+		if err != nil {
+			return err
+		}
+		assignments[field.DBName] = stamp
+	}
+
 	return nil
 }
 

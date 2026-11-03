@@ -3,6 +3,7 @@ package belongs_to_many_without_touching
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
@@ -13,8 +14,8 @@ import (
 // (12.x) onto the framework ORM. The corpus declares a single test,
 // testItWillNotTouchRelatedModelsWhenUpdatingChild, over the users, articles and article_user
 // tables; one Go test ports it, named TestBelongsToManyWithoutTouching_<method without the test
-// prefix>. It runs the corpus's model shape against the harness sqlite database, probes the
-// closest runnable chain, and skips on the divergence recorded below.
+// prefix>. It runs the corpus's model shape against the harness sqlite database and asserts the
+// corpus's observations below on that harness.
 //
 // # The corpus
 //
@@ -41,27 +42,28 @@ import (
 //     "updated_at" = ? where "articles"."id" in (1) (bindings [now]) — the statement the
 //     suppressed call never runs.
 //
-// # How our ORM diverges
+// # The port's shape
 //
-// Go models carry the class-level touch control (database/orm.WithoutTouching / WithoutTouchingOn /
-// IsIgnoringTouch), but there is no relation-level touch for a scope to gate — the
-// RelationWriter surface ends at UpdateExistingPivot, so BelongsToMany::touch() has no Go call to
-// reach, and the corpus model's $touches = ['user'] metadata has no Go field either. The ORM's
-// nearest touch is Query.Touch, an unconditional explicit write, and on the relation side
-// Many2Many.Touches, a pivot-write flag that bumps the parent — the opposite side of
-// BelongsToMany::touch(); neither can be suppressed. Probe against the harness database: the
-// corpus's users/articles/article_user fixture seeds and attaches through the relation writers and
-// Related reads the attached article; after backdating the article, Query.Touch bumps its
-// updated_at with 1 row affected, with no scope able to suppress it — where Laravel's suppressed
-// touch issues no query at all (oracle above).
+// The class-level control is ported (database/orm.WithoutTouching / WithoutTouchingOn /
+// IsIgnoringTouch), and the relation-level touch the corpus calls exists as RelationQuery.Touch —
+// Relation::touch's Go form, whose no-column path consults the same ignore gate per call
+// (database/gorm/relations' IgnoringTouch hook), so the corpus's observations run for real: the
+// false -> true -> false transition around the closure, the suppressed touch running no statement
+// (the mocked getUpdatedAtColumn / freshTimestampString / builder->update never-calls, observed as
+// an untouched row with zero affected rows), and the unsuppressed touch stamping the attached row
+// with the relation's constraint scoping the update — the same rows Laravel's BelongsToMany::touch
+// reaches by selecting the pivot ids first (oracle above). The corpus's $touches = ['user'] is
+// inert for this test — nothing saves the mock — and a Go save/delete touch declaration is the
+// relation descriptor's Touches flag, which no fixture here needs. (An earlier revision of this
+// port skipped, believing no Go relation call existed for the corpus's touch(); the relation-level
+// Touch and its ignore gate were present and are exercised here.)
 
 // --- models ------------------------------------------------------------------
 
 // belongsToManyWithoutTouchingUser ports the corpus's User.
 type belongsToManyWithoutTouchingUser struct {
-	databaseorm.Timestamps
+	databaseorm.Model
 
-	ID    uint   `gorm:"column:id;primaryKey;autoIncrement"`
 	Email string `gorm:"column:email"`
 
 	Articles []*belongsToManyWithoutTouchingArticle `gorm:"-"`
@@ -79,12 +81,13 @@ func (belongsToManyWithoutTouchingUser) Relations() map[string]contractsorm.Rela
 	}
 }
 
-// belongsToManyWithoutTouchingArticle ports the corpus's Article. Its $touches = ['user'] is
-// PHP-only metadata with no Go field (see the file header); the relation itself is ported.
+// belongsToManyWithoutTouchingArticle ports the corpus's Article. Its $touches = ['user'] is never
+// exercised by the test body (nothing saves the mock); Go carries a save/delete touch declaration
+// as the relation descriptor's Touches flag (contracts BelongsTo / HasOne / HasMany.Touches), not
+// on the model, so the fixture declares none — the relation itself is ported.
 type belongsToManyWithoutTouchingArticle struct {
-	databaseorm.Timestamps
+	databaseorm.Model
 
-	ID    uint   `gorm:"column:id;primaryKey;autoIncrement"`
 	Title string `gorm:"column:title"`
 
 	Users []*belongsToManyWithoutTouchingUser `gorm:"-"`
@@ -103,7 +106,7 @@ func (belongsToManyWithoutTouchingArticle) Relations() map[string]contractsorm.R
 }
 
 // belongsToManyWithoutTouchingArticleUser reads pivot rows back; the corpus never reads the pivot,
-// it exists so the probe can show the attach landed.
+// the fixture reads it so the attach is shown to have landed.
 type belongsToManyWithoutTouchingArticleUser struct {
 	ArticleID uint `gorm:"column:article_id"`
 	UserID    uint `gorm:"column:user_id"`
@@ -132,10 +135,12 @@ func belongsToManyWithoutTouchingSchema(t *testing.T, query contractsorm.Query) 
 func belongsToManyWithoutTouchingSeed(t *testing.T, query contractsorm.Query) (belongsToManyWithoutTouchingUser, belongsToManyWithoutTouchingArticle) {
 	t.Helper()
 
-	user := belongsToManyWithoutTouchingUser{ID: 1, Email: "taylorotwell@gmail.com"}
+	user := belongsToManyWithoutTouchingUser{Email: "taylorotwell@gmail.com"}
+	user.ID = 1
 	require.NoError(t, cloneRelationQuery(t, query).Create(&user))
 
-	article := belongsToManyWithoutTouchingArticle{ID: 1, Title: "An Article"}
+	article := belongsToManyWithoutTouchingArticle{Title: "An Article"}
+	article.ID = 1
 	require.NoError(t, cloneRelationQuery(t, query).Create(&article))
 
 	require.NoError(t, cloneRelationQuery(t, query).Relation(&user, "Articles").Attach([]any{article.ID}))
@@ -164,20 +169,54 @@ func TestBelongsToManyWithoutTouching_ItWillNotTouchRelatedModelsWhenUpdatingChi
 	require.Len(t, related, 1)
 	require.Equal(t, article.ID, related[0].ID)
 
-	// Probe: backdate the article's updated_at so a touch is observable, then run the ORM's touch.
-	// There is no withoutTouching scope in the Go ORM and no relation-level touch: Query.Touch is
-	// the only call to reach, and it writes unconditionally — the divergence the skip below records.
+	// Backdate the article's updated_at so a touch is observable; an unattached second article
+	// stands outside the relation constraint.
 	_, err := cloneRelationQuery(t, query).Exec(`update articles set updated_at = ? where id = ?`, "2020-01-01 00:00:00", article.ID)
 	require.NoError(t, err)
 
-	result, err := cloneRelationQuery(t, query).Model(&belongsToManyWithoutTouchingArticle{ID: article.ID}).Touch()
+	unattached := belongsToManyWithoutTouchingArticle{Title: "Unattached"}
+	unattached.ID = 2
+	require.NoError(t, cloneRelationQuery(t, query).Create(&unattached))
+	_, err = cloneRelationQuery(t, query).Exec(`update articles set updated_at = ? where id = ?`, "2020-01-01 00:00:00", unattached.ID)
 	require.NoError(t, err)
-	require.EqualValues(t, 1, result.RowsAffected)
 
-	var reloaded belongsToManyWithoutTouchingArticle
+	// Laravel: outside the scope isIgnoringTouch() is false — the related class's touches are on.
+	require.False(t, databaseorm.IsIgnoringTouch(&article), "outside the scope the related class's touches are enabled")
+
+	// Laravel: inside Model::withoutTouching(fn) isIgnoringTouch() is true and BelongsToMany::touch()
+	// returns before touching anything — the mocked builder->update() the corpus forbids runs no
+	// statement and the related row's timestamp stays put.
+	require.NoError(t, databaseorm.WithoutTouching(func() error {
+		assert.True(t, databaseorm.IsIgnoringTouch(&article), "withoutTouching reaches every model that embeds the base Model")
+
+		result, err := cloneRelationQuery(t, query).Related(&user, "Articles").Touch()
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.EqualValues(t, 0, result.RowsAffected, "the suppressed relation touch runs no update")
+
+		return nil
+	}))
+
+	assert.False(t, databaseorm.IsIgnoringTouch(&article), "the scope restores the state when it ends")
+
+	reloaded := belongsToManyWithoutTouchingArticle{}
 	require.NoError(t, cloneRelationQuery(t, query).Where("id", article.ID).First(&reloaded))
 	require.NotNil(t, reloaded.UpdatedAt)
-	require.NotEqual(t, "2020-01-01 00:00:00", reloaded.UpdatedAt.ToDateTimeString())
+	assert.Equal(t, "2020-01-01 00:00:00", reloaded.UpdatedAt.ToDateTimeString(), "the suppressed touch left the related row untouched")
 
-	t.Skip("our ORM diverges: the class-level control is ported (database/orm.WithoutTouching / WithoutTouchingOn / IsIgnoringTouch), but the corpus runs entirely on Mockery — its BelongsToMany::touch() call and the builder->update() it must never run have no Go relation call to make (the RelationWriter surface ends at UpdateExistingPivot), and the corpus model's $touches = ['user'] metadata has no Go field; the nearest call, Query.Touch, writes updated_at unconditionally and no scope suppresses it (probe: the corpus fixture seeds and attaches, Related reads the article, and Query.Touch on the backdated row reports 1 row affected), where Laravel inside Model::withoutTouching issues no query at all (oracle, illuminate/database v12.55.1, executed against sqlite: isIgnoringTouch false -> true -> false; suppressed touch 0 queries with updated_at unchanged; unsuppressed touch selects the pivot's article_id then runs update \"articles\" set \"updated_at\" = ? where \"articles\".\"id\" in (1))")
+	// Outside the scope the touch stamps again — the oracle's unsuppressed call — and the update
+	// reaches exactly the attached row: the unattached article stays put.
+	result, err := cloneRelationQuery(t, query).Related(&user, "Articles").Touch()
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.EqualValues(t, 1, result.RowsAffected, "outside the scope the constrained touch reaches the attached row")
+
+	require.NoError(t, cloneRelationQuery(t, query).Where("id", article.ID).First(&reloaded))
+	require.NotNil(t, reloaded.UpdatedAt)
+	assert.NotEqual(t, "2020-01-01 00:00:00", reloaded.UpdatedAt.ToDateTimeString(), "the attached row's updated_at is stamped fresh")
+
+	untouched := belongsToManyWithoutTouchingArticle{}
+	require.NoError(t, cloneRelationQuery(t, query).Where("id", unattached.ID).First(&untouched))
+	require.NotNil(t, untouched.UpdatedAt)
+	assert.Equal(t, "2020-01-01 00:00:00", untouched.UpdatedAt.ToDateTimeString(), "the unattached article stays outside the relation constraint")
 }

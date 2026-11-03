@@ -313,7 +313,7 @@ func TestSeam_DescriptorSeamInstalledByInit(t *testing.T) {
 	require.Equal(t, relations.KindMany2Many, desc.Kind)
 	require.Equal(t, "seam_parent_children", desc.PivotTable)
 
-	created, updated, err := relations.ResolvePivotTimestamps(&seamChild{}, "", true)
+	created, updated, err := relations.ResolvePivotTimestamps(&seamParent{}, &seamChild{}, "", true)
 	require.NoError(t, err)
 	require.Equal(t, "created_at", created)
 	require.Equal(t, "updated_at", updated)

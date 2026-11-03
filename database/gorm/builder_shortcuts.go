@@ -739,7 +739,9 @@ func (r *OrmBuilder) step(column, operator string, args []any) (*contractsdb.Res
 	}
 
 	// Laravel's addUpdatedAtColumn stamps updated_at unless the extra values already name it; the
-	// ORM's update path does the same through addAutoUpdateTime, so the map goes straight in.
+	// ORM's update path does the same through addAutoUpdateTime, so the map goes straight in
+	// (oracle v12.55.1, executed: /tmp/massupdate_scope_guard_probe.php quotes the stamp in the
+	// increment SQL).
 	//
 	// The step runs on a copy carrying withoutTouch: neither Builder::increment nor
 	// Model::increment propagates touches (they never reach finishSave), while the model-update
@@ -753,8 +755,10 @@ func (r *OrmBuilder) step(column, operator string, args []any) (*contractsdb.Res
 }
 
 // stepValues builds the assignment map an increment or decrement writes: the extra values, plus the
-// column rewritten to a raw `<column> <op> <amount>` expression. The arguments are the ones step has
-// already validated.
+// column rewritten to a raw `<column> <op> <amount>` expression. An extra value naming the
+// incremented column replaces the raw expression, the way incrementEach's
+// `array_merge($columns, $extra)` lets the extra win. The arguments are the ones step has already
+// validated.
 func (r *OrmBuilder) stepValues(column, operator string, args []any) map[string]any {
 	amount := "1"
 	var extra map[string]any
@@ -770,10 +774,16 @@ func (r *OrmBuilder) stepValues(column, operator string, args []any) map[string]
 		}
 	}
 
-	values := make(map[string]any, len(extra)+1)
-	maps.Copy(values, extra)
 	resolved := resolveColumn(r.updateSchema(), column)
-	values[resolved] = querybuilder.Raw(r.queryGrammar.Wrap(resolved) + " " + operator + " " + amount)
+	values := map[string]any{
+		resolved: querybuilder.Raw(r.queryGrammar.Wrap(resolved) + " " + operator + " " + amount),
+	}
+	// The extra values merge over the raw expression the way incrementEach ends in
+	// `$this->update(array_merge($columns, $extra))`: an extra naming the incremented column
+	// replaces the raw expression with the caller's value (oracle v12.55.1, executed:
+	// /tmp/inc_extra_probe.php — `Builder::increment extra names the column` compiles
+	// `update "users" set "count" = ?, "updated_at" = ?` and stores the extra value).
+	maps.Copy(values, extra)
 
 	return values
 }

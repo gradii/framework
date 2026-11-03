@@ -287,9 +287,11 @@ func MergeAttrMaps(attrs, values map[string]any) map[string]any {
 // WHERE clause. Mirrors fedaco's touchIfTouching on BelongsToMany.
 //
 // Called at the tail end of the public Sync / Attach / Detach / Toggle / UpdateExistingPivot
-// shells, and only when the operation actually affected pivot rows. The internal doAttach /
-// doDetach / doUpdateExistingPivot helpers do NOT touch — sync* paths chain multiple internal
-// calls and touch at most once at the end through this helper.
+// shells — Attach touches after every successful call, an empty id list included (Laravel's attach
+// touch step is unconditional on success; oracle v12.55.1, executed, C1/C3) — the other shells
+// only when the operation actually affected pivot rows. The internal doAttach / doDetach /
+// doUpdateExistingPivot helpers do NOT touch — sync* paths chain multiple internal calls and touch
+// at most once at the end through this helper.
 //
 // The stamp comes from the framework clock — carbon.Now(), the value every other write path
 // stamps — so a frozen test clock (carbon.SetTestNow) observes the touch. The statement is the

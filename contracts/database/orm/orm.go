@@ -179,6 +179,18 @@ type Query interface {
 	// returned instead of the error. The insert runs inside a savepoint when the query is bound
 	// to a transaction.
 	CreateOrFirst(dest any, conds ...any) error
+	// IncrementOrCreate finds the first record that matches the given attributes, or creates one
+	// when none matches, and steps a record that already existed, mirroring Eloquent's
+	// Builder::incrementOrCreate: the lookup and the create run through FirstOrCreate — the
+	// counted column's default rides along as its create-only values — and only a record that was
+	// found is incremented the way Model::increment does it: the column moves on the model and the
+	// extras fill before the updating event, the scope-less update keyed on the model writes the
+	// raw `<column> + <step>` expression, the extras and the refreshed updated-at stamp, the
+	// updated event runs, and the incremented column re-baselines in the model's original
+	// attributes. args carries Laravel's optional tail positionally — a column name (a string,
+	// default "count"), the create default and the step (numbers, default 1 each), and the extra
+	// values (a map) — because a Go signature cannot declare defaults.
+	IncrementOrCreate(dest any, attributes any, args ...any) error
 	// FirstOrFail finds the first record that matches the given conditions or throws an error.
 	FirstOrFail(dest any) error
 	// FirstOrNew finds the first record that matches the given conditions or return a new instance
@@ -363,7 +375,9 @@ type Query interface {
 	Restore(model ...any) (*db.Result, error)
 	// Rollback rolls back the changes in a transaction.
 	Rollback() error
-	// Save updates value in a database
+	// Save persists a model the way Eloquent's save() does: a model that carries no key inserts; an
+	// existing row receives only the attributes that changed since the model was loaded plus a
+	// save-time updated_at; and a model with nothing changed runs no statement at all.
 	Save(value any) error
 	// SaveQuietly updates value in a database without firing events
 	SaveQuietly(value any) error

@@ -177,7 +177,7 @@ func (r *OrmBuilder) DeleteRows(table string, wheres []relations.RowWhere, scope
 }
 
 // SelectRows reads columns of the rows of table the predicates select into column-keyed maps —
-// W7, the existingPivotIDs / allPivotIDs read: the select list set on the fresh table query, the
+// W7, the allPivotIDs read: the select list set on the fresh table query, the
 // pivot scope replayed, then the predicates; findMapsCompiled is handed no scope, since the row
 // query already carries it.
 func (r *OrmBuilder) SelectRows(table string, columns []string, wheres []relations.RowWhere, scope contractsorm.PivotCallback) ([]map[string]any, error) {
@@ -186,7 +186,7 @@ func (r *OrmBuilder) SelectRows(table string, columns []string, wheres []relatio
 
 // scopedRowQuery assembles the table-scoped query the row primitives run: the fresh builder bound
 // to table (pivotTableQuery), the select list when one is given (the SetSelects call
-// existingPivotIDs / allPivotIDs make first), the pivot scope replayed through
+// allPivotIDs makes first), the pivot scope replayed through
 // applyOnPivotQueryToQuery (a nil scope is the adapter's own no-op), then each predicate appended
 // through the very addWhere call pivotWhere makes.
 //

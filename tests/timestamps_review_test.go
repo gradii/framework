@@ -171,16 +171,34 @@ func TestTimestampShapesReview(t *testing.T) {
 					t.Run("SaveAutomatic", func(t *testing.T) {
 						create(t, &manual)
 						model := read(t, id)
-						updated := timestampReviewField(model, "UpdatedAt")
-						updated.Set(reflect.Zero(updated.Type()))
 						timestampReviewField(model, "Label").SetString("saved")
 						started := time.Now()
 						require.NoError(t, fixture.Query().Save(model))
+						// The loaded updated_at was not changed, so the save stamps it at save time — the
+						// loaded value is not written back — while the untouched manual created_at stays
+						// out of the update (dirty-only; oracle /tmp/save11/semantics_probe.php case 1).
 						assertTimestampReviewEqual(t, model, "CreatedAt", manual)
 						assertTimestampReviewNow(t, model, "UpdatedAt", started)
 						loaded := read(t, id)
 						assertTimestampReviewEqual(t, loaded, "CreatedAt", manual)
 						assertTimestampReviewNow(t, loaded, "UpdatedAt", started)
+					})
+					t.Run("SaveNulledUpdatedAtIsWrittenAsGiven", func(t *testing.T) {
+						create(t, &manual)
+						model := read(t, id)
+						updated := timestampReviewField(model, "UpdatedAt")
+						updated.Set(reflect.Zero(updated.Type()))
+						timestampReviewField(model, "Label").SetString("nulled")
+						require.NoError(t, fixture.Query().Save(model))
+						// A loaded updated_at zeroed by the caller is a dirty attribute: updateTimestamps()
+						// leaves it alone and the update writes NULL — it is not re-stamped (oracle, executed,
+						// /tmp/save11/null_updated_at_probe.php: dirty ["name","updated_at"], the update binds
+						// ["nulled",null,1] and the row's updated_at reads NULL).
+						assertTimestampReviewEqual(t, model, "CreatedAt", manual)
+						assertTimestampReviewEqual(t, model, "UpdatedAt", time.Time{})
+						loaded := read(t, id)
+						assertTimestampReviewEqual(t, loaded, "CreatedAt", manual)
+						assertTimestampReviewEqual(t, loaded, "UpdatedAt", time.Time{})
 					})
 					t.Run("SaveManual", func(t *testing.T) {
 						create(t, &manual)

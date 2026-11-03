@@ -258,6 +258,37 @@ func TestBelongsToManySyncTouchesParent_SyncWithDetachedValuesShouldTouch(t *tes
 	require.Equal(t, []uint{1, 2}, belongsToManySyncTouchesParentPivotUserIDs(t, query))
 }
 
+// TestBelongsToManySyncTouchesParent_AttachTouchesTheParentIncludingAnEmptyAttach ports an oracle
+// probe of this suite's models (illuminate/database v12.55.1, real sqlite, /tmp/attach_dedup_probe.php
+// C1/C2 with the same shapes): the pivot class's $touches = ['article'] makes attach touch the
+// article after a successful insert, and — because attach's touch step is unconditional on a
+// successful call (vendor v12.55.1, InteractsWithPivotTable::attach :350-351) — an EMPTY attach,
+// whose insert([]) runs no statement, bumps it too (C1: `update "ad_posts" set "updated_at" = ?
+// where "id" = ?` with no insert). Before round 6 the Go shell gated the bump on affected > 0 and
+// skipped it for an empty id list.
+func TestBelongsToManySyncTouchesParent_AttachTouchesTheParentIncludingAnEmptyAttach(t *testing.T) {
+	query := newRelationQuery(t)
+	belongsToManySyncTouchesParentSchema(t, query)
+	belongsToManySyncTouchesParentSeedData(t, query)
+
+	carbon.SetTestNow(carbon.Parse("2021-07-19 10:13:14"))
+	t.Cleanup(carbon.ClearTestNow)
+
+	article := belongsToManySyncTouchesParentArticle{ID: "1", Title: "uuid title"}
+	require.NoError(t, cloneRelationQuery(t, query).Create(&article))
+
+	// attach([1]): the pivot row lands and the parent is touched to the frozen instant.
+	require.NoError(t, cloneRelationQuery(t, query).Relation(&article, "Users").Attach([]any{1}))
+	require.NotNil(t, article.UpdatedAt)
+	assert.Equal(t, "2021-07-19 10:13:14", article.UpdatedAt.ToDateTimeString())
+	assert.Equal(t, []uint{1}, belongsToManySyncTouchesParentPivotUserIDs(t, query))
+
+	// attach([]): insert([]) writes nothing, yet the parent still moves (oracle C1).
+	carbon.SetTestNow(carbon.Parse("2021-07-20 19:13:14"))
+	require.NoError(t, cloneRelationQuery(t, query).Relation(&article, "Users").Attach([]any{}))
+	assert.Equal(t, "2021-07-20 19:13:14", belongsToManySyncTouchesParentArticleUpdatedAt(t, query).ToDateTimeString())
+}
+
 // TestBelongsToManySyncTouchesParent_SyncInsideWithoutTouchingDoesNotBump ports an oracle probe of
 // this suite's models (the corpus itself has no such test): a sync that detaches a pivot row inside
 // a scope that ignores the article's touches still deletes the row — the custom pivot's delete

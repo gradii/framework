@@ -21,10 +21,12 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	databasedb "github.com/gradii/framework/database/db"
 	databaseorm "github.com/gradii/framework/database/orm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,7 +42,7 @@ const (
 
 	skipModelAttributeBag = "PHP-only assertion (no Go equivalent): the Go ORM keeps no attribute bag — a model's attributes are plain struct fields — so the test's magic getter/setter and attribute-array behaviour cannot be reproduced"
 
-	skipModelDirty = "our ORM diverges: models keep no original-attribute snapshot, so dirty/clean tracking (syncOriginal/isDirty/isClean/originalIsEquivalent) has no API"
+	skipModelDirty = "our ORM diverges: the original-attribute snapshot is internal Save machinery (hydration captures it; a clean model skips the update, a dirty one writes only its changed columns) with no readable model-level API — Eloquent's isDirty/isClean/getOriginal/syncOriginal on a model value have no Go form"
 
 	skipModelCasts = "our ORM diverges: the Go ORM has no cast layer (no $casts/casts()) — a field's declared Go type is its only representation"
 
@@ -644,12 +646,49 @@ func TestModel_WithMethodCallsQueryBuilderCorrectlyWithArray(t *testing.T) {
 	require.Len(t, found[0].Comments, 1)
 }
 
+// modelDirtyProcessUser is the two-column shape the corpus's testUpdateProcess exercises: id,
+// name, and a second loaded column (foo) that must stay out of the dirty-only update — the
+// corpus's "make sure foo isn't synced so we can test that dirty attributes only are updated".
+type modelDirtyProcessUser struct {
+	ID   uint64 `gorm:"column:id;primaryKey;autoIncrement" db:"id"`
+	Name string `gorm:"column:name" db:"name"`
+	Foo  int    `gorm:"column:foo" db:"foo"`
+}
+
+func (modelDirtyProcessUser) TableName() string { return "users" }
+
 func TestModel_UpdateProcess(t *testing.T) {
-	// Laravel saves a model whose name alone is dirty and asserts the update carries exactly
-	// ['name' => 'taylor'] where id = 1. Our ORM diverges: Save overwrites every non-primary
-	// column (saveAssignments), so it cannot reproduce a dirty-only update; a column-scoped write
-	// is Update(column, value).
-	t.Skip(skipModelDirty + "; Save overwrites every non-primary column rather than the dirty ones, so Laravel's update ['name' => 'taylor'] cannot be reproduced")
+	query := newRelationQuery(t)
+	modelSchema(t, query)
+
+	seeded := modelDirtyProcessUser{Name: "old", Foo: 7}
+	require.NoError(t, cloneRelationQuery(t, query).Create(&seeded))
+
+	// Laravel syncs the model, dirties name alone and asserts the update carries exactly
+	// ['name' => 'taylor'] where id = 1: the loaded, unchanged foo stays out of the statement. The
+	// Go port reads the same set from the original bag hydration captured.
+	var loaded modelDirtyProcessUser
+	require.NoError(t, cloneRelationQuery(t, query).Where("id", 1).First(&loaded))
+	require.Equal(t, 7, loaded.Foo)
+	loaded.Name = "taylor"
+
+	ctx := databasedb.EnableQueryLog(context.Background())
+	withContext, ok := cloneRelationQuery(t, query).(contractsorm.QueryWithContext)
+	require.True(t, ok, "the ORM query must support WithContext")
+
+	require.NoError(t, withContext.WithContext(ctx).Model(&loaded).Save(&loaded))
+
+	logs := databasedb.GetQueryLog(ctx)
+	require.Len(t, logs, 1, "the dirty-only update is one statement")
+	// Oracle (illuminate/database v12.55.1, executed, /tmp/save11/semantics_probe.php): the update
+	// carries exactly the changed attributes — `update "users" set "name" = ? where "id" = ?` for a
+	// timestampless model; the whole-struct shape this replaces wrote `"foo" = ?` too.
+	assert.Equal(t, `update "users" set "name" = 'taylor' where "id" = 1`, logs[0].Query)
+
+	var reloaded modelDirtyProcessUser
+	require.NoError(t, cloneRelationQuery(t, query).Where("id", 1).First(&reloaded))
+	assert.Equal(t, "taylor", reloaded.Name)
+	assert.Equal(t, 7, reloaded.Foo)
 }
 
 func TestModel_UpdateProcessDoesntOverrideTimestamps(t *testing.T) {
@@ -730,11 +769,48 @@ func TestModel_EventsCanBeFiredWithCustomEventObjects(t *testing.T) {
 	require.EqualValues(t, 0, count, "the canceled create must not insert")
 }
 
+// modelTimestampsDisabledUser carries the per-instance $timestamps flag the corpus's
+// testUpdateProcessWithoutTimestamps flips: the embedded databaseorm.Timestamps maps Eloquent's
+// negated $timestamps to Disabled, and the users table holds the two timestamp columns.
+type modelTimestampsDisabledUser struct {
+	databaseorm.Timestamps
+
+	ID   uint64 `gorm:"column:id;primaryKey;autoIncrement" db:"id"`
+	Name string `gorm:"column:name" db:"name"`
+}
+
+func (modelTimestampsDisabledUser) TableName() string { return "users" }
+
 func TestModel_UpdateProcessWithoutTimestamps(t *testing.T) {
-	// Laravel saves with $timestamps = false and asserts update(['name' => 'taylor']) where id = 1.
-	// Same divergence as testUpdateProcess: our Save is not dirty-scoped. (Timestamps themselves
-	// are no obstacle — a model without timestamp fields has none stamped.)
-	t.Skip(skipModelDirty + "; Save overwrites every non-primary column rather than the dirty ones")
+	query := newRelationQuery(t)
+	modelSchema(t, query)
+
+	seeded := modelTimestampsDisabledUser{Name: "old"}
+	seeded.Disabled = true
+	require.NoError(t, cloneRelationQuery(t, query).Create(&seeded))
+
+	// Laravel sets $model->timestamps = false and asserts update(['name' => 'taylor']) where id = 1:
+	// the dirty column alone, no updated_at — the save never reaches updateTimestamps.
+	loaded := modelTimestampsDisabledUser{}
+	require.NoError(t, cloneRelationQuery(t, query).Where("id", 1).First(&loaded))
+	loaded.Disabled = true
+	loaded.Name = "taylor"
+
+	ctx := databasedb.EnableQueryLog(context.Background())
+	withContext, ok := cloneRelationQuery(t, query).(contractsorm.QueryWithContext)
+	require.True(t, ok, "the ORM query must support WithContext")
+
+	require.NoError(t, withContext.WithContext(ctx).Model(&loaded).Save(&loaded))
+
+	logs := databasedb.GetQueryLog(ctx)
+	require.Len(t, logs, 1, "the suspended update is one statement without updated_at")
+	// Oracle (illuminate/database v12.55.1, executed, /tmp/save11/semantics_probe.php, case 6):
+	// `update "s11_users" set "name" = ? where "id" = ?` — the dirty column alone.
+	assert.Equal(t, `update "users" set "name" = 'taylor' where "id" = 1`, logs[0].Query)
+
+	var reloaded modelTimestampsDisabledUser
+	require.NoError(t, cloneRelationQuery(t, query).Where("id", 1).First(&reloaded))
+	assert.Equal(t, "taylor", reloaded.Name)
 }
 
 func TestModel_UpdateUsesOldPrimaryKey(t *testing.T) {
@@ -1308,15 +1384,29 @@ func TestModel_WithoutEventDispatcher(t *testing.T) {
 	require.Equal(t, 1, observer.creating)
 	require.Equal(t, 1, observer.saved)
 
-	// The corpus's second closure updates an existing model without events, then saves normally.
+	// The corpus's second closure updates an existing model without events, then saves normally;
+	// both saves change a field, because a clean model runs no update at all — Model::save's
+	// isDirty gate — and fires no updating/updated events (oracle, executed: a clean save logs
+	// [saving, saved]).
+	loud.Name = "taylor-quiet"
 	require.NoError(t, cloneRelationQuery(t, query).WithoutEvents().Model(&loud).Save(&loud))
 	require.Zero(t, observer.updating, "no events inside WithoutEvents")
 
+	loud.Name = "otwell"
 	require.NoError(t, cloneRelationQuery(t, query).Model(&loud).Save(&loud))
 	require.Equal(t, 2, observer.saving)
 	require.Equal(t, 1, observer.updating)
 	require.Equal(t, 1, observer.updated)
 	require.Equal(t, 2, observer.saved)
+
+	// A save of the model now that it is clean runs no statement and skips the updating/updated
+	// pair — Model::save stops at the isDirty gate while saving and saved still fire (oracle,
+	// executed: a clean save logs [saving, saved]).
+	require.NoError(t, cloneRelationQuery(t, query).Model(&loud).Save(&loud))
+	require.Equal(t, 3, observer.saving)
+	require.Equal(t, 1, observer.updating)
+	require.Equal(t, 1, observer.updated)
+	require.Equal(t, 3, observer.saved)
 }
 
 const (

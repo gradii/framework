@@ -935,6 +935,10 @@ func (r *OrmBuilder) pageInto(dest any) ([]map[string]any, error) {
 
 	destValue.Elem().Set(page)
 
+	// Every element of the page was hydrated from a row, so each becomes its own original bag — a
+	// chunked read is a find like any other (see model_original.go).
+	syncOriginal(page.Interface())
+
 	return items, nil
 }
 
@@ -1489,22 +1493,7 @@ func (r *OrmBuilder) FirstOr(dest any, callback func() error) error {
 }
 
 func (r *OrmBuilder) FirstOrCreate(dest any, conds ...any) error {
-	if len(conds) == 0 {
-		return errors.OrmQueryConditionRequired
-	}
-
-	found, err := r.firstOrInit(dest, conds[0], conds[1:], nil)
-	if err != nil {
-		return err
-	}
-	if found {
-		// firstOrInit has already run the retrieved hooks.
-		return nil
-	}
-
-	// The row must be created: firstOrCreate routes a miss through createOrFirst, so a unique
-	// constraint another writer tripped reads the winning row back instead of failing.
-	_, err = r.createWithUniqueRetry(dest, conds[0])
+	_, err := r.firstOrCreateWithCreated(dest, conds...)
 
 	return err
 }
@@ -2366,6 +2355,10 @@ func assignCursorRows(dest any, items []map[string]any) error {
 
 	target.Elem().Set(slice)
 
+	// Every element of the page was hydrated from a row, so each becomes its own original bag (see
+	// model_original.go).
+	syncOriginal(slice.Interface())
+
 	return nil
 }
 
@@ -2445,6 +2438,21 @@ func (r *OrmBuilder) Rollback() error {
 	return r.tx.Rollback()
 }
 
+// Save persists a model the way Eloquent's Model::save does (Model.php:1215), on top of the
+// original-attribute tracking model_original.go carries: a model that carries no key is inserted; a
+// model that names a row updates exactly the attributes that changed since it was loaded plus the
+// freshly stamped updated_at, stamped at save time; and a model whose attributes all read back
+// unchanged runs no statement at all (`$saved = $this->isDirty() ? $this->performUpdate($query) :
+// true` — the updating and updated events and the owner touch are skipped with it, while the saved
+// event and the original sync still run, exactly as finishSave does). A model whose loaded values
+// were never captured — one built by hand — reads as having an empty original bag, so every field
+// is written, the behaviour Save always had.
+//
+// Oracle v12.55.1, executed (/tmp/save11/semantics_probe.php, /tmp/save11/events_probe.php): a
+// dirty model compiles `update "s11_users" set "name" = ?, "updated_at" = ? where "id" = ?` with
+// the save-time stamp ["new","2026-11-03 01:02:03",1]; a clean model runs nothing and its stored
+// updated_at is untouched; the event flow is [saving, updating, updated, saved] for the dirty save
+// and [saving, saved] for the clean one.
 func (r *OrmBuilder) Save(dest any) error {
 	if hasStringColumns(r.query.Selects()) && len(r.conditions.omit) > 0 {
 		return errors.OrmQuerySelectAndOmitsConflict
@@ -2464,45 +2472,56 @@ func (r *OrmBuilder) Save(dest any) error {
 	if dest, err = query.saving(dest); err != nil {
 		return err
 	}
+
 	if update {
-		if dest, err = query.updating(dest); err != nil {
-			return err
+		// Model::save: `$saved = $this->isDirty() ? $this->performUpdate($query) : true;` — the
+		// clean branch runs no updating event and no statement, but finishSave below still runs.
+		if isDirty(dest) {
+			if dest, err = query.updating(dest); err != nil {
+				return err
+			}
+
+			var wrote bool
+			if wrote, err = query.save(dest); err != nil {
+				return err
+			}
+			// performUpdate fires the updated event only when it wrote: `if (count($dirty) > 0)`.
+			if wrote {
+				if _, err := query.updated(dest); err != nil {
+					return err
+				}
+			}
 		}
 	} else {
 		if dest, err = query.creating(dest); err != nil {
 			return err
 		}
-	}
 
-	// The three shapes GORM distinguished — a plain save, and one narrowed by Select or by Omit — are
-	// one statement here, because the column filter carries that difference.
-	inserted, err := query.save(dest)
-	if err != nil {
-		return err
-	}
-
-	if update {
-		if _, err := query.updated(dest); err != nil {
+		var inserted bool
+		if inserted, err = query.save(dest); err != nil {
 			return err
 		}
-	} else if inserted {
 		// Like create(): an insert the empty-attribute guard skipped fires no created event.
-		if err := query.created(dest); err != nil {
-			return err
+		if inserted {
+			if err := query.created(dest); err != nil {
+				return err
+			}
 		}
 	}
+
 	if _, err := query.saved(dest); err != nil {
 		return err
 	}
 
-	// The same finishSave step as the create path: a successful model save touches the model's
-	// owners — unless the query carries withoutTouch, Laravel's save(['touch' => false]) (the
-	// BelongsToMany updateOrCreate arm, relation_writes.go).
-	if !query.conditions.withoutTouch {
+	// finishSave: the owners are touched while the model is still dirty — Laravel's
+	// `if ($this->isDirty() && ($options['touch'] ?? true))` re-checked before the original sync —
+	// and the original bag is then synced, so the write becomes the model's new baseline.
+	if !query.conditions.withoutTouch && isDirty(dest) {
 		if err := query.touchOwners(dest); err != nil {
 			return err
 		}
 	}
+	syncOriginal(dest)
 
 	return nil
 }
@@ -3578,6 +3597,10 @@ func (r *OrmBuilder) create(dest any) error {
 		return err
 	}
 
+	// finishSave's last step: the original bag becomes the written values, so a later Save of this
+	// model updates only what changes from here on (see model_original.go).
+	syncOriginal(dest)
+
 	return nil
 }
 
@@ -3954,8 +3977,10 @@ func (r *OrmBuilder) retrieved(dest any) error {
 	return err
 }
 
-// save writes a model, inserting it when it carries no key and overwriting the row it names when it
-// does.
+// save writes a model, inserting it when it carries no key and updating the row it names when it
+// does. The update carries only the columns that changed since the model was loaded — plus the
+// save-time updated_at — and reports whether a statement ran, so Save can leave the updated event
+// out for a set that turned out empty (performUpdate's `if (count($dirty) > 0)` guard).
 //
 // GORM also recreated the row when an update matched none, by upserting on the primary key. That is
 // deliberately not carried over: it made saving a soft-deleted model resurrect it and overwrite every
@@ -3971,6 +3996,8 @@ func (r *OrmBuilder) save(value any) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	// Nothing to set: performUpdate writes only a non-empty dirty set, and an empty assignment list
+	// would compile to a statement no dialect accepts.
 	if len(assignments) == 0 {
 		return false, nil
 	}

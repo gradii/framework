@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	databaseorm "github.com/gradii/framework/database/orm"
 	"github.com/gradii/framework/errors"
 )
 
@@ -407,18 +408,54 @@ func TestIncrementRefusesABareUnconditionedQuery(t *testing.T) {
 	assert.ErrorIs(t, err, errors.OrmMissingWhereClause)
 }
 
-// A scoped increment passes the guard on the scope's WHERE alone: the soft-delete predicate is the
-// compiled statement's where clause, exactly as it is for Laravel's
-// `update "users" set "id" = "id" + 1, "updated_at" = ? where "users"."deleted_at" is null`.
+// softDeleteTimestampUser is the scoped-increment pin's model: the framework's soft-delete field
+// plus the automatic updated-at timestamp, the shape the corpus's soft-delete model
+// (SoftDeletesTestUser) carries. The package's bare softDeleteUser fixture declares no timestamps,
+// so an increment of it compiles without the updated_at Laravel stamps.
+type softDeleteTimestampUser struct {
+	ID        uint
+	Name      string
+	UpdatedAt int64                 `gorm:"autoUpdateTime"`
+	DeletedAt databaseorm.DeletedAt `gorm:"column:deleted_at"`
+}
+
+func (softDeleteTimestampUser) TableName() string { return "soft_users" }
+
+// A scoped increment passes the guard on the scope's WHERE alone and stamps updated_at into the SET
+// list, exactly as Laravel compiles `update "users" set "id" = "id" + 1, "updated_at" = ? where
+// "users"."deleted_at" is null` (oracle v12.55.1, executed: /tmp/massupdate_scope_guard_probe.php,
+// `bare scoped increment(id)`).
 func TestIncrementScopedBySoftDeletePassesTheGuard(t *testing.T) {
-	query := newRelQueryWith(t, &softDeleteUser{})
+	query := newRelQueryWith(t, &softDeleteTimestampUser{})
 
 	assignments, err := query.updateAssignments(query.stepValues("id", "+", nil))
 	require.NoError(t, err)
 
-	statement, _, err := query.compileUpdate(assignments)
+	statement, bindings, err := query.compileUpdate(assignments)
 	require.NoError(t, err)
-	assert.Equal(t, `update "soft_users" set "id" = "id" + 1 where "soft_users"."deleted_at" is null`, statement)
+	assert.Equal(t, `update "soft_users" set "id" = "id" + 1, "updated_at" = ? where "soft_users"."deleted_at" is null`, statement)
+	require.Len(t, bindings, 1)
+	assert.NotNil(t, bindings[0], "updated_at is stamped")
+}
+
+// An extra value naming the incremented column replaces the raw expression: incrementEach ends in
+// `$this->update(array_merge($columns, $extra))`, so the caller's extra wins and the statement is
+// `update "users" set "count" = ?, "updated_at" = ? where "id" = ?` (oracle v12.55.1, executed:
+// /tmp/inc_extra_probe.php, `Builder::increment extra names the column`; Model::increment compiles
+// the same SET list). Decrement shares stepValues.
+func TestIncrementExtraNamingTheIncrementedColumnKeepsTheCallerValue(t *testing.T) {
+	query := compiledQuery(t, &shortcutUser{}, Conditions{}).Where("id", 1).(*OrmBuilder)
+
+	values := query.stepValues("score", "+", []any{5, map[string]any{"score": 99}})
+	assignments, err := query.updateAssignments(values)
+	require.NoError(t, err)
+
+	statement, bindings, err := query.compileUpdate(assignments)
+	require.NoError(t, err)
+	assert.Equal(t, `update "shortcut_users" set "score" = ?, "updated_at" = ? where "id" = ?`, statement)
+	assert.Equal(t, 99, bindings[0], "the extra value replaces the raw expression")
+	assert.NotNil(t, bindings[1], "updated_at is stamped")
+	assert.Equal(t, 1, bindings[2])
 }
 
 // touch() sets updated_at to now, or the named column; a model without an updated-at column has

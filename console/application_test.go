@@ -79,7 +79,7 @@ func TestRun_SignalHandling(t *testing.T) {
 		},
 		{
 			name:      "non-shutdownable command returns ctx error on cancel",
-			command:   &TestBlockingCommand{},
+			command:   &TestBlockingCommand{released: make(chan struct{})},
 			preCancel: true,
 			expectErr: context.Canceled,
 		},
@@ -87,6 +87,14 @@ func TestRun_SignalHandling(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if cmd, ok := tt.command.(*TestBlockingCommand); ok {
+				// Release the abandoned command after Call returns: the command must
+				// not complete while the action's select is evaluated, otherwise its
+				// nil return races the ctx.Done() branch and the assertion below
+				// becomes scheduling-dependent (candidate 23 load flake).
+				t.Cleanup(func() { close(cmd.released) })
+			}
+
 			cliApp := NewApplication("test", "test", "test", "test", true)
 			cliApp.Register([]console.Command{tt.command})
 
@@ -586,7 +594,13 @@ func (receiver *TestShutdownableCommand) Shutdown(_ console.Context) error {
 	return nil
 }
 
+// TestBlockingCommand models a non-shutdownable command that ignores context
+// cancellation: Handle stays blocked until the test closes released (from
+// t.Cleanup, after Call has returned). The application must therefore return
+// the ctx error while the command goroutine is still running, and the
+// assertion does not race the command's own completion (candidate 23).
 type TestBlockingCommand struct {
+	released chan struct{}
 }
 
 func (receiver *TestBlockingCommand) Signature() string {
@@ -601,8 +615,8 @@ func (receiver *TestBlockingCommand) Extend() command.Extend {
 	return command.Extend{}
 }
 
-func (receiver *TestBlockingCommand) Handle(ctx console.Context) error {
-	<-ctx.Done()
+func (receiver *TestBlockingCommand) Handle(_ console.Context) error {
+	<-receiver.released
 	return nil
 }
 

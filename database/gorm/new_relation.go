@@ -226,22 +226,6 @@ func (r *OrmBuilder) applyOneOfManyToReadPath(built *OrmBuilder, parent any, des
 	return nil
 }
 
-// relationInstallsOneOfMany reports whether the relation's own scope turns it into a one-of-many
-// relation. The scope is run against a throwaway query so none of its clauses leak; the caller
-// builds the real query with the scope itself.
-func (r *OrmBuilder) relationInstallsOneOfMany(desc *relationDescriptor) bool {
-	if desc.OnQuery == nil {
-		return false
-	}
-
-	scoped := r.fresh()
-	if returned, ok := desc.OnQuery(scoped).(*OrmBuilder); ok {
-		scoped = returned
-	}
-
-	return scoped.conditions.oneOfMany != nil
-}
-
 // throughJoinFragment renders the join Laravel's performJoin gives a through relation's related
 // query — the oracle compiles it as `inner join "intermediates" on "intermediates"."id" =
 // "prices"."intermediate_id"`. The caller supplies the join keyword.

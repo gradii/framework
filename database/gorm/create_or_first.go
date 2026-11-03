@@ -1,6 +1,7 @@
 package gorm
 
 import (
+	"reflect"
 	"strings"
 
 	"github.com/gradii/framework/errors"
@@ -169,4 +170,244 @@ func isUniqueConstraintViolation(err error) bool {
 	}
 
 	return false
+}
+
+// firstOrCreateWithCreated is FirstOrCreate carrying the created-vs-found signal Eloquent keeps on
+// the instance — $wasRecentlyCreated — which a Go model has no flag for: it reports true when the
+// row was just inserted, and false when an existing row was read, by the lookup itself or by
+// createOrFirst's re-read after a unique constraint another writer tripped. IncrementOrCreate is
+// the signal's consumer; the public FirstOrCreate has nothing to expose it on.
+func (r *OrmBuilder) firstOrCreateWithCreated(dest any, conds ...any) (bool, error) {
+	if len(conds) == 0 {
+		return false, errors.OrmQueryConditionRequired
+	}
+
+	found, err := r.firstOrInit(dest, conds[0], conds[1:], nil)
+	if err != nil {
+		return false, err
+	}
+	if found {
+		// firstOrInit has already run the retrieved hooks.
+		return false, nil
+	}
+
+	// The row must be created: firstOrCreate routes a miss through createOrFirst, so a unique
+	// constraint another writer tripped reads the winning row back instead of failing.
+	readBack, err := r.createWithUniqueRetry(dest, conds[0])
+	if err != nil {
+		return false, err
+	}
+
+	return !readBack, nil
+}
+
+// IncrementOrCreate finds the first record that matches the given attributes, or creates one when
+// none matches, and — only when the record already existed — steps it, mirroring Eloquent's
+// Builder::incrementOrCreate: firstOrCreate($attributes, [$column => $default]) followed, unless
+// wasRecentlyCreated, by Model::increment. The step is incrementModel's; args carries Laravel's
+// optional parameters positionally, since Go signatures cannot declare defaults: a string names
+// the column (default "count"), the first number is the create default and the second the step
+// (default 1 each), and a map is the extra values.
+func (r *OrmBuilder) IncrementOrCreate(dest any, attributes any, args ...any) error {
+	column, defaultAmount, step, extra := incrementOrCreateArgs(args)
+
+	created, err := r.firstOrCreateWithCreated(dest, attributes, map[string]any{column: defaultAmount})
+	if err != nil {
+		return err
+	}
+	if created {
+		return nil
+	}
+
+	return r.incrementModel(dest, column, step, extra)
+}
+
+// incrementModel runs one found record through Model::increment — incrementOrDecrement's Go form.
+// The column moves on the model and the extra values fill first, the way Eloquent writes
+// `$this->{$column} = $this->{$column} + $amount; $this->forceFill($extra);` before the updating
+// event, so a handler observes the stepped model (oracle v12.55.1, executed:
+// /tmp/cof_inc_events_probe.php — the updating listener reads count=2). The updating event then
+// runs; a handler's error aborts the write (the Go reading of Eloquent's `return false`). The
+// statement compiles on a fresh, scope-less query scoped to the model's key — Laravel's
+// setKeysForSaveQuery(newQueryWithoutScopes()) — as the raw `<column> + <step>` expression, the
+// extras and the automatic updated-at stamp; the updated event runs; and the incremented column
+// re-baselines in the original bag, leaving the force-filled extras dirty, which is the state a
+// later save writes the extras and updated_at from (same probe: the follow-up save compiles
+// `update "table" set "val" = ?, "updated_at" = ? where "id" = ?`).
+func (r *OrmBuilder) incrementModel(dest any, column string, step any, extra map[string]any) error {
+	if _, ok := numericString(step); !ok {
+		return errors.OrmQueryIncrementNonNumeric.Args(step, "increment")
+	}
+
+	stepped, err := r.incrementModelAmount(dest, column, step)
+	if err != nil {
+		return err
+	}
+	if err := r.assignColumn(dest, column, stepped); err != nil {
+		return err
+	}
+	for name, value := range extra {
+		if err := r.assignColumn(dest, name, value); err != nil {
+			return err
+		}
+	}
+
+	keyed := r.modelIncrementQuery(dest)
+
+	if _, err := keyed.updating(dest); err != nil {
+		return err
+	}
+
+	assignments, err := keyed.updateAssignments(keyed.stepValues(column, "+", []any{step, extra}))
+	if err != nil {
+		return err
+	}
+	statement, bindings, err := keyed.compileUpdateScoped(assignments, false)
+	if err != nil {
+		return err
+	}
+	if _, err := keyed.execStatement(statement, bindings); err != nil {
+		return err
+	}
+	if _, err := keyed.updated(dest); err != nil {
+		return err
+	}
+
+	syncOriginalAttribute(dest, column)
+
+	return nil
+}
+
+// modelIncrementQuery builds the query the increment statement runs on: Laravel's
+// newQueryWithoutScopes() — a fresh query on the model, carrying none of the receiver's wheres or
+// scopes — scoped to the model's key by the update path's own key where (setKeysForSaveQuery's Go
+// form: applyUpdateKeyWhere adds the key because the query carries no destination of its own),
+// with the soft-delete predicate lifted the way a fresh read lifts it.
+func (r *OrmBuilder) modelIncrementQuery(dest any) *OrmBuilder {
+	query := r.fresh()
+	if built, ok := query.Model(dest).(*OrmBuilder); ok {
+		query = built
+	}
+	query = query.WithoutGlobalScopes("*").(*OrmBuilder)
+	query = query.WithTrashed().(*OrmBuilder)
+
+	return query
+}
+
+// incrementModelAmount reads the model's current column value and adds the step the way PHP's
+// numeric + does: an integer pair adds as an integer, a float on either side makes the sum a
+// float, and nil — Eloquent's null attribute — counts as zero. A column the model does not declare
+// reads as the step alone: there is no field to hold the new value, and only the statement carries
+// it.
+func (r *OrmBuilder) incrementModelAmount(dest any, column string, step any) (any, error) {
+	schema, err := parseSchema(dest)
+	if err != nil {
+		return nil, err
+	}
+
+	field, ok := schema.FieldsByName[column]
+	if !ok {
+		field, ok = schema.FieldsByDBName[column]
+	}
+	if !ok {
+		return step, nil
+	}
+
+	current, _ := field.ValueOf(r.ctx, reflect.ValueOf(dest))
+
+	return addModelAmount(current, step), nil
+}
+
+// incrementOrCreateArgs unpacks IncrementOrCreate's optional tail: a string names the column, a
+// map is the extra values, and numbers fill the create default and the step in that order —
+// Laravel's ($column, $default, $step, $extra) read positionally, with Laravel's defaults.
+func incrementOrCreateArgs(args []any) (string, any, any, map[string]any) {
+	column := "count"
+	defaultAmount := any(1)
+	step := any(1)
+	var extra map[string]any
+	numerics := 0
+
+	for _, arg := range args {
+		if name, ok := arg.(string); ok {
+			column = name
+
+			continue
+		}
+		if mapping, ok := asColumnMap(arg); ok {
+			extra = mapping
+
+			continue
+		}
+
+		numerics++
+		if numerics == 1 {
+			defaultAmount = arg
+		} else {
+			step = arg
+		}
+	}
+
+	return column, defaultAmount, step, extra
+}
+
+// addModelAmount applies PHP's numeric + to the shapes a model column carries: two integer-kind
+// values add as an int64, a float on either side makes the sum a float64, and nil counts as zero
+// and yields the amount itself. A value that is not numeric falls back to the amount alone — the
+// nearest Go reading of PHP's coercion for a column a statement then governs.
+func addModelAmount(current, amount any) any {
+	if current == nil {
+		return amount
+	}
+
+	currentValue, amountValue := reflect.ValueOf(current), reflect.ValueOf(amount)
+
+	if isFloatKind(currentValue.Kind()) || isFloatKind(amountValue.Kind()) {
+		currentFloat, currentOK := floatValue(currentValue)
+		amountFloat, amountOK := floatValue(amountValue)
+		if !currentOK || !amountOK {
+			return amount
+		}
+
+		return currentFloat + amountFloat
+	}
+
+	currentInt, currentOK := intValue(currentValue)
+	amountInt, amountOK := intValue(amountValue)
+	if !currentOK || !amountOK {
+		return amount
+	}
+
+	return currentInt + amountInt
+}
+
+// isFloatKind reports whether a reflect kind is one of Go's two float kinds.
+func isFloatKind(kind reflect.Kind) bool {
+	return kind == reflect.Float32 || kind == reflect.Float64
+}
+
+// floatValue reads an integer- or float-kind value as a float64.
+func floatValue(value reflect.Value) (float64, bool) {
+	switch {
+	case value.CanInt():
+		return float64(value.Int()), true
+	case value.CanUint():
+		return float64(value.Uint()), true
+	case isFloatKind(value.Kind()):
+		return value.Float(), true
+	}
+
+	return 0, false
+}
+
+// intValue reads an integer-kind value as an int64.
+func intValue(value reflect.Value) (int64, bool) {
+	switch {
+	case value.CanInt():
+		return value.Int(), true
+	case value.CanUint():
+		return int64(value.Uint()), true
+	}
+
+	return 0, false
 }

@@ -74,10 +74,11 @@ type RelationQuery interface {
 	// overrides the pair to prefer the pivot's withTimestamps columns (BelongsToMany.php:1559/1569,
 	// `$this->pivotCreatedAt ?? $this->parent->getCreatedAtColumn() ?? Model::CREATED_AT`): the
 	// many-to-many object reports the pivot column its timestamp declaration resolved — the Pivot
-	// struct's tagged / conventional fields or PivotTimestamps: true — and the parent's column when
-	// none is declared, each column on its own (oracle v12.55.1, executed,
-	// /tmp/btm-pivot-ts-probe.php: withTimestamps('pivot_created_at', 'pivot_updated_at') reports
-	// the pivot names, no withTimestamps reports the parent's "user_created_at" /
+	// struct's tagged / conventional fields, or, for PivotTimestamps: true (the bare
+	// withTimestamps()), the parent model's column — and the parent's column when none is
+	// declared, each column on its own (oracle v12.55.1, executed, /tmp/btm-pivot-ts-probe.php:
+	// withTimestamps('pivot_created_at', 'pivot_updated_at') reports the pivot names, no
+	// withTimestamps and withTimestamps(false, false) report the parent's "user_created_at" /
 	// "user_updated_at", and withTimestamps('pivot_created_at') mixes them).
 	CreatedAt() string
 	// UpdatedAt is CreatedAt's updated-at sibling — Relation::updatedAt (Relations/Relation.php:383,
@@ -411,7 +412,8 @@ type BelongsToManyRelation interface {
 	// CreateMany is the slice form of Create.
 	CreateMany(dests any) error
 
-	// Attach inserts pivot rows linking parent to each id, skipping ids already attached.
+	// Attach inserts one pivot row per id — duplicates included, with no pivot-existence read; a
+	// duplicate row is written or the pivot's unique constraint raises.
 	Attach(ids []any) error
 	// AttachOrFail is Attach inside a transaction on the parent's connection — IWPT::attachOrFail
 	// (InteractsWithPivotTable.php:365; a 12.55-only addition),
@@ -488,9 +490,13 @@ type BelongsToManyRelation interface {
 	OrWherePivotBetween(column any, x, y any) BelongsToManyRelation
 	// OrWherePivotNotBetween is WherePivotNotBetween with the "or" connector.
 	OrWherePivotNotBetween(column any, x, y any) BelongsToManyRelation
-	// WithPivotValue adds a "pivot column = value" clause and records the value for pivot
-	// writes, mirroring BelongsToMany::withPivotValue; a nil value pairs the column with the
-	// pivot's parent-side foreign key column — Laravel's argument swap.
+	// WithPivotValue adds a "pivot column = value" clause and records the pair for the pivot
+	// construction, mirroring BelongsToMany::withPivotValue (BelongsToMany.php:481-498): base
+	// NewPivot merges the recorded values into its attribute bag (InteractsWithPivotTable.php:629,
+	// recorded values as defaults so the caller's attributes win), while the morph override does
+	// not (MorphToMany.php:156-172). A nil value pairs the argument column with the pivot's
+	// parent-side foreign key column — the frozen Go contract's pre-12 argument swap (Laravel 12
+	// throws InvalidArgumentException on a null value).
 	WithPivotValue(column any, value any) BelongsToManyRelation
 	// OrderByPivot adds an "order by pivot column" clause. Mirrors BelongsToMany::orderByPivot;
 	// the Go object keeps the relation (PHP returns the builder), so further wherePivot calls
@@ -577,8 +583,12 @@ type BelongsToManyRelation interface {
 	// newPivot class/exists => [Pivot, false]`, `U2a default newPivot table/keys => ['lu_role_user',
 	// 'lu_user_id', 'role_id']`, `U2c custom newPivot class/exists => ['LuRoleUser', false]`. The
 	// morph kinds override with MorphPivot and the morph stamps (MorphToMany::newPivot,
-	// MorphToMany.php:156). The withPivotValue-recorded values Laravel merges in (:629) have no Go
-	// consumer — the documented WithPivotValue divergence.
+	// MorphToMany.php:156), and the override does not merge the withPivotValue-recorded values
+	// (:629). Base construction does merge them first — `array_merge(array_column(
+	// $this->pivotValues, 'value', 'column'), $attributes)`, recorded values as defaults and the
+	// caller's attributes winning (oracle v12.55.1, executed, /tmp/reverify429/pv_probe.php:
+	// `C21 base attrs => ['level' => 'pv']`, `C21 caller wins => ['level' => 'caller']`,
+	// `C21 morph attrs => ['taggable_type' => 'PvPost']`).
 	NewPivot(attributes map[string]any, exists bool) (PivotModel, error)
 	// NewExistingPivot is NewPivot with exists true — InteractsWithPivotTable::newExistingPivot
 	// (:646, `return $this->newPivot($attributes, true);`), the constructor the read path's

@@ -101,8 +101,8 @@ type RelationWriter interface {
 	// HasOneOrMany kinds re-read over the write connection (useWritePdo), the through kinds on the
 	// default connection. For the BelongsToMany kinds the insert is the related row plus the pivot
 	// attach (BelongsToMany::create), the catch reads the related row back and attaches it, and a
-	// missed read-back, a pivot violation, or an already-attached pivot row re-reads through the
-	// relation on the write connection. Supported kinds: HasOne, HasMany, MorphOne, MorphMany,
+	// missed read-back or a pivot violation re-reads through the relation on the write
+	// connection. Supported kinds: HasOne, HasMany, MorphOne, MorphMany,
 	// HasOneThrough, HasManyThrough, Many2Many, MorphToMany.
 	//
 	// Deprecated: legacy flat RelationWriter path — use the relation builder object instead (Related / RelationQuery).
@@ -128,8 +128,9 @@ type RelationWriter interface {
 	Dissociate() error
 
 	// Attach inserts pivot rows linking parent to each id in ids. For polymorphic pivots the
-	// morph_type column is filled from the parent's morph value. Skips ids that already have a
-	// pivot row. Supported kinds: Many2Many, MorphToMany, MorphedByMany.
+	// morph_type column is filled from the parent's morph value. One pivot row per id, duplicates
+	// included — a duplicate is written, or the pivot's unique constraint raises. Supported kinds:
+	// Many2Many, MorphToMany, MorphedByMany.
 	//
 	// Deprecated: legacy flat RelationWriter path — use the relation builder object instead (Related / RelationQuery).
 	Attach(ids []any) error

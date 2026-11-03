@@ -1235,6 +1235,8 @@ func (r *Query) cursorRows(sql string, args []any, dest any) ([]map[string]any, 
 		return nil, err
 	}
 
+	r.withoutGroupLimitKeys(items)
+
 	r.trace(r.readBuilder, sql, args, now, int64(len(items)), nil)
 
 	if err := assignCursorRows(dest, items); err != nil {

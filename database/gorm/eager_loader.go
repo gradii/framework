@@ -127,7 +127,7 @@ func (r *OrmBuilder) loadHasOneOrMany(parents []reflect.Value, parentModel any, 
 
 	// The column is named without quotes: the compiler quotes each segment itself, and a name that
 	// arrived already quoted would be quoted a second time.
-	rows, err := r.runChunkedRelatedQueryCompiled(keys, desc, entry, []string{ref.ForeignColumn}, func(chunk []any) *OrmBuilder {
+	rows, err := r.runChunkedRelatedQueryCompiled(keys, desc, entry, []string{ref.ForeignColumn}, parentModel, func(chunk []any) *OrmBuilder {
 		return r.relatedChild(desc.RelatedTable, desc.RelatedTable+"."+ref.ForeignColumn, chunk)
 	})
 	if err != nil {
@@ -185,7 +185,7 @@ func (r *OrmBuilder) loadBelongsTo(parents []reflect.Value, parentModel any, des
 
 	// The column is named without quotes: the compiler quotes each segment itself, and a name that
 	// arrived already quoted would be quoted a second time.
-	rows, err := r.runChunkedRelatedQueryCompiled(keys, desc, entry, []string{ref.PrimaryColumn}, func(chunk []any) *OrmBuilder {
+	rows, err := r.runChunkedRelatedQueryCompiled(keys, desc, entry, []string{ref.PrimaryColumn}, parentModel, func(chunk []any) *OrmBuilder {
 		return r.relatedChild(desc.RelatedTable, desc.RelatedTable+"."+ref.PrimaryColumn, chunk)
 	})
 	if err != nil {
@@ -243,7 +243,7 @@ func (r *OrmBuilder) loadMorph(parents []reflect.Value, parentModel any, desc *r
 	// value, which is what separates a MorphOne / MorphMany from the plain HasOne / HasMany it is
 	// shaped like. Both columns are named without quotes: the compiler quotes each segment itself,
 	// and a name that arrived already quoted would be quoted a second time.
-	rows, err := r.runChunkedRelatedQueryCompiled(keys, desc, entry, []string{ref.ForeignColumn, desc.MorphTypeColumn}, func(chunk []any) *OrmBuilder {
+	rows, err := r.runChunkedRelatedQueryCompiled(keys, desc, entry, []string{ref.ForeignColumn, desc.MorphTypeColumn}, parentModel, func(chunk []any) *OrmBuilder {
 		return r.relatedChild(desc.RelatedTable, desc.RelatedTable+"."+ref.ForeignColumn, chunk).
 			Where(desc.RelatedTable+"."+desc.MorphTypeColumn, desc.MorphValue).(*OrmBuilder)
 	})
@@ -390,7 +390,7 @@ func (r *OrmBuilder) loadMorphTo(parents []reflect.Value, parentModel any, desc 
 		}
 		counts := desc.MorphWithCount[morphType]
 		needsModel := len(counts) > 0 || desc.MorphOnlyTrashed || desc.MorphWithoutTrashed
-		rows, qerr := r.runChunkedRelatedQueryCompiled(b.keys, bucketDesc, bucketEntry, []string{ownerKey}, func(chunk []any) *OrmBuilder {
+		rows, qerr := r.runChunkedRelatedQueryCompiled(b.keys, bucketDesc, bucketEntry, []string{ownerKey}, parentModel, func(chunk []any) *OrmBuilder {
 			child := r.relatedChild(relatedTable, relatedTable+"."+ownerKey, chunk)
 			if needsModel {
 				child = child.Model(sample).(*OrmBuilder)
@@ -600,7 +600,7 @@ func (r *OrmBuilder) loadMany2Many(parents []reflect.Value, parentModel any, des
 		relatedKeys = append(relatedKeys, v)
 	}
 
-	rows, err := r.runChunkedRelatedQueryCompiled(relatedKeys, desc, entry, []string{desc.PivotRelatedRef.PrimaryColumn}, func(chunk []any) *OrmBuilder {
+	rows, err := r.runChunkedRelatedQueryCompiled(relatedKeys, desc, entry, []string{desc.PivotRelatedRef.PrimaryColumn}, parentModel, func(chunk []any) *OrmBuilder {
 		return r.relatedChild(desc.RelatedTable, desc.RelatedTable+"."+desc.PivotRelatedRef.PrimaryColumn, chunk)
 	})
 	if err != nil {
@@ -731,7 +731,7 @@ func (r *OrmBuilder) loadMorphToMany(parents []reflect.Value, parentModel any, d
 		relatedKeys = append(relatedKeys, v)
 	}
 
-	rows, err := r.runChunkedRelatedQueryCompiled(relatedKeys, desc, entry, []string{desc.PivotRelatedRef.PrimaryColumn}, func(chunk []any) *OrmBuilder {
+	rows, err := r.runChunkedRelatedQueryCompiled(relatedKeys, desc, entry, []string{desc.PivotRelatedRef.PrimaryColumn}, parentModel, func(chunk []any) *OrmBuilder {
 		return r.relatedChild(desc.RelatedTable, desc.RelatedTable+"."+desc.PivotRelatedRef.PrimaryColumn, chunk)
 	})
 	if err != nil {
@@ -823,36 +823,27 @@ func (r *OrmBuilder) loadThrough(parents []reflect.Value, parentModel any, desc 
 		return r.maybeRecurseEmpty(parents, entry.Relation, isMany, nested, defaultFor)
 	}
 
-	secondKeysSet := make(map[string]any, len(throughRows))
-	for _, t := range throughRows {
-		k := dictKey(t[desc.SecondLocalKey])
-		if _, exists := secondKeysSet[k]; !exists {
-			secondKeysSet[k] = t[desc.SecondLocalKey]
-		}
-	}
-	secondKeys := make([]any, 0, len(secondKeysSet))
-	for _, v := range secondKeysSet {
-		secondKeys = append(secondKeys, v)
-	}
-
-	// A one-of-many through relation reads its related rows through the aggregate join Laravel's
-	// ofMany installs, constrained by the through key — getRelationQuery is the aggregate subquery
-	// for a one-of-many relation — so each parent resolves to its single aggregate row. The plain
-	// path reads the related rows by the related model's through key instead.
-	relatedKeys := secondKeys
+	// The related rows are read the way HasOneOrManyThrough::addEagerConstraints reads them: the
+	// related query joined to the through table and filtered on the through table's first key —
+	// whereInEager writes `through.<first key> in (...)` onto getRelationQuery, which for a through
+	// relation is the joined query — wearing the through read's select list (related.* plus the
+	// through key aliased laravel_through_key, the list shouldSelect installs on the relation read
+	// path). A callback's relation-level limit partitions by that first key, so the join has to be
+	// on the child before the rewrite runs. The one-of-many variant layers the aggregate join over
+	// this same base and keeps its own select.
 	buildRelatedChild := func(chunk []any) *OrmBuilder {
-		return r.relatedChild(desc.RelatedTable, desc.RelatedTable+"."+desc.SecondKey, chunk)
-	}
-	if r.relationInstallsOneOfMany(desc) {
-		relatedKeys = keys
-		buildRelatedChild = func(chunk []any) *OrmBuilder {
-			child := r.relatedChild(desc.RelatedTable, desc.ThroughTable+"."+desc.FirstKey, chunk)
-			child.query.JoinRaw(r.throughJoinFragment(desc), nil, "inner")
-			return child
+		child := r.relatedChild(desc.RelatedTable, desc.ThroughTable+"."+desc.FirstKey, chunk)
+		child.query.JoinRaw(r.throughJoinFragment(desc), nil, "inner")
+		child.conditions.throughRead = &throughReadConfig{
+			relatedTable: desc.RelatedTable,
+			throughTable: desc.ThroughTable,
+			firstKey:     desc.FirstKey,
 		}
+
+		return child
 	}
 
-	rows, err := r.runChunkedRelatedQueryCompiled(relatedKeys, desc, entry, []string{desc.SecondKey}, buildRelatedChild)
+	rows, err := r.runChunkedRelatedQueryCompiled(keys, desc, entry, []string{desc.SecondKey}, parentModel, buildRelatedChild)
 	if err != nil {
 		return err
 	}
@@ -891,13 +882,50 @@ func (r *OrmBuilder) loadThrough(parents []reflect.Value, parentModel any, desc 
 // Shared helpers
 // ---------------------------------------------------------------------------
 
+// eagerCallbackTarget is the query a With / Load constraint callback constrains. Laravel hands the
+// callback the relation object itself, resolved against a fresh — non-existing — parent instance
+// (`Relation::noConstraints(fn () => $this->getModel()->newInstance()->$name())`,
+// Eloquent/Builder.php:965), then runs `$constraints($relation)` on it (Builder.php:943). A
+// relation-level limit / take branches on `$this->parent->exists` (HasOneOrMany::limit,
+// HasOneOrMany.php:555; HasOneOrManyThrough::limit, :772) and routes a non-existing parent through
+// the query builder's groupLimit — the row_number() over (partition by <key>) derived table that
+// caps rows per parent. Oracle (illuminate/database v12.55.1, executed against sqlite from
+// /tmp/eager-callback-limit/eager_callback_limit.php): E1 loads two posts per user through
+// `select * from (select *, row_number() over (partition by "gl_posts"."user_id") as "laravel_row"
+// from "gl_posts" where "gl_posts"."user_id" in (1, 2)) as "laravel_table" where "laravel_row" <= 2
+// order by "laravel_row"`; E2 compiles the same per-country rewrite for the through relation.
+//
+// The Go callback keeps its Query signature, so the relation object — which embeds the builder — is
+// what it receives, and the caller unwraps the return value back to the child. Only the kinds whose
+// relation objects carry the branch are wrapped; a BelongsTo / MorphTo callback observes the same
+// query either way and keeps receiving the builder, and Many2Many / MorphToMany keep it because
+// their relation objects promote the builder's plain Limit — the pivot limit is not yet ported
+// (contracts/database/orm/orm.go:259), so Laravel's per-pivot group limit (BelongsToMany::limit,
+// BelongsToMany.php:1503) has no branch to reach here yet.
+func (r *OrmBuilder) eagerCallbackTarget(child *OrmBuilder, desc *relationDescriptor, protoParent any, relation string) contractsorm.Query {
+	if protoParent == nil {
+		return child
+	}
+
+	switch desc.Kind {
+	case relKindHasOne, relKindHasMany, relKindMorphOne, relKindMorphMany, relKindHasOneThrough, relKindHasManyThrough:
+		return relations.Wrap(child, protoParent, relation, relationInfoFromDescriptor(desc, child, protoParent), relationHooks(child, desc))
+	}
+
+	return child
+}
+
 // runRelatedQueryCompiled runs one related query that this package compiles itself.
 //
 // The loader used to hand GORM a statement per chunk; the statement is compiled and run here instead,
 // through the same path the rest of the ORM reads with. The child addresses a table without a model of
 // its own, which is what the statement it replaced did, so a related model's global scopes do not apply
 // to an eager load — that is a question of its own, not part of this migration.
-func (r *OrmBuilder) runRelatedQueryCompiled(child *OrmBuilder, desc *relationDescriptor, entry eagerLoadEntry, requiredCols []string) ([]reflect.Value, error) {
+//
+// protoParent is a fresh instance of the parent model — Laravel's newInstance() — that the relation
+// object handed to entry.Callback is built on, so the callback's relation-level limit / take sees a
+// non-existing parent and caps rows per parent (eagerCallbackTarget).
+func (r *OrmBuilder) runRelatedQueryCompiled(child *OrmBuilder, desc *relationDescriptor, entry eagerLoadEntry, requiredCols []string, protoParent any) ([]reflect.Value, error) {
 	// The chunk's IN constraint was written when the child was built; flush anything still queued so
 	// the scopes that follow keep their place, the order Eloquent builds eager-load constraints in.
 	child = child.flushWheres()
@@ -924,8 +952,10 @@ func (r *OrmBuilder) runRelatedQueryCompiled(child *OrmBuilder, desc *relationDe
 		}
 	}
 
+	// The callback constrains the relation object the way Laravel's does — see eagerCallbackTarget —
+	// and its return value is unwrapped back to the child.
 	if entry.Callback != nil {
-		if scoped, ok := entry.Callback(child).(*OrmBuilder); ok {
+		if scoped, ok := ormBuilderOf(entry.Callback(r.eagerCallbackTarget(child, desc, protoParent, entry.Relation))); ok {
 			child = scoped
 		}
 	}
@@ -1001,11 +1031,11 @@ func (r *OrmBuilder) runRelatedQueryCompiled(child *OrmBuilder, desc *relationDe
 
 // runChunkedRelatedQueryCompiled runs runRelatedQueryCompiled once per chunk of keys and concatenates
 // rows, so a callback's constraints and the column pruning are applied per chunk.
-func (r *OrmBuilder) runChunkedRelatedQueryCompiled(keys []any, desc *relationDescriptor, entry eagerLoadEntry, requiredCols []string, buildChild func(chunk []any) *OrmBuilder) ([]reflect.Value, error) {
+func (r *OrmBuilder) runChunkedRelatedQueryCompiled(keys []any, desc *relationDescriptor, entry eagerLoadEntry, requiredCols []string, protoParent any, buildChild func(chunk []any) *OrmBuilder) ([]reflect.Value, error) {
 	chunks := chunkKeys(keys, r.chunkSize())
 	var all []reflect.Value
 	for _, chunk := range chunks {
-		rows, err := r.runRelatedQueryCompiled(buildChild(chunk), desc, entry, requiredCols)
+		rows, err := r.runRelatedQueryCompiled(buildChild(chunk), desc, entry, requiredCols, protoParent)
 		if err != nil {
 			return nil, err
 		}

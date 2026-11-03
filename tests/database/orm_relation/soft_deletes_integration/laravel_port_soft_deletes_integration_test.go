@@ -1,12 +1,14 @@
 package soft_deletes_integration
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	databasedb "github.com/gradii/framework/database/db"
 	databaseorm "github.com/gradii/framework/database/orm"
 	"github.com/gradii/framework/support/carbon"
 )
@@ -358,6 +360,15 @@ func TestSoftDeletesIntegration_SoftDeletesAreNotRetrievedFromRelationshipBaseQu
 	assert.Equal(t, first.ID, posts[0].ID)
 }
 
+// freezeSoftDeletesClock pins the clock the way the corpus's setUp does, so the query log's inlined
+// updated_at binding is deterministic.
+func freezeSoftDeletesClock(t *testing.T) {
+	t.Helper()
+
+	carbon.SetTestNow(carbon.Parse("2023-01-01 00:00:00"))
+	t.Cleanup(carbon.ClearTestNow)
+}
+
 func TestSoftDeletesIntegration_SoftDeletesAreNotRetrievedFromBuilderHelpers(t *testing.T) {
 	// Laravel runs the soft-delete scope through chunk(2, cb), pluck('email'), paginate(2),
 	// simplePaginate(2), cursorPaginate(2), increment('id') and decrement('id'), asserting each
@@ -401,14 +412,21 @@ func TestSoftDeletesIntegration_SoftDeletesAreNotRetrievedFromBuilderHelpers(t *
 	assert.Len(t, cursorRows, 1)
 
 	// The corpus's increment('id') / decrement('id') address the trashed user by email and report 0
-	// affected rows: the soft-delete scope joins the WHERE (oracle, sqlite: `update "users" set "id" =
-	// "id" + 1, "updated_at" = ? where "email" = ? and "users"."deleted_at" is null`, 0 rows), so the
-	// trashed row is never touched.
-	affected, err := cloneRelationQuery(t, query).Model(&softDeletesTestUser{}).Where("email", "taylorotwell@gmail.com").Increment("id")
+	// affected rows, and the bare scoped pair reports 1: the soft-delete scope joins the WHERE, so
+	// the trashed row is never touched and the one live row is stepped. The four statements below pin
+	// the compiled SET list against the oracle (illuminate/database v12.55.1, executed: each carries
+	// `"updated_at" = ?`); the clock is frozen so the log's inlined timestamp is deterministic.
+	freezeSoftDeletesClock(t)
+
+	ctx := databasedb.EnableQueryLog(context.Background())
+	withContext, ok := cloneRelationQuery(t, query).(contractsorm.QueryWithContext)
+	require.True(t, ok, "the ORM query must support WithContext")
+
+	affected, err := withContext.WithContext(ctx).Model(&softDeletesTestUser{}).Where("email", "taylorotwell@gmail.com").Increment("id")
 	require.NoError(t, err)
 	assert.Equal(t, int64(0), affected.RowsAffected)
 
-	affected, err = cloneRelationQuery(t, query).Model(&softDeletesTestUser{}).Where("email", "taylorotwell@gmail.com").Decrement("id")
+	affected, err = withContext.WithContext(ctx).Model(&softDeletesTestUser{}).Where("email", "taylorotwell@gmail.com").Decrement("id")
 	require.NoError(t, err)
 	assert.Equal(t, int64(0), affected.RowsAffected)
 
@@ -417,13 +435,20 @@ func TestSoftDeletesIntegration_SoftDeletesAreNotRetrievedFromBuilderHelpers(t *
 	// counted. Laravel compiles `update "users" set "id" = "id" + 1, "updated_at" = ? where
 	// "users"."deleted_at" is null` and reports 1 affected row (oracle, sqlite) - the one live user -
 	// and so does the guard now that the compiled WHERE clause is what it reads.
-	affected, err = cloneRelationQuery(t, query).Model(&softDeletesTestUser{}).Increment("id")
+	affected, err = withContext.WithContext(ctx).Model(&softDeletesTestUser{}).Increment("id")
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), affected.RowsAffected)
 
-	affected, err = cloneRelationQuery(t, query).Model(&softDeletesTestUser{}).Decrement("id")
+	affected, err = withContext.WithContext(ctx).Model(&softDeletesTestUser{}).Decrement("id")
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), affected.RowsAffected)
+
+	logs := databasedb.GetQueryLog(ctx)
+	require.Len(t, logs, 4)
+	assert.Equal(t, `update "users" set "id" = "id" + 1, "updated_at" = '2023-01-01 00:00:00' where "email" = 'taylorotwell@gmail.com' and "users"."deleted_at" is null`, logs[0].Query)
+	assert.Equal(t, `update "users" set "id" = "id" - 1, "updated_at" = '2023-01-01 00:00:00' where "email" = 'taylorotwell@gmail.com' and "users"."deleted_at" is null`, logs[1].Query)
+	assert.Equal(t, `update "users" set "id" = "id" + 1, "updated_at" = '2023-01-01 00:00:00' where "users"."deleted_at" is null`, logs[2].Query)
+	assert.Equal(t, `update "users" set "id" = "id" - 1, "updated_at" = '2023-01-01 00:00:00' where "users"."deleted_at" is null`, logs[3].Query)
 }
 
 func TestSoftDeletesIntegration_WithTrashedReturnsAllRecords(t *testing.T) {

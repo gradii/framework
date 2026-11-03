@@ -46,7 +46,7 @@ func TestDescriptorSeam_AbsentEntryPointsReturnNamedError(t *testing.T) {
 	_, err = BuildMorphPivotDescriptor(parent, "seam_guard_parents", "Tags", &struct{}{}, "taggable", "", "", "parent_id", "tag_id", "id", "id", "", false, false)
 	require.ErrorIs(t, err, errors.OrmRelationDescriptorSeamMissing)
 
-	_, _, err = ResolvePivotTimestamps(&struct{}{}, "Pivot", true)
+	_, _, err = ResolvePivotTimestamps(&struct{}{}, &struct{}{}, "Pivot", true)
 	require.ErrorIs(t, err, errors.OrmRelationDescriptorSeamMissing)
 
 	_, err = ResolveMorphValue(parent, "seam_guard_parents")
@@ -109,9 +109,40 @@ func TestDescriptorSeam_InstalledSeamIsTransparent(t *testing.T) {
 	_, _, err = ResolveMorphAlias(parent)
 	require.ErrorIs(t, err, sentinel)
 
-	// PivotFieldStructType reports no pivot struct, so the fallback columns resolve as before.
-	created, updated, err := ResolvePivotTimestamps(&struct{}{}, "Pivot", true)
+	// PivotFieldStructType reports no pivot struct, so the fallback reads the parent's schema
+	// through ParseModel — the installed reader's own result surfaces (the seam is transparent;
+	// the reader's error is not swallowed).
+	_, _, err = ResolvePivotTimestamps(&struct{}{}, &struct{}{}, "Pivot", true)
+	require.ErrorIs(t, err, sentinel)
+}
+
+// TestDescriptorSeam_FallbackFallsToLaravelDefaults pins fallback-enabled resolution when the
+// parent's schema declares no automatic timestamp fields: Laravel's static::CREATED_AT /
+// static::UPDATED_AT defaults ("created_at" / "updated_at") stand for the parent's columns — the
+// same reading the accessor path reports when the parent declares none.
+func TestDescriptorSeam_FallbackFallsToLaravelDefaults(t *testing.T) {
+	saved := descriptorSeam
+	t.Cleanup(func() { descriptorSeam = saved })
+
+	descriptorSeam = DescriptorSeam{
+		ParseModel:           func(model any) (ModelSchema, error) { return seamStubSchema{}, nil },
+		TableOf:              func(model any) (string, error) { return "", nil },
+		PivotFieldStructType: func(relatedModel any, pivotFieldName string) (reflect.Type, bool) { return nil, false },
+		HasRelationTag:       func(model any, name string) bool { return false },
+		MorphValue:           func(model any) (string, bool, error) { return "", false, nil },
+	}
+
+	created, updated, err := ResolvePivotTimestamps(&struct{}{}, &struct{}{}, "Pivot", true)
 	require.NoError(t, err)
 	require.Equal(t, "created_at", created)
 	require.Equal(t, "updated_at", updated)
 }
+
+// seamStubSchema is a seam ModelSchema whose model declares no automatic timestamp columns.
+type seamStubSchema struct{}
+
+func (seamStubSchema) Table() string                            { return "stub" }
+func (seamStubSchema) TypeName() string                         { return "stub" }
+func (seamStubSchema) ColumnType(string) (reflect.Type, bool)   { return nil, false }
+func (seamStubSchema) Columns() []SchemaColumn                  { return nil }
+func (seamStubSchema) ColumnByName(string) (SchemaColumn, bool) { return SchemaColumn{}, false }

@@ -562,11 +562,16 @@ func (r *OrmBuilder) createOrFirstMany2Many(desc *relationDescriptor, parent any
 
 		return false, nil
 	}
-	// The tap's attach (:691) runs in its own savepoint. Our Attach de-duplicates instead of
-	// raising when the pivot row already exists (a documented divergence), so the second catch
-	// (:693) — (clone $this)->useWritePdo()->where($attributes)->first(), the pivot-joined
-	// relation read on the write PDO — is taken when the attach trips a unique constraint, when it
-	// finds the row already attached (affected == 0), and when the plain read-back missed (above).
+	// The tap's attach (:691) runs in its own savepoint; when it goes through, the read-back
+	// instance is returned. A pivot row that already exists trips the pivot's unique constraint —
+	// Laravel's attach has no pre-read — and the second catch (:693) —
+	// (clone $this)->useWritePdo()->where($attributes)->first(), the pivot-joined relation read
+	// on the write PDO — re-reads it; the same catch is taken when the plain read-back missed
+	// (above). A miss there rethrows the violation: the attach's when it fired, the first
+	// insert's otherwise. Oracle v12.55.1, executed, /tmp/attach_dedup_probe.php D1: related
+	// insert attempt (unlogged), plain read-back, pivot insert attempt (unlogged), pivot-joined
+	// select; the instance carries the hydrated pivot, wasRecentlyCreated = false. B1/B3 pin the
+	// violation itself (attach -> UCV; attachOrFail -> begin,rollback).
 	childPK, err := readParentColumn(r, dest, desc.PivotRelatedRef.PrimaryColumn)
 	if err != nil {
 		return false, err
@@ -575,17 +580,15 @@ func (r *OrmBuilder) createOrFirstMany2Many(desc *relationDescriptor, parent any
 	if err != nil {
 		return false, err
 	}
-	var affected int64
 	attachErr := r.withSavepointIfNeeded(func() error {
-		var inner error
-		affected, inner = relations.DoAttach(r, r.writeInfo(desc, parent), parentVal, []any{childPK}, nil)
+		_, inner := relations.DoAttach(r, r.writeInfo(desc, parent), parentVal, []any{childPK}, nil)
 
 		return inner
 	})
-	if attachErr == nil && affected > 0 {
+	if attachErr == nil {
 		return false, r.touchIfTouching(desc, parent, parentVal)
 	}
-	if attachErr != nil && !isUniqueConstraintViolation(attachErr) {
+	if !isUniqueConstraintViolation(attachErr) {
 		return false, attachErr
 	}
 	found, relookupErr := relations.RelationFirst(r, parent, relation, attrs, dest, true)
@@ -593,11 +596,7 @@ func (r *OrmBuilder) createOrFirstMany2Many(desc *relationDescriptor, parent any
 		return false, relookupErr
 	}
 	if !found {
-		if attachErr != nil {
-			return false, errors.OrmUniqueConstraintViolation.Args(attachErr)
-		}
-
-		return false, errors.OrmUniqueConstraintViolation.Args(err)
+		return false, errors.OrmUniqueConstraintViolation.Args(attachErr)
 	}
 
 	return false, nil
@@ -702,8 +701,9 @@ func (r *OrmBuilder) UpdateOrCreateRelation(parent any, relation string, attrs m
 // and the OrFail transaction re-dispatch call. Bodies, Laravel anchors and oracle evidence: the
 // relations file.
 
-// AttachRelation inserts pivot rows linking parent to each id in ids. Skips ids that already
-// have a pivot row. Supported kinds: Many2Many, MorphToMany, MorphedByMany.
+// AttachRelation inserts one pivot row per id in ids, duplicates included — no pivot-existence
+// read (Laravel's attach has none): a duplicate row is written, or the pivot's unique constraint
+// raises. Supported kinds: Many2Many, MorphToMany, MorphedByMany.
 //
 // RelationWriter.Attach shell (contracts/database/orm/relation_writer.go:134) — reached through Query.Relation(parent, name); the flat Orm.Attach form intentionally does not exist (relation_writer.go:9).
 func (r *OrmBuilder) AttachRelation(parent any, relation string, ids []any) error {
@@ -915,8 +915,9 @@ func castKey(v any, t reflect.Type) any {
 // name back (over the write connection for the HasOneOrMany kinds, on the default connection for
 // the through kinds) and returns it. For the BelongsToMany kinds the insert is the related row
 // plus the pivot attach (BelongsToMany::create), the catch reads the related row back plainly and
-// attaches it, and a second violation — or an already-attached pivot row — re-reads through the
-// pivot-joined relation on the write connection, hydrating the Pivot struct.
+// attaches it, and a violation from that attach (an already-attached pivot row trips the pivot's
+// unique constraint) re-reads through the pivot-joined relation on the write connection,
+// hydrating the Pivot struct.
 // Supported kinds: HasOne, HasMany, MorphOne, MorphMany, HasOneThrough, HasManyThrough,
 // Many2Many, MorphToMany.
 //

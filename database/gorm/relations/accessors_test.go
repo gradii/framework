@@ -205,9 +205,14 @@ func (bptUser) Relations() map[string]contractsorm.Relation {
 		// The pivot struct names both columns — the Go form of withTimestamps('pivot_created_at',
 		// 'pivot_updated_at'), oracle C.
 		"StampedRoles": contractsorm.Many2Many{Related: &bptStampedRole{}, Table: "bpt_role_user", ForeignPivotKey: "user_id", RelatedPivotKey: "role_id"},
-		// The pivot struct names only the created column — withTimestamps('pivot_created_at'),
-		// oracle D.
-		"CreatedRoles": contractsorm.Many2Many{Related: &bptCreatedRole{}, Table: "bpt_role_user", ForeignPivotKey: "user_id", RelatedPivotKey: "role_id"},
+		// The pivot struct names only the created column and the PivotTimestamps fallback fills
+		// the updated side from the parent — withTimestamps('pivot_created_at'), oracle D
+		// (without the flag this declaration would be the two-argument
+		// withTimestamps('pivot_created_at', false), which stamps only the created column).
+		"CreatedRoles": contractsorm.Many2Many{Related: &bptCreatedRole{}, Table: "bpt_role_user", ForeignPivotKey: "user_id", RelatedPivotKey: "role_id", PivotTimestamps: true},
+		// Bare withTimestamps(): no pivot struct names columns, so both stamps resolve the parent
+		// class's columns ('user_created_at' / 'user_updated_at'), oracle B.
+		"BareRoles": contractsorm.Many2Many{Related: &bptRole{}, Table: "bpt_role_user", ForeignPivotKey: "user_id", RelatedPivotKey: "role_id", PivotTimestamps: true},
 	}
 }
 
@@ -273,4 +278,34 @@ func TestAccessors_BelongsToManyTimestampsFromRealDescriptor(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "pivot_created_at", created.CreatedAt())
 	require.Equal(t, "user_updated_at", created.UpdatedAt())
+
+	// Oracle B: withTimestamps() (bare) — pivotCreatedAt / pivotUpdatedAt stay null, so both
+	// columns resolve the parent class's 'user_created_at' / 'user_updated_at'.
+	bare, ok := builder.Related(&bptUser{ID: 7}, "BareRoles").(contractsorm.BelongsToManyRelation)
+	require.True(t, ok)
+	require.Equal(t, "user_created_at", bare.CreatedAt())
+	require.Equal(t, "user_updated_at", bare.UpdatedAt())
+}
+
+// TestAccessors_BelongsToManyBareTimestampsWriteTheParentColumns pins the WRITE side of oracle B:
+// the bare withTimestamps() pivot write stamps the parent class's columns, so the attach INSERT
+// carries user_created_at / user_updated_at, and updateExistingPivot rewrites user_updated_at
+// alone. Oracle v12.55.1, executed, /tmp/btm-pivot-ts-write-probe.php: bare withTimestamps()
+// attaches 'user_created_at, user_updated_at'; updateExistingPivot rewrote user_updated_at and
+// left the pivot's own column at its sentinel.
+func TestAccessors_BelongsToManyBareTimestampsWriteTheParentColumns(t *testing.T) {
+	builder, recorder := newRelationTestBuilder(t)
+
+	require.NoError(t, builder.AttachRelation(&bptUser{ID: 7}, "BareRoles", []any{1}))
+
+	statements := recorder.take()
+	require.Len(t, statements, 1, "the attach is a single INSERT — no existence read (round 6; oracle /tmp/attach_dedup_probe.php A1a/B0)")
+	assert.Equal(t, `insert into "bpt_role_user" ("role_id", "user_created_at", "user_id", "user_updated_at") values (?, ?, ?, ?)`, statements[0].query)
+
+	_, err := builder.UpdateExistingPivotRelation(&bptUser{ID: 7}, "BareRoles", 1, map[string]any{"note": "x"})
+	require.NoError(t, err)
+
+	statements = recorder.take()
+	require.Len(t, statements, 1)
+	assert.Equal(t, `update "bpt_role_user" set "note" = ?, "user_updated_at" = ? where "bpt_role_user"."user_id" = ? and "bpt_role_user"."role_id" = ?`, statements[0].query)
 }

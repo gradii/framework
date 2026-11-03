@@ -15,6 +15,8 @@ import (
 // /tmp/lalign_write_or_fail.php). The oracle measured, over a posts <-> tags schema:
 //
 //	attachOrFail                    -> begin + commit around the call, void return, pivot written
+//	attachOrFail duplicate          -> the pivot's unique constraint propagates; begin + rollback
+//	                                  (/tmp/attach_dedup_probe.php B3, round 6)
 //	detachOrFail([2])               -> begin + commit, removed count 1
 //	detachOrFail(null)              -> begin + commit, every row of the parent detached
 //	syncOrFail([1, 3])              -> begin + commit, changes {attached: [3]}
@@ -253,6 +255,90 @@ func TestWriteFamiliesOrFail_ToggleDetachesBeforeItAttaches(t *testing.T) {
 	assert.Len(t, changes.Attached, 1)
 	assert.Empty(t, changes.Detached)
 	assert.ElementsMatch(t, []uint64{tags[0].ID, tags[1].ID}, wfAttachedTagIDs(t, query, &post, "GuardedTags"))
+}
+
+// The attachNew order is observable through failure: oracle B8 (/tmp/lalign_synccore_order_probe.php,
+// section B8; illuminate/database v12.55.1, real sqlite) ran a plain sync([7, 9, 8]) against a
+// trigger that refuses tag 9 and left [7] — tag 7 was already inserted when tag 9 raised, and tag 8
+// was never attempted. Laravel's attachNew attaches one record at a time
+// (InteractsWithPivotTable.php:244, `$this->attach($id, $attributes, $touch)` inside the record
+// loop), so records ahead of a failure are committed and records behind it never run. A batch
+// insert of the three rows would instead abort as one statement and leave nothing. The port runs
+// the same shape on seeded tag ids — 3, then the refused 2, then 4 — because the assertion reads
+// through the relation join and the ids must exist as tags.
+func TestWriteFamilies_SyncAttachesPerRecordBeforeAFailure(t *testing.T) {
+	query := newRelationQuery(t)
+	wfSchema(t, query)
+	post, tags := wfOrFailPost(t, query)
+
+	_, err := cloneRelationQuery(t, query).Exec(fmt.Sprintf(
+		`create trigger wf_post_tag_no_two before insert on wf_post_tag when new.tag_id = %d begin select raise(abort, 'tag 2 refused'); end`, tags[1].ID))
+	require.NoError(t, err)
+
+	relationship := wfPivotRelation(t, query, &post)
+
+	_, err = relationship.Sync([]any{tags[2].ID, tags[1].ID, tags[3].ID})
+	require.Error(t, err, "the tag-2 insert is refused")
+
+	assert.Equal(t, []uint64{tags[2].ID}, wfAttachedTagIDs(t, query, &post, "Tags"),
+		"records before the failing one stay attached; the record after it is never attempted")
+}
+
+// Oracle B9 (same probe, section B9): with a trigger refusing updates of tag 2,
+// syncWithPivotValues([9, 2]) raised AFTER tag 9 was inserted — the final pivot set was [2, 9] and
+// tag 2 kept its old role. The insert of the new record ahead of the existing one is what proves
+// the walk is per input record: the previous update-first/batch-insert shape would have failed on
+// the update before any insert, leaving only [2]. The port's ids are the seeded tags:
+// [tags[2], tags[1]] inserts tag 3 first, then updates tag 2.
+func TestWriteFamilies_SyncWithPivotValuesInsertsBeforeAFailingUpdate(t *testing.T) {
+	query := newRelationQuery(t)
+	wfSchema(t, query)
+	post, tags := wfOrFailPost(t, query)
+
+	_, err := cloneRelationQuery(t, query).Exec(fmt.Sprintf(
+		`insert into wf_post_tag (post_id, tag_id, role) values (%d, %d, 'old')`, post.ID, tags[1].ID))
+	require.NoError(t, err)
+	_, err = cloneRelationQuery(t, query).Exec(fmt.Sprintf(
+		`create trigger wf_post_tag_no_update before update on wf_post_tag when old.tag_id = %d begin select raise(abort, 'update refused'); end`, tags[1].ID))
+	require.NoError(t, err)
+
+	relationship := wfPivotRelation(t, query, &post)
+
+	_, err = relationship.SyncWithPivotValues([]any{tags[2].ID, tags[1].ID}, map[string]any{"role": "r"})
+	require.Error(t, err, "the tag-2 update is refused")
+
+	assert.ElementsMatch(t, []uint64{tags[1].ID, tags[2].ID}, wfAttachedTagIDs(t, query, &post, "Tags"),
+		"the insert of the record ahead of the failing update is already committed")
+	row := wfPivotRow{}
+	require.NoError(t, cloneRelationQuery(t, query).Model(&wfPivotRow{}).
+		Where("post_id", post.ID).Where("tag_id", tags[1].ID).First(&row))
+	assert.Equal(t, "old", row.Role, "the refused update left the old role in place")
+}
+
+// Oracle B3 (/tmp/attach_dedup_probe.php, round 6): a duplicate attachOrFail trips the pivot's
+// unique constraint inside the transaction — begin + rollback, rows unchanged — while a
+// non-duplicate call commits (B4). Before round 6 the port pre-read the pivot table and skipped
+// the duplicate silently, so no violation ever surfaced.
+func TestWriteFamiliesOrFail_AttachOrFailDuplicatePropagatesTheUniqueConstraint(t *testing.T) {
+	query := newRelationQuery(t)
+	wfSchema(t, query)
+	post, tags := wfOrFailPost(t, query)
+
+	_, err := cloneRelationQuery(t, query).Exec(
+		`create unique index wf_post_tag_unique on wf_post_tag (post_id, tag_id)`)
+	require.NoError(t, err)
+
+	relationship := wfPivotRelation(t, query, &post)
+	require.NoError(t, relationship.Attach([]any{tags[0].ID}))
+
+	err = relationship.AttachOrFail([]any{tags[0].ID})
+	require.Error(t, err, "the duplicate trips the pivot's unique constraint (oracle B3)")
+	assert.Contains(t, err.Error(), "UNIQUE constraint failed")
+	assert.Equal(t, []uint64{tags[0].ID}, wfAttachedTagIDs(t, query, &post, "Tags"),
+		"the rollback leaves the pivot row set untouched")
+
+	require.NoError(t, relationship.AttachOrFail([]any{tags[1].ID}))
+	assert.ElementsMatch(t, []uint64{tags[0].ID, tags[1].ID}, wfAttachedTagIDs(t, query, &post, "Tags"))
 }
 
 // The nested case: inside an outer transaction the OrFail wrapper rides a savepoint, so a failing

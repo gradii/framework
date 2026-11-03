@@ -23,6 +23,12 @@ type belongsToManyRelationQuery struct {
 	// SELECT render deduplicates like Laravel's ->unique()). applyPivotRead pushes it to the
 	// wrapped builder's pivot read.
 	pivotColumns []string
+	// pivotValues is the recorded "pivot column = value" list WithPivotValue accumulates — the
+	// Go form of BelongsToMany::$pivotValues (BelongsToMany.php:110; entries are
+	// ['column' => ..., 'value' => ...], call order and duplicates kept). Base NewPivot folds the
+	// list into the attribute bag the way IWPT::newPivot's array_column merge does (:629); the
+	// MorphToMany override does not merge it.
+	pivotValues []pivotValue
 	// pivotAccessor is the call-time As accessor; "" keeps the declaration's field
 	// (RelationInfo.PivotField).
 	pivotAccessor string
@@ -30,6 +36,15 @@ type belongsToManyRelationQuery struct {
 	// (BelongsToMany.php:138), the custom pivot class the NewPivot family dispatches to. nil keeps
 	// the default constructors.
 	pivotFactory contractsorm.PivotFactory
+}
+
+// pivotValue is one recorded "pivot column = value" pair — the Go form of a
+// BelongsToMany::$pivotValues entry (['column' => ..., 'value' => ...]). The column is stored as
+// the call supplied it (Laravel records the raw argument, Expression included); only string
+// columns can become attribute keys in the NewPivot merge.
+type pivotValue struct {
+	column any
+	value  any
 }
 
 // FindOrNew returns the attached related row with primary key id, read through the pivot-joined
@@ -505,19 +520,28 @@ func (m *belongsToManyRelationQuery) OrWherePivotNotBetween(column any, x, y any
 	return m
 }
 
-// WithPivotValue adds a "pivot column = value" clause and records the value Laravel keeps for new
-// pivot rows (pivotValues). Laravel 12's withPivotValue throws InvalidArgumentException for a
-// null value (oracle-probed: "The provided value may not be null."); the frozen Go contract
-// documents the pre-12 argument swap for that shape — a nil value pairs the argument column with
-// the pivot's parent-side foreign key column — so `WithPivotValue(7, nil)` clauses the parent
-// pivot key against 7 (upstream removed the swap; the contract's citation is pre-12 behavior).
-// The recorded pivot-value half has no Go consumer: the write shells resolve their own pivot rows
-// per call (the frozen zero-worker-edit design) and Laravel's newPivotQuery does not replay
-// pivotValues either — only the wherePivot clause here is observable.
+// WithPivotValue adds a "pivot column = value" clause and records the pair for the pivot
+// construction — the Go form of BelongsToMany::withPivotValue (vendor v12.55.1,
+// BelongsToMany.php:481-498, `$this->pivotValues[] = compact('column', 'value'); return
+// $this->wherePivot($column, '=', $value);`): the pair lives per relation instance as PHP keeps
+// $pivotValues, and base NewPivot merges the recorded values into its attribute bag
+// (IWPT::newPivot, InteractsWithPivotTable.php:629 — see NewPivot below). The pair recorded is
+// the one this call applied: Laravel 12 throws InvalidArgumentException for a null value
+// (oracle-probed: "The provided value may not be null."), while the frozen Go contract keeps the
+// pre-12 argument swap for that shape — a nil value pairs the argument column with the pivot's
+// parent-side foreign key column — so `WithPivotValue(7, nil)` clauses the parent pivot key
+// against 7 and records that pair. The morph leaf's promoted call records here too, but its
+// NewPivot override never merges the list (MorphToMany.php:156-172). The write shells still
+// resolve their own pivot rows per call (the frozen zero-worker-edit design), so an attach does
+// not receive the recorded values where Laravel's baseAttachRecord (:454) does — the residual
+// (oracle v12.55.1, executed, /tmp/reverify429/pv_probe.php: attach after withPivotValue ->
+// `insert into "lu_role_user" ("level", "lu_user_id", "role_id") values (?, ?, ?)`).
 func (m *belongsToManyRelationQuery) WithPivotValue(column any, value any) contractsorm.BelongsToManyRelation {
 	if value == nil {
 		column, value = m.info.PivotParentRef.ForeignColumn, column
 	}
+
+	m.pivotValues = append(m.pivotValues, pivotValue{column: column, value: value})
 
 	return m.WherePivot(column, "=", value)
 }
@@ -672,7 +696,10 @@ func (m *belongsToManyRelationQuery) Using(factory contractsorm.PivotFactory) co
 }
 
 // NewPivot builds a pivot instance for the relation — InteractsWithPivotTable::newPivot (vendor
-// v12.55.1, InteractsWithPivotTable.php:627-642). A recorded Using factory receives
+// v12.55.1, InteractsWithPivotTable.php:627-642). The WithPivotValue-recorded values merge into
+// the attributes FIRST — `array_merge(array_column($this->pivotValues, 'value', 'column'),
+// $attributes)` (:629): the recorded values are defaults, the caller's attributes win, and for a
+// duplicated column the last recorded pair wins. A recorded Using factory then receives
 // (parent, attributes, table, exists) and its result is returned — the Go reading of `$using
 // ::fromRawAttributes(...)` through Model::newPivot (Model.php:1726); the class default is
 // relations.Pivot::FromAttributes, then the relation stamps its pivot keys and related model
@@ -680,8 +707,15 @@ func (m *belongsToManyRelationQuery) Using(factory contractsorm.PivotFactory) co
 // :640-642). Oracle (v12.55.1, executed): `U2a default newPivot class/exists => [Pivot, false]`,
 // `U2a default newPivot dirty => []`, `U2a default newPivot table/keys => ['lu_role_user',
 // 'lu_user_id', 'role_id']`, `U2c custom newPivot class/exists => ['LuRoleUser', false]`,
-// `U2c custom newPivot dirty => ['level' => 'gold']`.
+// `U2c custom newPivot dirty => ['level' => 'gold']`; the withPivotValue extension
+// (/tmp/reverify429/pv_probe.php): `C21 base attrs => ['level' => 'pv']`, `C21 base dirty => []`,
+// `C21 caller wins => ['level' => 'caller']`, `C21 caller extra => ['level' => 'pv', 'other' =>
+// 'x']`, `C21 duplicate last wins => ['level' => 'b']`, `C21 base existing attrs => ['level' =>
+// 'pv']`, `C21 using-class attrs => ['level' => 'pv']`, `C21 using-class dirty => ['level' =>
+// 'pv']`, `C21 morph attrs => ['taggable_type' => 'PvPost']`.
 func (m *belongsToManyRelationQuery) NewPivot(attributes map[string]any, exists bool) (contractsorm.PivotModel, error) {
+	attributes = m.mergePivotValues(attributes)
+
 	if m.pivotFactory != nil {
 		pivot, err := m.pivotFactory(m.parent, attributes, m.info.PivotTable, exists)
 		if err != nil {
@@ -705,9 +739,42 @@ func (m *belongsToManyRelationQuery) NewPivot(attributes map[string]any, exists 
 // BelongsToMany::hydratePivotRelation (BelongsToMany.php:1234) feeds migrated pivot attributes
 // into (oracle: `U2b default newExistingPivot class/exists => [Pivot, true]`, `U2b default
 // newExistingPivot dirty => []`, `U2d custom newExistingPivot class/exists/dirty => [LuRoleUser,
-// true, []]`).
+// true, []]`; the withPivotValue extension: `C21 base existing attrs => ['level' => 'pv']`).
 func (m *belongsToManyRelationQuery) NewExistingPivot(attributes map[string]any) (contractsorm.PivotModel, error) {
 	return m.NewPivot(attributes, true)
+}
+
+// mergePivotValues folds the WithPivotValue-recorded pairs into an attributes bag the way
+// IWPT::newPivot does — `array_merge(array_column($this->pivotValues, 'value', 'column'),
+// $attributes)` (vendor v12.55.1, InteractsWithPivotTable.php:629): the recorded values are
+// defaults, the caller's attributes win, and for a duplicated column the last recorded pair wins
+// (array_column keeps the last entry). With nothing recorded the caller's bag passes through
+// untouched, so a caller's map is never mutated. A non-string recorded column cannot land on a
+// Go attribute key and is skipped: PHP's array_column throws for an object column (oracle
+// v12.55.1, executed: `withPivotValue(new Expression(...), 'pv')` then `newPivot` throws
+// "Cannot access offset of type Illuminate\Database\Query\Expression on array"), while a
+// scalar non-string is renumbered by array_merge into a nameless numeric slot
+// (`withPivotValue(7, 'sev')` -> `[0 => 'sev']`; a null column dies earlier, in setAttribute) —
+// either way the merge is where it cannot land. One residual edge: a numeric-string column stays
+// a Go string and merges under its literal key where PHP renumbers it away (`withPivotValue('7',
+// 'sev2')` -> `[0 => 'sev2']`); measured with /tmp/r6verify-c21/my_pv_probe.php.
+func (m *belongsToManyRelationQuery) mergePivotValues(attributes map[string]any) map[string]any {
+	if len(m.pivotValues) == 0 {
+		return attributes
+	}
+
+	merged := make(map[string]any, len(m.pivotValues)+len(attributes))
+	for _, entry := range m.pivotValues {
+		if column, ok := entry.column.(string); ok {
+			merged[column] = entry.value
+		}
+	}
+
+	for column, value := range attributes {
+		merged[column] = value
+	}
+
+	return merged
 }
 
 // finishPivot stamps a factory-built pivot whose concrete type this package knows with the
@@ -738,18 +805,16 @@ func finishPivot(pivot contractsorm.PivotModel, foreignKey, relatedKey string, r
 // struct's autoCreateTime / autoUpdateTime tagged fields, its CreatedAt / UpdatedAt convention or
 // the relation-level PivotTimestamps fallback, resolved into RelationInfo.PivotCreatedAtColumn by
 // ResolvePivotTimestamps — is the object-path form of that call; an undeclared column ("") falls
-// through to the base Relation::createdAt parent resolution. Oracle v12.55.1, executed,
-// /tmp/btm-pivot-ts-probe.php: withTimestamps('pivot_created_at', 'pivot_updated_at') reports
-// 'pivot_created_at' / 'pivot_updated_at'; no withTimestamps, withTimestamps() and
-// withTimestamps(false) report the parent class's 'user_created_at' / 'user_updated_at'; the mixed
-// withTimestamps('pivot_created_at') reports 'pivot_created_at' and 'user_updated_at'.
-//
-// Residual (not this accessor's): Laravel's bare withTimestamps() leaves $pivotCreatedAt null and
-// so stamps the pivot with the parent's columns, whereas the Go PivotTimestamps: true fallback
-// resolves the literal "created_at" / "updated_at" (ResolvePivotTimestamps priority 3). The
-// accessor reports the column the Go pivot write actually stamps — Laravel's invariant, where
-// createdAt() is the stamp column resolver — so the fallback's naming is the descriptor build's
-// concern, recorded as a follow-up candidate.
+// through to the base Relation::createdAt parent resolution. The PivotTimestamps: true fallback
+// itself resolves the parent model's columns (Laravel's bare withTimestamps() leaves
+// $pivotCreatedAt null, so createdAt() reports `$this->parent->getCreatedAtColumn() ??
+// Model::CREATED_AT` and the pivot write stamps that same column), so this accessor and the write
+// agree without the fallthrough. Oracle v12.55.1, executed, /tmp/btm-pivot-ts-probe.php (reads)
+// and /tmp/btm-pivot-ts-write-probe.php (writes): withTimestamps('pivot_created_at',
+// 'pivot_updated_at') reports and stamps 'pivot_created_at' / 'pivot_updated_at'; withTimestamps()
+// and the mixed withTimestamps('pivot_created_at') report/stamp the parent class's
+// 'user_created_at' / 'user_updated_at' for the sides they do not name; no withTimestamps and
+// withTimestamps(false, false) stamp nothing.
 func (m *belongsToManyRelationQuery) CreatedAt() string {
 	if m.info.PivotCreatedAtColumn != "" {
 		return m.info.PivotCreatedAtColumn
