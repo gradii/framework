@@ -1,7 +1,7 @@
 name: Test In Example
 # The upstream workflow tested goravel/example against this checkout. There is no
 # Gradii example application yet, and the upstream one requires
-# github.com/goravel/framework, so the replace below never applied. Manual until
+# github.com/gradii/framework, so the replace below never applied. Manual until
 # a Gradii example exists; the two jobs are kept as the recipe for it.
 on:
   workflow_dispatch:
