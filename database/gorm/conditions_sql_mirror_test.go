@@ -28,7 +28,8 @@ import (
 //   - the byte-identity pins record the exact statements the ORM compiled BEFORE the migration on
 //     every path that wrote to a mirror — the pivot row primitives (the pivot chain's staged
 //     predicates plus the pivot scope replay), Find's inline conditions and the FirstOr* fold — and
-//     must keep passing after it; the recorded text was captured on the unmodified tree;
+//     must keep passing after it; the recorded text was captured on the unmodified tree (round 8
+//     re-pinned the pivot-row scope column to the raw form — see that pin's note);
 //   - the single-source pins assert the new property, that the condition or table is on the
 //     builder State the moment it is written; they were red on the unmodified tree (the staged
 //     slice and the Conditions table held the state until the statement compiled) and are green
@@ -81,7 +82,10 @@ func newMirrorQuery(t *testing.T) (*OrmBuilder, *recordingSQLDriver) {
 
 // The pivot row primitives replay the pivot scope ahead of the predicates — the scope wrote its
 // clause straight to the builder while the staged predicates joined it at compile time — and
-// the migration keeps that order.
+// the migration keeps that order. Round 8 (candidate 27) re-pinned the scope column to the raw
+// form the row primitives now compile: Laravel's newPivotQuery replays the recorded pivot wheres
+// unqualified (`where "active" = ?`), where the relation read keeps the pivot-table qualifier
+// (oracle v12.55.1, executed, /tmp/c27_pivot_qualification_probe.php U3/D4/S3/T3 vs E3).
 func TestConditionsMirror_PivotRowPrimitivesAreByteIdentical(t *testing.T) {
 	query, recorder := newMirrorQuery(t)
 	var seam relations.Builder = query
@@ -95,17 +99,17 @@ func TestConditionsMirror_PivotRowPrimitivesAreByteIdentical(t *testing.T) {
 
 	_, err = seam.DeleteRows(info.PivotTable, wheres, info.OnPivotQuery)
 	require.NoError(t, err)
-	assert.Equal(t, `delete from "mirror_role_user" where "mirror_role_user"."active" = ? and "mirror_role_user"."user_id" = ? and "mirror_role_user"."role_id" in (?, ?)`, recorder.last(t).sql)
+	assert.Equal(t, `delete from "mirror_role_user" where "active" = ? and "mirror_role_user"."user_id" = ? and "mirror_role_user"."role_id" in (?, ?)`, recorder.last(t).sql)
 	assert.Equal(t, []driver.Value{int64(1), int64(7), int64(1), int64(2)}, recorder.last(t).args)
 
 	_, err = seam.UpdateRows(info.PivotTable, wheres[:1], info.OnPivotQuery, map[string]any{"note": "x"})
 	require.NoError(t, err)
-	assert.Equal(t, `update "mirror_role_user" set "note" = ? where "mirror_role_user"."active" = ? and "mirror_role_user"."user_id" = ?`, recorder.last(t).sql)
+	assert.Equal(t, `update "mirror_role_user" set "note" = ? where "active" = ? and "mirror_role_user"."user_id" = ?`, recorder.last(t).sql)
 	assert.Equal(t, []driver.Value{"x", int64(1), int64(7)}, recorder.last(t).args)
 
 	_, err = seam.SelectRows(info.PivotTable, []string{"role_id"}, wheres, info.OnPivotQuery)
 	require.NoError(t, err)
-	assert.Equal(t, `select "role_id" from "mirror_role_user" where "mirror_role_user"."active" = ? and "mirror_role_user"."user_id" = ? and "mirror_role_user"."role_id" in (?, ?)`, recorder.last(t).sql)
+	assert.Equal(t, `select "role_id" from "mirror_role_user" where "active" = ? and "mirror_role_user"."user_id" = ? and "mirror_role_user"."role_id" in (?, ?)`, recorder.last(t).sql)
 	assert.Equal(t, []driver.Value{int64(1), int64(7), int64(1), int64(2)}, recorder.last(t).args)
 }
 

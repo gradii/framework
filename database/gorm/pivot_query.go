@@ -15,12 +15,23 @@ type queryPivotQuery struct {
 	grammar   querybuilder.Grammar
 	q         contractsorm.Query
 	tableName string
+	// bare replays the caller's column WITHOUT the pivot-table qualifier - the shape Laravel's
+	// newPivotQuery uses when it replays the recorded pivot wheres raw (`$query->where(...$arguments)`,
+	// InteractsWithPivotTable.php:682, the arguments verbatim). The relation read path keeps the
+	// qualifier (wherePivot applies `$this->where($this->qualifyPivotColumn($column))` to the
+	// relation query), so the adapter is built bare only for the pivot-row primitives.
+	bare bool
 }
 
-// pivotColumn names the column the way a caller writes one - table.column, unquoted - because the
-// structured where methods wrap each segment at compile time; the grammar-wrapped form the Where
-// method passes as an Expression would be quoted a second time.
+// pivotColumn names the column the way a caller writes one. The structured where methods wrap each
+// segment at compile time; the qualified form carries the pivot table, the bare form the column
+// alone, because the grammar-wrapped form the Where method passes as an Expression would be quoted
+// a second time.
 func (p *queryPivotQuery) pivotColumn(column string) string {
+	if p.bare {
+		return column
+	}
+
 	return p.tableName + "." + column
 }
 
@@ -28,7 +39,21 @@ func newQueryPivotQuery(grammar querybuilder.Grammar, q contractsorm.Query, tabl
 	return &queryPivotQuery{grammar: grammar, q: q, tableName: tableName}
 }
 
+// newBareQueryPivotQuery is newQueryPivotQuery for the pivot-row primitives (DoDetach /
+// DoUpdateExistingPivot / the sync-family current-ids read): Laravel's newPivotQuery replays the
+// recorded pivot wheres raw, so the column reaches the statement unqualified. Oracle v12.55.1,
+// executed, /tmp/c27_pivot_qualification_probe.php U3/D4/S3/T3:
+// `... where "role" = ? ...` (cf. the relation read E3, where the same clause reads
+// `"c27_post_tag"."role" = ?`).
+func newBareQueryPivotQuery(grammar querybuilder.Grammar, q contractsorm.Query, tableName string) *queryPivotQuery {
+	return &queryPivotQuery{grammar: grammar, q: q, tableName: tableName, bare: true}
+}
+
 func (p *queryPivotQuery) qualified(column string) string {
+	if p.bare {
+		return p.grammar.Wrap(column)
+	}
+
 	return p.grammar.Wrap(p.tableName + "." + column)
 }
 
@@ -81,6 +106,18 @@ func applyOnPivotQueryToQuery(grammar querybuilder.Grammar, q contractsorm.Query
 		return q
 	}
 	pq := newQueryPivotQuery(grammar, q, desc.PivotTable)
+	desc.OnPivotQuery(pq)
+	return pq.q
+}
+
+// applyOnPivotQueryToQueryBare is applyOnPivotQueryToQuery for the pivot-row primitives: the scope
+// replays with the raw column (newBareQueryPivotQuery), matching Laravel's newPivotQuery
+// (InteractsWithPivotTable.php:682). The relation read path keeps the qualified form.
+func applyOnPivotQueryToQueryBare(grammar querybuilder.Grammar, q contractsorm.Query, desc *relationDescriptor) contractsorm.Query {
+	if desc.OnPivotQuery == nil {
+		return q
+	}
+	pq := newBareQueryPivotQuery(grammar, q, desc.PivotTable)
 	desc.OnPivotQuery(pq)
 	return pq.q
 }

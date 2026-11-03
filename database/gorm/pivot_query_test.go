@@ -101,6 +101,44 @@ func TestApplyOnPivotQueryToQuery_AppliesCallback(t *testing.T) {
 	assert.Contains(t, sql, `"rel_user_roles"."active" = ?`)
 }
 
+// TestQueryPivotQuery_Bare_RendersTheRawColumn pins the pivot-row replay of the OnPivotQuery scope:
+// Laravel's newPivotQuery replays the recorded pivot wheres with the raw column
+// (`$query->where(...$arguments)`, InteractsWithPivotTable.php:682), so the adapter built bare
+// reaches the statement unqualified - the shape DoDetach / DoUpdateExistingPivot / the sync-family
+// current-ids read compile. Oracle v12.55.1, executed, /tmp/c27_pivot_qualification_probe.php
+// U3/U4/U5/D4/S3/T3: `... where "role" = ?`, `and "role" in (?, ?)`, `and "role" is null` - the
+// same adapter built qualified is the relation read (E3), `"c27_post_tag"."role" = ?`.
+func TestQueryPivotQuery_Bare_RendersTheRawColumn(t *testing.T) {
+	base := newRelQueryWith(t, &relUser{}).Table("rel_user_roles").(*OrmBuilder)
+	pq := newBareQueryPivotQuery(base.queryGrammar, base, "rel_user_roles")
+	pq.Where("role", "admin").WhereIn("scope", []any{"a", "b"}).WhereNull("deleted_at")
+
+	sql := newRelationSQL(t, pq.q, &[]map[string]any{})
+	assert.Contains(t, sql, `"role" = ?`)
+	assert.Contains(t, sql, `"scope" in (?, ?)`)
+	assert.Contains(t, sql, `"deleted_at" is null`)
+	assert.NotContains(t, sql, `"rel_user_roles"."role"`)
+	assert.NotContains(t, sql, `"rel_user_roles"."scope"`)
+	assert.NotContains(t, sql, `"rel_user_roles"."deleted_at"`)
+}
+
+// TestApplyOnPivotQueryToQueryBare_AppliesCallbackRaw is the same split one level up: the pivot-row
+// apply replays the scope with the raw column, where applyOnPivotQueryToQuery leaves it qualified
+// (the relation read path).
+func TestApplyOnPivotQueryToQueryBare_AppliesCallbackRaw(t *testing.T) {
+	base := newRelQueryWith(t, &relUser{}).Table("rel_user_roles").(*OrmBuilder)
+	desc := &relationDescriptor{
+		PivotTable: "rel_user_roles",
+		OnPivotQuery: func(q contractsorm.PivotQuery) contractsorm.PivotQuery {
+			return q.Where("active", 1)
+		},
+	}
+	out := applyOnPivotQueryToQueryBare(base.queryGrammar, base, desc)
+	sql := newRelationSQL(t, out, &[]map[string]any{})
+	assert.Contains(t, sql, `"active" = ?`)
+	assert.NotContains(t, sql, `"rel_user_roles"."active"`)
+}
+
 // Descriptor wiring: OnPivotQuery declared on Many2Many / MorphToMany / MorphedByMany must land
 // on the relationDescriptor.
 type pivotWireUser struct {

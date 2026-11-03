@@ -238,7 +238,7 @@ func TestPivotWorkers_AllPivotIDs_ReadShapes(t *testing.T) {
 	require.NoError(t, err)
 	statements = recorder.take()
 	require.Len(t, statements, 1)
-	assert.Equal(t, `select * from "pw_taggables" where "pw_taggables"."taggable_id" = ? and "pw_taggables"."taggable_type" = ?`, statements[0].query)
+	assert.Equal(t, `select * from "pw_taggables" where "pw_taggables"."taggable_id" = ? and "taggable_type" = ?`, statements[0].query)
 }
 
 // --- TogglePivotIDs ---------------------------------------------------------------------------
@@ -264,7 +264,7 @@ func TestPivotWorkers_TogglePivotIDs_ReadShapes(t *testing.T) {
 	require.NoError(t, err)
 	statements = recorder.take()
 	require.Len(t, statements, 1)
-	assert.Equal(t, `select "tag_id" from "pw_taggables" where "pw_taggables"."taggable_id" = ? and "pw_taggables"."taggable_type" = ?`, statements[0].query)
+	assert.Equal(t, `select "tag_id" from "pw_taggables" where "pw_taggables"."taggable_id" = ? and "taggable_type" = ?`, statements[0].query)
 }
 
 // --- DoDetach ----------------------------------------------------------------------------------
@@ -320,7 +320,7 @@ func TestPivotWorkers_DoDetach_GuardsAndShapes(t *testing.T) {
 	require.NoError(t, err)
 	statements = recorder.take()
 	require.Len(t, statements, 1)
-	assert.Equal(t, `delete from "pw_taggables" where "pw_taggables"."taggable_id" = ? and "pw_taggables"."taggable_type" = ? and "pw_taggables"."tag_id" in (?)`, statements[0].query)
+	assert.Equal(t, `delete from "pw_taggables" where "pw_taggables"."taggable_id" = ? and "taggable_type" = ? and "pw_taggables"."tag_id" in (?)`, statements[0].query)
 
 	// scoped -> the scope predicate leads.
 	builder, recorder = newRelationTestBuilder(t)
@@ -329,7 +329,7 @@ func TestPivotWorkers_DoDetach_GuardsAndShapes(t *testing.T) {
 	require.NoError(t, err)
 	statements = recorder.take()
 	require.Len(t, statements, 1)
-	assert.Equal(t, `delete from "pw_parent_kids" where "pw_parent_kids"."role" = ? and "pw_parent_kids"."parent_id" = ?`, statements[0].query)
+	assert.Equal(t, `delete from "pw_parent_kids" where "role" = ? and "pw_parent_kids"."parent_id" = ?`, statements[0].query)
 }
 
 // --- DoUpdateExistingPivot ---------------------------------------------------------------------

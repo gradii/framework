@@ -21,7 +21,8 @@ import (
 // (Builder, RelationInfo) assembles the same query state the gorm original does.
 
 // seamSQLUser / seamSQLRole: a many-to-many with pivot timestamps and a pivot scope, so every
-// primitive exercises the stamps and the applyOnPivotQueryToQuery replay.
+// primitive exercises the stamps and the applyOnPivotQueryToQueryBare replay (the pivot-row scope
+// replays bare, matching Laravel's newPivotQuery).
 type seamSQLUser struct {
 	ID        uint             `gorm:"column:id;primaryKey"`
 	UpdatedAt *carbon.DateTime `gorm:"autoUpdateTime;column:updated_at"`
@@ -103,7 +104,7 @@ func TestSeam_DeleteRows_IsByteIdenticalToDetach(t *testing.T) {
 	assert.Equal(t, legacy, ported)
 	assert.Contains(t, ported[0].query, `delete from "seam_role_user" where`)
 	assert.Contains(t, ported[0].query, `"seam_role_user"."role_id" in (`)
-	assert.Contains(t, ported[0].query, `"seam_role_user"."active" = ?`, "the pivot scope replays last")
+	assert.Contains(t, ported[0].query, `where "active" = ?`, "the pivot scope replays first, bare")
 }
 
 // TestSeam_UpdateRows_IsByteIdenticalToUpdateExistingPivot: doUpdateExistingPivot versus
@@ -130,7 +131,7 @@ func TestSeam_UpdateRows_IsByteIdenticalToUpdateExistingPivot(t *testing.T) {
 
 	assert.Equal(t, maskTimes(legacy), maskTimes(ported))
 	assert.Contains(t, ported[0].query, `update "seam_role_user" set "note" = ?, "updated_at" = ? where`)
-	assert.Contains(t, ported[0].query, `"seam_role_user"."active" = ?`)
+	assert.Contains(t, ported[0].query, `where "active" = ?`)
 	assert.Contains(t, ported[0].query, `"seam_role_user"."role_id" in (?)`)
 }
 

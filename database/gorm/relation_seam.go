@@ -187,8 +187,15 @@ func (r *OrmBuilder) SelectRows(table string, columns []string, wheres []relatio
 // scopedRowQuery assembles the table-scoped query the row primitives run: the fresh builder bound
 // to table (pivotTableQuery), the select list when one is given (the SetSelects call
 // allPivotIDs makes first), the pivot scope replayed through
-// applyOnPivotQueryToQuery (a nil scope is the adapter's own no-op), then each predicate appended
-// through the very addWhere call pivotWhere makes.
+// applyOnPivotQueryToQueryBare (a nil scope is the adapter's own no-op), then each predicate
+// appended through the very addWhere call pivotWhere makes.
+//
+// The scope replays BARE here - the row primitives are Laravel's newPivotQuery, whose recorded
+// pivot wheres reach the statement with the raw (unqualified) column - while the relation read
+// path (applyOnPivotQueryToQuery) keeps the pivot-table qualifier, the shape wherePivot applies to
+// the relation query. Oracle v12.55.1, executed, /tmp/c27_pivot_qualification_probe.php: the
+// pivot-row statements carry `... where "role" = ? ...` (U3/D4/S3/T3), the relation read E3
+// carries `"c27_post_tag"."role" = ?`.
 //
 // The scope's clauses sit ahead of the predicates in the compiled where clause. That is the order
 // the statements have always carried: the predicates used to wait on the ORM's internal where
@@ -204,7 +211,7 @@ func (r *OrmBuilder) scopedRowQuery(table string, columns []string, wheres []rel
 		}
 		query.query.SetSelects(selects)
 	}
-	if scoped, ok := applyOnPivotQueryToQuery(r.queryGrammar, query, pivotScopeDescriptor(table, scope)).(*OrmBuilder); ok {
+	if scoped, ok := applyOnPivotQueryToQueryBare(r.queryGrammar, query, pivotScopeDescriptor(table, scope)).(*OrmBuilder); ok {
 		query = scoped
 	}
 	for _, where := range wheres {
@@ -216,7 +223,8 @@ func (r *OrmBuilder) scopedRowQuery(table string, columns []string, wheres []rel
 
 // pivotScopeDescriptor carries exactly the two descriptor fields the pivot-scope adapter reads —
 // the qualifier table and the callback — so the row primitives replay a scope through the one
-// adapter the workers use (applyOnPivotQueryToQuery / findMapsCompiled) without a full descriptor.
+// adapter the workers use (applyOnPivotQueryToQueryBare / findMapsCompiled) without a full
+// descriptor.
 func pivotScopeDescriptor(table string, scope contractsorm.PivotCallback) *relationDescriptor {
 	return &relationDescriptor{PivotTable: table, OnPivotQuery: scope}
 }

@@ -145,7 +145,8 @@ type RelationInfo struct {
 	RelatedKeyType reflect.Type
 	// OnPivotQuery is the declaration's pivot-table scope (Many2Many.OnPivotQuery and the morph
 	// variants) — desc.onPivotQuery, the callback the pivot-table SELECT / UPDATE / DELETE
-	// primitives replay before compiling (applyOnPivotQueryToQuery). nil when none is declared.
+	// primitives replay before compiling (applyOnPivotQueryToQueryBare for the pivot-row
+	// primitives, applyOnPivotQueryToQuery for the relation read). nil when none is declared.
 	OnPivotQuery contractsorm.PivotCallback
 }
 
@@ -278,7 +279,7 @@ type Builder interface {
 	//   isIgnoringTouch()             Builder.IsIgnoringTouch — database/orm imports this package
 	//                                 (through morphmap), so calling it here would be a cycle
 	//   ormBuilderOf()                duplicated: BuilderOf (pure unwrap over Builder)
-	//   applyOnPivotQueryToQuery()    the scope argument of UpdateRows / DeleteRows / SelectRows,
+	//   applyOnPivotQueryToQueryBare()  the scope argument of UpdateRows / DeleteRows / SelectRows,
 	//                                 fed from RelationInfo.OnPivotQuery
 	//   (*OrmBuilder) casts           re-homed onto the Builder assertion (BuilderOf)
 	//
@@ -332,9 +333,10 @@ type Builder interface {
 	// pivot row without the wherePivot constraints as well.
 	InsertRows(table string, rows []map[string]any) error
 	// UpdateRows compiles and runs an update of values on table — W5, the
-	// doUpdateExistingPivot / touchIfTouching statement: a fresh builder bound to table, each
-	// RowWhere appended in order through addWhere, the pivot scope replayed last (nil skips it),
-	// then compileUpdate + execStatement. Reports the rows affected.
+	// doUpdateExistingPivot / touchIfTouching statement: a fresh builder bound to table, the pivot
+	// scope replayed first with the raw column (nil skips it; Laravel's newPivotQuery replays the
+	// recorded pivot wheres unqualified), each RowWhere appended in order through addWhere, then
+	// compileUpdate + execStatement. Reports the rows affected.
 	UpdateRows(table string, wheres []RowWhere, scope contractsorm.PivotCallback, values map[string]any) (int64, error)
 	// DeleteRows compiles and runs a delete on table — W6, the doDetach statement, assembled the
 	// way UpdateRows assembles its update and run through execDelete. Reports the rows affected.

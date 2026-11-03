@@ -193,19 +193,19 @@ delete from "pw_parent_kids" where "pw_parent_kids"."parent_id" = ? | [7]
 ## detach.ids result=0 err=<nil>
 delete from "pw_parent_kids" where "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" in (?, ?) | [7 5 6]
 ## detach.tags.ids result=0 err=<nil>
-delete from "pw_taggables" where "pw_taggables"."taggable_id" = ? and "pw_taggables"."taggable_type" = ? and "pw_taggables"."tag_id" in (?) | [7 pw_parents 5]
+delete from "pw_taggables" where "pw_taggables"."taggable_id" = ? and "taggable_type" = ? and "pw_taggables"."tag_id" in (?) | [7 pw_parents 5]
 ## detach.scoped.nil result=0 err=<nil>
-delete from "pw_parent_kids" where "pw_parent_kids"."role" = ? and "pw_parent_kids"."parent_id" = ? | [admin 7]
+delete from "pw_parent_kids" where "role" = ? and "pw_parent_kids"."parent_id" = ? | [admin 7]
 ## detach.empty result=0 err=<nil>
 ## detach.nestedEmpty result=0 err=<nil>
 ## sync.one result=&{[5] [] []} err=<nil>
 select * from "pw_parent_kids" where "pw_parent_kids"."parent_id" = ? | [7]
 insert into "pw_parent_kids" ("kid_id", "parent_id") values (?, ?) | [5 7]
 ## sync.tags.one result=&{[5] [] []} err=<nil>
-select * from "pw_taggables" where "pw_taggables"."taggable_id" = ? and "pw_taggables"."taggable_type" = ? | [7 pw_parents]
+select * from "pw_taggables" where "pw_taggables"."taggable_id" = ? and "taggable_type" = ? | [7 pw_parents]
 insert into "pw_taggables" ("tag_id", "taggable_id", "taggable_type") values (?, ?, ?) | [5 7 pw_parents]
 ## sync.scoped.one result=&{[5] [] []} err=<nil>
-select * from "pw_parent_kids" where "pw_parent_kids"."role" = ? and "pw_parent_kids"."parent_id" = ? | [admin 7]
+select * from "pw_parent_kids" where "role" = ? and "pw_parent_kids"."parent_id" = ? | [admin 7]
 insert into "pw_parent_kids" ("kid_id", "parent_id") values (?, ?) | [5 7]
 ## syncWithoutDetaching.one result=&{[5] [] []} err=<nil>
 select * from "pw_parent_kids" where "pw_parent_kids"."parent_id" = ? | [7]
@@ -228,9 +228,9 @@ insert into "pw_parent_kids" ("kid_id", "parent_id", "role") values (?, ?, ?) | 
 ## updateExistingPivot.kids result=0 err=<nil>
 update "pw_parent_kids" set "role" = ? where "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" in (?) | [x 7 5]
 ## updateExistingPivot.tags result=0 err=<nil>
-update "pw_taggables" set "role" = ? where "pw_taggables"."taggable_id" = ? and "pw_taggables"."taggable_type" = ? and "pw_taggables"."tag_id" in (?) | [x 7 pw_parents 5]
+update "pw_taggables" set "role" = ? where "pw_taggables"."taggable_id" = ? and "taggable_type" = ? and "pw_taggables"."tag_id" in (?) | [x 7 pw_parents 5]
 ## updateExistingPivot.scoped result=0 err=<nil>
-update "pw_parent_kids" set "role" = ? where "pw_parent_kids"."role" = ? and "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" in (?) | [x admin 7 5]
+update "pw_parent_kids" set "role" = ? where "role" = ? and "pw_parent_kids"."parent_id" = ? and "pw_parent_kids"."kid_id" in (?) | [x admin 7 5]
 ## updateExistingPivot.empty result=0 err=<nil>
 ## guard.valueParent result=<nil> err=Related: parent must be a non-nil pointer to a struct, got relations_test.pwParent
 ## guard.unknownRelation result=<nil> err=relation "Nope" not found on model *relations_test.pwParent

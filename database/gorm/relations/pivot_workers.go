@@ -274,10 +274,24 @@ func BasePivotRow(info RelationInfo, parentVal, relatedID any, attrs map[string]
 
 // --- the pivot reads the diffs run on ----------------------------------------------------------
 
-// pivotEquality is the equality fragment pivotWhere renders: the dialect-quoted qualified column
-// followed by " = ?" with the value as its single binding.
+// pivotEquality is the parent-key equality fragment pivotWhere renders: the dialect-quoted
+// qualified column followed by " = ?" with the value as its single binding. Laravel writes the
+// pivot-row parent predicate with getQualifiedForeignPivotKeyName (InteractsWithPivotTable.php:693),
+// so the pivot table qualifier stays on this one.
 func pivotEquality(b Builder, info RelationInfo, column string, value any) RowWhere {
 	return RowWhere{Query: fmt.Sprintf("%s = ?", b.Ident(info.PivotTable, column)), Args: []any{value}}
+}
+
+// pivotMorphEquality is the morph-type predicate MorphToMany::newPivotQuery appends to the pivot-row
+// predicates: Laravel writes `->where($this->morphType, $this->morphClass)` with the morph type
+// column UNQUALIFIED (MorphToMany.php:146), unlike the parent / related key predicates, which use
+// getQualifiedForeignPivotKeyName / getQualifiedRelatedPivotKeyName and stay qualified. This is the
+// pivot-row (newPivotQuery) context only — the relation read query qualifies the morph type through
+// qualifyPivotColumn (MorphToMany::addWhereConstraints :88) and does not use this helper. Oracle
+// v12.55.1, executed, /tmp/c27_pivot_qualification_probe.php U2/U7/D3/D5/S2/T2:
+// `... and "taggable_type" = ?`.
+func pivotMorphEquality(b Builder, info RelationInfo, value any) RowWhere {
+	return RowWhere{Query: fmt.Sprintf("%s = ?", b.Ident(info.MorphTypeColumn)), Args: []any{value}}
 }
 
 // pivotInList is the IN fragment pivotWhere renders: the unquoted qualified column with the id
@@ -312,7 +326,7 @@ func TogglePivotIDs(b Builder, info RelationInfo, parentVal any) ([]any, error) 
 func pivotIDsFrom(b Builder, info RelationInfo, parentVal any, columns []string) ([]any, error) {
 	wheres := []RowWhere{pivotEquality(b, info, info.PivotParentRef.ForeignColumn, parentVal)}
 	if info.Kind == KindMorphToMany {
-		wheres = append(wheres, pivotEquality(b, info, info.MorphTypeColumn, info.MorphValue))
+		wheres = append(wheres, pivotMorphEquality(b, info, info.MorphValue))
 	}
 	rows, err := b.SelectRows(info.PivotTable, columns, wheres, info.OnPivotQuery)
 	if err != nil {
@@ -395,7 +409,7 @@ func DoDetach(b Builder, info RelationInfo, parentVal any, ids []any) (int64, er
 
 	wheres := []RowWhere{pivotEquality(b, info, info.PivotParentRef.ForeignColumn, parentVal)}
 	if info.Kind == KindMorphToMany {
-		wheres = append(wheres, pivotEquality(b, info, info.MorphTypeColumn, info.MorphValue))
+		wheres = append(wheres, pivotMorphEquality(b, info, info.MorphValue))
 	}
 	if len(ids) > 0 {
 		wheres = append(wheres, pivotInList(info, info.PivotRelatedRef.ForeignColumn, ids))
@@ -920,7 +934,7 @@ func DoUpdateExistingPivot(b Builder, info RelationInfo, parentVal any, id any, 
 	}
 	wheres := []RowWhere{pivotEquality(b, info, info.PivotParentRef.ForeignColumn, parentVal)}
 	if info.Kind == KindMorphToMany {
-		wheres = append(wheres, pivotEquality(b, info, info.MorphTypeColumn, info.MorphValue))
+		wheres = append(wheres, pivotMorphEquality(b, info, info.MorphValue))
 	}
 	wheres = append(wheres, pivotInList(info, info.PivotRelatedRef.ForeignColumn, []any{id}))
 
