@@ -24,16 +24,16 @@ func TestORMWithContextKeepsSuppliedProcessor(t *testing.T) {
 	components, err := databasedriver.ResolveQueryComponents(baseTestDialect{}, contractsdriver.GrammarOptions{Driver: "base"})
 	require.NoError(t, err)
 
-	query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, nil, nil, components).
-		Table("users").Select("name").(*Query)
+	query := NewOrmBuilder(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, nil, nil, components).
+		Table("users").Select("name").(*OrmBuilder)
 
-	child := query.WithContext(context.Background()).(*Query)
-	for _, current := range []*Query{child, child.Clone().(*Query)} {
+	child := query.WithContext(context.Background()).(*OrmBuilder)
+	for _, current := range []*OrmBuilder{child, child.Clone().(*OrmBuilder)} {
 		_, _, err := current.compileSelect()
 		require.NoError(t, err)
-		assert.Same(t, components.Processor, current.builder.Processor())
+		assert.Same(t, components.Processor, current.query.Processor())
 	}
 
 	// The receiver is left as it was built.
-	assert.Same(t, components.Processor, query.builder.Processor())
+	assert.Same(t, components.Processor, query.query.Processor())
 }

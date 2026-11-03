@@ -14,7 +14,7 @@ import (
 func compileSugar(t *testing.T, query contractsorm.Query) (string, []any) {
 	t.Helper()
 
-	statement, bindings, err := query.(*Query).compileSelect()
+	statement, bindings, err := query.(*OrmBuilder).compileSelect()
 	require.NoError(t, err)
 
 	return statement, bindings
@@ -25,7 +25,7 @@ func compileSugar(t *testing.T, query contractsorm.Query) (string, []any) {
 // whereRelation is whereHas with the where written for the caller: a (column, value) pair, or a
 // (column, operator, value) triple. Mirrors QueriesRelationships::whereRelation.
 func TestWhereRelationIsWhereHasWithOneWhere(t *testing.T) {
-	const exists = `select * from "rel_users" where exists (select 1 from "rel_books" where "rel_users"."id" = "rel_books"."user_id" and "title" %s ?)`
+	const exists = `select * from "rel_users" where exists (select * from "rel_books" where "rel_users"."id" = "rel_books"."user_id" and "title" %s ?)`
 
 	pair := compiledQuery(t, &relUser{}, Conditions{}).WhereRelation("Books", "title", "Go")
 	statement, bindings := compileSugar(t, pair)
@@ -45,7 +45,7 @@ func TestWhereRelationAcceptsACallback(t *testing.T) {
 	})
 
 	statement, bindings := compileSugar(t, query)
-	assert.Equal(t, `select * from "rel_users" where exists (select 1 from "rel_books" where "rel_users"."id" = "rel_books"."user_id" and "title" = ? and "user_id" = ?)`, statement)
+	assert.Equal(t, `select * from "rel_users" where exists (select * from "rel_books" where "rel_users"."id" = "rel_books"."user_id" and "title" = ? and "user_id" = ?)`, statement)
 	assert.Equal(t, []any{"Go", 1}, bindings)
 }
 
@@ -53,17 +53,17 @@ func TestWhereRelationAcceptsACallback(t *testing.T) {
 func TestWhereRelationVariants(t *testing.T) {
 	or := compiledQuery(t, &relUser{}, Conditions{}).Where("id", 1).OrWhereRelation("Books", "title", "Go")
 	statement, bindings := compileSugar(t, or)
-	assert.Equal(t, `select * from "rel_users" where "id" = ? or exists (select 1 from "rel_books" where "rel_users"."id" = "rel_books"."user_id" and "title" = ?)`, statement)
+	assert.Equal(t, `select * from "rel_users" where "id" = ? or exists (select * from "rel_books" where "rel_users"."id" = "rel_books"."user_id" and "title" = ?)`, statement)
 	assert.Equal(t, []any{1, "Go"}, bindings)
 
 	doesnt := compiledQuery(t, &relUser{}, Conditions{}).WhereDoesntHaveRelation("Books", "title", "Go")
 	statement, bindings = compileSugar(t, doesnt)
-	assert.Equal(t, `select * from "rel_users" where not exists (select 1 from "rel_books" where "rel_users"."id" = "rel_books"."user_id" and "title" = ?)`, statement)
+	assert.Equal(t, `select * from "rel_users" where not exists (select * from "rel_books" where "rel_users"."id" = "rel_books"."user_id" and "title" = ?)`, statement)
 	assert.Equal(t, []any{"Go"}, bindings)
 
 	orDoesnt := compiledQuery(t, &relUser{}, Conditions{}).Where("id", 1).OrWhereDoesntHaveRelation("Books", "title", "Go")
 	statement, bindings = compileSugar(t, orDoesnt)
-	assert.Equal(t, `select * from "rel_users" where "id" = ? or not exists (select 1 from "rel_books" where "rel_users"."id" = "rel_books"."user_id" and "title" = ?)`, statement)
+	assert.Equal(t, `select * from "rel_users" where "id" = ? or not exists (select * from "rel_books" where "rel_users"."id" = "rel_books"."user_id" and "title" = ?)`, statement)
 	assert.Equal(t, []any{1, "Go"}, bindings)
 }
 
@@ -73,30 +73,30 @@ func TestWhereRelationVariants(t *testing.T) {
 // QueriesRelationships::withWhereHas.
 func TestWithWhereHasConstrainsAndEagerLoads(t *testing.T) {
 	callback := func(q contractsorm.Query) contractsorm.Query { return q.Where("title", "Go") }
-	query := compiledQuery(t, &relUser{}, Conditions{}).WithWhereHas("Books", callback).(*Query)
+	query := compiledQuery(t, &relUser{}, Conditions{}).WithWhereHas("Books", callback).(*OrmBuilder)
 
 	statement, bindings, err := query.compileSelect()
 	require.NoError(t, err)
-	assert.Equal(t, `select * from "rel_users" where exists (select 1 from "rel_books" where "rel_users"."id" = "rel_books"."user_id" and "title" = ?)`, statement)
+	assert.Equal(t, `select * from "rel_users" where exists (select * from "rel_books" where "rel_users"."id" = "rel_books"."user_id" and "title" = ?)`, statement)
 	assert.Equal(t, []any{"Go"}, bindings)
 
 	require.Len(t, query.conditions.eagerLoad, 1)
-	assert.Equal(t, "Books", query.conditions.eagerLoad[0].relation)
-	assert.NotNil(t, query.conditions.eagerLoad[0].callback, "the eager load carries the same constraint")
+	assert.Equal(t, "Books", query.conditions.eagerLoad[0].Relation)
+	assert.NotNil(t, query.conditions.eagerLoad[0].Callback, "the eager load carries the same constraint")
 }
 
 // A column list on the relation ("Books:id,title") applies to the eager load alone, as
 // Str::before($relation, ':') strips it from the whereHas.
 func TestWithWhereHasStripsTheColumnListFromTheExistenceCheck(t *testing.T) {
-	query := compiledQuery(t, &relUser{}, Conditions{}).WithWhereHas("Books:id,title").(*Query)
+	query := compiledQuery(t, &relUser{}, Conditions{}).WithWhereHas("Books:id,title").(*OrmBuilder)
 
 	statement, _, err := query.compileSelect()
 	require.NoError(t, err)
-	assert.Equal(t, `select * from "rel_users" where exists (select 1 from "rel_books" where "rel_users"."id" = "rel_books"."user_id")`, statement)
+	assert.Equal(t, `select * from "rel_users" where exists (select * from "rel_books" where "rel_users"."id" = "rel_books"."user_id")`, statement)
 
 	require.Len(t, query.conditions.eagerLoad, 1)
-	assert.Equal(t, "Books", query.conditions.eagerLoad[0].relation)
-	assert.Equal(t, []string{"id", "title"}, query.conditions.eagerLoad[0].columns)
+	assert.Equal(t, "Books", query.conditions.eagerLoad[0].Relation)
+	assert.Equal(t, []string{"id", "title"}, query.conditions.eagerLoad[0].Columns)
 }
 
 // --- WhereBelongsTo ---------------------------------------------------------------------------------
@@ -132,15 +132,15 @@ func TestWhereBelongsToDefaultsTheRelationToTheModelName(t *testing.T) {
 
 // An empty collection and a relation that is not a BelongsTo are refused, as the PHP method throws.
 func TestWhereBelongsToRefusesBadInput(t *testing.T) {
-	empty := compiledQuery(t, &relBook{}, Conditions{}).WhereBelongsTo([]*relUser{}, "Author").(*Query)
+	empty := compiledQuery(t, &relBook{}, Conditions{}).WhereBelongsTo([]*relUser{}, "Author").(*OrmBuilder)
 	_, _, err := empty.compileSelect()
 	assert.ErrorIs(t, err, errors.OrmWhereBelongsToEmpty)
 
-	notBelongsTo := compiledQuery(t, &relUser{}, Conditions{}).WhereBelongsTo(&relBook{ID: 1}, "Books").(*Query)
+	notBelongsTo := compiledQuery(t, &relUser{}, Conditions{}).WhereBelongsTo(&relBook{ID: 1}, "Books").(*OrmBuilder)
 	_, _, err = notBelongsTo.compileSelect()
 	assert.ErrorIs(t, err, errors.OrmWhereBelongsToNotBelongsTo)
 
-	unknown := compiledQuery(t, &relBook{}, Conditions{}).WhereBelongsTo(&relUser{ID: 7}, "Missing").(*Query)
+	unknown := compiledQuery(t, &relBook{}, Conditions{}).WhereBelongsTo(&relUser{ID: 7}, "Missing").(*OrmBuilder)
 	_, _, err = unknown.compileSelect()
 	assert.ErrorIs(t, err, errors.OrmRelationNotFound)
 }

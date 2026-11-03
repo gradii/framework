@@ -1529,9 +1529,10 @@ func (r *Query) collectChunk() ([]map[string]any, []db.Row, error) {
 	return items, rows, nil
 }
 
-// Each iterates the results one row at a time.
+// Each iterates the results one row at a time, reading 1000 rows per statement like Laravel's
+// BuildsQueries::each, which delegates to chunk(1000, ...).
 func (r *Query) Each(callback func(row db.Row) error) error {
-	return r.Chunk(1, func(rows []db.Row) error {
+	return r.Chunk(1000, func(rows []db.Row) error {
 		for _, row := range rows {
 			if err := callback(row); err != nil {
 				return err

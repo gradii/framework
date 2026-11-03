@@ -427,19 +427,19 @@ func (_c *Orm_Query_Call) RunAndReturn(run func() orm.Query) *Orm_Query_Call {
 }
 
 // Related provides a mock function with given fields: parent, relation
-func (_m *Orm) Related(parent interface{}, relation string) orm.Query {
+func (_m *Orm) Related(parent interface{}, relation string) orm.RelationQuery {
 	ret := _m.Called(parent, relation)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Related")
 	}
 
-	var r0 orm.Query
-	if rf, ok := ret.Get(0).(func(interface{}, string) orm.Query); ok {
+	var r0 orm.RelationQuery
+	if rf, ok := ret.Get(0).(func(interface{}, string) orm.RelationQuery); ok {
 		r0 = rf(parent, relation)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(orm.Query)
+			r0 = ret.Get(0).(orm.RelationQuery)
 		}
 	}
 
@@ -465,12 +465,12 @@ func (_c *Orm_Related_Call) Run(run func(parent interface{}, relation string)) *
 	return _c
 }
 
-func (_c *Orm_Related_Call) Return(_a0 orm.Query) *Orm_Related_Call {
+func (_c *Orm_Related_Call) Return(_a0 orm.RelationQuery) *Orm_Related_Call {
 	_c.Call.Return(_a0)
 	return _c
 }
 
-func (_c *Orm_Related_Call) RunAndReturn(run func(interface{}, string) orm.Query) *Orm_Related_Call {
+func (_c *Orm_Related_Call) RunAndReturn(run func(interface{}, string) orm.RelationQuery) *Orm_Related_Call {
 	_c.Call.Return(run)
 	return _c
 }

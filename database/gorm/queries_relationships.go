@@ -10,10 +10,15 @@ package gorm
 
 import (
 	"fmt"
+	"reflect"
+	"strconv"
 	"strings"
+	"sync/atomic"
+	"unicode"
 
-	contractsdriver "github.com/gradii/framework/contracts/database/driver"
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	"github.com/gradii/framework/database/gorm/relations"
+	"github.com/gradii/framework/database/orm/morphmap"
 	querybuilder "github.com/gradii/framework/database/query"
 	"github.com/gradii/framework/database/query/core"
 	"github.com/gradii/framework/errors"
@@ -34,96 +39,192 @@ import (
 // inner subquery, a string operator (defaults to ">="), and an int count (defaults to 1). For
 // nested relations dot-notation is honoured: `Has("Books.Author")` is shorthand for
 // `WhereHas("Books", q -> q.Has("Author"))`.
-func (r *Query) Has(relation string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) Has(relation string, args ...any) contractsorm.Query {
 	return r.queueRelationExistence(relation, args, "and", false)
 }
 
 // OrHas adds a relationship count / exists condition to the query with an "or" conjunction.
-func (r *Query) OrHas(relation string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) OrHas(relation string, args ...any) contractsorm.Query {
 	return r.queueRelationExistence(relation, args, "or", false)
 }
 
 // DoesntHave adds a relationship absence condition to the query.
 // Equivalent to Has(rel, "<", 1).
-func (r *Query) DoesntHave(relation string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) DoesntHave(relation string, args ...any) contractsorm.Query {
 	return r.queueRelationExistence(relation, args, "and", true)
 }
 
 // OrDoesntHave adds a relationship absence condition with an "or" conjunction.
-func (r *Query) OrDoesntHave(relation string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) OrDoesntHave(relation string, args ...any) contractsorm.Query {
 	return r.queueRelationExistence(relation, args, "or", true)
 }
 
 // WhereHas adds a relationship count / exists condition to the query with where clauses.
 // Functionally identical to Has - the rename merely makes call sites that always pass a callback
 // read more naturally.
-func (r *Query) WhereHas(relation string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) WhereHas(relation string, args ...any) contractsorm.Query {
 	return r.queueRelationExistence(relation, args, "and", false)
 }
 
 // OrWhereHas adds a relationship count / exists condition with where clauses and an "or"
 // conjunction.
-func (r *Query) OrWhereHas(relation string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) OrWhereHas(relation string, args ...any) contractsorm.Query {
 	return r.queueRelationExistence(relation, args, "or", false)
 }
 
 // WhereDoesntHave adds a relationship absence condition to the query with where clauses.
-func (r *Query) WhereDoesntHave(relation string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) WhereDoesntHave(relation string, args ...any) contractsorm.Query {
 	return r.queueRelationExistence(relation, args, "and", true)
 }
 
 // OrWhereDoesntHave adds a relationship absence condition with where clauses and an "or"
 // conjunction.
-func (r *Query) OrWhereDoesntHave(relation string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) OrWhereDoesntHave(relation string, args ...any) contractsorm.Query {
 	return r.queueRelationExistence(relation, args, "or", true)
 }
 
 // HasMorph adds a polymorphic relationship count / exists condition to the query.
 // types is a slice of model instances; the morph value used in the polymorphic type column is
-// derived from each model's GORM-resolved table name.
-//
-// Note: auto-discovery of distinct morph values via `types = ['*']` is not supported; an explicit
-// list of model instances is required.
-func (r *Query) HasMorph(relation string, types []any, args ...any) contractsorm.Query {
+// derived from each model's GORM-resolved table name. Pass []any{"*"} to resolve the values from
+// the parent table instead — Laravel's hasMorph(['*']), whose types come from the distinct
+// morph-type column read at compile time; Has / WhereHas / DoesntHave on a MorphTo take that path
+// automatically, mirroring how Eloquent's has() delegates to hasMorph($relation, ['*']).
+func (r *OrmBuilder) HasMorph(relation string, types []any, args ...any) contractsorm.Query {
 	return r.queueMorphExistence(relation, types, args, "and", false)
 }
 
 // OrHasMorph adds a polymorphic relationship count / exists condition with an "or" conjunction.
-func (r *Query) OrHasMorph(relation string, types []any, args ...any) contractsorm.Query {
+func (r *OrmBuilder) OrHasMorph(relation string, types []any, args ...any) contractsorm.Query {
 	return r.queueMorphExistence(relation, types, args, "or", false)
 }
 
 // DoesntHaveMorph adds a polymorphic relationship absence condition.
-func (r *Query) DoesntHaveMorph(relation string, types []any, args ...any) contractsorm.Query {
+func (r *OrmBuilder) DoesntHaveMorph(relation string, types []any, args ...any) contractsorm.Query {
 	return r.queueMorphExistence(relation, types, args, "and", true)
 }
 
 // OrDoesntHaveMorph adds a polymorphic relationship absence condition with an "or" conjunction.
-func (r *Query) OrDoesntHaveMorph(relation string, types []any, args ...any) contractsorm.Query {
+func (r *OrmBuilder) OrDoesntHaveMorph(relation string, types []any, args ...any) contractsorm.Query {
 	return r.queueMorphExistence(relation, types, args, "or", true)
 }
 
 // WhereHasMorph adds a polymorphic existence condition with where clauses; callbacks may be
 // MorphRelationCallback for per-type scoping.
-func (r *Query) WhereHasMorph(relation string, types []any, args ...any) contractsorm.Query {
+func (r *OrmBuilder) WhereHasMorph(relation string, types []any, args ...any) contractsorm.Query {
 	return r.queueMorphExistence(relation, types, args, "and", false)
 }
 
 // OrWhereHasMorph adds a polymorphic existence condition with where clauses and an "or"
 // conjunction.
-func (r *Query) OrWhereHasMorph(relation string, types []any, args ...any) contractsorm.Query {
+func (r *OrmBuilder) OrWhereHasMorph(relation string, types []any, args ...any) contractsorm.Query {
 	return r.queueMorphExistence(relation, types, args, "or", false)
 }
 
 // WhereDoesntHaveMorph adds a polymorphic absence condition with where clauses.
-func (r *Query) WhereDoesntHaveMorph(relation string, types []any, args ...any) contractsorm.Query {
+func (r *OrmBuilder) WhereDoesntHaveMorph(relation string, types []any, args ...any) contractsorm.Query {
 	return r.queueMorphExistence(relation, types, args, "and", true)
 }
 
 // OrWhereDoesntHaveMorph adds a polymorphic absence condition with where clauses and an "or"
 // conjunction.
-func (r *Query) OrWhereDoesntHaveMorph(relation string, types []any, args ...any) contractsorm.Query {
+func (r *OrmBuilder) OrWhereDoesntHaveMorph(relation string, types []any, args ...any) contractsorm.Query {
 	return r.queueMorphExistence(relation, types, args, "or", true)
+}
+
+// ---------------------------------------------------------------------------
+// Public API: attached-to (whereAttachedTo / orWhereAttachedTo / whereAttachedToCollection)
+//
+// Both port QueriesRelationships::whereAttachedTo: the relation's existence subquery is scoped
+// with the given models' keys the way Builder::whereKey writes them - integer keys inlined
+// through whereIntegerInRaw, other keys bound through whereIn.
+// ---------------------------------------------------------------------------
+
+// WhereAttachedTo constrains the query to the rows attached to the given model through a
+// many-to-many relation. Mirrors whereAttachedTo($model, $relationshipName = null): the relation
+// defaults to the plural camel form of the related model's type name and must resolve to a
+// many-to-many relation.
+func (r *OrmBuilder) WhereAttachedTo(related any, relation ...string) contractsorm.Query {
+	return r.whereAttachedTo(related, relation, false)
+}
+
+// OrWhereAttachedTo is WhereAttachedTo with an "or" conjunction. Mirrors orWhereAttachedTo,
+// which forwards to whereAttachedTo under Laravel's "or" boolean.
+func (r *OrmBuilder) OrWhereAttachedTo(related any, relation ...string) contractsorm.Query {
+	return r.whereAttachedTo(related, relation, true)
+}
+
+// WhereAttachedToCollection is WhereAttachedTo for a collection of models, mirroring
+// whereAttachedTo called with a collection: every model's key joins the list the existence
+// subquery matches against the related table's key.
+func (r *OrmBuilder) WhereAttachedToCollection(related any, relation ...string) contractsorm.Query {
+	return r.whereAttachedTo(related, relation, false)
+}
+
+func (r *OrmBuilder) whereAttachedTo(related any, relation []string, or bool) contractsorm.Query {
+	models := relatedModels(related)
+	if len(models) == 0 {
+		return r.withError(errors.OrmWhereAttachedToEmpty)
+	}
+
+	parent := r.parentModel()
+	if parent == nil {
+		return r.withError(errors.OrmQueryInvalidModel.Args("nil"))
+	}
+
+	name := ""
+	if len(relation) > 0 {
+		name = relation[0]
+	}
+	if name == "" {
+		name = str.Of(reflect.Indirect(reflect.ValueOf(models[0])).Type().Name()).Camel().Plural().String()
+	}
+
+	desc, err := relations.ResolveRelation(parent, name)
+	if err != nil {
+		return r.withError(err)
+	}
+	if desc.Kind != relKindMany2Many && desc.Kind != relKindMorphToMany {
+		return r.withError(errors.OrmWhereAttachedToNotBelongsToMany.Args(name, modelName(parent)))
+	}
+
+	// The plucked column is the related model's own key name, the way $related->getKeyName()
+	// reads it, and each key value is read through the model's schema.
+	schema, err := parseSchema(desc.RelatedModel)
+	if err != nil || len(schema.PrimaryFields) == 0 {
+		return r.withError(errors.OrmQueryPrimaryKeyNotFound.Args(modelName(desc.RelatedModel)))
+	}
+	keyColumn := schema.PrimaryFields[0].DBName
+
+	keys := make([]any, 0, len(models))
+	for _, model := range models {
+		key, err := readParentColumn(r, model, keyColumn)
+		if err != nil {
+			return r.withError(err)
+		}
+		keys = append(keys, key)
+	}
+
+	// Builder::whereKey inlines an integer key list through whereIntegerInRaw - the oracle's
+	// `in (49)` carries no binding - and binds any other list through whereIn; the qualified
+	// column is the related model's, as getQualifiedKeyName qualifies it.
+	column := desc.RelatedTable + "." + keyColumn
+	callback := func(query contractsorm.Query) contractsorm.Query {
+		if inner, ok := query.(*OrmBuilder); ok && allIntegerKeys(keys) {
+			inner.query.WhereIntegerInRaw(column, keys, core.BooleanAnd, false)
+
+			return inner
+		}
+
+		return query.WhereIn(column, keys)
+	}
+
+	// Laravel's whereAttachedTo hands its $boolean to has(), so the or form joins the
+	// statement's wheres with the "or exists" clause the way OrHas renders it.
+	if or {
+		return r.OrHas(name, callback)
+	}
+
+	return r.Has(name, callback)
 }
 
 // ---------------------------------------------------------------------------
@@ -134,35 +235,50 @@ func (r *Query) OrWhereDoesntHaveMorph(relation string, types []any, args ...any
 // ---------------------------------------------------------------------------
 
 // WithAggregate adds a sub-select to include an aggregate value for a relationship.
-// fn must be one of: count, max, min, sum, avg, exists.
-func (r *Query) WithAggregate(relation, column, fn string, args ...any) contractsorm.Query {
+// fn must be one of: count, max, min, sum, avg, exists. column is a column name, a
+// table-qualified name, "*", or a raw expression (database/query's Raw / Expression) - the
+// string|Expression union Laravel's withAggregate accepts. relation may carry an "as" rename
+// ("foo as foo_bar"): the rename becomes the select alias verbatim, otherwise the alias is the
+// Str::snake derivation Laravel computes from name, function and column.
+func (r *OrmBuilder) WithAggregate(relation string, column any, fn string, args ...any) contractsorm.Query {
+	if relation == "" {
+		return r
+	}
 	if !validAggregateFn(fn) {
 		return r.withError(errors.OrmRelationInvalidAggregate.Args(fn))
+	}
+	columnValue, ok := aggregateColumnValue(column)
+	if !ok {
+		return r.withError(errors.OrmRelationInvalidArgument.Args(column))
 	}
 	cb, _, _, err := parseRelationArgs(args)
 	if err != nil {
 		return r.withError(err)
 	}
+	name, alias := parseAggregateRelationName(relation)
+	if alias == "" {
+		alias = aggregateAlias(name, fn, columnValue)
+	}
 	conditions := r.conditions
 	conditions.selectSubs = deep.Append(conditions.selectSubs, selectSub{
-		relation: relation,
+		relation: name,
 		column:   column,
 		function: fn,
-		alias:    aggregateAlias(relation, fn, column),
+		alias:    alias,
 		callback: cb,
 	})
 	return r.setConditions(conditions)
 }
 
 // WithCount adds sub-select queries to count the relations. Each entry may be either:
-//   - a string ("Books") - emits `(SELECT COUNT(*) FROM ...) AS books_count`
+//   - a string ("Books", or "Books as book_total" for a rename) - emits `(SELECT COUNT(*) FROM ...) as books_count`
 //   - a contractsorm.RelationCount struct for scoped counts and/or custom alias
-func (r *Query) WithCount(relations ...any) contractsorm.Query {
+func (r *OrmBuilder) WithCount(relations ...any) contractsorm.Query {
 	current := r
 	for _, raw := range relations {
 		switch v := raw.(type) {
 		case string:
-			next, ok := current.WithAggregate(v, "*", "count").(*Query)
+			next, ok := current.WithAggregate(v, "*", "count").(*OrmBuilder)
 			if !ok {
 				return current
 			}
@@ -172,7 +288,7 @@ func (r *Query) WithCount(relations ...any) contractsorm.Query {
 			if v.Callback != nil {
 				args = append(args, v.Callback)
 			}
-			next, ok := current.WithAggregate(v.Name, "*", "count", args...).(*Query)
+			next, ok := current.WithAggregate(v.Name, "*", "count", args...).(*OrmBuilder)
 			if !ok {
 				return current
 			}
@@ -190,22 +306,22 @@ func (r *Query) WithCount(relations ...any) contractsorm.Query {
 }
 
 // WithMax adds sub-select queries to include the max of the relation's column.
-func (r *Query) WithMax(relation, column string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) WithMax(relation string, column any, args ...any) contractsorm.Query {
 	return r.WithAggregate(relation, column, "max", args...)
 }
 
 // WithMin adds sub-select queries to include the min of the relation's column.
-func (r *Query) WithMin(relation, column string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) WithMin(relation string, column any, args ...any) contractsorm.Query {
 	return r.WithAggregate(relation, column, "min", args...)
 }
 
 // WithSum adds sub-select queries to include the sum of the relation's column.
-func (r *Query) WithSum(relation, column string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) WithSum(relation string, column any, args ...any) contractsorm.Query {
 	return r.WithAggregate(relation, column, "sum", args...)
 }
 
 // WithAvg adds sub-select queries to include the average of the relation's column.
-func (r *Query) WithAvg(relation, column string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) WithAvg(relation string, column any, args ...any) contractsorm.Query {
 	return r.WithAggregate(relation, column, "avg", args...)
 }
 
@@ -213,10 +329,10 @@ func (r *Query) WithAvg(relation, column string, args ...any) contractsorm.Query
 // emitted as `CASE WHEN EXISTS (...) THEN 1 ELSE 0 END` for cross-dialect portability (SQL Server
 // has no boolean literal). The dest field may be either `bool` or an integer type - Go's
 // database/sql layer converts 0/1 ints to bool automatically.
-func (r *Query) WithExists(relations ...string) contractsorm.Query {
+func (r *OrmBuilder) WithExists(relations ...string) contractsorm.Query {
 	current := r
 	for _, rel := range relations {
-		next, ok := current.WithAggregate(rel, "*", "exists").(*Query)
+		next, ok := current.WithAggregate(rel, "*", "exists").(*OrmBuilder)
 		if !ok {
 			return current
 		}
@@ -234,21 +350,21 @@ func (r *Query) WithExists(relations ...string) contractsorm.Query {
 
 // With eagerly loads the given relationships using Goravel's own loader. Accepts the
 // union of fedaco's with(...) shapes; see the orm.Query interface comment for the full grammar.
-func (r *Query) With(args ...any) contractsorm.Query {
-	entries, err := parseEagerLoad(args)
+func (r *OrmBuilder) With(args ...any) contractsorm.Query {
+	entries, err := relations.ParseEagerLoad(args)
 	if err != nil {
 		return r.withError(err)
 	}
 	conditions := r.conditions
 	for _, e := range entries {
-		conditions.eagerLoad = upsertEagerLoadEntry(conditions.eagerLoad, e, e.callback != nil || e.columns != nil)
+		conditions.eagerLoad = relations.MergeEagerLoadEntry(conditions.eagerLoad, e)
 	}
 	return r.setConditions(conditions)
 }
 
 // Without removes the named relations from the eager-load list. Mirrors fedaco's
 // without(). Names must match exactly (including dot-paths, e.g. "Books.Author").
-func (r *Query) Without(relations ...string) contractsorm.Query {
+func (r *OrmBuilder) Without(relations ...string) contractsorm.Query {
 	if len(relations) == 0 || len(r.conditions.eagerLoad) == 0 {
 		return r
 	}
@@ -259,7 +375,7 @@ func (r *Query) Without(relations ...string) contractsorm.Query {
 	conditions := r.conditions
 	filtered := make([]eagerLoadEntry, 0, len(conditions.eagerLoad))
 	for _, e := range conditions.eagerLoad {
-		if _, omit := drop[e.relation]; omit {
+		if _, omit := drop[e.Relation]; omit {
 			continue
 		}
 		filtered = append(filtered, e)
@@ -270,7 +386,7 @@ func (r *Query) Without(relations ...string) contractsorm.Query {
 
 // WithOnly clears the eager-load list, then adds the given relations. Mirrors fedaco's
 // withOnly(). Useful when a default-scoped query has eager loads you want to override.
-func (r *Query) WithOnly(args ...any) contractsorm.Query {
+func (r *OrmBuilder) WithOnly(args ...any) contractsorm.Query {
 	conditions := r.conditions
 	conditions.eagerLoad = nil
 	return r.setConditions(conditions).With(args...)
@@ -280,7 +396,7 @@ func (r *Query) WithOnly(args ...any) contractsorm.Query {
 // Internal: queueing
 // ---------------------------------------------------------------------------
 
-func (r *Query) queueRelationExistence(relation string, args []any, conjunction string, doesntHave bool) contractsorm.Query {
+func (r *OrmBuilder) queueRelationExistence(relation string, args []any, conjunction string, doesntHave bool) contractsorm.Query {
 	cb, op, count, err := parseRelationArgs(args)
 	if err != nil {
 		return r.withError(err)
@@ -289,21 +405,42 @@ func (r *Query) queueRelationExistence(relation string, args []any, conjunction 
 		op = "<"
 		count = 1
 	}
+
+	// Laravel appends the exists clause to the builder's wheres at call time, so the clause sits
+	// between the wheres written before and after the call. The clause itself is rendered at compile
+	// time, when the parent model is known, so its position is recorded here: the earlier wheres are
+	// flushed now and the builder's counts become the splice points applyRelations uses.
+	r = r.flushWheres()
+	whereIndex := len(r.query.State().Wheres)
+	bindingIndex := len(r.query.State().Bindings["where"])
+
 	conditions := r.conditions
 	conditions.relations = deep.Append(conditions.relations, relationExistence{
-		relation:    relation,
-		operator:    op,
-		count:       count,
-		conjunction: conjunction,
-		callback:    cb,
+		relation:     relation,
+		operator:     op,
+		count:        count,
+		conjunction:  conjunction,
+		callback:     cb,
+		whereIndex:   whereIndex,
+		bindingIndex: bindingIndex,
 	})
 	return r.setConditions(conditions)
 }
 
-func (r *Query) queueMorphExistence(relation string, types []any, args []any, conjunction string, doesntHave bool) contractsorm.Query {
+func (r *OrmBuilder) queueMorphExistence(relation string, types []any, args []any, conjunction string, doesntHave bool) contractsorm.Query {
 	if len(types) == 0 {
 		return r.withError(errors.OrmRelationMorphTypesEmpty)
 	}
+
+	// A lone "*" is Laravel's auto-discovery marker: hasMorph compares `$types === ['*']` and
+	// reads the morph values from the parent table itself. The marker is consumed here; the values
+	// are resolved when the clause compiles.
+	morphAuto := false
+	if marker, ok := types[0].(string); ok && marker == "*" && len(types) == 1 {
+		morphAuto = true
+		types = nil
+	}
+
 	cb, mcb, op, count, err := parseMorphRelationArgs(args)
 	if err != nil {
 		return r.withError(err)
@@ -312,6 +449,14 @@ func (r *Query) queueMorphExistence(relation string, types []any, args []any, co
 		op = "<"
 		count = 1
 	}
+
+	// Same position recording as queueRelationExistence: the morph clause is appended to the
+	// statement's wheres at call time in Laravel, so the earlier wheres flush here and the current
+	// counts are remembered as the splice points.
+	r = r.flushWheres()
+	whereIndex := len(r.query.State().Wheres)
+	bindingIndex := len(r.query.State().Bindings["where"])
+
 	conditions := r.conditions
 	conditions.relations = deep.Append(conditions.relations, relationExistence{
 		relation:      relation,
@@ -321,6 +466,9 @@ func (r *Query) queueMorphExistence(relation string, types []any, args []any, co
 		callback:      cb,
 		morphTypes:    types,
 		morphCallback: mcb,
+		morphAuto:     morphAuto,
+		whereIndex:    whereIndex,
+		bindingIndex:  bindingIndex,
 	})
 	return r.setConditions(conditions)
 }
@@ -329,82 +477,194 @@ func (r *Query) queueMorphExistence(relation string, types []any, args []any, co
 // Internal: existence subquery construction
 // ---------------------------------------------------------------------------
 
-// compileExistenceSubquery builds the correlated inner SELECT for a relation as a framework builder.
-// Callers render it with ToSelectSQL and inline the result, so no GORM statement carries the
-// subquery. The builder is nil when the relation kind is unsupported.
-func (r *Query) compileExistenceSubquery(desc *relationDescriptor, callback contractsorm.RelationCallback) (*querybuilder.Builder, error) {
-	builder := r.subqueryBuilder(desc.relatedTable)
+// compileExistenceSubquery builds the correlated inner SELECT for a relation as a framework
+// builder. Callers render it with ToSelectSQL and inline the result, so no GORM statement carries
+// the subquery. The builder is nil when the relation kind is unsupported. The second return value
+// is the self-join alias when the relation reads the parent's own table (Laravel's
+// laravel_reserved_N), empty otherwise: the aggregate path qualifies its column with it, the way
+// getRelationHashedColumn reuses getRelationCountHash(false).
+//
+// The operator/count belong to the final segment of a dotted chain (Laravel's hasNested hands them
+// to the last has() call); this entry point leaves them at the defaults the aggregate paths and the
+// direct callers expect.
+func (r *OrmBuilder) compileExistenceSubquery(desc *relationDescriptor, callback contractsorm.RelationCallback) (*querybuilder.Builder, string, error) {
+	return r.compileExistenceSubqueryIn(desc, callback, desc.ParentTable, desc.ParentTable, ">=", 1)
+}
 
-	switch desc.kind {
-	case relKindHasOne, relKindHasMany, relKindBelongsTo, relKindMorphOne, relKindMorphMany:
-		for _, ref := range desc.references {
-			builder.WhereRaw(r.ident(ref.primaryTable, ref.primaryColumn)+" = "+r.ident(ref.foreignTable, ref.foreignColumn), nil, core.BooleanAnd)
+// compileExistenceSubqueryIn renders one existence level with the enclosing query's table identity
+// threaded in: parentFrom is the enclosing statement's from string ("posts", or
+// "posts as laravel_reserved_0" once that level aliased itself) and parentQualifier the table name
+// the correlation's parent side binds to. Laravel's self branches compare the related query's from
+// against the parent query's from string (HasOneOrMany::getRelationExistenceQuery and
+// BelongsToMany::getRelationExistenceQuery both do), so only a level whose table equals the
+// enclosing from string is aliased - a nested level under an already-aliased parent compares
+// against "table as hash" and keeps the plain name, correlating back to the enclosing alias.
+//
+// leafOperator/leafCount travel with the recursion and land on the final segment's clause, the way
+// hasNested hands the caller's operator/count to the last has() call; every segment before the last
+// stays a plain exists.
+func (r *OrmBuilder) compileExistenceSubqueryIn(desc *relationDescriptor, callback contractsorm.RelationCallback, parentFrom, parentQualifier, leafOperator string, leafCount int) (*querybuilder.Builder, string, error) {
+	builder := r.subqueryBuilder(desc.RelatedTable)
+
+	// A relation reading the parent's own table aliases the inner copy of the table, so the
+	// correlation does not bind the subquery's table to itself. HasOneOrMany and BelongsToMany
+	// branch on `$query->from == $parentQuery->from` and take the alias from
+	// Relation::$selfJoinCount; the outer references keep the plain table name. Through relations
+	// keep Laravel's through-specific self handling, which is not ported, so they never alias.
+	selfAlias := ""
+	relatedQualifier := desc.RelatedTable
+	if existenceLevelAliases(desc.Kind) && desc.ParentTable != "" && desc.RelatedTable == parentFrom {
+		selfAlias = nextSelfJoinAlias()
+		relatedQualifier = selfAlias
+		builder.From(desc.RelatedTable, selfAlias)
+	}
+	fromString := desc.RelatedTable
+	if selfAlias != "" {
+		fromString = desc.RelatedTable + " as " + selfAlias
+	}
+	if parentQualifier == "" {
+		parentQualifier = desc.ParentTable
+	}
+
+	switch desc.Kind {
+	case relKindHasOne, relKindHasMany, relKindMorphOne, relKindMorphMany:
+		for _, ref := range desc.References {
+			builder.WhereRaw(r.ident(parentQualifier, ref.PrimaryColumn)+" = "+r.ident(relatedQualifier, ref.ForeignColumn), nil, core.BooleanAnd)
 		}
-		if desc.kind == relKindMorphOne || desc.kind == relKindMorphMany {
-			builder.WhereRaw(r.ident(desc.relatedTable, desc.morphTypeColumn)+" = ?", []any{desc.morphValue}, core.BooleanAnd)
+		if desc.Kind == relKindMorphOne || desc.Kind == relKindMorphMany {
+			builder.WhereRaw(r.ident(relatedQualifier, desc.MorphTypeColumn)+" = ?", []any{desc.MorphValue}, core.BooleanAnd)
+		}
+	case relKindBelongsTo:
+		// BelongsTo writes the parent's foreign key first ("parent"."foo_id" = "close"."id"); the
+		// self form flips to the aliased owner key first, the order
+		// BelongsTo::getRelationExistenceQueryForSelfRelation pins.
+		for _, ref := range desc.References {
+			if selfAlias != "" {
+				builder.WhereRaw(r.ident(relatedQualifier, ref.PrimaryColumn)+" = "+r.ident(parentQualifier, ref.ForeignColumn), nil, core.BooleanAnd)
+			} else {
+				builder.WhereRaw(r.ident(parentQualifier, ref.ForeignColumn)+" = "+r.ident(relatedQualifier, ref.PrimaryColumn), nil, core.BooleanAnd)
+			}
 		}
 	case relKindMany2Many, relKindMorphToMany:
-		builder.JoinRaw(r.tableRef(desc.pivotTable)+" on "+
-			r.ident(desc.pivotTable, desc.pivotRelatedRef.foreignColumn)+" = "+
-			r.ident(desc.relatedTable, desc.pivotRelatedRef.primaryColumn), nil, "inner")
-		builder.WhereRaw(r.ident(desc.pivotParentRef.primaryTable, desc.pivotParentRef.primaryColumn)+" = "+
-			r.ident(desc.pivotTable, desc.pivotParentRef.foreignColumn), nil, core.BooleanAnd)
-		if desc.kind == relKindMorphToMany {
-			builder.WhereRaw(r.ident(desc.pivotTable, desc.morphTypeColumn)+" = ?", []any{desc.morphValue}, core.BooleanAnd)
+		// The join reads the related table first, the operand order the oracle emits for the
+		// relation existence join (`on "far"."id" = "user_role"."related_id"`).
+		builder.JoinRaw(r.tableRef(desc.PivotTable)+" on "+
+			r.ident(relatedQualifier, desc.PivotRelatedRef.PrimaryColumn)+" = "+
+			r.ident(desc.PivotTable, desc.PivotRelatedRef.ForeignColumn), nil, "inner")
+		builder.WhereRaw(r.ident(parentQualifier, desc.PivotParentRef.PrimaryColumn)+" = "+
+			r.ident(desc.PivotTable, desc.PivotParentRef.ForeignColumn), nil, core.BooleanAnd)
+		if desc.Kind == relKindMorphToMany {
+			builder.WhereRaw(r.ident(desc.PivotTable, desc.MorphTypeColumn)+" = ?", []any{desc.MorphValue}, core.BooleanAnd)
 		}
 	case relKindHasOneThrough, relKindHasManyThrough:
-		builder.JoinRaw(r.tableRef(desc.throughTable)+" on "+
-			r.ident(desc.relatedTable, desc.secondKey)+" = "+
-			r.ident(desc.throughTable, desc.secondLocalKey), nil, "inner")
-		builder.WhereRaw(r.ident(desc.parentTable, desc.localKey)+" = "+
-			r.ident(desc.throughTable, desc.firstKey), nil, core.BooleanAnd)
+		// The oracle renders the through side first ("rel_users"."id" = "rel_posts"."rel_user_id"),
+		// the same order the through read join wears.
+		builder.JoinRaw(r.tableRef(desc.ThroughTable)+" on "+
+			r.ident(desc.ThroughTable, desc.SecondLocalKey)+" = "+
+			r.ident(relatedQualifier, desc.SecondKey), nil, "inner")
+		builder.WhereRaw(r.ident(parentQualifier, desc.LocalKey)+" = "+
+			r.ident(desc.ThroughTable, desc.FirstKey), nil, core.BooleanAnd)
 	default:
-		return nil, errors.OrmRelationUnsupported.Args(desc.name, desc.parentTable, fmt.Sprintf("kind=%d", desc.kind))
+		return nil, "", errors.OrmRelationUnsupported.Args(desc.Name, desc.ParentTable, fmt.Sprintf("kind=%d", desc.Kind))
 	}
 
-	// Apply the relation's default scope before the caller's callback so the user's WhereHas
-	// callback can layer on top of the always-on filter.
-	r.applyRelationScope(builder, desc.onQuery)
-	r.applyRelationScope(builder, callback)
-
-	r.applySubquerySoftDelete(builder, desc.relatedTable, desc.relatedModel)
-
-	if desc.nested != nil {
-		nested, err := r.compileExistenceSubquery(desc.nested, nil)
+	// The relation's default scope contributes its one-of-many JOIN at join position and its where
+	// clauses after the caller's closure: Laravel merges the join inside getRelationExistenceQuery
+	// but mergeConstraintsFrom appends the relation's own wheres after callScope has run the
+	// closure, so the closure's clauses bind first.
+	relationScoped, joinSQL, joinArgs := r.relationScopeQuery(desc)
+	if joinSQL != "" {
+		builder.JoinRaw(joinSQL, joinArgs, "inner")
+	}
+	// The caller's closure binds at the leaf, the way hasNested hands it to the final has() call; an
+	// intermediate level of a chained relation contributes the nested relation's clause instead.
+	// Both sit in the callScope position Laravel gives them: hasNested runs the chain through the
+	// closure callScope applies before addHasWhere merges the relation constraints and before
+	// toBase applies the related model's scopes, so the nested clause leads the intermediate
+	// model's own wheres, its global scopes and its soft-delete predicate. Like the closure, the
+	// caller's operator/count ride down to the final segment: hasNested builds every earlier
+	// segment as a plain whereHas, so only the leaf clause carries the count comparison.
+	if desc.Nested == nil {
+		r.applyRelationScope(builder, callback)
+	} else {
+		nested, _, err := r.compileExistenceSubqueryIn(desc.Nested, callback, fromString, relatedQualifier, leafOperator, leafCount)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		if nested != nil {
-			nestedSQL, nestedBindings := nested.ToSelectSQL()
-			builder.WhereRaw("exists ("+nestedSQL+")", nestedBindings, core.BooleanAnd)
+			operator, count := ">=", 1
+			if desc.Nested.Nested == nil {
+				operator, count = leafOperator, leafCount
+			}
+			applyExistenceClause(builder, nested, operator, count, core.BooleanAnd)
 		}
 	}
+	if relationScoped != nil {
+		appendWhereClauses(builder, relationScoped.query)
+	}
 
-	setSubquerySelect(builder, "1")
+	// Laravel builds the subquery from the related model's fresh query, so the related model's
+	// global scopes filter inside the exists body, after the relation's constraints and before the
+	// soft-delete predicate - the order the oracle pins.
+	r.applyRelatedGlobalScopes(builder, desc.RelatedModel)
 
-	return builder, nil
+	r.applySubquerySoftDelete(builder, relatedQualifier, desc.RelatedModel)
+
+	// addHasWhere merges the relation query's own constraints - the wherePivot scopes - into the
+	// existence query after the caller's closure ran, so the pivot filter binds last, after a
+	// nested level's exists. Only pivot-scoped relations carry the callback.
+	if desc.OnPivotQuery != nil {
+		scoped := r.fresh()
+		if returned, ok := applyOnPivotQueryToQuery(r.queryGrammar, scoped, desc).(*OrmBuilder); ok {
+			scoped = returned
+		}
+		appendWhereClauses(builder, scoped.flushWheres().query)
+	}
+
+	// The body selects `*`, the shape Relation::getRelationExistenceQuery's `$columns = ['*']`
+	// default renders; the aggregate paths overwrite the select with their own expression.
+	return builder, selfAlias, nil
+}
+
+// existenceLevelAliases reports whether a relation kind takes Laravel's self-join alias when it
+// reads the parent's own table: the HasOneOrMany family, BelongsTo and the many-to-many family do;
+// the through family has its own self handling (aliasing the through table in one of its two
+// cases) which this port does not model, so those levels keep the plain table name.
+func existenceLevelAliases(kind relationKind) bool {
+	switch kind {
+	case relKindHasOne, relKindHasMany, relKindBelongsTo, relKindMorphOne, relKindMorphMany, relKindMany2Many, relKindMorphToMany:
+		return true
+	}
+
+	return false
 }
 
 // compileMorphExistenceSubquery is the morph-specific variant. The morph_type column is pinned on the
 // related table, inside the subquery, and the type comparison the caller needs lives in the subquery.
-func (r *Query) compileMorphExistenceSubquery(desc *relationDescriptor, morphValue string, callback contractsorm.RelationCallback) *querybuilder.Builder {
-	builder := r.subqueryBuilder(desc.relatedTable)
-	for _, ref := range desc.references {
-		builder.WhereRaw(r.ident(ref.primaryTable, ref.primaryColumn)+" = "+r.ident(ref.foreignTable, ref.foreignColumn), nil, core.BooleanAnd)
+func (r *OrmBuilder) compileMorphExistenceSubquery(desc *relationDescriptor, morphValue string, callback contractsorm.RelationCallback) *querybuilder.Builder {
+	builder := r.subqueryBuilder(desc.RelatedTable)
+	for _, ref := range desc.References {
+		builder.WhereRaw(r.ident(ref.PrimaryTable, ref.PrimaryColumn)+" = "+r.ident(ref.ForeignTable, ref.ForeignColumn), nil, core.BooleanAnd)
 	}
-	builder.WhereRaw(r.ident(desc.relatedTable, desc.morphTypeColumn)+" = ?", []any{morphValue}, core.BooleanAnd)
-	r.applyRelationScope(builder, desc.onQuery)
+	builder.WhereRaw(r.ident(desc.RelatedTable, desc.MorphTypeColumn)+" = ?", []any{morphValue}, core.BooleanAnd)
+	relationScoped, joinSQL, joinArgs := r.relationScopeQuery(desc)
+	if joinSQL != "" {
+		builder.JoinRaw(joinSQL, joinArgs, "inner")
+	}
 	r.applyRelationScope(builder, callback)
-	r.applySubquerySoftDelete(builder, desc.relatedTable, desc.relatedModel)
-	setSubquerySelect(builder, "1")
+	if relationScoped != nil {
+		appendWhereClauses(builder, relationScoped.query)
+	}
+	r.applyRelatedGlobalScopes(builder, desc.RelatedModel)
+	r.applySubquerySoftDelete(builder, desc.RelatedTable, desc.RelatedModel)
 
 	return builder
 }
 
 // compileAggregateSubquery returns the framework builder for the inner SELECT of an aggregate. The
 // select expression is dictated by sub.function.
-func (r *Query) compileAggregateSubquery(desc *relationDescriptor, sub selectSub) (*querybuilder.Builder, error) {
-	inner, err := r.compileExistenceSubquery(desc, sub.callback)
+func (r *OrmBuilder) compileAggregateSubquery(desc *relationDescriptor, sub selectSub) (*querybuilder.Builder, error) {
+	inner, selfAlias, err := r.compileExistenceSubquery(desc, sub.callback)
 	if err != nil {
 		return nil, err
 	}
@@ -412,18 +672,32 @@ func (r *Query) compileAggregateSubquery(desc *relationDescriptor, sub selectSub
 		return nil, nil
 	}
 
+	columnValue, _ := aggregateColumnValue(sub.column)
+
 	var selectExpr string
-	switch sub.function {
-	case "count":
-		selectExpr = "count(*)"
-	case "exists":
+	switch {
+	case sub.function == "exists":
 		selectExpr = "1"
+	case core.IsExpression(sub.column):
+		// An Expression column is spliced verbatim: sprintf('%s(%s)', $function, getValue($column)).
+		selectExpr = fmt.Sprintf("%s(%s)", sub.function, columnValue)
 	default:
-		col := "*"
-		if sub.column != "*" && sub.column != "" {
-			col = r.ident(desc.relatedTable, sub.column)
+		column := "*"
+		switch {
+		case columnValue == "*" || columnValue == "":
+			// The default "*" stands.
+		case strings.Contains(columnValue, "."):
+			// A qualified column is wrapped as-is; qualifyColumn leaves a dotted name alone, so a
+			// pivot column like "user_role.price" keeps its own table.
+			column = r.queryGrammar.Wrap(columnValue)
+		case selfAlias != "":
+			// The self-join's column wears the subquery alias, the way getRelationHashedColumn
+			// prefixes getRelationCountHash(false) for a same-table column.
+			column = r.ident(selfAlias, columnValue)
+		default:
+			column = r.ident(desc.RelatedTable, columnValue)
 		}
-		selectExpr = fmt.Sprintf("%s(%s)", sub.function, col)
+		selectExpr = fmt.Sprintf("%s(%s)", sub.function, column)
 	}
 	setSubquerySelect(inner, selectExpr)
 
@@ -440,7 +714,7 @@ func (r *Query) compileAggregateSubquery(desc *relationDescriptor, sub selectSub
 // the statement carries, so what is decided here is only the clause: the same EXISTS optimisation,
 // negation and conjunction the GORM path hands over, and for the polymorphic variants the same set of
 // per-type clauses joined into one group.
-func (r *Query) applyRelations(builder *querybuilder.Builder) error {
+func (r *OrmBuilder) applyRelations(builder *querybuilder.Builder) error {
 	if len(r.conditions.relations) == 0 {
 		return nil
 	}
@@ -450,61 +724,197 @@ func (r *Query) applyRelations(builder *querybuilder.Builder) error {
 		return errors.OrmQueryEmptyRelation
 	}
 
+	// Every clause is rendered at the tail; relocateAppendedClause then moves it back to the where
+	// position its call recorded, so the statement preserves Laravel's call order (a has() clause
+	// sits between the wheres written before and after it). The counters shift the recorded positions
+	// and binding offsets by what the clauses spliced before them added.
+	splicedWheres := 0
+	splicedBindings := 0
+
 	for _, item := range r.conditions.relations {
 		boolean := core.BooleanAnd
 		if item.conjunction == "or" {
 			boolean = core.BooleanOr
 		}
 
-		if len(item.morphTypes) > 0 {
+		whereStart := len(builder.State().Wheres)
+		bindingStart := len(builder.State().Bindings["where"])
+
+		if item.morphAuto || len(item.morphTypes) > 0 {
 			if err := r.applyMorphRelation(builder, parent, item, boolean); err != nil {
 				return err
 			}
+		} else {
+			desc, err := relations.ResolveRelation(parent, item.relation)
+			if err != nil {
+				return err
+			}
 
-			continue
+			if desc.Kind == relKindMorphTo {
+				// Laravel's has() on a MorphTo delegates to hasMorph($relation, ['*'], ...): the
+				// morph values are read from the parent table itself rather than from model
+				// instances, so the clause resolves its types through the auto path.
+				item.morphAuto = true
+				if err := r.applyMorphRelation(builder, parent, item, boolean); err != nil {
+					return err
+				}
+			} else {
+				// hasNested always renders the first segment as a plain exists - not exists for the
+				// doesntHave shape (operator "<", count 1) - and hands the caller's operator/count to
+				// the final segment, so a dotted chain keeps its count comparison on the leaf.
+				leafOperator, leafCount := item.operator, item.count
+				outerOperator, outerCount := item.operator, item.count
+				if desc.Nested != nil {
+					outerOperator, outerCount = ">=", 1
+					if item.operator == "<" && item.count == 1 {
+						outerOperator = "<"
+						leafOperator, leafCount = ">=", 1
+					}
+				}
+
+				inner, _, err := r.compileExistenceSubqueryIn(desc, item.callback, desc.ParentTable, desc.ParentTable, leafOperator, leafCount)
+				if err != nil {
+					return err
+				}
+				if inner == nil {
+					continue
+				}
+
+				applyExistenceClause(builder, inner, outerOperator, outerCount, boolean)
+			}
 		}
 
-		desc, err := resolveRelation(parent, item.relation)
-		if err != nil {
-			return err
-		}
+		appendedWheres := len(builder.State().Wheres) - whereStart
+		appendedBindings := len(builder.State().Bindings["where"]) - bindingStart
 
-		inner, err := r.compileExistenceSubquery(desc, item.callback)
-		if err != nil {
-			return err
-		}
-		if inner == nil {
-			continue
-		}
+		relocateAppendedClause(builder, whereStart, bindingStart, item.whereIndex+splicedWheres, item.bindingIndex+splicedBindings)
 
-		applyExistenceClause(builder, inner, item.operator, item.count, boolean)
+		splicedWheres += appendedWheres
+		splicedBindings += appendedBindings
 	}
 
 	return nil
 }
 
-// applyMorphRelation adds a polymorphic existence condition. Each requested type is a table of its own,
-// so the types contribute one clause each to a single group, which the condition's conjunction then
-// attaches to the query.
-func (r *Query) applyMorphRelation(builder *querybuilder.Builder, parent any, item relationExistence, boolean string) error {
-	desc, err := resolveRelation(parent, item.relation)
+// relocateAppendedClause moves the clauses a relation existence condition appended at the tail back
+// to the positions the condition recorded when its method was called, restoring Laravel's
+// call-order placement for a clause whose rendering is deferred to compile time. The move is a pure
+// re-slice of the where list and of its binding list: the bindings appended with the clause travel
+// to the parallel offset, so the statement's placeholders keep matching their values.
+func relocateAppendedClause(builder *querybuilder.Builder, whereStart, bindingStart, whereTarget, bindingTarget int) {
+	state := builder.State()
+
+	if moved := state.Wheres[whereStart:]; len(moved) > 0 && whereTarget < whereStart {
+		wheres := make([]core.Where, 0, len(state.Wheres))
+		wheres = append(wheres, state.Wheres[:whereTarget]...)
+		wheres = append(wheres, moved...)
+		wheres = append(wheres, state.Wheres[whereTarget:whereStart]...)
+		state.Wheres = wheres
+	}
+
+	bindings := state.Bindings["where"]
+	if moved := bindings[bindingStart:]; len(moved) > 0 && bindingTarget < bindingStart {
+		relocated := make([]any, 0, len(bindings))
+		relocated = append(relocated, bindings[:bindingTarget]...)
+		relocated = append(relocated, moved...)
+		relocated = append(relocated, bindings[bindingTarget:bindingStart]...)
+		state.Bindings["where"] = relocated
+	}
+}
+
+// applyMorphRelation adds a polymorphic existence condition. Each requested type is a table of its
+// own, so the types contribute one alternative each to a single group, which the condition's
+// conjunction then attaches to the query: every type after the first is joined with "or", the shape
+// Laravel's hasMorph renders with one orWhere closure per type.
+//
+// A `['*']` condition (morphAuto) resolves its types first — hasMorph reads the parent table's
+// distinct morph-type values at call time, keeping the non-empty ones — and reports a relation kind
+// other than MorphTo as unsupported, because Eloquent's auto-discovery builds per-type belongs-to
+// queries, which only a MorphTo can feed.
+func (r *OrmBuilder) applyMorphRelation(builder *querybuilder.Builder, parent any, item relationExistence, boolean string) error {
+	desc, err := relations.ResolveRelation(parent, item.relation)
 	if err != nil {
 		return err
 	}
 
-	switch desc.kind {
+	if item.morphAuto {
+		return r.applyAutoMorphRelation(builder, parent, desc, item, boolean)
+	}
+
+	switch desc.Kind {
 	case relKindMorphOne, relKindMorphMany, relKindMorphTo:
 	default:
 		return errors.OrmRelationUnsupported.Args(item.relation, fmt.Sprintf("%T", parent), "morph (must be polymorphic relation)")
 	}
 
-	builder.WhereNested(func(group *querybuilder.Builder) *querybuilder.Builder {
-		for _, typeModel := range item.morphTypes {
-			// A type that cannot be resolved contributes nothing rather than failing the query, which
-			// is what the GORM path does: it skips the type and keeps the others.
-			if err := r.applyMorphTypeClause(group, desc, typeModel, item); err != nil {
-				continue
+	// Strict morph mode pre-flight: Laravel's hasMorph resolves every requested type with
+	// (new $type)->getMorphClass() while the per-type orWhere closures are built — the where()
+	// closure runs synchronously (QueriesRelationships.php:289) — so an unmapped type raises
+	// ClassMorphViolationException at call time. The clause builder below runs inside WhereNested,
+	// which cannot return an error, and its per-type skip stays the lax GORM-path parity for
+	// types whose table does not resolve; the strict failure is raised here, where it can leave
+	// the function. While strict mode is off resolveMorphValue never fails and this loop changes
+	// nothing.
+	for _, typeModel := range item.morphTypes {
+		if relatedTable, err := tableNameFor(typeModel); err == nil {
+			if _, err := relations.ResolveMorphValue(typeModel, relatedTable); err != nil {
+				return err
 			}
+		}
+	}
+
+	builder.WhereNested(func(group *querybuilder.Builder) *querybuilder.Builder {
+		r.addMorphAlternatives(group, desc, item, item.morphTypes)
+
+		return group
+	}, boolean)
+
+	return nil
+}
+
+// applyAutoMorphRelation adds the `types = ['*']` form: the morph values are read from the parent
+// table itself instead of coming from model instances. Every value resolves through the morph map —
+// the port has no class strings to instantiate — and a value the map does not know is reported with
+// OrmMorphTypeUnknown, where Laravel would fail constructing the class the stored value names.
+func (r *OrmBuilder) applyAutoMorphRelation(builder *querybuilder.Builder, parent any, desc *relationDescriptor, item relationExistence, boolean string) error {
+	if desc.Kind != relKindMorphTo {
+		return errors.OrmRelationUnsupported.Args(item.relation, fmt.Sprintf("%T", parent), `auto morph discovery ("*") requires a MorphTo relation`)
+	}
+
+	aliases, err := r.distinctMorphTypes(parent, desc)
+	if err != nil {
+		return err
+	}
+
+	// An empty type list degenerates to `where 0 <operator> <count>` on the outer query — the
+	// hasMorph branch that keeps has() over a table with no morph values from matching anything
+	// (oracle: `select * from "photos" where 0 >= ?`, binding 1).
+	if len(aliases) == 0 {
+		applySimpleWhere(builder, querybuilder.Expression{Value: "0"}, []any{item.operator, item.count}, boolean)
+
+		return nil
+	}
+
+	samples := make([]any, 0, len(aliases))
+	for _, alias := range aliases {
+		sample := morphmap.Find(alias)
+		if sample == nil {
+			return errors.OrmMorphTypeUnknown.Args(alias)
+		}
+
+		samples = append(samples, sample)
+	}
+
+	builder.WhereNested(func(group *querybuilder.Builder) *querybuilder.Builder {
+		r.addMorphAlternatives(group, desc, item, samples)
+
+		// The negated forms carry Laravel's null-morph alternative: without it a row that stores no
+		// morph type at all could never match a "not having the relation" condition (oracle:
+		// `or "photos"."imageable_type" is null`).
+		if morphNullApplies(item.operator, item.count) {
+			// The column is written the way a caller writes one — unquoted, table-qualified — because
+			// the compiler quotes each segment itself; an already-quoted name would be quoted again.
+			group.WhereNull(desc.ParentTable+"."+desc.MorphTypeColumn, core.BooleanOr, false)
 		}
 
 		return group
@@ -513,19 +923,83 @@ func (r *Query) applyMorphRelation(builder *querybuilder.Builder, parent any, it
 	return nil
 }
 
-// applyMorphTypeClause adds the clauses one requested type contributes to the group.
+// addMorphAlternatives adds one set of clauses per type to the group, joining every type after the
+// first with an "or" conjunction. A type the lax path cannot resolve contributes nothing rather
+// than failing the query, which is what the GORM path does: it skips the type and keeps the
+// others. An unmapped model under strict mode never reaches this skip — applyMorphRelation's
+// pre-flight has already raised the class violation.
+func (r *OrmBuilder) addMorphAlternatives(group *querybuilder.Builder, desc *relationDescriptor, item relationExistence, types []any) {
+	first := true
+	for _, typeModel := range types {
+		typeBoolean := core.BooleanOr
+		if first {
+			typeBoolean = core.BooleanAnd
+		}
+
+		if err := r.applyMorphTypeClause(group, desc, typeModel, item, typeBoolean); err != nil {
+			continue
+		}
+
+		first = false
+	}
+}
+
+// morphNullApplies mirrors hasMorph's `$checkMorphNull` for the auto-discovery form: the negated
+// comparisons are the ones that add `or <morph type> is null`.
+func morphNullApplies(operator string, count int) bool {
+	switch operator {
+	case "<":
+		return count >= 1
+	case "<=":
+		return count >= 0
+	case "=":
+		return count == 0
+	case "!=":
+		return count >= 1
+	}
+
+	return false
+}
+
+// distinctMorphTypes reads the MorphTo relation's distinct morph-type values from the parent table,
+// the way hasMorph(['*']) plucks `$this->model->newModelQuery()->distinct()->pluck($type)` and drops
+// the empty values. The read runs on the receiver's connection while the clause is compiled, and it
+// is deliberately unscoped: newModelQuery registers no global scopes and no soft-delete filter, so
+// trashed or scope-excluded parents still contribute their types, exactly as they do in Laravel.
+func (r *OrmBuilder) distinctMorphTypes(parent any, desc *relationDescriptor) ([]string, error) {
+	values := []any{}
+	read := r.relatedQuery(parent).WithoutGlobalScopes().WithTrashed().Distinct(desc.MorphTypeColumn)
+	if err := read.Pluck(desc.MorphTypeColumn, &values); err != nil {
+		return nil, err
+	}
+
+	aliases := make([]string, 0, len(values))
+	for _, value := range values {
+		if alias := morphTypeToString(value); alias != "" {
+			aliases = append(aliases, alias)
+		}
+	}
+
+	return aliases, nil
+}
+
+// applyMorphTypeClause adds the clauses one requested type contributes to the group, joined to the
+// earlier alternatives with typeBoolean.
 //
 // The type is pinned inside the subquery for the outbound kinds, whose morph column lives on the
-// related table, and against the parent table for the inverse kind, whose column lives there. Either
-// way the type and its subquery are ANDed inside the group, so the group reads as one alternative per
-// type.
-func (r *Query) applyMorphTypeClause(builder *querybuilder.Builder, desc *relationDescriptor, typeModel any, item relationExistence) error {
+// related table. For the inverse kind the pair lives in a group of its own — Laravel wraps each type
+// in an orWhere closure — so it reads `(<type> = ? and exists (...))`, the shape the oracle pins for
+// `has('imageable')` over photos.
+func (r *OrmBuilder) applyMorphTypeClause(builder *querybuilder.Builder, desc *relationDescriptor, typeModel any, item relationExistence, typeBoolean string) error {
 	relatedTable, err := tableNameFor(typeModel)
 	if err != nil {
 		return err
 	}
 
-	morphValue := resolveMorphValue(typeModel, relatedTable)
+	morphValue, err := relations.ResolveMorphValue(typeModel, relatedTable)
+	if err != nil {
+		return err
+	}
 
 	callback := item.callback
 	if item.morphCallback != nil {
@@ -535,41 +1009,55 @@ func (r *Query) applyMorphTypeClause(builder *querybuilder.Builder, desc *relati
 		}
 	}
 
-	if desc.kind == relKindMorphTo {
+	if desc.Kind == relKindMorphTo {
 		inner := r.compileMorphToExistenceSubquery(desc, relatedTable, typeModel, callback)
 
-		builder.WhereRaw(r.ident(desc.parentTable, desc.morphTypeColumn)+" = ?", []any{morphValue}, core.BooleanAnd)
+		builder.WhereNested(func(pair *querybuilder.Builder) *querybuilder.Builder {
+			pair.WhereRaw(r.ident(desc.ParentTable, desc.MorphTypeColumn)+" = ?", []any{morphValue}, core.BooleanAnd)
 
-		applyExistenceClause(builder, inner, item.operator, item.count, core.BooleanAnd)
+			applyExistenceClause(pair, inner, item.operator, item.count, core.BooleanAnd)
+
+			return pair
+		}, typeBoolean)
 
 		return nil
 	}
 
 	inner := r.compileMorphExistenceSubquery(desc, morphValue, callback)
 
-	applyExistenceClause(builder, inner, item.operator, item.count, core.BooleanAnd)
+	applyExistenceClause(builder, inner, item.operator, item.count, typeBoolean)
 
 	return nil
 }
 
 // compileMorphToExistenceSubquery builds the belongs-to-shaped inner query an inverse polymorphic
-// condition correlates against one of its types: that type's own key against the parent's morph id.
+// condition correlates against one of its types: the parent's morph id against that type's own key,
+// the operand order Laravel's per-type BelongsTo writes.
 //
 // The type is one of the morph map's models, so each type decides its own soft-delete predicate: a
 // type still declaring gorm.DeletedAt is left to GORM, exactly as on every other compiled path, while
 // a type carrying the framework's own soft-delete type gets its "not deleted" predicate inside the
 // subquery - the same per-type treatment Laravel's SoftDeletingScope gives the BelongsTo it builds.
-func (r *Query) compileMorphToExistenceSubquery(desc *relationDescriptor, relatedTable string, relatedModel any, callback contractsorm.RelationCallback) *querybuilder.Builder {
-	ownerKey := desc.morphOwnerKey
+func (r *OrmBuilder) compileMorphToExistenceSubquery(desc *relationDescriptor, relatedTable string, relatedModel any, callback contractsorm.RelationCallback) *querybuilder.Builder {
+	ownerKey := desc.MorphOwnerKey
 	if ownerKey == "" {
 		ownerKey = "id"
 	}
 
 	builder := r.subqueryBuilder(relatedTable)
-	builder.WhereRaw(r.ident(relatedTable, ownerKey)+" = "+r.ident(desc.parentTable, desc.morphIDColumn), nil, core.BooleanAnd)
+	// The parent's morph id leads the correlation (oracle: `exists (select * from "posts" where
+	// "photos"."imageable_id" = "posts"."id")`).
+	builder.WhereRaw(r.ident(desc.ParentTable, desc.MorphIDColumn)+" = "+r.ident(relatedTable, ownerKey), nil, core.BooleanAnd)
 
-	r.applyRelationScope(builder, desc.onQuery)
+	relationScoped, joinSQL, joinArgs := r.relationScopeQuery(desc)
+	if joinSQL != "" {
+		builder.JoinRaw(joinSQL, joinArgs, "inner")
+	}
 	r.applyRelationScope(builder, callback)
+	if relationScoped != nil {
+		appendWhereClauses(builder, relationScoped.query)
+	}
+	r.applyRelatedGlobalScopes(builder, relatedModel)
 
 	r.applySubquerySoftDelete(builder, relatedTable, relatedModel)
 
@@ -589,7 +1077,14 @@ func applyExistenceClause(builder *querybuilder.Builder, inner *querybuilder.Bui
 
 	setSubquerySelect(inner, "count(*)")
 	subquery, bindings := inner.ToSelectSQL()
-	builder.WhereRaw("("+subquery+") "+operator+" ?", append(bindings, count), boolean)
+	_ = builder.AddBinding(bindings, "where")
+	// The count is inlined as a raw expression, the way Laravel's addWhereCountQuery writes
+	// new Expression($count) for a numeric count, and the comparison goes through the builder's
+	// where path so the operator is validated: an unknown operator is swapped for "=" and bound as
+	// the value, discarding the count, the handling Builder::where() gives both. Concatenating the
+	// comparison put a caller string into the statement verbatim.
+	applySimpleWhere(builder, querybuilder.Expression{Value: "(" + subquery + ")"},
+		[]any{operator, querybuilder.Expression{Value: strconv.Itoa(count)}}, boolean)
 }
 
 // existenceKeyword names the clause an existence condition becomes, negated when the condition asked
@@ -607,23 +1102,23 @@ func existenceKeyword(operator string, count int) string {
 // ---------------------------------------------------------------------------
 
 // relatedChild returns a child query addressing one table and matching a column against a list of
-// values. It is the shape every eager loader builds per chunk, expressed in the conditions the compiler
-// reads rather than as a statement handed to GORM.
+// values. It is the shape every eager loader builds per chunk: the constraint goes straight onto the
+// child's builder, the way Eloquent's addEagerConstraints writes it, so it keeps its place ahead of
+// anything a relation scope or callback adds.
 //
 // The column is named the way a caller writes one — unquoted, with a dot separating a table from its
 // column — because the compiler quotes each segment. A name that arrived already quoted would be
 // quoted again and the statement would not run.
-func (r *Query) relatedChild(table string, column string, values []any) *Query {
+func (r *OrmBuilder) relatedChild(table string, column string, values []any) *OrmBuilder {
 	// The child starts from no conditions of its own, as the fresh session it replaced did. Inheriting
 	// the receiver's would carry the parent query's where clause into the child and narrow it to the
 	// rows the parent matched.
 	child := r.fresh()
+	child.query.From(table, "")
 
-	conditions := child.conditions
-	conditions.table = &Table{name: table}
-	conditions.where = append(conditions.where, contractsdriver.Where{Query: column, Args: []any{values}})
+	child.query.WhereIn(column, values, core.BooleanAnd, false)
 
-	return child.setConditions(conditions)
+	return child
 }
 
 // applySubquerySoftDelete adds the related model's "not soft deleted" predicate inside an existence
@@ -632,7 +1127,7 @@ func (r *Query) relatedChild(table string, column string, values []any) *Query {
 // would match a parent whose only related rows are soft-deleted. Only the framework's own soft-delete
 // type is handled: a related model still declaring gorm.DeletedAt is left to GORM, exactly as on every
 // other compiled path.
-func (r *Query) applySubquerySoftDelete(builder *querybuilder.Builder, table string, model any) {
+func (r *OrmBuilder) applySubquerySoftDelete(builder *querybuilder.Builder, table string, model any) {
 	if !usesFrameworkSoftDeleteModel(model) {
 		return
 	}
@@ -642,14 +1137,97 @@ func (r *Query) applySubquerySoftDelete(builder *querybuilder.Builder, table str
 		return
 	}
 
-	builder.WhereRaw(r.ident(table, column)+" IS NULL", nil, core.BooleanAnd)
+	// A structured where, so the grammar compiles Laravel's lowercase "is null" through
+	// compileWhereNull instead of rendering a raw fragment's own casing.
+	builder.WhereNull(table+"."+column, core.BooleanAnd, false)
+}
+
+// applyRelatedGlobalScopes folds the related model's global scopes into an existence subquery.
+// Laravel builds the subquery from `$relation->getRelated()->newQueryWithoutRelationships()`, a
+// fresh query whose global scopes are registered, and toBase() applies them inside the subquery;
+// the parent's own scope removals do not reach them. The scopes land after the correlation and the
+// relation's constraints, each in its declaration order - the order addGlobalScopes gives the
+// scopes of a top-level query - and each is regrouped the way the callScope addGlobalScopes runs it,
+// so a scope's or-chain becomes its own nested group before the next scope's clauses land.
+func (r *OrmBuilder) applyRelatedGlobalScopes(builder *querybuilder.Builder, relatedModel any) {
+	scopes := relatedGlobalScopes(relatedModel)
+	if len(scopes) == 0 {
+		return
+	}
+
+	scoped := r.fresh()
+	scopedWhereCount := 0
+	scopedBindingCount := 0
+	for _, scope := range scopes {
+		originalWhereCount := len(builder.State().Wheres)
+
+		if returned, ok := scope(scoped).(*OrmBuilder); ok {
+			scoped = returned
+		}
+
+		// Flush after each scope so the next one's clauses land after the previous one's, the order
+		// withScopesApplied gives the scopes of a top-level query.
+		scoped = scoped.flushWheres()
+
+		// The scope starts from what the previous scopes produced - addGlobalScopes reuses its
+		// query per scope - so only the wheres it added move onto the subquery now.
+		allWheres := scoped.query.State().Wheres
+		addedWheres := allWheres[scopedWhereCount:]
+		scopedWhereCount = len(allWheres)
+		if len(addedWheres) == 0 {
+			continue
+		}
+
+		allBindings := scoped.query.State().Bindings["where"]
+		addedBindings := allBindings[scopedBindingCount:]
+		scopedBindingCount = len(allBindings)
+
+		builder.State().Wheres = append(builder.State().Wheres, addedWheres...)
+		_ = builder.AddBinding(addedBindings, "where")
+
+		if len(builder.State().Wheres) > originalWhereCount {
+			addNewWheresWithinGroupIn(builder, originalWhereCount)
+		}
+	}
+}
+
+// relatedGlobalScopes resolves the global-scope callbacks a related model declares, in declaration
+// order. Nil when the model declares none or is not a global-scope model.
+func relatedGlobalScopes(relatedModel any) []func(contractsorm.Query) contractsorm.Query {
+	if relatedModel == nil {
+		return nil
+	}
+
+	model, err := modelToStruct(relatedModel)
+	if err != nil {
+		return nil
+	}
+
+	modelWithGlobalScopes, ok := model.(contractsorm.ModelWithGlobalScopes)
+	if !ok {
+		return nil
+	}
+
+	modelGlobalScopes := modelWithGlobalScopes.GlobalScopes()
+	if len(modelGlobalScopes) == 0 {
+		return nil
+	}
+
+	// The scopes keep their declaration order - the order a model lists them in, which is the order
+	// addGlobalScopes applies a top-level query's scopes in.
+	scopes := make([]func(contractsorm.Query) contractsorm.Query, 0, len(modelGlobalScopes))
+	for _, globalScope := range modelGlobalScopes {
+		scopes = append(scopes, globalScope.Scope)
+	}
+
+	return scopes
 }
 
 // subqueryBuilder starts a framework builder for a correlated subquery over table.
 //
 // The name is bare, like every table name the ORM holds, and goes in through tableRef so the
 // grammar renders it with the dialect quoting and the connection prefix exactly once.
-func (r *Query) subqueryBuilder(table string) *querybuilder.Builder {
+func (r *OrmBuilder) subqueryBuilder(table string) *querybuilder.Builder {
 	builder := querybuilder.NewBuilder(r.queryGrammar)
 	builder.SetDriver(r.dbConfig.Driver)
 	builder.FromRaw(r.tableRef(table), nil)
@@ -663,26 +1241,79 @@ func setSubquerySelect(builder *querybuilder.Builder, expression string) {
 	builder.Select(querybuilder.Expression{Value: expression})
 }
 
-// applyRelationScope runs a relation callback against a child query and translates its conditions onto
-// the subquery builder. The callback is handed a wrapper query, exactly as it was when the subquery
-// was assembled with GORM, but its clauses now land on the framework builder.
-func (r *Query) applyRelationScope(builder *querybuilder.Builder, callback contractsorm.RelationCallback) {
+// applyRelationScope runs a relation callback and carries its where conditions onto the subquery
+// builder, in order after the correlation wheres. Laravel runs the callback through callScope, which
+// regroups the subquery's wheres around the clauses the callback added, so an or-chain the callback
+// leaves becomes its own nested group instead of leaking past the correlation; the same regroup is
+// applied here. Non-where clauses the callback sets (an order by, a limit) are deliberately not
+// carried: Laravel emits them inside the subquery, but SQL Server rejects ORDER BY in a subquery,
+// and relation_sql_test.go pins the difference.
+func (r *OrmBuilder) applyRelationScope(builder *querybuilder.Builder, callback contractsorm.RelationCallback) {
 	if callback == nil {
 		return
 	}
 
-	child := r.fresh()
+	originalWhereCount := len(builder.State().Wheres)
 
-	if scoped, ok := callback(child).(*Query); ok {
-		scoped.applyWhere(builder)
+	scoped := r.fresh()
+	if returned, ok := callback(scoped).(*OrmBuilder); ok {
+		scoped = returned
+	}
 
+	scoped = scoped.flushWheres()
+
+	appendWhereClauses(builder, scoped.query)
+
+	if len(builder.State().Wheres) > originalWhereCount {
+		addNewWheresWithinGroupIn(builder, originalWhereCount)
+	}
+}
+
+// applyOneOfManyRelationScope applies a relation's default scope to an existence subquery. A plain
+// scope contributes its where clauses, as before. A one-of-many relation instead joins the
+// aggregate subquery Laravel's ofMany builds — with the relation's of-many closure constraints
+// inside it — so the existence check is evaluated against the one-of-many rows, the way
+// HasOne::getRelationExistenceQuery merges the join before the exists runs.
+// relationScopeQuery resolves a relation's default scope without applying it: the returned query
+// holds the where clauses the caller appends after its own callback, and the join string (with its
+// bindings) is the one-of-many JOIN Laravel's ofMany installs, which the caller applies at join
+// position. The split mirrors Laravel: HasOne::getRelationExistenceQuery merges the of-many join
+// into the existence query, while mergeConstraintsFrom appends the relation's own wheres after the
+// caller's closure has run.
+func (r *OrmBuilder) relationScopeQuery(desc *relationDescriptor) (*OrmBuilder, string, []any) {
+	if desc.OnQuery == nil {
+		return nil, "", nil
+	}
+
+	scoped := r.fresh()
+	if returned, ok := desc.OnQuery(scoped).(*OrmBuilder); ok {
+		scoped = returned
+	}
+
+	if scoped.conditions.oneOfMany != nil {
+		join, args, err := r.oneOfManyJoin(scoped, desc, scoped.conditions.oneOfMany, nil, false)
+		if err == nil && join != "" {
+			// Constraints written before OfMany stay on the existence query itself; the ones after
+			// it were moved into the aggregate subquery by the join builder.
+			return scoped.flushWheres(), join, args
+		}
+	}
+
+	return scoped.flushWheres(), "", nil
+}
+
+// appendWhereClauses moves a child query's where clauses onto the subquery builder, bindings
+// included, so they keep their place after the clauses already on it.
+func appendWhereClauses(dst, src *querybuilder.Builder) {
+	if len(src.State().Wheres) == 0 {
 		return
 	}
 
-	child.applyWhere(builder)
+	dst.State().Wheres = append(dst.State().Wheres, src.State().Wheres...)
+	_ = dst.AddBinding(src.State().Bindings["where"], "where")
 }
 
-func (r *Query) parentModel() any {
+func (r *OrmBuilder) parentModel() any {
 	if r.conditions.model != nil {
 		return r.conditions.model
 	}
@@ -696,7 +1327,7 @@ func (r *Query) parentModel() any {
 	return nil
 }
 
-func (r *Query) parentTable(parent any) string {
+func (r *OrmBuilder) parentTable(parent any) string {
 	if t, err := tableNameFor(parent); err == nil {
 		return t
 	}
@@ -785,13 +1416,127 @@ func validAggregateFn(fn string) bool {
 	return false
 }
 
-func aggregateAlias(relation, fn, column string) string {
-	rel := str.Of(strings.ReplaceAll(relation, ".", "_")).Snake().String()
-	if column == "*" || column == "" {
-		return fmt.Sprintf("%s_%s", rel, fn)
+// parseAggregateRelationName splits a withAggregate relation string on the "as" rename Laravel
+// parses: "foo as foo_bar" yields ("foo", "foo_bar"); anything else keeps the whole string as the
+// relation and reports no alias. Mirrors withAggregate's explode(' ') and Str::lower check.
+func parseAggregateRelationName(relation string) (name, alias string) {
+	segments := strings.Split(relation, " ")
+	if len(segments) == 3 && strings.EqualFold(segments[1], "as") {
+		return segments[0], segments[2]
 	}
-	return fmt.Sprintf("%s_%s_%s", rel, fn, column)
+
+	return relation, ""
+}
+
+// aggregateColumnValue returns the string value of an aggregate column and whether the column was
+// acceptable: a string is returned as written, an expression (database/query's Raw / Expression)
+// contributes its raw SQL - the value Grammar::getValue reads. Mirrors the string|Expression union
+// of withAggregate's $column.
+func aggregateColumnValue(column any) (string, bool) {
+	if value, ok := column.(string); ok {
+		return value, true
+	}
+	if core.IsExpression(column) {
+		return core.ExpressionValue(column), true
+	}
+
+	return "", false
+}
+
+// selfJoinAliasCount names the aliased copies of a table that self-referencing subqueries read.
+// Laravel's Relation::$selfJoinCount is a process-wide static; the same numbering is reproduced
+// here, so the Nth self-join compiled in a process aliases laravel_reserved_(N-1) - the first is
+// laravel_reserved_0. Tests that assert the alias normalise the index, as Laravel's own corpus
+// tests do.
+var selfJoinAliasCount atomic.Int64
+
+// nextSelfJoinAlias hands out the next alias. The post-increment matches
+// Relation::getRelationCountHash(): the first alias a process hands out is laravel_reserved_0.
+func nextSelfJoinAlias() string {
+	return fmt.Sprintf("laravel_reserved_%d", selfJoinAliasCount.Add(1)-1)
+}
+
+// aggregateAlias derives the select alias for an aggregate without an explicit rename, byte for
+// byte the way withAggregate computes it:
+//
+//	Str::snake(preg_replace('/[^[:alnum:][:space:]_]/u', '', sprintf('%s %s %s',
+//	    $name, $function, strtolower($grammar->getValue($column)))))
+//
+// so min(price - discount) over "foo" aliases as "foo_min_price_discount" and no punctuation from
+// an expression column can leak into the column name.
+func aggregateAlias(name, fn, column string) string {
+	stripped := make([]rune, 0, len(name)+len(fn)+len(column)+2)
+	for _, char := range fmt.Sprintf("%s %s %s", name, fn, phpLower(column)) {
+		if unicode.IsLetter(char) || unicode.IsDigit(char) || unicode.IsSpace(char) || char == '_' {
+			stripped = append(stripped, char)
+		}
+	}
+
+	return laravelSnake(string(stripped))
+}
+
+// phpLower lowercases the way PHP's strtolower does: ASCII letters only, every other rune left
+// alone.
+func phpLower(value string) string {
+	return strings.Map(func(char rune) rune {
+		if char >= 'A' && char <= 'Z' {
+			return char + ('a' - 'A')
+		}
+
+		return char
+	}, value)
+}
+
+// laravelSnake mirrors Str::snake's transformation for an alias input: the first letter of every
+// whitespace-separated word is uppercased, the whitespace is removed, a delimiter is inserted
+// before every interior capital, and the result is lowercased - the sequence that turns
+// "foo min price  discount" into "foo_min_price_discount" and
+// "foo sum timestampdiffsecond created_at updated_at" into
+// "foo_sum_timestampdiffsecond_created_at_updated_at". Str::snake's ctype_lower fast path is not
+// needed here: an alias input always contains the sprintf's spaces.
+func laravelSnake(value string) string {
+	upper := []rune(value)
+	atWordStart := true
+	for index, char := range upper {
+		if atWordStart && unicode.IsLetter(char) {
+			upper[index] = unicode.ToUpper(char)
+			atWordStart = false
+
+			continue
+		}
+
+		atWordStart = isPHPSpace(char)
+	}
+
+	joined := make([]rune, 0, len(upper))
+	for _, char := range upper {
+		if !isPHPSpace(char) {
+			joined = append(joined, char)
+		}
+	}
+
+	var builder strings.Builder
+	builder.Grow(len(joined))
+	for index, char := range joined {
+		if index > 0 && char >= 'A' && char <= 'Z' {
+			builder.WriteRune('_')
+		}
+		builder.WriteRune(char)
+	}
+
+	return strings.ToLower(builder.String())
+}
+
+// isPHPSpace reports whether a rune is one of the characters PHP's ucwords treats as a word
+// separator and \s matches: space, tab, newline, carriage return, form feed, vertical tab.
+func isPHPSpace(char rune) bool {
+	switch char {
+	case ' ', '\t', '\n', '\r', '\f', '\v':
+		return true
+	}
+
+	return false
 }
 
 // Sanity: ensure *Query satisfies contractsorm.QueryWithRelations at compile time.
-var _ contractsorm.QueryWithRelations = (*Query)(nil)
+var _ contractsorm.QueryWithRelations = (*OrmBuilder)(nil)

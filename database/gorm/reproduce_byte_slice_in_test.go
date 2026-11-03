@@ -22,9 +22,7 @@ import (
 //	with binding []byte("ab") (one byte slice value)
 func TestByteSliceBindsAsValue(t *testing.T) {
 	// Test the database/gorm/sql.go applySingleWhere path (line 470)
-	query := compiledQuery(t, &relUser{}, Conditions{
-		where: []contractsdriver.Where{{Query: "note", Args: []any{[]byte("ab")}}},
-	})
+	query := compiledQueryWhere(t, &relUser{}, []contractsdriver.Where{{Query: "note", Args: []any{[]byte("ab")}}}...)
 
 	sql, bindings, err := query.compileSelect()
 	assert.NoError(t, err)

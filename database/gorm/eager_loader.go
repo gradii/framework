@@ -3,6 +3,7 @@ package gorm
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"reflect"
 	"slices"
@@ -10,8 +11,14 @@ import (
 
 	"github.com/samber/lo"
 
+	contractsorm "github.com/gradii/framework/contracts/database/orm"
+
+	"github.com/gradii/framework/database/gorm/relations"
 	"github.com/gradii/framework/database/orm/morphmap"
+	querybuilder "github.com/gradii/framework/database/query"
+	"github.com/gradii/framework/database/query/core"
 	"github.com/gradii/framework/errors"
+	"github.com/gradii/framework/support/str"
 )
 
 // defaultEagerLoadChunkSize is the WHERE IN list size at which we split a single eager-load
@@ -27,7 +34,7 @@ const defaultEagerLoadChunkSize = 1000
 // applyEagerLoads runs all queued With entries against the just-loaded dest. It must be
 // called by terminal methods (Get / Find / First / FirstOrFail / FirstOr / Cursor) after the main
 // query has populated dest, and only when conditions.eagerLoad is non-empty.
-func (r *Query) applyEagerLoads(dest any) error {
+func (r *OrmBuilder) applyEagerLoads(dest any) error {
 	if len(r.conditions.eagerLoad) == 0 {
 		return nil
 	}
@@ -46,16 +53,16 @@ func (r *Query) applyEagerLoads(dest any) error {
 // runEagerLoads iterates the eager-load entries and dispatches each top-level relation to its
 // kind-specific loader. Nested entries (those whose name contains a dot) are handled by the
 // trickle-down recursion inside each loader, mirroring fedaco's eagerLoadRelations.
-func (r *Query) runEagerLoads(parents []reflect.Value, entries []eagerLoadEntry) error {
+func (r *OrmBuilder) runEagerLoads(parents []reflect.Value, entries []eagerLoadEntry) error {
 	if len(parents) == 0 || len(entries) == 0 {
 		return nil
 	}
 	parentModel := newSampleModel(parents[0])
 	for _, entry := range entries {
-		if strings.Contains(entry.relation, ".") {
+		if strings.Contains(entry.Relation, ".") {
 			continue
 		}
-		nested := directNestedEntries(entries, entry.relation)
+		nested := relations.DirectNestedEntries(entries, entry.Relation)
 		if err := r.loadOneRelation(parents, parentModel, entry, nested); err != nil {
 			return err
 		}
@@ -63,69 +70,77 @@ func (r *Query) runEagerLoads(parents []reflect.Value, entries []eagerLoadEntry)
 	return nil
 }
 
-func (r *Query) loadOneRelation(parents []reflect.Value, parentModel any, entry eagerLoadEntry, nested []eagerLoadEntry) error {
-	desc, err := resolveRelation(parentModel, entry.relation)
+func (r *OrmBuilder) loadOneRelation(parents []reflect.Value, parentModel any, entry eagerLoadEntry, nested []eagerLoadEntry) error {
+	desc, err := relations.ResolveRelation(parentModel, entry.Relation)
 	if err != nil {
 		return err
 	}
-	switch desc.kind {
+	switch desc.Kind {
 	case relKindHasOne, relKindHasMany:
-		return r.loadHasOneOrMany(parents, parentModel, desc, entry, nested, desc.kind == relKindHasMany)
+		return r.loadHasOneOrMany(parents, parentModel, desc, entry, nested, desc.Kind == relKindHasMany)
 	case relKindBelongsTo:
 		return r.loadBelongsTo(parents, parentModel, desc, entry, nested)
 	case relKindMany2Many:
 		return r.loadMany2Many(parents, parentModel, desc, entry, nested)
 	case relKindMorphOne, relKindMorphMany:
-		return r.loadMorph(parents, parentModel, desc, entry, nested, desc.kind == relKindMorphMany)
+		return r.loadMorph(parents, parentModel, desc, entry, nested, desc.Kind == relKindMorphMany)
 	case relKindMorphTo:
 		return r.loadMorphTo(parents, parentModel, desc, entry, nested)
 	case relKindMorphToMany:
 		return r.loadMorphToMany(parents, parentModel, desc, entry, nested)
 	case relKindHasOneThrough, relKindHasManyThrough:
-		return r.loadThrough(parents, parentModel, desc, entry, nested, desc.kind == relKindHasManyThrough)
+		return r.loadThrough(parents, parentModel, desc, entry, nested, desc.Kind == relKindHasManyThrough)
 	}
-	return errors.OrmRelationUnsupported.Args(entry.relation, reflect.TypeOf(parentModel).String(), fmt.Sprintf("kind=%d", desc.kind))
+	return errors.OrmRelationUnsupported.Args(entry.Relation, reflect.TypeOf(parentModel).String(), fmt.Sprintf("kind=%d", desc.Kind))
 }
 
 // ---------------------------------------------------------------------------
 // Per-kind loaders
 // ---------------------------------------------------------------------------
 
-func (r *Query) loadHasOneOrMany(parents []reflect.Value, parentModel any, desc *relationDescriptor, entry eagerLoadEntry, nested []eagerLoadEntry, isMany bool) error {
-	if len(desc.references) == 0 {
-		return errors.OrmRelationUnsupported.Args(entry.relation, "", "no references")
+func (r *OrmBuilder) loadHasOneOrMany(parents []reflect.Value, parentModel any, desc *relationDescriptor, entry eagerLoadEntry, nested []eagerLoadEntry, isMany bool) error {
+	if len(desc.References) == 0 {
+		return errors.OrmRelationUnsupported.Args(entry.Relation, "", "no references")
 	}
-	ref := desc.references[0]
+	ref := desc.References[0]
 	parentSchema, err := parseSchema(parentModel)
 	if err != nil {
 		return err
 	}
-	parentField, ok := parentSchema.FieldsByDBName[ref.primaryColumn]
+	parentField, ok := parentSchema.FieldsByDBName[ref.PrimaryColumn]
 	if !ok {
-		return errors.OrmRelationUnsupported.Args(entry.relation, parentSchema.Name, "no parent field for "+ref.primaryColumn)
+		return errors.OrmRelationUnsupported.Args(entry.Relation, parentSchema.Name, "no parent field for "+ref.PrimaryColumn)
+	}
+
+	// HasOne is the to-one member of this family: a WithDefault declaration fills the parents the
+	// read leaves unmatched, including those with an empty local key (Laravel's initRelation seeds
+	// every model before the query).
+	var defaultFor func(parent reflect.Value) ([]reflect.Value, error)
+	if !isMany {
+		defaultFor = r.relationDefaultFor(desc, parentModel)
 	}
 
 	keys := extractKeys(r, parents, parentField)
 	if len(keys) == 0 {
-		return r.maybeRecurseEmpty(parents, entry.relation, isMany, nested)
+		return r.maybeRecurseEmpty(parents, entry.Relation, isMany, nested, defaultFor)
 	}
 
 	// The column is named without quotes: the compiler quotes each segment itself, and a name that
 	// arrived already quoted would be quoted a second time.
-	rows, err := r.runChunkedRelatedQueryCompiled(keys, desc, entry, []string{ref.foreignColumn}, func(chunk []any) *Query {
-		return r.relatedChild(desc.relatedTable, desc.relatedTable+"."+ref.foreignColumn, chunk)
+	rows, err := r.runChunkedRelatedQueryCompiled(keys, desc, entry, []string{ref.ForeignColumn}, func(chunk []any) *OrmBuilder {
+		return r.relatedChild(desc.RelatedTable, desc.RelatedTable+"."+ref.ForeignColumn, chunk)
 	})
 	if err != nil {
 		return err
 	}
 
-	relatedSchema, err := parseSchema(desc.relatedModel)
+	relatedSchema, err := parseSchema(desc.RelatedModel)
 	if err != nil {
 		return err
 	}
-	fkField, ok := relatedSchema.FieldsByDBName[ref.foreignColumn]
+	fkField, ok := relatedSchema.FieldsByDBName[ref.ForeignColumn]
 	if !ok {
-		return errors.OrmRelationUnsupported.Args(entry.relation, relatedSchema.Name, "no related FK field for "+ref.foreignColumn)
+		return errors.OrmRelationUnsupported.Args(entry.Relation, relatedSchema.Name, "no related FK field for "+ref.ForeignColumn)
 	}
 
 	dict := make(map[string][]reflect.Value, len(rows))
@@ -134,49 +149,56 @@ func (r *Query) loadHasOneOrMany(parents []reflect.Value, parentModel any, desc 
 		dict[dictKey(val)] = append(dict[dictKey(val)], row)
 	}
 
-	if err := r.assignToParents(parents, parentField, entry.relation, dict, isMany); err != nil {
+	if err := r.applyInverseRelations(desc, parents, parentField, dict, !isMany); err != nil {
+		return err
+	}
+	if err := r.assignToParents(parents, parentField, entry.Relation, dict, isMany, defaultFor); err != nil {
 		return err
 	}
 	return r.recurseNested(rows, nested)
 }
 
-func (r *Query) loadBelongsTo(parents []reflect.Value, parentModel any, desc *relationDescriptor, entry eagerLoadEntry, nested []eagerLoadEntry) error {
-	if len(desc.references) == 0 {
-		return errors.OrmRelationUnsupported.Args(entry.relation, "", "no references")
+func (r *OrmBuilder) loadBelongsTo(parents []reflect.Value, parentModel any, desc *relationDescriptor, entry eagerLoadEntry, nested []eagerLoadEntry) error {
+	if len(desc.References) == 0 {
+		return errors.OrmRelationUnsupported.Args(entry.Relation, "", "no references")
 	}
-	ref := desc.references[0]
+	ref := desc.References[0]
 	parentSchema, err := parseSchema(parentModel)
 	if err != nil {
 		return err
 	}
 	// For BelongsTo: ref.foreignTable=parent, ref.foreignColumn=FK on parent;
 	// ref.primaryTable=related, ref.primaryColumn=PK on related.
-	fkField, ok := parentSchema.FieldsByDBName[ref.foreignColumn]
+	fkField, ok := parentSchema.FieldsByDBName[ref.ForeignColumn]
 	if !ok {
-		return errors.OrmRelationUnsupported.Args(entry.relation, parentSchema.Name, "no parent FK field for "+ref.foreignColumn)
+		return errors.OrmRelationUnsupported.Args(entry.Relation, parentSchema.Name, "no parent FK field for "+ref.ForeignColumn)
 	}
+
+	// With a WithDefault declaration, parents whose foreign key is null or points at no row take
+	// the default instance — getResults' is_null short-circuit and its first()-null fallback.
+	defaultFor := r.relationDefaultFor(desc, parentModel)
 
 	keys := extractKeys(r, parents, fkField)
 	if len(keys) == 0 {
-		return r.maybeRecurseEmpty(parents, entry.relation, false, nested)
+		return r.maybeRecurseEmpty(parents, entry.Relation, false, nested, defaultFor)
 	}
 
 	// The column is named without quotes: the compiler quotes each segment itself, and a name that
 	// arrived already quoted would be quoted a second time.
-	rows, err := r.runChunkedRelatedQueryCompiled(keys, desc, entry, []string{ref.primaryColumn}, func(chunk []any) *Query {
-		return r.relatedChild(desc.relatedTable, desc.relatedTable+"."+ref.primaryColumn, chunk)
+	rows, err := r.runChunkedRelatedQueryCompiled(keys, desc, entry, []string{ref.PrimaryColumn}, func(chunk []any) *OrmBuilder {
+		return r.relatedChild(desc.RelatedTable, desc.RelatedTable+"."+ref.PrimaryColumn, chunk)
 	})
 	if err != nil {
 		return err
 	}
 
-	relatedSchema, err := parseSchema(desc.relatedModel)
+	relatedSchema, err := parseSchema(desc.RelatedModel)
 	if err != nil {
 		return err
 	}
-	pkField, ok := relatedSchema.FieldsByDBName[ref.primaryColumn]
+	pkField, ok := relatedSchema.FieldsByDBName[ref.PrimaryColumn]
 	if !ok {
-		return errors.OrmRelationUnsupported.Args(entry.relation, relatedSchema.Name, "no related PK field for "+ref.primaryColumn)
+		return errors.OrmRelationUnsupported.Args(entry.Relation, relatedSchema.Name, "no related PK field for "+ref.PrimaryColumn)
 	}
 
 	dict := make(map[string][]reflect.Value, len(rows))
@@ -185,50 +207,57 @@ func (r *Query) loadBelongsTo(parents []reflect.Value, parentModel any, desc *re
 		dict[dictKey(val)] = append(dict[dictKey(val)], row)
 	}
 
-	if err := r.assignToParents(parents, fkField, entry.relation, dict, false); err != nil {
+	if err := r.assignToParents(parents, fkField, entry.Relation, dict, false, defaultFor); err != nil {
 		return err
 	}
 	return r.recurseNested(rows, nested)
 }
 
-func (r *Query) loadMorph(parents []reflect.Value, parentModel any, desc *relationDescriptor, entry eagerLoadEntry, nested []eagerLoadEntry, isMany bool) error {
-	if len(desc.references) == 0 {
-		return errors.OrmRelationUnsupported.Args(entry.relation, "", "no references")
+func (r *OrmBuilder) loadMorph(parents []reflect.Value, parentModel any, desc *relationDescriptor, entry eagerLoadEntry, nested []eagerLoadEntry, isMany bool) error {
+	if len(desc.References) == 0 {
+		return errors.OrmRelationUnsupported.Args(entry.Relation, "", "no references")
 	}
-	ref := desc.references[0]
+	ref := desc.References[0]
 	parentSchema, err := parseSchema(parentModel)
 	if err != nil {
 		return err
 	}
-	parentField, ok := parentSchema.FieldsByDBName[ref.primaryColumn]
+	parentField, ok := parentSchema.FieldsByDBName[ref.PrimaryColumn]
 	if !ok {
-		return errors.OrmRelationUnsupported.Args(entry.relation, parentSchema.Name, "no parent field for "+ref.primaryColumn)
+		return errors.OrmRelationUnsupported.Args(entry.Relation, parentSchema.Name, "no parent field for "+ref.PrimaryColumn)
+	}
+
+	// MorphOne is the to-one member of this family: a WithDefault declaration fills the parents
+	// the read leaves unmatched, including those with an empty local key, exactly as HasOne does.
+	var defaultFor func(parent reflect.Value) ([]reflect.Value, error)
+	if !isMany {
+		defaultFor = r.relationDefaultFor(desc, parentModel)
 	}
 
 	keys := extractKeys(r, parents, parentField)
 	if len(keys) == 0 {
-		return r.maybeRecurseEmpty(parents, entry.relation, isMany, nested)
+		return r.maybeRecurseEmpty(parents, entry.Relation, isMany, nested, defaultFor)
 	}
 
 	// The child is the related table filtered by the foreign key and by the relation's own morph
 	// value, which is what separates a MorphOne / MorphMany from the plain HasOne / HasMany it is
 	// shaped like. Both columns are named without quotes: the compiler quotes each segment itself,
 	// and a name that arrived already quoted would be quoted a second time.
-	rows, err := r.runChunkedRelatedQueryCompiled(keys, desc, entry, []string{ref.foreignColumn, desc.morphTypeColumn}, func(chunk []any) *Query {
-		return r.relatedChild(desc.relatedTable, desc.relatedTable+"."+ref.foreignColumn, chunk).
-			Where(desc.relatedTable+"."+desc.morphTypeColumn, desc.morphValue).(*Query)
+	rows, err := r.runChunkedRelatedQueryCompiled(keys, desc, entry, []string{ref.ForeignColumn, desc.MorphTypeColumn}, func(chunk []any) *OrmBuilder {
+		return r.relatedChild(desc.RelatedTable, desc.RelatedTable+"."+ref.ForeignColumn, chunk).
+			Where(desc.RelatedTable+"."+desc.MorphTypeColumn, desc.MorphValue).(*OrmBuilder)
 	})
 	if err != nil {
 		return err
 	}
 
-	relatedSchema, err := parseSchema(desc.relatedModel)
+	relatedSchema, err := parseSchema(desc.RelatedModel)
 	if err != nil {
 		return err
 	}
-	fkField, ok := relatedSchema.FieldsByDBName[ref.foreignColumn]
+	fkField, ok := relatedSchema.FieldsByDBName[ref.ForeignColumn]
 	if !ok {
-		return errors.OrmRelationUnsupported.Args(entry.relation, relatedSchema.Name, "no related FK field for "+ref.foreignColumn)
+		return errors.OrmRelationUnsupported.Args(entry.Relation, relatedSchema.Name, "no related FK field for "+ref.ForeignColumn)
 	}
 
 	dict := make(map[string][]reflect.Value, len(rows))
@@ -237,7 +266,10 @@ func (r *Query) loadMorph(parents []reflect.Value, parentModel any, desc *relati
 		dict[dictKey(val)] = append(dict[dictKey(val)], row)
 	}
 
-	if err := r.assignToParents(parents, parentField, entry.relation, dict, isMany); err != nil {
+	if err := r.applyInverseRelations(desc, parents, parentField, dict, !isMany); err != nil {
+		return err
+	}
+	if err := r.assignToParents(parents, parentField, entry.Relation, dict, isMany, defaultFor); err != nil {
 		return err
 	}
 	return r.recurseNested(rows, nested)
@@ -247,18 +279,18 @@ func (r *Query) loadMorph(parents []reflect.Value, parentModel any, desc *relati
 // MorphMany loaders, the related Go type is unknown at descriptor build time and discovered per
 // row from the value of the *_type column. Parents are bucketed by morph type, and each bucket
 // runs an IN query against its resolved table.
-func (r *Query) loadMorphTo(parents []reflect.Value, parentModel any, desc *relationDescriptor, entry eagerLoadEntry, nested []eagerLoadEntry) error {
+func (r *OrmBuilder) loadMorphTo(parents []reflect.Value, parentModel any, desc *relationDescriptor, entry eagerLoadEntry, nested []eagerLoadEntry) error {
 	parentSchema, err := parseSchema(parentModel)
 	if err != nil {
 		return err
 	}
-	typeField, ok := parentSchema.FieldsByDBName[desc.morphTypeColumn]
+	typeField, ok := parentSchema.FieldsByDBName[desc.MorphTypeColumn]
 	if !ok {
-		return errors.OrmRelationUnsupported.Args(entry.relation, parentSchema.Name, "no parent field for "+desc.morphTypeColumn)
+		return errors.OrmRelationUnsupported.Args(entry.Relation, parentSchema.Name, "no parent field for "+desc.MorphTypeColumn)
 	}
-	idField, ok := parentSchema.FieldsByDBName[desc.morphIDColumn]
+	idField, ok := parentSchema.FieldsByDBName[desc.MorphIDColumn]
 	if !ok {
-		return errors.OrmRelationUnsupported.Args(entry.relation, parentSchema.Name, "no parent field for "+desc.morphIDColumn)
+		return errors.OrmRelationUnsupported.Args(entry.Relation, parentSchema.Name, "no parent field for "+desc.MorphIDColumn)
 	}
 
 	// Bucket parents by morph type, deduplicating IDs per bucket.
@@ -272,13 +304,22 @@ func (r *Query) loadMorphTo(parents []reflect.Value, parentModel any, desc *rela
 	for i, parent := range parents {
 		typeVal, typeZero := typeField.ValueOf(r.ctx, parent)
 		idVal, idZero := idField.ValueOf(r.ctx, parent)
-		if typeZero || idZero {
+		// The type is recorded even when the parent carries no id, so a default instance can be
+		// resolved from the class the type column names.
+		morphType := ""
+		if !typeZero {
+			// Like the id half below, the type may sit behind a pointer or a driver.Valuer
+			// wrapper (a nullable morph_type column); the morph map must see the value the field
+			// carries, never the pointer address fmt.Sprint would render.
+			morphType = morphTypeToString(derefKeyValue(typeVal))
+		}
+		parentMorphKey[i] = morphType
+		if typeZero || idZero || morphType == "" {
 			continue
 		}
-		morphType, _ := typeVal.(string)
-		if morphType == "" {
-			morphType = fmt.Sprint(typeVal)
-		}
+		// The morph id may sit in a pointer-typed field; the bucket and the IN list both carry
+		// the value it addresses.
+		idVal = derefKeyValue(idVal)
 		k := dictKey(idVal)
 		b, exists := buckets[morphType]
 		if !exists {
@@ -289,14 +330,14 @@ func (r *Query) loadMorphTo(parents []reflect.Value, parentModel any, desc *rela
 			b.seenKeys[k] = struct{}{}
 			b.keys = append(b.keys, idVal)
 		}
-		parentMorphKey[i] = morphType
 		parentBucketKey[i] = k
 	}
 
 	if len(buckets) == 0 {
-		// No parents pointed at anything; clear the relation field on each.
+		// No parents pointed at anything; each takes the relation's default when one is declared
+		// (an empty type column resolves it to the parent's own class), nil otherwise.
 		for _, parent := range parents {
-			if err := setRelationField(parent, entry.relation, nil); err != nil {
+			if err := r.setRelationDefaultOrNil(parent, entry.Relation, desc, parentModel); err != nil {
 				return err
 			}
 		}
@@ -323,13 +364,13 @@ func (r *Query) loadMorphTo(parents []reflect.Value, parentModel any, desc *rela
 		// Make a per-bucket descriptor so the compiled runner's user-callback gets a
 		// related-shaped query.
 		bucketDesc := &relationDescriptor{
-			kind:         relKindBelongsTo, // BelongsTo-shaped: WHERE related.<owner_key> IN ?
-			parentTable:  desc.parentTable,
-			relatedTable: relatedTable,
-			relatedModel: sample,
-			onQuery:      desc.onQuery, // propagate so the default scope applies per bucket
+			Kind:         relKindBelongsTo, // BelongsTo-shaped: WHERE related.<owner_key> IN ?
+			ParentTable:  desc.ParentTable,
+			RelatedTable: relatedTable,
+			RelatedModel: sample,
+			OnQuery:      desc.OnQuery, // propagate so the default scope applies per bucket
 		}
-		ownerKey := desc.morphOwnerKey
+		ownerKey := desc.MorphOwnerKey
 		if ownerKey == "" {
 			ownerKey = "id"
 		}
@@ -337,8 +378,34 @@ func (r *Query) loadMorphTo(parents []reflect.Value, parentModel any, desc *rela
 		// The bucket's rows are matched on the owner key and are named the way a caller writes a
 		// column: unquoted, with the related table qualifying it, because the compiler quotes each
 		// segment itself.
-		rows, qerr := r.runChunkedRelatedQueryCompiled(b.keys, bucketDesc, entry, []string{ownerKey}, func(chunk []any) *Query {
-			return r.relatedChild(relatedTable, relatedTable+"."+ownerKey, chunk)
+		//
+		// The bucket consumes the class's declared config too: the constrain callback layers over
+		// the caller's entry callback (the order MorphTo::getResultsByType applies them — the
+		// relation's merged constraints first, constrain after), and the trashed family and
+		// per-type counts need the resolved model on the child, because the soft-delete predicate
+		// and the count sub-selects compile against it.
+		bucketEntry := entry
+		if constrain := desc.MorphConstrain[morphType]; constrain != nil {
+			bucketEntry.Callback = chainRelationCallbacks(entry.Callback, constrain)
+		}
+		counts := desc.MorphWithCount[morphType]
+		needsModel := len(counts) > 0 || desc.MorphOnlyTrashed || desc.MorphWithoutTrashed
+		rows, qerr := r.runChunkedRelatedQueryCompiled(b.keys, bucketDesc, bucketEntry, []string{ownerKey}, func(chunk []any) *OrmBuilder {
+			child := r.relatedChild(relatedTable, relatedTable+"."+ownerKey, chunk)
+			if needsModel {
+				child = child.Model(sample).(*OrmBuilder)
+			}
+			switch {
+			case desc.MorphOnlyTrashed:
+				child = child.OnlyTrashed().(*OrmBuilder)
+			case desc.MorphWithTrashed && !desc.MorphWithoutTrashed:
+				child = child.WithTrashed().(*OrmBuilder)
+			}
+			if len(counts) > 0 {
+				child = child.WithCount(counts...).(*OrmBuilder)
+			}
+
+			return child
 		})
 		if qerr != nil {
 			return qerr
@@ -351,7 +418,7 @@ func (r *Query) loadMorphTo(parents []reflect.Value, parentModel any, desc *rela
 		}
 		ownerField, ok := relatedSchema.FieldsByDBName[ownerKey]
 		if !ok {
-			return errors.OrmRelationUnsupported.Args(entry.relation, relatedSchema.Name, "no owner key field for "+ownerKey)
+			return errors.OrmRelationUnsupported.Args(entry.Relation, relatedSchema.Name, "no owner key field for "+ownerKey)
 		}
 		dict := make(map[string]reflect.Value, len(rows))
 		for _, row := range rows {
@@ -366,58 +433,133 @@ func (r *Query) loadMorphTo(parents []reflect.Value, parentModel any, desc *rela
 		morphType := parentMorphKey[i]
 		idKey := parentBucketKey[i]
 		if morphType == "" || idKey == "" {
-			if err := setRelationField(parent, entry.relation, nil); err != nil {
+			if err := r.setRelationDefaultOrNil(parent, entry.Relation, desc, parentModel); err != nil {
 				return err
 			}
 			continue
 		}
 		bucketResult, ok := resolved[morphType]
 		if !ok {
-			if err := setRelationField(parent, entry.relation, nil); err != nil {
+			if err := r.setRelationDefaultOrNil(parent, entry.Relation, desc, parentModel); err != nil {
 				return err
 			}
 			continue
 		}
 		row, ok := bucketResult.dict[idKey]
 		if !ok {
-			if err := setRelationField(parent, entry.relation, nil); err != nil {
+			if err := r.setRelationDefaultOrNil(parent, entry.Relation, desc, parentModel); err != nil {
 				return err
 			}
 			continue
 		}
-		if err := setRelationField(parent, entry.relation, []reflect.Value{row}); err != nil {
+		if err := setRelationField(parent, entry.Relation, []reflect.Value{row}); err != nil {
 			return err
 		}
+	}
+
+	if len(desc.MorphWith) > 0 {
+		// Per-type eager loads: each resolved type recurses with its own MorphWith list merged
+		// over the relation's nested loads — the per-type with() MorphTo::getResultsByType
+		// installs. The shared walk below hands mixed types to one sample model, so a declared
+		// per-type config takes the per-bucket walk instead.
+		for morphType, bucketResult := range resolved {
+			entries, err := morphWithEntriesFor(desc, morphType, nested)
+			if err != nil {
+				return err
+			}
+			if err := r.recurseNested(bucketResult.rows, entries); err != nil {
+				return err
+			}
+		}
+
+		return nil
 	}
 
 	return r.recurseNested(allRows, nested)
 }
 
+// chainRelationCallbacks composes the caller's eager-load callback with a per-type constrain
+// callback in application order — the caller's first, the constrain second, the order
+// MorphTo::getResultsByType gives the merged relation constraints (mergeConstraintsFrom) and the
+// constrain callback. A callback that returns a foreign query keeps the builder, the contract
+// runRelatedQueryCompiled pins for a single callback.
+func chainRelationCallbacks(first, second contractsorm.RelationCallback) contractsorm.RelationCallback {
+	if first == nil {
+		return second
+	}
+	if second == nil {
+		return first
+	}
+
+	return func(query contractsorm.Query) contractsorm.Query {
+		if scoped, ok := first(query).(*OrmBuilder); ok {
+			query = scoped
+		}
+		if scoped, ok := second(query).(*OrmBuilder); ok {
+			query = scoped
+		}
+
+		return query
+	}
+}
+
+// morphWithEntriesFor merges a type's MorphWith list into the relation's own nested eager loads —
+// MorphTo::getResultsByType's array_merge of the query's eager loads and the class's list. The
+// class's list entries are plain relation names (numeric keys in PHP), so array_merge seats them
+// BESIDE the relation-keyed nested loads — a name the nested loads already carry is absorbed by
+// with()'s combineConstraints, the nested entry keeping its constraint and select list — rather than
+// replacing it. Oracle (illuminate/database v12.55.1, executed, /tmp/morphverify-probes/
+// collision_dotted.php — the caller's `with(['commentable.author' => ...])` constraint survives the
+// collision, the author read still carrying `"name" = ?`). Each name is parsed with the With grammar
+// (dotted paths and column pruning included); an unconfigured type keeps the nested loads untouched.
+func morphWithEntriesFor(desc *relationDescriptor, morphType string, nested []eagerLoadEntry) ([]eagerLoadEntry, error) {
+	with := desc.MorphWith[morphType]
+	if len(with) == 0 {
+		return nested, nil
+	}
+
+	args := make([]any, 0, len(with))
+	for _, name := range with {
+		args = append(args, name)
+	}
+	entries, err := relations.ParseEagerLoad(args)
+	if err != nil {
+		return nil, err
+	}
+
+	merged := append([]eagerLoadEntry(nil), nested...)
+	for _, entry := range entries {
+		merged = relations.CombineEagerLoadEntry(merged, entry)
+	}
+
+	return merged, nil
+}
+
 // loadMany2Many eager-loads a regular many-to-many relation through a pivot table. The pivot rows
 // and the related rows are both read through statements this package compiles itself, and the
 // pivot schema the loader matches against comes from the relation descriptor.
-func (r *Query) loadMany2Many(parents []reflect.Value, parentModel any, desc *relationDescriptor, entry eagerLoadEntry, nested []eagerLoadEntry) error {
+func (r *OrmBuilder) loadMany2Many(parents []reflect.Value, parentModel any, desc *relationDescriptor, entry eagerLoadEntry, nested []eagerLoadEntry) error {
 	parentSchema, err := parseSchema(parentModel)
 	if err != nil {
 		return err
 	}
-	parentField, ok := parentSchema.FieldsByDBName[desc.pivotParentRef.primaryColumn]
+	parentField, ok := parentSchema.FieldsByDBName[desc.PivotParentRef.PrimaryColumn]
 	if !ok {
-		return errors.OrmRelationUnsupported.Args(entry.relation, parentSchema.Name, "no parent field for "+desc.pivotParentRef.primaryColumn)
+		return errors.OrmRelationUnsupported.Args(entry.Relation, parentSchema.Name, "no parent field for "+desc.PivotParentRef.PrimaryColumn)
 	}
 
 	keys := extractKeys(r, parents, parentField)
 	if len(keys) == 0 {
-		return r.maybeRecurseEmpty(parents, entry.relation, true, nested)
+		return r.maybeRecurseEmpty(parents, entry.Relation, true, nested, nil)
 	}
 
-	pivotParentCol := desc.pivotParentRef.foreignColumn
-	pivotRelatedCol := desc.pivotRelatedRef.foreignColumn
+	pivotParentCol := desc.PivotParentRef.ForeignColumn
+	pivotRelatedCol := desc.PivotRelatedRef.ForeignColumn
 
 	// The related model's Pivot field, when it declares one, contributes extra pivot columns to the
 	// SELECT through the hydration plan. Struct-only: when the related model has no field by
 	// desc.pivotField, no pivot hydration happens.
-	relatedSchema, err := parseSchema(desc.relatedModel)
+	relatedSchema, err := parseSchema(desc.RelatedModel)
 	if err != nil {
 		return err
 	}
@@ -436,14 +578,14 @@ func (r *Query) loadMany2Many(parents []reflect.Value, parentModel any, desc *re
 	// The pivot rows are read through the compiled path: the child names the pivot table and the FK
 	// columns the way a caller writes them — unquoted, with the table qualifying the IN column — and
 	// the helper threads the descriptor's OnPivotQuery in before the statement is compiled.
-	pivotRows, err := r.runChunkedPivotQueryCompiled(keys, desc, func(chunk []any) *Query {
-		return r.pivotChild(desc.pivotTable, desc.pivotTable+"."+pivotParentCol, chunk, pivotSelectCols)
+	pivotRows, err := r.runChunkedPivotQueryCompiled(keys, desc, func(chunk []any) *OrmBuilder {
+		return r.pivotChild(desc.PivotTable, desc.PivotTable+"."+pivotParentCol, chunk, pivotSelectCols)
 	})
 	if err != nil {
 		return err
 	}
 	if len(pivotRows) == 0 {
-		return r.maybeRecurseEmpty(parents, entry.relation, true, nested)
+		return r.maybeRecurseEmpty(parents, entry.Relation, true, nested, nil)
 	}
 
 	relatedKeysSet := make(map[string]any, len(pivotRows))
@@ -458,16 +600,16 @@ func (r *Query) loadMany2Many(parents []reflect.Value, parentModel any, desc *re
 		relatedKeys = append(relatedKeys, v)
 	}
 
-	rows, err := r.runChunkedRelatedQueryCompiled(relatedKeys, desc, entry, []string{desc.pivotRelatedRef.primaryColumn}, func(chunk []any) *Query {
-		return r.relatedChild(desc.relatedTable, desc.relatedTable+"."+desc.pivotRelatedRef.primaryColumn, chunk)
+	rows, err := r.runChunkedRelatedQueryCompiled(relatedKeys, desc, entry, []string{desc.PivotRelatedRef.PrimaryColumn}, func(chunk []any) *OrmBuilder {
+		return r.relatedChild(desc.RelatedTable, desc.RelatedTable+"."+desc.PivotRelatedRef.PrimaryColumn, chunk)
 	})
 	if err != nil {
 		return err
 	}
 
-	relatedPKField, ok := relatedSchema.FieldsByDBName[desc.pivotRelatedRef.primaryColumn]
+	relatedPKField, ok := relatedSchema.FieldsByDBName[desc.PivotRelatedRef.PrimaryColumn]
 	if !ok {
-		return errors.OrmRelationUnsupported.Args(entry.relation, relatedSchema.Name, "no related PK field for "+desc.pivotRelatedRef.primaryColumn)
+		return errors.OrmRelationUnsupported.Args(entry.Relation, relatedSchema.Name, "no related PK field for "+desc.PivotRelatedRef.PrimaryColumn)
 	}
 	relatedByID := make(map[string]reflect.Value, len(rows))
 	for _, row := range rows {
@@ -509,7 +651,7 @@ func (r *Query) loadMany2Many(parents []reflect.Value, parentModel any, desc *re
 		dict[parentKey] = append(dict[parentKey], row)
 	}
 
-	if err := r.assignToParents(parents, parentField, entry.relation, dict, true); err != nil {
+	if err := r.assignToParents(parents, parentField, entry.Relation, dict, true, nil); err != nil {
 		return err
 	}
 
@@ -520,28 +662,28 @@ func (r *Query) loadMany2Many(parents []reflect.Value, parentModel any, desc *re
 // pivot WHERE that pins the morph_type column to desc.morphValue. Both MorphToMany (forward) and
 // MorphedByMany (inverse) share this code path; the difference between them is captured in
 // desc.morphValue at descriptor-build time.
-func (r *Query) loadMorphToMany(parents []reflect.Value, parentModel any, desc *relationDescriptor, entry eagerLoadEntry, nested []eagerLoadEntry) error {
+func (r *OrmBuilder) loadMorphToMany(parents []reflect.Value, parentModel any, desc *relationDescriptor, entry eagerLoadEntry, nested []eagerLoadEntry) error {
 	parentSchema, err := parseSchema(parentModel)
 	if err != nil {
 		return err
 	}
-	parentField, ok := parentSchema.FieldsByDBName[desc.pivotParentRef.primaryColumn]
+	parentField, ok := parentSchema.FieldsByDBName[desc.PivotParentRef.PrimaryColumn]
 	if !ok {
-		return errors.OrmRelationUnsupported.Args(entry.relation, parentSchema.Name, "no parent field for "+desc.pivotParentRef.primaryColumn)
+		return errors.OrmRelationUnsupported.Args(entry.Relation, parentSchema.Name, "no parent field for "+desc.PivotParentRef.PrimaryColumn)
 	}
 
 	keys := extractKeys(r, parents, parentField)
 	if len(keys) == 0 {
-		return r.maybeRecurseEmpty(parents, entry.relation, true, nested)
+		return r.maybeRecurseEmpty(parents, entry.Relation, true, nested, nil)
 	}
 
-	pivotParentCol := desc.pivotParentRef.foreignColumn
-	pivotRelatedCol := desc.pivotRelatedRef.foreignColumn
+	pivotParentCol := desc.PivotParentRef.ForeignColumn
+	pivotRelatedCol := desc.PivotRelatedRef.ForeignColumn
 
 	// Check if the related model has a Pivot field — if yes, we'll SELECT extra pivot columns
 	// using the desc.pivotUsing struct schema. struct-only: when desc.pivotUsing is nil, no pivot
 	// hydration happens regardless of whether the related model has a Pivot field.
-	relatedSchema, err := parseSchema(desc.relatedModel)
+	relatedSchema, err := parseSchema(desc.RelatedModel)
 	if err != nil {
 		return err
 	}
@@ -550,9 +692,13 @@ func (r *Query) loadMorphToMany(parents []reflect.Value, parentModel any, desc *
 		return err
 	}
 
-	// Build the pivot SELECT list: always include the two FK columns, plus the columns reported
-	// by the Using-struct hydration plan when present.
+	// Build the pivot SELECT list: always include the two FK columns and the morph type column —
+	// MorphToMany::aliasedPivotColumns interleaves the morph type between the related key and the
+	// withPivot columns — plus the columns reported by the Using-struct hydration plan when present.
 	pivotSelectCols := []string{pivotParentCol, pivotRelatedCol}
+	if desc.MorphTypeColumn != "" {
+		pivotSelectCols = append(pivotSelectCols, desc.MorphTypeColumn)
+	}
 	if pivotPlan != nil {
 		pivotSelectCols = append(pivotSelectCols, pivotPlan.extraColumns...)
 	}
@@ -562,15 +708,15 @@ func (r *Query) loadMorphToMany(parents []reflect.Value, parentModel any, desc *
 	// column — and carries the morph-type predicate that separates a MorphToMany pivot read from a
 	// plain Many2Many one. The helper threads the descriptor's OnPivotQuery in before the statement
 	// is compiled, so the per-relation pivot scope reaches this read too.
-	pivotRows, err := r.runChunkedPivotQueryCompiled(keys, desc, func(chunk []any) *Query {
-		return r.pivotChild(desc.pivotTable, desc.pivotTable+"."+pivotParentCol, chunk, pivotSelectCols).
-			Where(desc.pivotTable+"."+desc.morphTypeColumn, desc.morphValue).(*Query)
+	pivotRows, err := r.runChunkedPivotQueryCompiled(keys, desc, func(chunk []any) *OrmBuilder {
+		return r.pivotChild(desc.PivotTable, desc.PivotTable+"."+pivotParentCol, chunk, pivotSelectCols).
+			Where(desc.PivotTable+"."+desc.MorphTypeColumn, desc.MorphValue).(*OrmBuilder)
 	})
 	if err != nil {
 		return err
 	}
 	if len(pivotRows) == 0 {
-		return r.maybeRecurseEmpty(parents, entry.relation, true, nested)
+		return r.maybeRecurseEmpty(parents, entry.Relation, true, nested, nil)
 	}
 
 	relatedKeysSet := make(map[string]any, len(pivotRows))
@@ -585,16 +731,16 @@ func (r *Query) loadMorphToMany(parents []reflect.Value, parentModel any, desc *
 		relatedKeys = append(relatedKeys, v)
 	}
 
-	rows, err := r.runChunkedRelatedQueryCompiled(relatedKeys, desc, entry, []string{desc.pivotRelatedRef.primaryColumn}, func(chunk []any) *Query {
-		return r.relatedChild(desc.relatedTable, desc.relatedTable+"."+desc.pivotRelatedRef.primaryColumn, chunk)
+	rows, err := r.runChunkedRelatedQueryCompiled(relatedKeys, desc, entry, []string{desc.PivotRelatedRef.PrimaryColumn}, func(chunk []any) *OrmBuilder {
+		return r.relatedChild(desc.RelatedTable, desc.RelatedTable+"."+desc.PivotRelatedRef.PrimaryColumn, chunk)
 	})
 	if err != nil {
 		return err
 	}
 
-	relatedPKField, ok := relatedSchema.FieldsByDBName[desc.pivotRelatedRef.primaryColumn]
+	relatedPKField, ok := relatedSchema.FieldsByDBName[desc.PivotRelatedRef.PrimaryColumn]
 	if !ok {
-		return errors.OrmRelationUnsupported.Args(entry.relation, relatedSchema.Name, "no related PK field for "+desc.pivotRelatedRef.primaryColumn)
+		return errors.OrmRelationUnsupported.Args(entry.Relation, relatedSchema.Name, "no related PK field for "+desc.PivotRelatedRef.PrimaryColumn)
 	}
 	relatedByID := make(map[string]reflect.Value, len(rows))
 	for _, row := range rows {
@@ -632,48 +778,56 @@ func (r *Query) loadMorphToMany(parents []reflect.Value, parentModel any, desc *
 		dict[parentKey] = append(dict[parentKey], row)
 	}
 
-	if err := r.assignToParents(parents, parentField, entry.relation, dict, true); err != nil {
+	if err := r.assignToParents(parents, parentField, entry.Relation, dict, true, nil); err != nil {
 		return err
 	}
 
 	return r.recurseNested(nestedRows, nested)
 }
 
-func (r *Query) loadThrough(parents []reflect.Value, parentModel any, desc *relationDescriptor, entry eagerLoadEntry, nested []eagerLoadEntry, isMany bool) error {
+func (r *OrmBuilder) loadThrough(parents []reflect.Value, parentModel any, desc *relationDescriptor, entry eagerLoadEntry, nested []eagerLoadEntry, isMany bool) error {
 	parentSchema, err := parseSchema(parentModel)
 	if err != nil {
 		return err
 	}
-	parentField, ok := parentSchema.FieldsByDBName[desc.localKey]
+	parentField, ok := parentSchema.FieldsByDBName[desc.LocalKey]
 	if !ok {
-		return errors.OrmRelationUnsupported.Args(entry.relation, parentSchema.Name, "no parent field for "+desc.localKey)
+		return errors.OrmRelationUnsupported.Args(entry.Relation, parentSchema.Name, "no parent field for "+desc.LocalKey)
+	}
+
+	// HasOneThrough is the to-one member of the through family: a WithDefault declaration fills
+	// the parents the read leaves unmatched, including those with an empty local key, exactly as
+	// HasOne does.
+	var defaultFor func(parent reflect.Value) ([]reflect.Value, error)
+	if !isMany {
+		defaultFor = r.relationDefaultFor(desc, parentModel)
 	}
 
 	keys := extractKeys(r, parents, parentField)
 	if len(keys) == 0 {
-		return r.maybeRecurseEmpty(parents, entry.relation, isMany, nested)
+		return r.maybeRecurseEmpty(parents, entry.Relation, isMany, nested, defaultFor)
 	}
 
 	// The through rows are read through the compiled path, like the pivot reads the other loaders
 	// use: the child names the through table and the parent FK column the way a caller writes them —
 	// unquoted, with the table qualifying the IN column — and keeps the two key columns bare in the
 	// SELECT list, so the returned map stays keyed by the names the hydration loop indexes.
-	throughRows, err := r.runChunkedPivotQueryCompiled(keys, desc, func(chunk []any) *Query {
-		return r.pivotChild(desc.throughTable, desc.throughTable+"."+desc.firstKey, chunk,
-			[]string{desc.firstKey, desc.secondLocalKey})
+	throughRows, err := r.runChunkedPivotQueryCompiled(keys, desc, func(chunk []any) *OrmBuilder {
+		return r.pivotChild(desc.ThroughTable, desc.ThroughTable+"."+desc.FirstKey, chunk,
+			[]string{desc.FirstKey, desc.SecondLocalKey})
 	})
 	if err != nil {
 		return err
 	}
 	if len(throughRows) == 0 {
-		return r.maybeRecurseEmpty(parents, entry.relation, isMany, nested)
+		return r.maybeRecurseEmpty(parents, entry.Relation, isMany, nested, defaultFor)
 	}
 
 	secondKeysSet := make(map[string]any, len(throughRows))
 	for _, t := range throughRows {
-		k := dictKey(t[desc.secondLocalKey])
+		k := dictKey(t[desc.SecondLocalKey])
 		if _, exists := secondKeysSet[k]; !exists {
-			secondKeysSet[k] = t[desc.secondLocalKey]
+			secondKeysSet[k] = t[desc.SecondLocalKey]
 		}
 	}
 	secondKeys := make([]any, 0, len(secondKeysSet))
@@ -681,20 +835,35 @@ func (r *Query) loadThrough(parents []reflect.Value, parentModel any, desc *rela
 		secondKeys = append(secondKeys, v)
 	}
 
-	rows, err := r.runChunkedRelatedQueryCompiled(secondKeys, desc, entry, []string{desc.secondKey}, func(chunk []any) *Query {
-		return r.relatedChild(desc.relatedTable, desc.relatedTable+"."+desc.secondKey, chunk)
-	})
+	// A one-of-many through relation reads its related rows through the aggregate join Laravel's
+	// ofMany installs, constrained by the through key — getRelationQuery is the aggregate subquery
+	// for a one-of-many relation — so each parent resolves to its single aggregate row. The plain
+	// path reads the related rows by the related model's through key instead.
+	relatedKeys := secondKeys
+	buildRelatedChild := func(chunk []any) *OrmBuilder {
+		return r.relatedChild(desc.RelatedTable, desc.RelatedTable+"."+desc.SecondKey, chunk)
+	}
+	if r.relationInstallsOneOfMany(desc) {
+		relatedKeys = keys
+		buildRelatedChild = func(chunk []any) *OrmBuilder {
+			child := r.relatedChild(desc.RelatedTable, desc.ThroughTable+"."+desc.FirstKey, chunk)
+			child.query.JoinRaw(r.throughJoinFragment(desc), nil, "inner")
+			return child
+		}
+	}
+
+	rows, err := r.runChunkedRelatedQueryCompiled(relatedKeys, desc, entry, []string{desc.SecondKey}, buildRelatedChild)
 	if err != nil {
 		return err
 	}
 
-	relatedSchema, err := parseSchema(desc.relatedModel)
+	relatedSchema, err := parseSchema(desc.RelatedModel)
 	if err != nil {
 		return err
 	}
-	secondField, ok := relatedSchema.FieldsByDBName[desc.secondKey]
+	secondField, ok := relatedSchema.FieldsByDBName[desc.SecondKey]
 	if !ok {
-		return errors.OrmRelationUnsupported.Args(entry.relation, relatedSchema.Name, "no related field for "+desc.secondKey)
+		return errors.OrmRelationUnsupported.Args(entry.Relation, relatedSchema.Name, "no related field for "+desc.SecondKey)
 	}
 	relatedByThrough := make(map[string][]reflect.Value, len(rows))
 	for _, row := range rows {
@@ -705,14 +874,14 @@ func (r *Query) loadThrough(parents []reflect.Value, parentModel any, desc *rela
 
 	dict := make(map[string][]reflect.Value, len(parents))
 	for _, t := range throughRows {
-		parentKey := dictKey(t[desc.firstKey])
-		secondKey := dictKey(t[desc.secondLocalKey])
+		parentKey := dictKey(t[desc.FirstKey])
+		secondKey := dictKey(t[desc.SecondLocalKey])
 		if rels, ok := relatedByThrough[secondKey]; ok {
 			dict[parentKey] = append(dict[parentKey], rels...)
 		}
 	}
 
-	if err := r.assignToParents(parents, parentField, entry.relation, dict, isMany); err != nil {
+	if err := r.assignToParents(parents, parentField, entry.Relation, dict, isMany, defaultFor); err != nil {
 		return err
 	}
 	return r.recurseNested(rows, nested)
@@ -728,32 +897,59 @@ func (r *Query) loadThrough(parents []reflect.Value, parentModel any, desc *rela
 // through the same path the rest of the ORM reads with. The child addresses a table without a model of
 // its own, which is what the statement it replaced did, so a related model's global scopes do not apply
 // to an eager load — that is a question of its own, not part of this migration.
-func (r *Query) runRelatedQueryCompiled(child *Query, desc *relationDescriptor, entry eagerLoadEntry, requiredCols []string) ([]reflect.Value, error) {
+func (r *OrmBuilder) runRelatedQueryCompiled(child *OrmBuilder, desc *relationDescriptor, entry eagerLoadEntry, requiredCols []string) ([]reflect.Value, error) {
+	// The chunk's IN constraint was written when the child was built; flush anything still queued so
+	// the scopes that follow keep their place, the order Eloquent builds eager-load constraints in.
+	child = child.flushWheres()
+
 	// The relation's own scope applies first, and the caller's callback layers on top of it.
-	if desc.onQuery != nil {
-		if scoped, ok := desc.onQuery(child).(*Query); ok {
-			child = scoped
-		}
-	}
-	if entry.callback != nil {
-		if scoped, ok := entry.callback(child).(*Query); ok {
+	if desc.OnQuery != nil {
+		if scoped, ok := desc.OnQuery(child).(*OrmBuilder); ok {
 			child = scoped
 		}
 	}
 
-	// OfMany asks for one row per parent, which is a join against a grouped subquery.
-	if child.conditions.oneOfMany != nil {
-		join, args, err := r.oneOfManyJoin(desc, child.conditions.oneOfMany)
+	// OfMany asks for one row per parent, which is a join against a grouped subquery. The relation's
+	// own scope ran first, so the constraints it wrote after OfMany — the Go form of Laravel's
+	// ofMany closure — are moved into that subquery as the join is built.
+	joined := false
+	if cfg := child.conditions.oneOfMany; cfg != nil {
+		join, args, err := r.oneOfManyJoin(child, desc, cfg, nil, false)
 		if err != nil {
 			return nil, err
 		}
 		if join != "" {
-			child.builder.JoinRaw(join, args, "inner")
+			child.query.JoinRaw(join, args, "inner")
+			joined = true
 		}
 	}
 
-	if len(entry.columns) > 0 {
-		cols := append([]string(nil), entry.columns...)
+	if entry.Callback != nil {
+		if scoped, ok := entry.Callback(child).(*OrmBuilder); ok {
+			child = scoped
+		}
+	}
+
+	// A caller callback that installed OfMany itself (the With(...) form the contract documents)
+	// gets the same join; the marks OfMany recorded delimit its own follow-on constraints.
+	if !joined {
+		if cfg := child.conditions.oneOfMany; cfg != nil {
+			join, args, err := r.oneOfManyJoin(child, desc, cfg, nil, false)
+			if err != nil {
+				return nil, err
+			}
+			if join != "" {
+				child.query.JoinRaw(join, args, "inner")
+				joined = true
+			}
+		}
+	}
+	if joined && len(child.query.Selects()) == 0 {
+		child.query.SelectRaw(r.ident(desc.RelatedTable, "*"), nil)
+	}
+
+	if len(entry.Columns) > 0 {
+		cols := append([]string(nil), entry.Columns...)
 		for _, req := range requiredCols {
 			if !slices.ContainsFunc(cols, func(c string) bool {
 				if c == req {
@@ -770,7 +966,7 @@ func (r *Query) runRelatedQueryCompiled(child *Query, desc *relationDescriptor, 
 		for _, col := range cols {
 			selects = append(selects, col)
 		}
-		child.builder.SetSelects(selects)
+		child.query.SetSelects(selects)
 	}
 
 	statement, bindings, err := child.compileSelect()
@@ -784,9 +980,9 @@ func (r *Query) runRelatedQueryCompiled(child *Query, desc *relationDescriptor, 
 	}
 	defer errors.Ignore(rows.Close)
 
-	relatedType := indirectStructType(reflect.TypeOf(desc.relatedModel))
+	relatedType := indirectStructType(reflect.TypeOf(desc.RelatedModel))
 	if relatedType == nil {
-		return nil, errors.OrmRelationUnsupported.Args(desc.name, desc.parentTable, "no related model")
+		return nil, errors.OrmRelationUnsupported.Args(desc.Name, desc.ParentTable, "no related model")
 	}
 
 	slicePtr := reflect.New(reflect.SliceOf(reflect.PointerTo(relatedType)))
@@ -805,7 +1001,7 @@ func (r *Query) runRelatedQueryCompiled(child *Query, desc *relationDescriptor, 
 
 // runChunkedRelatedQueryCompiled runs runRelatedQueryCompiled once per chunk of keys and concatenates
 // rows, so a callback's constraints and the column pruning are applied per chunk.
-func (r *Query) runChunkedRelatedQueryCompiled(keys []any, desc *relationDescriptor, entry eagerLoadEntry, requiredCols []string, buildChild func(chunk []any) *Query) ([]reflect.Value, error) {
+func (r *OrmBuilder) runChunkedRelatedQueryCompiled(keys []any, desc *relationDescriptor, entry eagerLoadEntry, requiredCols []string, buildChild func(chunk []any) *OrmBuilder) ([]reflect.Value, error) {
 	chunks := chunkKeys(keys, r.chunkSize())
 	var all []reflect.Value
 	for _, chunk := range chunks {
@@ -819,53 +1015,353 @@ func (r *Query) runChunkedRelatedQueryCompiled(keys []any, desc *relationDescrip
 	return all, nil
 }
 
-// oneOfManyJoin renders the join an OfMany callback asks for: a grouped subquery holding the
-// per-parent aggregate, so only the row reaching it is kept. It returns the UNKEYED join fragment —
-// "(sub) alias ON ..." with no join keyword — because conditions.join is rendered with a keyword
-// prefix appended (see the loop in newBuilder over conditions.join, which calls JoinRaw(..., "inner")).
-// Carrying an "INNER JOIN " prefix here would render the keyword twice.
-func (r *Query) oneOfManyJoin(desc *relationDescriptor, cfg *oneOfManyConfig) (string, []any, error) {
-	if cfg == nil || len(desc.references) == 0 {
+// oneOfManyJoin renders the join every read of a one-of-many relation carries: one nested grouped
+// subquery per declared (column, aggregate) pair — each aggregating its own column, carrying every
+// earlier column as a tie-break through min(...), and joining the level below — the outermost one
+// joined on every aggregate column. The single-column shape is Laravel's (oracle, sqlite):
+//
+//	inner join (select MAX("logins"."id") as "id_aggregate", "logins"."user_id" from "logins" where
+//	"logins"."user_id" = ? and "logins"."user_id" is not null group by "logins"."user_id") as
+//	"latest_login" on "latest_login"."id_aggregate" = "logins"."id" and "latest_login"."user_id" =
+//	"logins"."user_id"
+//
+// and the two-column price() carries the nested joins the oracle compiles:
+//
+//	select "prices".* from "prices" inner join (select max("prices"."id") as "id_aggregate",
+//	min("prices"."published_at") as "published_at_aggregate", "prices"."user_id" from "prices"
+//	inner join (select max("prices"."published_at") as "published_at_aggregate", "prices"."user_id"
+//	from "prices" where ... group by "prices"."user_id") as "price" on
+//	"price"."published_at_aggregate" = "prices"."published_at" and "price"."user_id" =
+//	"prices"."user_id" where ... group by "prices"."user_id") as "price" on "price"."id_aggregate" =
+//	"prices"."id" and "price"."published_at_aggregate" = "prices"."published_at" and
+//	"price"."user_id" = "prices"."user_id"
+//
+// The related model's key is appended as a MAX pair when the declaration omits it, so ties always
+// resolve to one row. The alias is the relation name in snake case ("_of_many" appended when it
+// equals the related table's name), matching Laravel's getDefaultOneOfManyJoinAlias, and each
+// aggregate column is "<column>_aggregate". Constraints the relation's own of-many chain wrote
+// after the configuration (Laravel's ofMany closure) are moved off builder and into every subquery,
+// and so is the eager loader's parent-key in-list — with the morph-type filter a morph relation
+// follows it with. Laravel's addEagerConstraints writes that in-list through getRelationQuery,
+// which for a one-of-many relation is the innermost aggregate subquery, so the eager read carries
+// no constraint on the outer query. readPath asks for the relation constraints to be re-stated
+// inside the innermost subquery too (foreign key = parent, foreign key is not null; a through
+// relation's through key = parent instead), which Laravel's ofMany re-applies through
+// addConstraints.
+//
+// It returns the UNKEYED join fragment — "(sub) as alias on ..." with no join keyword — because the
+// join list is rendered with a keyword prefix appended (JoinRaw(..., "inner")); carrying an
+// "inner join " prefix here would render the keyword twice.
+func (r *OrmBuilder) oneOfManyJoin(builder *OrmBuilder, desc *relationDescriptor, cfg *oneOfManyConfig, parentValue any, readPath bool) (string, []any, error) {
+	if cfg == nil {
 		return "", nil, nil
 	}
 
-	switch desc.kind {
+	alias := oneOfManyAlias(desc)
+	var (
+		groupCols   []string // the columns every subquery selects and groups by besides its aggregates
+		joinTail    []string // the ON conditions appended after a subquery's aggregate columns
+		inListCol   string   // the outer column the eager in-list was written on
+		throughJoin string   // the inner join a through subquery carries on every level
+	)
+
+	switch desc.Kind {
 	case relKindHasOne, relKindMorphOne:
+		if len(desc.References) == 0 {
+			return "", nil, nil
+		}
+		ref := desc.References[0]
+		foreign := r.ident(desc.RelatedTable, ref.ForeignColumn)
+		groupCols = []string{foreign}
+		joinTail = []string{r.ident(alias, ref.ForeignColumn) + " = " + foreign}
+		inListCol = desc.RelatedTable + "." + ref.ForeignColumn
+		if desc.Kind == relKindMorphOne {
+			// MorphOne::addOneOfManyJoinSubQueryConstraints constrains the type first, then the
+			// foreign key — the reverse of the select and group-by order.
+			morph := r.ident(desc.RelatedTable, desc.MorphTypeColumn)
+			groupCols = append(groupCols, morph)
+			joinTail = []string{r.ident(alias, desc.MorphTypeColumn) + " = " + morph, r.ident(alias, ref.ForeignColumn) + " = " + foreign}
+		}
+	case relKindHasOneThrough:
+		key := r.ident(desc.ThroughTable, desc.FirstKey)
+		groupCols = []string{key}
+		joinTail = []string{r.ident(alias, desc.FirstKey) + " = " + key}
+		inListCol = desc.ThroughTable + "." + desc.FirstKey
+		throughJoin = r.throughJoinFragment(desc)
 	default:
 		// Ignored on unsupported kinds rather than erroring, so a generic with-callback that calls
 		// LatestOfMany does not break unrelated relations downstream.
 		return "", nil, nil
 	}
 
-	ref := desc.references[0]
-	relatedTable := desc.relatedTable
-	const alias = "goravel_one_of_many"
+	columns := oneOfManyEffectiveColumns(desc, cfg)
 
-	groupCols := []string{r.ident(relatedTable, ref.foreignColumn)}
-	selectCols := []string{
-		cfg.aggregate + "(" + r.ident(relatedTable, cfg.column) + ") AS aggregate",
-		r.ident(relatedTable, ref.foreignColumn),
+	// The eager loader's parent-key in-list (and a morph relation's type filter) was written when
+	// the child was built; pop it so the innermost subquery re-states it, and shift the marks
+	// OfMany recorded by the popped clauses.
+	eagerKeys, eagerMorph, poppedWheres, poppedBindings := builder.takeEagerOneOfManyConstraints(desc)
+	clauses := *cfg
+	clauses.whereMark -= poppedWheres
+	clauses.whereBindMark -= poppedBindings
+	if clauses.whereMark < 0 {
+		clauses.whereMark = 0
 	}
-	if desc.kind == relKindMorphOne {
-		groupCols = append(groupCols, r.ident(relatedTable, desc.morphTypeColumn))
-		selectCols = append(selectCols, r.ident(relatedTable, desc.morphTypeColumn))
+	if clauses.whereBindMark < 0 {
+		clauses.whereBindMark = 0
+	}
+	movedWheres, movedWhereBindings, movedJoins, movedJoinBindings := builder.takeOneOfManyClauses(&clauses)
+
+	// Build the levels innermost first; every level is aliased with the relation name, the way
+	// Laravel's ofMany chains them.
+	var (
+		levelSQL  string
+		levelArgs []any
+		levelCols []string
+	)
+
+	for i, col := range columns {
+		sub := r.subqueryBuilder(desc.RelatedTable)
+
+		if i == 0 {
+			// The closure constraints run before the relation constraints, the order ofMany writes
+			// them in: the closure executes inside the loop and addConstraints runs at its end —
+			// where a through relation's through join is performed too.
+			for _, join := range movedJoins {
+				sub.State().Joins = append(sub.State().Joins, join)
+			}
+			if len(movedJoinBindings) > 0 {
+				_ = sub.AddBinding(movedJoinBindings, "join")
+			}
+			if throughJoin != "" {
+				sub.JoinRaw(throughJoin, nil, "inner")
+			}
+		} else {
+			// A later level performs the through join while it is built, then the closure
+			// constraints, and joins the level below last (Laravel's beforeQuery callback).
+			if throughJoin != "" {
+				sub.JoinRaw(throughJoin, nil, "inner")
+			}
+			for _, join := range movedJoins {
+				sub.State().Joins = append(sub.State().Joins, join)
+			}
+			if len(movedJoinBindings) > 0 {
+				_ = sub.AddBinding(movedJoinBindings, "join")
+			}
+
+			on := make([]string, 0, len(levelCols)+len(joinTail))
+			for _, prev := range levelCols {
+				on = append(on, r.ident(alias, prev+"_aggregate")+" = "+r.ident(desc.RelatedTable, prev))
+			}
+			on = append(on, joinTail...)
+			sub.JoinRaw("("+levelSQL+") as "+r.ident(alias)+" on "+strings.Join(on, " and "), levelArgs, "inner")
+		}
+
+		selectCols := []string{col.aggregate + "(" + r.ident(desc.RelatedTable, col.column) + ") as " + r.ident(col.column+"_aggregate")}
+		for _, prev := range levelCols {
+			selectCols = append(selectCols, "min("+r.ident(desc.RelatedTable, prev)+") as "+r.ident(prev+"_aggregate"))
+		}
+		selectCols = append(selectCols, groupCols...)
+		sub.SelectRaw(strings.Join(selectCols, ", "), nil)
+
+		if len(movedWheres) > 0 {
+			sub.State().Wheres = append(sub.State().Wheres, movedWheres...)
+			_ = sub.AddBinding(movedWhereBindings, "where")
+		}
+
+		if i == 0 {
+			if eagerKeys != nil {
+				// Eloquent's addEagerConstraints writes the parent-key in-list into the aggregate
+				// subquery (getRelationQuery is the subquery for a one-of-many relation).
+				// Relation::whereInMethod inlines the keys through whereIntegerInRaw only when the
+				// parent key is an integer; a string-keyed parent (UUID) keeps its bindings, so the
+				// subquery reads `in (?, ?)` with the keys bound (oracle, sqlite). A morph relation's
+				// type filter follows the in-list (oracle: `where "logos"."logoable_id" in (1, 2)
+				// and "logos"."logoable_type" = ?`).
+				if allIntegerKeys(eagerKeys) {
+					sub.WhereIntegerInRaw(inListCol, eagerKeys, core.BooleanAnd, false)
+				} else {
+					sub.WhereIn(inListCol, eagerKeys, core.BooleanAnd, false)
+				}
+				if eagerMorph {
+					sub.WhereRaw(r.ident(desc.RelatedTable, desc.MorphTypeColumn)+" = ?", []any{desc.MorphValue}, core.BooleanAnd)
+				}
+			}
+
+			if readPath {
+				// HasOneOrMany::addConstraints / HasOneOrManyThrough::addConstraints, re-applied to
+				// the innermost subquery at the end of ofMany: the morph type filter first for
+				// MorphOne, then the key and — except for a through relation — its not-null half.
+				if desc.Kind == relKindMorphOne {
+					sub.WhereRaw(r.ident(desc.RelatedTable, desc.MorphTypeColumn)+" = ?", []any{desc.MorphValue}, core.BooleanAnd)
+				}
+				if desc.Kind == relKindHasOneThrough {
+					sub.WhereRaw(r.ident(desc.ThroughTable, desc.FirstKey)+" = ?", []any{parentValue}, core.BooleanAnd)
+				} else {
+					foreign := r.ident(desc.RelatedTable, desc.References[0].ForeignColumn)
+					sub.WhereRaw(foreign+" = ?", []any{parentValue}, core.BooleanAnd)
+					sub.WhereRaw(foreign+" is not null", nil, core.BooleanAnd)
+				}
+			}
+		}
+
+		// The related model's soft-delete scope reaches every aggregate level the way Laravel's
+		// global scopes do.
+		r.applySubquerySoftDelete(sub, desc.RelatedTable, desc.RelatedModel)
+
+		sub.GroupByRaw(strings.Join(groupCols, ", "), nil)
+		levelSQL, levelArgs = sub.ToSelectSQL()
+		levelCols = append([]string{col.column}, levelCols...)
 	}
 
-	sub := r.subqueryBuilder(relatedTable)
-	sub.SelectRaw(strings.Join(selectCols, ", "), nil)
-	sub.GroupByRaw(strings.Join(groupCols, ", "), nil)
-	subStatement, subArgs := sub.ToSelectSQL()
-
-	on := []string{
-		r.ident(relatedTable, cfg.column) + " = " + alias + ".aggregate",
-		r.ident(relatedTable, ref.foreignColumn) + " = " + alias + "." + r.ident(ref.foreignColumn),
+	on := make([]string, 0, len(levelCols)+len(joinTail))
+	for _, col := range levelCols {
+		on = append(on, r.ident(alias, col+"_aggregate")+" = "+r.ident(desc.RelatedTable, col))
 	}
-	if desc.kind == relKindMorphOne {
-		on = append(on, r.ident(relatedTable, desc.morphTypeColumn)+" = "+
-			alias+"."+r.ident(desc.morphTypeColumn))
+	on = append(on, joinTail...)
+
+	return fmt.Sprintf("(%s) as %s on %s", levelSQL, r.ident(alias), strings.Join(on, " and ")), levelArgs, nil
+}
+
+// oneOfManyEffectiveColumns is the configuration's columns with the related model's key appended
+// when the declaration omits it — Laravel's ofMany rule: the string form of OfMany carries the key
+// with the same aggregate (keyAggregate), the ordered forms append it with MAX.
+func oneOfManyEffectiveColumns(desc *relationDescriptor, cfg *oneOfManyConfig) []oneOfManyColumn {
+	key := "id"
+	if schema, err := parseSchema(desc.RelatedModel); err == nil && len(schema.PrimaryFields) > 0 {
+		key = schema.PrimaryFields[0].DBName
 	}
 
-	return fmt.Sprintf("(%s) %s ON %s", subStatement, alias, strings.Join(on, " AND ")), subArgs, nil
+	for _, col := range cfg.columns {
+		if col.column == key {
+			return cfg.columns
+		}
+	}
+
+	aggregate := cfg.keyAggregate
+	if aggregate == "" {
+		aggregate = "MAX"
+	}
+
+	return append(append([]oneOfManyColumn(nil), cfg.columns...), oneOfManyColumn{column: key, aggregate: aggregate})
+}
+
+// oneOfManyAlias names the aggregate subquery the way Laravel's getDefaultOneOfManyJoinAlias does:
+// the relation name in snake case, with "_of_many" appended when that name equals the related
+// table's name.
+func oneOfManyAlias(desc *relationDescriptor) string {
+	alias := str.Of(desc.Name).Snake().String()
+	if alias == desc.RelatedTable {
+		alias += "_of_many"
+	}
+
+	return alias
+}
+
+// takeOneOfManyClauses removes every clause added after OfMany was called and returns them, so the
+// join can move the relation's of-many closure constraints into the aggregate subquery. Laravel's
+// ofMany closure receives the subquery builder and writes to it directly; the Go formulation chains
+// the closure constraints after OfMany inside the relation's OnQuery, and the marks OfMany recorded
+// delimit them.
+func (b *OrmBuilder) takeOneOfManyClauses(cfg *oneOfManyConfig) (wheres []core.Where, whereBindings []any, joins []core.Join, joinBindings []any) {
+	state := b.query.State()
+
+	if cfg.whereMark < len(state.Wheres) {
+		wheres = append([]core.Where(nil), state.Wheres[cfg.whereMark:]...)
+		state.Wheres = state.Wheres[:cfg.whereMark]
+	}
+	if cfg.whereBindMark < len(state.Bindings["where"]) {
+		whereBindings = append([]any(nil), state.Bindings["where"][cfg.whereBindMark:]...)
+		state.Bindings["where"] = state.Bindings["where"][:cfg.whereBindMark]
+	}
+	if cfg.joinMark < len(state.Joins) {
+		joins = append([]core.Join(nil), state.Joins[cfg.joinMark:]...)
+		state.Joins = state.Joins[:cfg.joinMark]
+	}
+	if cfg.joinBindMark < len(state.Bindings["join"]) {
+		joinBindings = append([]any(nil), state.Bindings["join"][cfg.joinBindMark:]...)
+		state.Bindings["join"] = state.Bindings["join"][:cfg.joinBindMark]
+	}
+
+	return wheres, whereBindings, joins, joinBindings
+}
+
+// takeEagerOneOfManyConstraints pops the constraints the eager loader wrote when it built the child
+// — the parent-key in-list, and the morph-type filter that follows it for a morph relation — and
+// returns them, so the join can re-state them inside the innermost aggregate subquery the way
+// Laravel's addEagerConstraints writes through getRelationQuery. Only the loader's own leading
+// clauses are touched: the in-list must be the child's first where clause and name the column the
+// relation constrains — the related foreign key, or the through key for a through relation — and
+// every value must bind one-to-one (a subquery value list is left alone). The counts let the caller
+// shift the marks OfMany recorded.
+func (b *OrmBuilder) takeEagerOneOfManyConstraints(desc *relationDescriptor) (keys []any, morphType bool, poppedWheres, poppedBindings int) {
+	var inListColumn string
+	switch desc.Kind {
+	case relKindHasOne, relKindMorphOne:
+		if len(desc.References) == 0 {
+			return nil, false, 0, 0
+		}
+		inListColumn = desc.RelatedTable + "." + desc.References[0].ForeignColumn
+	case relKindHasOneThrough:
+		inListColumn = desc.ThroughTable + "." + desc.FirstKey
+	default:
+		return nil, false, 0, 0
+	}
+
+	state := b.query.State()
+	if len(state.Wheres) == 0 {
+		return nil, false, 0, 0
+	}
+
+	first := state.Wheres[0]
+	if first.Type != core.WhereInType || fmt.Sprint(first.Column) != inListColumn {
+		return nil, false, 0, 0
+	}
+
+	bound := querybuilder.CleanBindings(first.Values)
+	if len(bound) != len(first.Values) {
+		// An expression in the list does not bind one-to-one; leave the child as it was built.
+		return nil, false, 0, 0
+	}
+
+	keys = append([]any(nil), first.Values...)
+	state.Wheres = state.Wheres[1:]
+	if len(state.Bindings["where"]) >= len(bound) {
+		state.Bindings["where"] = state.Bindings["where"][len(bound):]
+	} else {
+		state.Bindings["where"] = nil
+	}
+	poppedWheres, poppedBindings = 1, len(bound)
+
+	if desc.Kind == relKindMorphOne && len(state.Wheres) > 0 {
+		next := state.Wheres[0]
+		if next.Type == core.WhereBasic && fmt.Sprint(next.Column) == desc.RelatedTable+"."+desc.MorphTypeColumn &&
+			fmt.Sprint(next.Value) == desc.MorphValue {
+			state.Wheres = state.Wheres[1:]
+			if len(state.Bindings["where"]) > 0 {
+				state.Bindings["where"] = state.Bindings["where"][1:]
+			}
+			poppedWheres++
+			poppedBindings++
+			morphType = true
+		}
+	}
+
+	return keys, morphType, poppedWheres, poppedBindings
+}
+
+// allIntegerKeys reports whether every eager key is an integer kind — the Go stand-in for the
+// integer key-type check Relation::whereInMethod makes before it chooses whereIntegerInRaw. Keys
+// of any other type (a string-keyed parent) bind through whereIn instead, as Laravel's do.
+func allIntegerKeys(keys []any) bool {
+	for _, key := range keys {
+		switch key.(type) {
+		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+		default:
+			return false
+		}
+	}
+
+	return true
 }
 
 // pivotChild returns the child query a many-to-many loader reads its pivot rows with: one pivot
@@ -876,14 +1372,14 @@ func (r *Query) oneOfManyJoin(desc *relationDescriptor, cfg *oneOfManyConfig) (s
 // once when the statement is rendered. The select list keeps the bare column names the pivot table
 // declares, because the rows come back as a column-named map that the hydration loop indexes by
 // those names.
-func (r *Query) pivotChild(table string, column string, values []any, columns []string) *Query {
+func (r *OrmBuilder) pivotChild(table string, column string, values []any, columns []string) *OrmBuilder {
 	child := r.relatedChild(table, column, values)
 
 	selects := make([]any, 0, len(columns))
 	for _, col := range columns {
 		selects = append(selects, col)
 	}
-	child.builder.SetSelects(selects)
+	child.query.SetSelects(selects)
 
 	return child
 }
@@ -891,7 +1387,7 @@ func (r *Query) pivotChild(table string, column string, values []any, columns []
 // runChunkedPivotQueryCompiled runs the pivot-table read once per chunk of keys and accumulates the
 // rows into a single []map[string]any, keyed by column name. It is the reader the loaders call:
 // the pivot and through reads are compiled here instead of being handed to GORM.
-func (r *Query) runChunkedPivotQueryCompiled(keys []any, desc *relationDescriptor, buildChild func(chunk []any) *Query) ([]map[string]any, error) {
+func (r *OrmBuilder) runChunkedPivotQueryCompiled(keys []any, desc *relationDescriptor, buildChild func(chunk []any) *OrmBuilder) ([]map[string]any, error) {
 	chunks := chunkKeys(keys, r.chunkSize())
 	var all []map[string]any
 	for _, chunk := range chunks {
@@ -909,8 +1405,8 @@ func (r *Query) runChunkedPivotQueryCompiled(keys []any, desc *relationDescripto
 // findMapsCompiled compiles one pivot child and reads its rows into column-keyed maps. The
 // descriptor's OnPivotQuery is applied first, so the per-relation pivot scope reaches every pivot
 // read without the loader restating it.
-func (r *Query) findMapsCompiled(child *Query, desc *relationDescriptor) ([]map[string]any, error) {
-	if scoped, ok := applyOnPivotQueryToQuery(r.queryGrammar, child, desc).(*Query); ok {
+func (r *OrmBuilder) findMapsCompiled(child *OrmBuilder, desc *relationDescriptor) ([]map[string]any, error) {
+	if scoped, ok := applyOnPivotQueryToQuery(r.queryGrammar, child, desc).(*OrmBuilder); ok {
 		child = scoped
 	}
 
@@ -946,11 +1442,25 @@ func (r *Query) findMapsCompiled(child *Query, desc *relationDescriptor) ([]map[
 // assignToParents writes the dictionary entries onto each parent's relation field using
 // setRelationField. When isMany is false and a parent has multiple matches, only the first one is
 // assigned (HasOne / BelongsTo / MorphOne / HasOneThrough cases).
-func (r *Query) assignToParents(parents []reflect.Value, parentField *schemaField, relation string, dict map[string][]reflect.Value, isMany bool) error {
+//
+// defaultFor, when non-nil, builds the relation's default related row for a parent the read left
+// unmatched — an empty parent key, or a key nothing in the dictionary answered. That is the merge
+// Laravel's eager load performs: initRelation seeds every model with getDefaultFor(model), then
+// match overwrites the ones a result was found for, so an existing row always wins.
+func (r *OrmBuilder) assignToParents(parents []reflect.Value, parentField *schemaField, relation string, dict map[string][]reflect.Value, isMany bool, defaultFor func(parent reflect.Value) ([]reflect.Value, error)) error {
 	for _, parent := range parents {
 		val, zero := parentField.ValueOf(r.ctx, parent)
 		if zero {
 			if !isMany {
+				if defaultFor != nil {
+					rows, err := defaultFor(parent)
+					if err != nil {
+						return err
+					}
+					if err := setRelationField(parent, relation, rows); err != nil {
+						return err
+					}
+				}
 				continue
 			}
 			if err := setRelationField(parent, relation, nil); err != nil {
@@ -959,8 +1469,20 @@ func (r *Query) assignToParents(parents []reflect.Value, parentField *schemaFiel
 			continue
 		}
 		match := dict[dictKey(val)]
-		if !isMany && len(match) > 1 {
-			match = match[:1]
+		if !isMany {
+			if len(match) > 1 {
+				match = match[:1]
+			}
+			if len(match) == 0 && defaultFor != nil {
+				rows, err := defaultFor(parent)
+				if err != nil {
+					return err
+				}
+				if err := setRelationField(parent, relation, rows); err != nil {
+					return err
+				}
+				continue
+			}
 		}
 		if err := setRelationField(parent, relation, match); err != nil {
 			return err
@@ -969,7 +1491,74 @@ func (r *Query) assignToParents(parents []reflect.Value, parentField *schemaFiel
 	return nil
 }
 
-func (r *Query) recurseNested(rows []reflect.Value, nested []eagerLoadEntry) error {
+// applyInverseRelations writes the parent back onto every related model a has-one-or-many /
+// morph-one-or-many load matched to it — the write-back a Laravel relation declaring
+// ->inverse()/->chaperone() performs once its query has run
+// (SupportsInverseRelations::applyInverseRelationToCollection, applied per parent by
+// HasOneOrMany::matchOneOrMany on the eager path and by the after-query callback on
+// getResults). The very parent instance is stored — Eloquent's assertSame($parent,
+// $child->$inverse), no extra query — so it is applied before the parent's own destination
+// field is written: a value-slice destination copies the child, and the copy must already carry
+// the inverse. dict is keyed the way the loaders built it (by the child's foreign-key value);
+// one caps the match at a single child for HasOne / MorphOne, mirroring matchOneOrMany's to-one
+// truncation. A parent whose key is empty or matches no child writes nothing, exactly as
+// matchOneOrMany iterates only dictionary hits.
+func (r *OrmBuilder) applyInverseRelations(desc *relationDescriptor, parents []reflect.Value, parentField *schemaField, dict map[string][]reflect.Value, one bool) error {
+	if desc.Inverse == "" {
+		return nil
+	}
+	for _, parent := range parents {
+		val, zero := parentField.ValueOf(r.ctx, parent)
+		if zero {
+			continue
+		}
+		match := dict[dictKey(val)]
+		if one && len(match) > 1 {
+			match = match[:1]
+		}
+		for _, child := range match {
+			if err := r.applyInverseRelationToModel(desc, child, parent); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// applyInverseRelationToModel stores parent on the related model's inverse relation —
+// SupportsInverseRelations::applyInverseRelationToModel, the per-model half of the chaperone.
+// child is the pointer the loaders carry; the field receives the pointer to the same parent row
+// the model was matched to, matching Eloquent's instance identity. The name comes from the live
+// inverse state, not the bare declaration: Eloquent's applyInverseRelationToModel reads
+// getInverseRelationship(), null after withoutChaperone / withoutInverse, so a cleared relation
+// links neither read results nor default instances (oracle probe_c.php E/F/H report linked false);
+// the eager / never-installed paths fall back to the declaration through inverseWriteBackName.
+func (r *OrmBuilder) applyInverseRelationToModel(desc *relationDescriptor, child reflect.Value, parent reflect.Value) error {
+	inverse := r.inverseWriteBackName(desc)
+	if inverse == "" {
+		return nil
+	}
+	if child.Kind() == reflect.Pointer {
+		child = child.Elem()
+	}
+	return setRelationField(child, inverse, []reflect.Value{inverseParentRef(parent)})
+}
+
+// inverseParentRef hands the child's relation field the parent instance itself. Parents arrive as
+// addressable struct values (collectEagerParents and recurseNested both carry addressable
+// elements), so the stored pointer is the one the caller already holds; a non-addressable value
+// falls back to a copy, like parentAsAny.
+func inverseParentRef(parent reflect.Value) reflect.Value {
+	if parent.CanAddr() {
+		return parent.Addr()
+	}
+	dup := reflect.New(parent.Type())
+	dup.Elem().Set(parent)
+
+	return dup
+}
+
+func (r *OrmBuilder) recurseNested(rows []reflect.Value, nested []eagerLoadEntry) error {
 	if len(rows) == 0 || len(nested) == 0 {
 		return nil
 	}
@@ -980,10 +1569,24 @@ func (r *Query) recurseNested(rows []reflect.Value, nested []eagerLoadEntry) err
 	return r.runEagerLoads(nestedParents, nested)
 }
 
-// maybeRecurseEmpty is the no-op fast path: when there are no parent keys to load against, leave
-// each parent's relation field at its zero value (or empty slice for many) and skip nested.
-func (r *Query) maybeRecurseEmpty(parents []reflect.Value, relation string, isMany bool, _ []eagerLoadEntry) error {
+// maybeRecurseEmpty handles the no-parent-keys fast path: with no keys to load against, a to-one
+// parent keeps the relation's declared default (Laravel's initRelation seeds every model before
+// the query) and stays nil otherwise, while a to-many parent gets the empty slice. Nested loads
+// are skipped either way.
+func (r *OrmBuilder) maybeRecurseEmpty(parents []reflect.Value, relation string, isMany bool, _ []eagerLoadEntry, defaultFor func(parent reflect.Value) ([]reflect.Value, error)) error {
 	if !isMany {
+		if defaultFor == nil {
+			return nil
+		}
+		for _, parent := range parents {
+			rows, err := defaultFor(parent)
+			if err != nil {
+				return err
+			}
+			if err := setRelationField(parent, relation, rows); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 	for _, parent := range parents {
@@ -1042,12 +1645,20 @@ func newSampleModel(parent reflect.Value) any {
 }
 
 // extractKeys pulls the unique non-zero values of field from the parent slice.
-func extractKeys(r *Query, parents []reflect.Value, field *schemaField) []any {
+func extractKeys(r *OrmBuilder, parents []reflect.Value, field *schemaField) []any {
 	seen := make(map[string]struct{}, len(parents))
 	out := make([]any, 0, len(parents))
 	for _, parent := range parents {
 		val, zero := field.ValueOf(r.ctx, parent)
 		if zero {
+			continue
+		}
+		// A pointer-typed field reads as a pointer; the IN list and the dedup key both take the
+		// value it addresses, the scalar every non-pointer key field contributes.
+		val = derefKeyValue(val)
+		if val == nil {
+			// A wrapper that unwraps to no value (NullString{Valid: false}) is as absent as a
+			// nil pointer.
 			continue
 		}
 		k := dictKey(val)
@@ -1060,10 +1671,64 @@ func extractKeys(r *Query, parents []reflect.Value, field *schemaField) []any {
 	return out
 }
 
+// derefKeyValue unwraps pointer values down to the value they address, so a key read off a
+// pointer-typed model field — the Go shape of a nullable foreign key — is the scalar itself,
+// never the pointer fmt.Sprint would render as an address. A driver.Valuer referent unwraps one
+// level further to its Value() — the database value keys the comparison, where fmt.Sprint of the
+// wrapper ("{1 true}") never could — and an invalid wrapper (NullString{Valid: false}) or a nil
+// pointer has no value at all: it reads as nil.
+func derefKeyValue(v any) any {
+	for {
+		rv := reflect.ValueOf(v)
+		if !rv.IsValid() {
+			return nil
+		}
+		if rv.Kind() == reflect.Pointer && rv.IsNil() {
+			return nil
+		}
+		// A driver.Valuer — sql.NullString, sql.NullInt64, a custom column type — carries its
+		// key in its Value(); stringifying the wrapper itself can never equal the related row's
+		// key.
+		if valuer, ok := v.(driver.Valuer); ok {
+			return unwrapValuerValue(valuer)
+		}
+		if rv.Kind() != reflect.Pointer {
+			if reflect.PointerTo(rv.Type()).Implements(valuerInterface) {
+				// Value() lives on the pointer receiver and the key read off the field is a copy;
+				// take its address the way BindingValueOf does for binding.
+				addr := reflect.New(rv.Type())
+				addr.Elem().Set(rv)
+
+				return unwrapValuerValue(addr.Interface().(driver.Valuer))
+			}
+
+			return v
+		}
+		v = rv.Elem().Interface()
+	}
+}
+
+// unwrapValuerValue reduces a driver.Valuer to the value it keys on: nil when the wrapper is
+// invalid or Value() errors — absent, exactly like a nil pointer — the string form of []byte
+// text, and the driver value itself (string, int64) otherwise.
+func unwrapValuerValue(valuer driver.Valuer) any {
+	value, err := valuer.Value()
+	if err != nil || value == nil {
+		return nil
+	}
+	if data, ok := value.([]byte); ok {
+		return string(data)
+	}
+
+	return value
+}
+
 // dictKey reduces any value to a canonical string for use as a map key, paving over the type
 // mismatch between Go field types (uint, int64, string) and database-layer scan types
-// (often int64 or []byte). Mirrors fedaco's _getDictionaryKey.
+// (often int64 or []byte). Pointer values unwrap to the value they address first, so a pointer
+// FK keys the dictionary by value rather than by address. Mirrors fedaco's _getDictionaryKey.
 func dictKey(v any) string {
+	v = derefKeyValue(v)
 	switch x := v.(type) {
 	case nil:
 		return ""
@@ -1077,7 +1742,7 @@ func dictKey(v any) string {
 
 // chunkSize returns the eager-load IN-clause chunk size, falling back to the default when the
 // config key is absent. A non-positive value disables chunking.
-func (r *Query) chunkSize() int {
+func (r *OrmBuilder) chunkSize() int {
 	if r.config == nil {
 		return defaultEagerLoadChunkSize
 	}
@@ -1195,22 +1860,34 @@ type pivotHydrationPlan struct {
 // error) when the related model has no field by that name — pivot data still flows through the
 // SELECT but nothing is surfaced. Returns an error when the field exists but isn't a struct
 // (catches typos like `Pivot string`).
-func preparePivotHydration(r *Query, desc *relationDescriptor) (*pivotHydrationPlan, error) {
-	relatedType := reflect.TypeOf(desc.relatedModel)
+func preparePivotHydration(r *OrmBuilder, desc *relationDescriptor) (*pivotHydrationPlan, error) {
+	return preparePivotHydrationFor(desc.RelatedModel, desc.PivotField)
+}
+
+// preparePivotHydrationFor builds the plan for one pivot field name on a related model — the core
+// preparePivotHydration (the declaration-time path) and OrmBuilder.ConfigurePivotRead (the
+// relation object's call-time As/WithPivot capability) share. A nil or non-struct model, or a
+// model without a field by the name, yields (nil, nil); a field that exists but is not a struct
+// yields the named OrmRelationPivotFieldNotStruct error.
+func preparePivotHydrationFor(relatedModel any, pivotField string) (*pivotHydrationPlan, error) {
+	relatedType := reflect.TypeOf(relatedModel)
+	if relatedType == nil {
+		return nil, nil
+	}
 	if relatedType.Kind() == reflect.Pointer {
 		relatedType = relatedType.Elem()
 	}
 	if relatedType.Kind() != reflect.Struct {
 		return nil, nil
 	}
-	pivotStructField, ok := relatedType.FieldByName(desc.pivotField)
+	pivotStructField, ok := relatedType.FieldByName(pivotField)
 	if !ok {
 		// No field by this name — silently skip hydration; the relation still works for joining.
 		return nil, nil
 	}
 	if pivotStructField.Type.Kind() != reflect.Struct {
 		return nil, errors.OrmRelationPivotFieldNotStruct.Args(
-			relatedType.String(), desc.pivotField, pivotStructField.Type.Kind().String(),
+			relatedType.String(), pivotField, pivotStructField.Type.Kind().String(),
 		)
 	}
 	// Parse the field type's GORM schema by instantiating a zero value of it.
@@ -1228,7 +1905,7 @@ func preparePivotHydration(r *Query, desc *relationDescriptor) (*pivotHydrationP
 		byCol[f.DBName] = f
 	}
 	return &pivotHydrationPlan{
-		fieldName:     desc.pivotField,
+		fieldName:     pivotField,
 		extraColumns:  cols,
 		fieldByColumn: byCol,
 	}, nil

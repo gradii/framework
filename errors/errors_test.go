@@ -274,3 +274,53 @@ type customError struct{}
 func (e *customError) Error() string {
 	return "custom error"
 }
+
+func TestOrmModelNotFoundWrapsTheRecordNotFoundSentinel(t *testing.T) {
+	err := OrmModelNotFound.Args("hasManyThroughPost", "1, 2")
+
+	assert.Equal(t, "No query results for model [hasManyThroughPost] 1, 2", err.Error())
+	assert.True(t, Is(err, OrmRecordNotFound))
+	assert.True(t, Is(err, OrmModelNotFound))
+}
+
+func TestOrmModelNotFoundNoIdsRendersTheIdlessMessage(t *testing.T) {
+	err := OrmModelNotFoundNoIds.Args("hasManyThroughPost")
+
+	assert.Equal(t, "No query results for model [hasManyThroughPost].", err.Error())
+	assert.True(t, Is(err, OrmRecordNotFound))
+	assert.True(t, Is(err, OrmModelNotFoundNoIds))
+}
+
+func TestWrapError(t *testing.T) {
+	t.Run("message is the formatted text", func(t *testing.T) {
+		err := wrap(stdErrors.New("inner"), "outer: %s %d").Args("value", 3)
+
+		assert.Equal(t, "outer: value 3", err.Error())
+	})
+
+	t.Run("Is matches the wrapped error", func(t *testing.T) {
+		base := New("base error")
+
+		assert.True(t, Is(wrap(base, "outer: %s").Args("value"), base))
+	})
+
+	t.Run("Is matches another error built from the same template", func(t *testing.T) {
+		sentinel := wrap(stdErrors.New("inner"), "outer: %s")
+
+		assert.True(t, Is(sentinel.Args("a"), sentinel))
+	})
+
+	t.Run("Unwrap reports the wrapped error", func(t *testing.T) {
+		base := New("base error")
+
+		assert.Equal(t, base, Unwrap(wrap(base, "outer")))
+	})
+
+	t.Run("SetModule prefixes the message and keeps the wrap", func(t *testing.T) {
+		base := New("base error")
+		modular := wrap(base, "outer").SetModule("Test")
+
+		assert.Equal(t, "[Test] outer", modular.Error())
+		assert.True(t, Is(modular, base))
+	})
+}

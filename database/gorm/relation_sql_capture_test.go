@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	"github.com/gradii/framework/database/gorm/relations"
 )
 
 // TestCapture_RelationSQL is a one-shot helper that writes the actual SQL generated for every
@@ -77,7 +78,10 @@ func TestCapture_RelationSQL(t *testing.T) {
 	}
 	for _, c := range cases {
 		q, dest := c.build(t)
-		gq := q.(*Query)
+		gq, ok := ormBuilderOf(q)
+		if !ok {
+			t.Fatalf("expected *OrmBuilder, got %T", q)
+		}
 		stmt, _, cerr := gq.dest(dest).addGlobalScopes().compileSelect()
 		if cerr != nil {
 			if _, err := fmt.Fprintf(f, "[%s] ERROR: %v\n\n", c.name, cerr); err != nil {
@@ -113,14 +117,14 @@ func TestCapture_RelationSQL(t *testing.T) {
 	}
 	for _, c := range existence {
 		q := newRelQueryWith(t, c.model)
-		desc, err := resolveRelation(c.model, c.relation)
+		desc, err := relations.ResolveRelation(c.model, c.relation)
 		if err != nil {
 			if _, err := fmt.Fprintf(f, "[%s] ERROR: %v\n\n", c.name, err); err != nil {
 				t.Fatal(err)
 			}
 			continue
 		}
-		inner, cerr := q.compileExistenceSubquery(desc, nil)
+		inner, _, cerr := q.compileExistenceSubquery(desc, nil)
 		if cerr != nil {
 			if _, err := fmt.Fprintf(f, "[%s] ERROR: %v\n\n", c.name, cerr); err != nil {
 				t.Fatal(err)
@@ -150,7 +154,7 @@ func TestCapture_RelationSQL(t *testing.T) {
 	}
 	for _, c := range aggregates {
 		q := newRelQueryWith(t, &relUser{})
-		desc, err := resolveRelation(&relUser{}, "Books")
+		desc, err := relations.ResolveRelation(&relUser{}, "Books")
 		if err != nil {
 			if _, err := fmt.Fprintf(f, "[%s] ERROR: %v\n\n", c.name, err); err != nil {
 				t.Fatal(err)

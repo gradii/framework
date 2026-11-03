@@ -496,6 +496,69 @@ func (_c *QueryWithRelations_OrHasMorph_Call) RunAndReturn(run func(string, []in
 	return _c
 }
 
+// OrWhereAttachedTo provides a mock function with given fields: related, relation
+func (_m *QueryWithRelations) OrWhereAttachedTo(related interface{}, relation ...string) orm.Query {
+	_va := make([]interface{}, len(relation))
+	for _i := range relation {
+		_va[_i] = relation[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, related)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for OrWhereAttachedTo")
+	}
+
+	var r0 orm.Query
+	if rf, ok := ret.Get(0).(func(interface{}, ...string) orm.Query); ok {
+		r0 = rf(related, relation...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(orm.Query)
+		}
+	}
+
+	return r0
+}
+
+// QueryWithRelations_OrWhereAttachedTo_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'OrWhereAttachedTo'
+type QueryWithRelations_OrWhereAttachedTo_Call struct {
+	*mock.Call
+}
+
+// OrWhereAttachedTo is a helper method to define mock.On call
+//   - related interface{}
+//   - relation ...string
+func (_e *QueryWithRelations_Expecter) OrWhereAttachedTo(related interface{}, relation ...interface{}) *QueryWithRelations_OrWhereAttachedTo_Call {
+	return &QueryWithRelations_OrWhereAttachedTo_Call{Call: _e.mock.On("OrWhereAttachedTo",
+		append([]interface{}{related}, relation...)...)}
+}
+
+func (_c *QueryWithRelations_OrWhereAttachedTo_Call) Run(run func(related interface{}, relation ...string)) *QueryWithRelations_OrWhereAttachedTo_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]string, len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(string)
+			}
+		}
+		run(args[0].(interface{}), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *QueryWithRelations_OrWhereAttachedTo_Call) Return(_a0 orm.Query) *QueryWithRelations_OrWhereAttachedTo_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *QueryWithRelations_OrWhereAttachedTo_Call) RunAndReturn(run func(interface{}, ...string) orm.Query) *QueryWithRelations_OrWhereAttachedTo_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // OrWhereBelongsTo provides a mock function with given fields: related, relation
 func (_m *QueryWithRelations) OrWhereBelongsTo(related interface{}, relation ...string) orm.Query {
 	_va := make([]interface{}, len(relation))
@@ -913,6 +976,132 @@ func (_c *QueryWithRelations_OrWhereRelation_Call) Return(_a0 orm.Query) *QueryW
 }
 
 func (_c *QueryWithRelations_OrWhereRelation_Call) RunAndReturn(run func(string, interface{}, ...interface{}) orm.Query) *QueryWithRelations_OrWhereRelation_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// WhereAttachedTo provides a mock function with given fields: related, relation
+func (_m *QueryWithRelations) WhereAttachedTo(related interface{}, relation ...string) orm.Query {
+	_va := make([]interface{}, len(relation))
+	for _i := range relation {
+		_va[_i] = relation[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, related)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for WhereAttachedTo")
+	}
+
+	var r0 orm.Query
+	if rf, ok := ret.Get(0).(func(interface{}, ...string) orm.Query); ok {
+		r0 = rf(related, relation...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(orm.Query)
+		}
+	}
+
+	return r0
+}
+
+// QueryWithRelations_WhereAttachedTo_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'WhereAttachedTo'
+type QueryWithRelations_WhereAttachedTo_Call struct {
+	*mock.Call
+}
+
+// WhereAttachedTo is a helper method to define mock.On call
+//   - related interface{}
+//   - relation ...string
+func (_e *QueryWithRelations_Expecter) WhereAttachedTo(related interface{}, relation ...interface{}) *QueryWithRelations_WhereAttachedTo_Call {
+	return &QueryWithRelations_WhereAttachedTo_Call{Call: _e.mock.On("WhereAttachedTo",
+		append([]interface{}{related}, relation...)...)}
+}
+
+func (_c *QueryWithRelations_WhereAttachedTo_Call) Run(run func(related interface{}, relation ...string)) *QueryWithRelations_WhereAttachedTo_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]string, len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(string)
+			}
+		}
+		run(args[0].(interface{}), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *QueryWithRelations_WhereAttachedTo_Call) Return(_a0 orm.Query) *QueryWithRelations_WhereAttachedTo_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *QueryWithRelations_WhereAttachedTo_Call) RunAndReturn(run func(interface{}, ...string) orm.Query) *QueryWithRelations_WhereAttachedTo_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// WhereAttachedToCollection provides a mock function with given fields: related, relation
+func (_m *QueryWithRelations) WhereAttachedToCollection(related interface{}, relation ...string) orm.Query {
+	_va := make([]interface{}, len(relation))
+	for _i := range relation {
+		_va[_i] = relation[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, related)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for WhereAttachedToCollection")
+	}
+
+	var r0 orm.Query
+	if rf, ok := ret.Get(0).(func(interface{}, ...string) orm.Query); ok {
+		r0 = rf(related, relation...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(orm.Query)
+		}
+	}
+
+	return r0
+}
+
+// QueryWithRelations_WhereAttachedToCollection_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'WhereAttachedToCollection'
+type QueryWithRelations_WhereAttachedToCollection_Call struct {
+	*mock.Call
+}
+
+// WhereAttachedToCollection is a helper method to define mock.On call
+//   - related interface{}
+//   - relation ...string
+func (_e *QueryWithRelations_Expecter) WhereAttachedToCollection(related interface{}, relation ...interface{}) *QueryWithRelations_WhereAttachedToCollection_Call {
+	return &QueryWithRelations_WhereAttachedToCollection_Call{Call: _e.mock.On("WhereAttachedToCollection",
+		append([]interface{}{related}, relation...)...)}
+}
+
+func (_c *QueryWithRelations_WhereAttachedToCollection_Call) Run(run func(related interface{}, relation ...string)) *QueryWithRelations_WhereAttachedToCollection_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]string, len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(string)
+			}
+		}
+		run(args[0].(interface{}), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *QueryWithRelations_WhereAttachedToCollection_Call) Return(_a0 orm.Query) *QueryWithRelations_WhereAttachedToCollection_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *QueryWithRelations_WhereAttachedToCollection_Call) RunAndReturn(run func(interface{}, ...string) orm.Query) *QueryWithRelations_WhereAttachedToCollection_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1339,7 +1528,7 @@ func (_c *QueryWithRelations_WhereRelation_Call) RunAndReturn(run func(string, i
 }
 
 // WithAggregate provides a mock function with given fields: relation, column, fn, args
-func (_m *QueryWithRelations) WithAggregate(relation string, column string, fn string, args ...interface{}) orm.Query {
+func (_m *QueryWithRelations) WithAggregate(relation string, column interface{}, fn string, args ...interface{}) orm.Query {
 	var _ca []interface{}
 	_ca = append(_ca, relation, column, fn)
 	_ca = append(_ca, args...)
@@ -1350,7 +1539,7 @@ func (_m *QueryWithRelations) WithAggregate(relation string, column string, fn s
 	}
 
 	var r0 orm.Query
-	if rf, ok := ret.Get(0).(func(string, string, string, ...interface{}) orm.Query); ok {
+	if rf, ok := ret.Get(0).(func(string, interface{}, string, ...interface{}) orm.Query); ok {
 		r0 = rf(relation, column, fn, args...)
 	} else {
 		if ret.Get(0) != nil {
@@ -1368,7 +1557,7 @@ type QueryWithRelations_WithAggregate_Call struct {
 
 // WithAggregate is a helper method to define mock.On call
 //   - relation string
-//   - column string
+//   - column interface{}
 //   - fn string
 //   - args ...interface{}
 func (_e *QueryWithRelations_Expecter) WithAggregate(relation interface{}, column interface{}, fn interface{}, args ...interface{}) *QueryWithRelations_WithAggregate_Call {
@@ -1376,7 +1565,7 @@ func (_e *QueryWithRelations_Expecter) WithAggregate(relation interface{}, colum
 		append([]interface{}{relation, column, fn}, args...)...)}
 }
 
-func (_c *QueryWithRelations_WithAggregate_Call) Run(run func(relation string, column string, fn string, args ...interface{})) *QueryWithRelations_WithAggregate_Call {
+func (_c *QueryWithRelations_WithAggregate_Call) Run(run func(relation string, column interface{}, fn string, args ...interface{})) *QueryWithRelations_WithAggregate_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		variadicArgs := make([]interface{}, len(args)-3)
 		for i, a := range args[3:] {
@@ -1384,7 +1573,7 @@ func (_c *QueryWithRelations_WithAggregate_Call) Run(run func(relation string, c
 				variadicArgs[i] = a.(interface{})
 			}
 		}
-		run(args[0].(string), args[1].(string), args[2].(string), variadicArgs...)
+		run(args[0].(string), args[1].(interface{}), args[2].(string), variadicArgs...)
 	})
 	return _c
 }
@@ -1394,13 +1583,13 @@ func (_c *QueryWithRelations_WithAggregate_Call) Return(_a0 orm.Query) *QueryWit
 	return _c
 }
 
-func (_c *QueryWithRelations_WithAggregate_Call) RunAndReturn(run func(string, string, string, ...interface{}) orm.Query) *QueryWithRelations_WithAggregate_Call {
+func (_c *QueryWithRelations_WithAggregate_Call) RunAndReturn(run func(string, interface{}, string, ...interface{}) orm.Query) *QueryWithRelations_WithAggregate_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // WithAvg provides a mock function with given fields: relation, column, args
-func (_m *QueryWithRelations) WithAvg(relation string, column string, args ...interface{}) orm.Query {
+func (_m *QueryWithRelations) WithAvg(relation string, column interface{}, args ...interface{}) orm.Query {
 	var _ca []interface{}
 	_ca = append(_ca, relation, column)
 	_ca = append(_ca, args...)
@@ -1411,7 +1600,7 @@ func (_m *QueryWithRelations) WithAvg(relation string, column string, args ...in
 	}
 
 	var r0 orm.Query
-	if rf, ok := ret.Get(0).(func(string, string, ...interface{}) orm.Query); ok {
+	if rf, ok := ret.Get(0).(func(string, interface{}, ...interface{}) orm.Query); ok {
 		r0 = rf(relation, column, args...)
 	} else {
 		if ret.Get(0) != nil {
@@ -1429,14 +1618,14 @@ type QueryWithRelations_WithAvg_Call struct {
 
 // WithAvg is a helper method to define mock.On call
 //   - relation string
-//   - column string
+//   - column interface{}
 //   - args ...interface{}
 func (_e *QueryWithRelations_Expecter) WithAvg(relation interface{}, column interface{}, args ...interface{}) *QueryWithRelations_WithAvg_Call {
 	return &QueryWithRelations_WithAvg_Call{Call: _e.mock.On("WithAvg",
 		append([]interface{}{relation, column}, args...)...)}
 }
 
-func (_c *QueryWithRelations_WithAvg_Call) Run(run func(relation string, column string, args ...interface{})) *QueryWithRelations_WithAvg_Call {
+func (_c *QueryWithRelations_WithAvg_Call) Run(run func(relation string, column interface{}, args ...interface{})) *QueryWithRelations_WithAvg_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		variadicArgs := make([]interface{}, len(args)-2)
 		for i, a := range args[2:] {
@@ -1444,7 +1633,7 @@ func (_c *QueryWithRelations_WithAvg_Call) Run(run func(relation string, column 
 				variadicArgs[i] = a.(interface{})
 			}
 		}
-		run(args[0].(string), args[1].(string), variadicArgs...)
+		run(args[0].(string), args[1].(interface{}), variadicArgs...)
 	})
 	return _c
 }
@@ -1454,7 +1643,7 @@ func (_c *QueryWithRelations_WithAvg_Call) Return(_a0 orm.Query) *QueryWithRelat
 	return _c
 }
 
-func (_c *QueryWithRelations_WithAvg_Call) RunAndReturn(run func(string, string, ...interface{}) orm.Query) *QueryWithRelations_WithAvg_Call {
+func (_c *QueryWithRelations_WithAvg_Call) RunAndReturn(run func(string, interface{}, ...interface{}) orm.Query) *QueryWithRelations_WithAvg_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1578,7 +1767,7 @@ func (_c *QueryWithRelations_WithExists_Call) RunAndReturn(run func(...string) o
 }
 
 // WithMax provides a mock function with given fields: relation, column, args
-func (_m *QueryWithRelations) WithMax(relation string, column string, args ...interface{}) orm.Query {
+func (_m *QueryWithRelations) WithMax(relation string, column interface{}, args ...interface{}) orm.Query {
 	var _ca []interface{}
 	_ca = append(_ca, relation, column)
 	_ca = append(_ca, args...)
@@ -1589,7 +1778,7 @@ func (_m *QueryWithRelations) WithMax(relation string, column string, args ...in
 	}
 
 	var r0 orm.Query
-	if rf, ok := ret.Get(0).(func(string, string, ...interface{}) orm.Query); ok {
+	if rf, ok := ret.Get(0).(func(string, interface{}, ...interface{}) orm.Query); ok {
 		r0 = rf(relation, column, args...)
 	} else {
 		if ret.Get(0) != nil {
@@ -1607,14 +1796,14 @@ type QueryWithRelations_WithMax_Call struct {
 
 // WithMax is a helper method to define mock.On call
 //   - relation string
-//   - column string
+//   - column interface{}
 //   - args ...interface{}
 func (_e *QueryWithRelations_Expecter) WithMax(relation interface{}, column interface{}, args ...interface{}) *QueryWithRelations_WithMax_Call {
 	return &QueryWithRelations_WithMax_Call{Call: _e.mock.On("WithMax",
 		append([]interface{}{relation, column}, args...)...)}
 }
 
-func (_c *QueryWithRelations_WithMax_Call) Run(run func(relation string, column string, args ...interface{})) *QueryWithRelations_WithMax_Call {
+func (_c *QueryWithRelations_WithMax_Call) Run(run func(relation string, column interface{}, args ...interface{})) *QueryWithRelations_WithMax_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		variadicArgs := make([]interface{}, len(args)-2)
 		for i, a := range args[2:] {
@@ -1622,7 +1811,7 @@ func (_c *QueryWithRelations_WithMax_Call) Run(run func(relation string, column 
 				variadicArgs[i] = a.(interface{})
 			}
 		}
-		run(args[0].(string), args[1].(string), variadicArgs...)
+		run(args[0].(string), args[1].(interface{}), variadicArgs...)
 	})
 	return _c
 }
@@ -1632,13 +1821,13 @@ func (_c *QueryWithRelations_WithMax_Call) Return(_a0 orm.Query) *QueryWithRelat
 	return _c
 }
 
-func (_c *QueryWithRelations_WithMax_Call) RunAndReturn(run func(string, string, ...interface{}) orm.Query) *QueryWithRelations_WithMax_Call {
+func (_c *QueryWithRelations_WithMax_Call) RunAndReturn(run func(string, interface{}, ...interface{}) orm.Query) *QueryWithRelations_WithMax_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // WithMin provides a mock function with given fields: relation, column, args
-func (_m *QueryWithRelations) WithMin(relation string, column string, args ...interface{}) orm.Query {
+func (_m *QueryWithRelations) WithMin(relation string, column interface{}, args ...interface{}) orm.Query {
 	var _ca []interface{}
 	_ca = append(_ca, relation, column)
 	_ca = append(_ca, args...)
@@ -1649,7 +1838,7 @@ func (_m *QueryWithRelations) WithMin(relation string, column string, args ...in
 	}
 
 	var r0 orm.Query
-	if rf, ok := ret.Get(0).(func(string, string, ...interface{}) orm.Query); ok {
+	if rf, ok := ret.Get(0).(func(string, interface{}, ...interface{}) orm.Query); ok {
 		r0 = rf(relation, column, args...)
 	} else {
 		if ret.Get(0) != nil {
@@ -1667,14 +1856,14 @@ type QueryWithRelations_WithMin_Call struct {
 
 // WithMin is a helper method to define mock.On call
 //   - relation string
-//   - column string
+//   - column interface{}
 //   - args ...interface{}
 func (_e *QueryWithRelations_Expecter) WithMin(relation interface{}, column interface{}, args ...interface{}) *QueryWithRelations_WithMin_Call {
 	return &QueryWithRelations_WithMin_Call{Call: _e.mock.On("WithMin",
 		append([]interface{}{relation, column}, args...)...)}
 }
 
-func (_c *QueryWithRelations_WithMin_Call) Run(run func(relation string, column string, args ...interface{})) *QueryWithRelations_WithMin_Call {
+func (_c *QueryWithRelations_WithMin_Call) Run(run func(relation string, column interface{}, args ...interface{})) *QueryWithRelations_WithMin_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		variadicArgs := make([]interface{}, len(args)-2)
 		for i, a := range args[2:] {
@@ -1682,7 +1871,7 @@ func (_c *QueryWithRelations_WithMin_Call) Run(run func(relation string, column 
 				variadicArgs[i] = a.(interface{})
 			}
 		}
-		run(args[0].(string), args[1].(string), variadicArgs...)
+		run(args[0].(string), args[1].(interface{}), variadicArgs...)
 	})
 	return _c
 }
@@ -1692,13 +1881,13 @@ func (_c *QueryWithRelations_WithMin_Call) Return(_a0 orm.Query) *QueryWithRelat
 	return _c
 }
 
-func (_c *QueryWithRelations_WithMin_Call) RunAndReturn(run func(string, string, ...interface{}) orm.Query) *QueryWithRelations_WithMin_Call {
+func (_c *QueryWithRelations_WithMin_Call) RunAndReturn(run func(string, interface{}, ...interface{}) orm.Query) *QueryWithRelations_WithMin_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // WithSum provides a mock function with given fields: relation, column, args
-func (_m *QueryWithRelations) WithSum(relation string, column string, args ...interface{}) orm.Query {
+func (_m *QueryWithRelations) WithSum(relation string, column interface{}, args ...interface{}) orm.Query {
 	var _ca []interface{}
 	_ca = append(_ca, relation, column)
 	_ca = append(_ca, args...)
@@ -1709,7 +1898,7 @@ func (_m *QueryWithRelations) WithSum(relation string, column string, args ...in
 	}
 
 	var r0 orm.Query
-	if rf, ok := ret.Get(0).(func(string, string, ...interface{}) orm.Query); ok {
+	if rf, ok := ret.Get(0).(func(string, interface{}, ...interface{}) orm.Query); ok {
 		r0 = rf(relation, column, args...)
 	} else {
 		if ret.Get(0) != nil {
@@ -1727,14 +1916,14 @@ type QueryWithRelations_WithSum_Call struct {
 
 // WithSum is a helper method to define mock.On call
 //   - relation string
-//   - column string
+//   - column interface{}
 //   - args ...interface{}
 func (_e *QueryWithRelations_Expecter) WithSum(relation interface{}, column interface{}, args ...interface{}) *QueryWithRelations_WithSum_Call {
 	return &QueryWithRelations_WithSum_Call{Call: _e.mock.On("WithSum",
 		append([]interface{}{relation, column}, args...)...)}
 }
 
-func (_c *QueryWithRelations_WithSum_Call) Run(run func(relation string, column string, args ...interface{})) *QueryWithRelations_WithSum_Call {
+func (_c *QueryWithRelations_WithSum_Call) Run(run func(relation string, column interface{}, args ...interface{})) *QueryWithRelations_WithSum_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		variadicArgs := make([]interface{}, len(args)-2)
 		for i, a := range args[2:] {
@@ -1742,7 +1931,7 @@ func (_c *QueryWithRelations_WithSum_Call) Run(run func(relation string, column 
 				variadicArgs[i] = a.(interface{})
 			}
 		}
-		run(args[0].(string), args[1].(string), variadicArgs...)
+		run(args[0].(string), args[1].(interface{}), variadicArgs...)
 	})
 	return _c
 }
@@ -1752,7 +1941,7 @@ func (_c *QueryWithRelations_WithSum_Call) Return(_a0 orm.Query) *QueryWithRelat
 	return _c
 }
 
-func (_c *QueryWithRelations_WithSum_Call) RunAndReturn(run func(string, string, ...interface{}) orm.Query) *QueryWithRelations_WithSum_Call {
+func (_c *QueryWithRelations_WithSum_Call) RunAndReturn(run func(string, interface{}, ...interface{}) orm.Query) *QueryWithRelations_WithSum_Call {
 	_c.Call.Return(run)
 	return _c
 }

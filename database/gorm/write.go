@@ -34,7 +34,7 @@ func indirectValue(value reflect.Value) reflect.Value {
 	return value
 }
 
-func (r *Query) insertRecords(value any) ([]map[string]any, error) {
+func (r *OrmBuilder) insertRecords(value any) ([]map[string]any, error) {
 	if value == nil {
 		return nil, errors.DatabaseUnsupportedType.Args("nil", "struct, map, or a slice of them")
 	}
@@ -83,19 +83,21 @@ func (r *Query) insertRecords(value any) ([]map[string]any, error) {
 // declaredTable returns the table the query names explicitly with Table(), or "" when it names
 // none. A caller who names the table satisfies the model's table requirement, so schema resolution
 // does not have to demand TableName() as well.
-func (r *Query) declaredTable() string {
-	if r.conditions.table != nil {
-		if name, ok := r.conditions.table.name.(string); ok {
-			return name
-		}
-		// An already-qualified table is named by an expression; its raw SQL is the name.
-		return querybuilder.ExpressionValue(r.conditions.table.name)
+func (r *OrmBuilder) declaredTable() string {
+	source := r.query.TableSource()
+	if source == nil {
+		return ""
 	}
 
-	return ""
+	if name, ok := source.(string); ok {
+		return name
+	}
+
+	// An already-qualified table is named by an expression; its raw SQL is the name.
+	return querybuilder.ExpressionValue(source)
 }
 
-func (r *Query) structRecord(value any) (map[string]any, error) {
+func (r *OrmBuilder) structRecord(value any) (map[string]any, error) {
 	reflected := indirectValue(reflect.ValueOf(value))
 	if !reflected.IsValid() || reflected.Kind() != reflect.Struct {
 		return nil, errors.DatabaseUnsupportedType.Args(reflect.TypeOf(value).String(), "struct")
@@ -113,13 +115,24 @@ func (r *Query) structRecord(value any) (map[string]any, error) {
 		return nil, err
 	}
 
-	if err := r.applyInsertTimestamps(reflected, schema); err != nil {
-		return nil, err
+	// Eloquent stamps the automatic timestamps only while the model uses timestamps (performInsert's
+	// updateTimestamps gate); a WithoutTimestamps scope or the model's own flag leaves the columns to
+	// the caller. With the stamping withheld, an unset automatic column is dropped from the record —
+	// Eloquent's insert carries no such attribute, so the database's own default applies — while a
+	// value the caller set is written. The Go zero value stands in for "unset".
+	timestamps := r.usesTimestamps(value)
+	if timestamps {
+		if err := r.applyInsertTimestamps(reflected, schema); err != nil {
+			return nil, err
+		}
 	}
 
 	record := make(map[string]any, len(schema.Fields))
 	for _, field := range schema.Fields {
 		fieldValue, _ := field.BindingValueOf(r.ctx, reflected)
+		if !timestamps && (field.AutoCreateTime != 0 || field.AutoUpdateTime != 0) && zeroTimestamp(fieldValue) {
+			continue
+		}
 		record[field.DBName] = fieldValue
 	}
 
@@ -128,7 +141,7 @@ func (r *Query) structRecord(value any) (map[string]any, error) {
 
 // applyInsertTimestamps fills the model's automatic timestamps, so a column the caller left unset is
 // populated and one the caller set is left alone.
-func (r *Query) applyInsertTimestamps(value reflect.Value, schema *modelSchema) error {
+func (r *OrmBuilder) applyInsertTimestamps(value reflect.Value, schema *modelSchema) error {
 	now := carbon.Now().StdTime()
 
 	for _, field := range schema.Fields {
@@ -163,10 +176,10 @@ func (r *Query) applyInsertTimestamps(value reflect.Value, schema *modelSchema) 
 // A struct field carries no "set" flag, so the zero value stands in for unset and a zero sole
 // primary key is left out whatever its type. That also drops a key an application set to its own
 // zero value, which Eloquent would keep; a struct cannot tell that apart from an unset field.
-func (r *Query) filterInsertColumns(record map[string]any) map[string]any {
+func (r *OrmBuilder) filterInsertColumns(record map[string]any) map[string]any {
 	schema := r.insertSchema()
 
-	columns := selectStringColumns(r.builder.Selects())
+	columns := selectStringColumns(r.query.Selects())
 	if len(columns) > 0 && !hasWildcard(columns) {
 		selected := make(map[string]any, len(columns))
 		for _, column := range columns {
@@ -200,7 +213,7 @@ func (r *Query) filterInsertColumns(record map[string]any) map[string]any {
 // name became a column the table does not have, which the dialect rejected (PostgreSQL answers
 // 42703). A name the model does not declare is left as written, so a raw column or expression still
 // passes through.
-func (r *Query) resolveRecordColumns(record map[string]any) map[string]any {
+func (r *OrmBuilder) resolveRecordColumns(record map[string]any) map[string]any {
 	schema := r.insertSchema()
 	if schema == nil {
 		return record
@@ -242,7 +255,7 @@ func resolveInsertColumn(schema *modelSchema, name string) string {
 
 // insertSchema is the schema of the model the insert writes to, or nil when the query names no model,
 // in which case identifiers are taken as written.
-func (r *Query) insertSchema() *modelSchema {
+func (r *OrmBuilder) insertSchema() *modelSchema {
 	model := r.parentModel()
 	if model == nil {
 		return nil
@@ -271,7 +284,7 @@ func hasWildcard(columns []string) bool {
 // solePrimaryKeyColumn returns the column of a sole primary key, which an insert leaves out when the
 // caller has not set it. A composite key names more than one column, so no single one can stand for
 // it and the model's columns are taken as they are.
-func (r *Query) solePrimaryKeyColumn() string {
+func (r *OrmBuilder) solePrimaryKeyColumn() string {
 	if field := r.primaryKeyField(); field != nil {
 		return field.DBName
 	}
@@ -282,7 +295,7 @@ func (r *Query) solePrimaryKeyColumn() string {
 // primaryKeyField returns the model's sole primary key field, so the insert key read-back can be
 // typed by the column it belongs to. It is nil when the query names no model or the model has a
 // composite key, in which case no single key is there to read back.
-func (r *Query) primaryKeyField() *schemaField {
+func (r *OrmBuilder) primaryKeyField() *schemaField {
 	schema := r.insertSchema()
 	if schema == nil || len(schema.PrimaryFields) != 1 {
 		return nil
@@ -326,7 +339,7 @@ func isZeroValue(value any) bool {
 //
 // Each record is inserted by its own statement: a dialect that returns the generated key does so
 // for one row, so a statement carrying a whole batch could not report the keys back.
-func (r *Query) insertRows(records []map[string]any) ([]any, error) {
+func (r *OrmBuilder) insertRows(records []map[string]any) ([]any, error) {
 	keys := make([]any, 0, len(records))
 
 	for _, record := range records {
@@ -393,13 +406,14 @@ func uniformInsertRecords(records []map[string]any) []map[string]any {
 // builds one statement for the batch, even though execution inserts a row at a time to read its key
 // back. The batch is first given the union of its columns, so a column only a later record carries is
 // still reported rather than hidden behind the first record's column list.
-func (r *Query) compileInsertAll(records []map[string]any) (string, []any, error) {
+func (r *OrmBuilder) compileInsertAll(records []map[string]any) (string, []any, error) {
 	builder, err := r.newBuilder()
 	if err != nil {
 		return "", nil, err
 	}
 
 	records = uniformInsertRecords(records)
+	records = insertGetIdValues(records)
 
 	// The generated key is reported by column name: PostgreSQL appends `returning <key>` and SQL
 	// Server an `output inserted.<key>` clause. Laravel falls back to "id" only when the caller
@@ -416,14 +430,46 @@ func (r *Query) compileInsertAll(records []map[string]any) (string, []any, error
 	return statement, bindings, nil
 }
 
+// insertGetIdValues hands the compiler the values list Eloquent's insertGetId receives for
+// attribute arrays with no entries. performInsert on an incrementing model always calls
+// insertGetId($attributes) — the empty-attribute guard sits in the non-incrementing branch — and an
+// empty array reaches the grammar's empty-values branch, which renders Laravel's empty insert:
+// `insert into <table> default values` (PostgreSQL appends `returning "<key>"`, SQL Server an
+// `output inserted.<key>` clause, and MySQL spells it `() values ()`, as Laravel's own grammar
+// does). Passing the one-record list through instead would compile the invalid `() values ()` on
+// the other dialects (sqlite: near ")" syntax error).
+//
+// A batch whose records are all empty is that same empty attribute array asked for once per row:
+// Create on a slice of empty incrementing models runs insertGetId([]) once per record, so the
+// values list the batch is handed to the compiler as is the empty one however many records it
+// holds. Laravel renders the literal batch `[[], []]` as `insert into <table> () values (), ()`
+// (oracle, illuminate/database v12.55.1: the same on every dialect, because the empty column list
+// columnizes to nothing and each record parameterizes to an empty tuple), and only MySQL accepts
+// that statement — sqlite, PostgreSQL and SQL Server reject any empty column list (sqlite: near ")"
+// syntax error) — so the literal batch would report a statement the target dialect cannot run
+// while execution runs the empty insert. A batch carrying any column is returned untouched.
+func insertGetIdValues(records []map[string]any) []map[string]any {
+	if len(records) == 0 {
+		return records
+	}
+
+	for _, record := range records {
+		if len(record) > 0 {
+			return records
+		}
+	}
+
+	return nil
+}
+
 // compileInsert renders one record as an insert statement and its bindings.
-func (r *Query) compileInsert(record map[string]any) (string, []any, error) {
+func (r *OrmBuilder) compileInsert(record map[string]any) (string, []any, error) {
 	return r.compileInsertAll([]map[string]any{record})
 }
 
 // insertRow inserts one record and returns its generated key, or nil when the dialect cannot
 // report one.
-func (r *Query) insertRow(record map[string]any) (any, error) {
+func (r *OrmBuilder) insertRow(record map[string]any) (any, error) {
 	builder, err := r.newBuilder()
 	if err != nil {
 		return nil, err
@@ -434,7 +480,7 @@ func (r *Query) insertRow(record map[string]any) (any, error) {
 	}
 
 	connection := &insertConnection{query: r, pool: pool}
-	return builder.InsertGetID(connection, []map[string]any{record}, r.solePrimaryKeyColumn())
+	return builder.InsertGetID(connection, insertGetIdValues([]map[string]any{record}), r.solePrimaryKeyColumn())
 }
 
 // readReturnedKey reads the key a `returning` insert reports back into the type of the primary key
@@ -445,7 +491,7 @@ func (r *Query) insertRow(record map[string]any) (any, error) {
 // and, where it did not error, was coerced to a number. The target is built from the field's own Go
 // type instead, so an integer key still comes back as an integer and a string key comes back as a
 // string. A query that names no model has no type to go on, so the value is returned as read.
-func (r *Query) readReturnedKey(statement string, bindings []any) (any, error) {
+func (r *OrmBuilder) readReturnedKey(statement string, bindings []any) (any, error) {
 	field := r.primaryKeyField()
 
 	var target any = new(any)
@@ -462,7 +508,7 @@ func (r *Query) readReturnedKey(statement string, bindings []any) (any, error) {
 
 // assignInsertedKeys writes the generated keys back onto the destination, so a caller can read the
 // id of the row it just created.
-func (r *Query) assignInsertedKeys(dest any, keys []any) {
+func (r *OrmBuilder) assignInsertedKeys(dest any, keys []any) {
 	if len(keys) == 0 {
 		return
 	}
@@ -484,7 +530,7 @@ func (r *Query) assignInsertedKeys(dest any, keys []any) {
 }
 
 // assignInsertedKey sets the model's primary key field to the generated key.
-func (r *Query) assignInsertedKey(dest any, key any) {
+func (r *OrmBuilder) assignInsertedKey(dest any, key any) {
 	if dest == nil || key == nil {
 		return
 	}
@@ -507,23 +553,72 @@ func (r *Query) assignInsertedKey(dest any, key any) {
 	_ = schema.PrimaryFields[0].Set(r.ctx, reflected, key)
 }
 
-// execInsert runs the whole insert for a destination and populates its keys. The event hooks stay
-// with the caller, which runs them around this call.
-func (r *Query) execInsert(dest any) error {
+// execInsert runs the whole insert for a destination and populates its keys, reporting whether a row
+// was written. The event hooks stay with the caller, which runs them around this call; an insert
+// skipped by the empty-attribute guard reports false so the created hook is left out too.
+func (r *OrmBuilder) execInsert(dest any) (bool, error) {
 	records, err := r.insertRecords(dest)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if len(records) == 0 {
-		return nil
+		return false, nil
+	}
+
+	if r.skipsEmptyNonIncrementingInsert(dest, records) {
+		return false, nil
 	}
 
 	keys, err := r.insertRows(records)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	r.assignInsertedKeys(dest, keys)
 
-	return nil
+	return true, nil
+}
+
+// skipsEmptyNonIncrementingInsert mirrors the guard in Eloquent's Model::performInsert: a model
+// whose table does not generate the key — no primary key column is declared, which is the Go form of
+// $incrementing = false, since one sole primary key is what the generated-key read-back needs — and
+// whose insert carries no attribute at all is left unsaved, without an insert and without the
+// created event: `if (empty($attributes)) { return true; }`. A map handed to Create is the
+// attribute array itself — create(['name' => null]) carries an attribute, so the guard lets that
+// insert run — therefore only a map record with no key at all is the empty attribute set. A struct
+// record names every declared field instead, and the Go zero stands in for an unset attribute there,
+// the same stand-in the insert column filter documents.
+func (r *OrmBuilder) skipsEmptyNonIncrementingInsert(dest any, records []map[string]any) bool {
+	model := r.parentModel()
+	if model == nil {
+		model = dest
+	}
+
+	schema, err := parseSchemaWithTable(model, r.declaredTable())
+	if err != nil || len(schema.PrimaryFields) > 0 {
+		return false
+	}
+
+	// A map record is the attribute set itself, so any key means the insert has an attribute and
+	// runs; a struct record carries every declared field, and each zero stands in for an unset
+	// attribute.
+	fromMap := indirectValue(reflect.ValueOf(dest)).Kind() == reflect.Map
+
+	for _, record := range records {
+		if fromMap {
+			if len(record) > 0 {
+				return false
+			}
+
+			continue
+		}
+
+		for _, value := range record {
+			if !isZeroValue(value) {
+				return false
+			}
+		}
+	}
+
+	return true
 }

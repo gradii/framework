@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	"github.com/gradii/framework/database/gorm/relations"
 	"github.com/gradii/framework/errors"
 )
 
@@ -14,24 +15,24 @@ import (
 
 // WhereRelation adds an existence condition with a single where on the related rows. Mirrors
 // whereRelation: the column may instead be a callback that constrains the related rows freely.
-func (r *Query) WhereRelation(relation string, column any, args ...any) contractsorm.Query {
+func (r *OrmBuilder) WhereRelation(relation string, column any, args ...any) contractsorm.Query {
 	return r.WhereHas(relation, relationWhere(column, args))
 }
 
 // OrWhereRelation is WhereRelation with an "or" conjunction. Mirrors orWhereRelation.
-func (r *Query) OrWhereRelation(relation string, column any, args ...any) contractsorm.Query {
+func (r *OrmBuilder) OrWhereRelation(relation string, column any, args ...any) contractsorm.Query {
 	return r.OrWhereHas(relation, relationWhere(column, args))
 }
 
 // WhereDoesntHaveRelation adds an absence condition with a single where on the related rows.
 // Mirrors whereDoesntHaveRelation.
-func (r *Query) WhereDoesntHaveRelation(relation string, column any, args ...any) contractsorm.Query {
+func (r *OrmBuilder) WhereDoesntHaveRelation(relation string, column any, args ...any) contractsorm.Query {
 	return r.WhereDoesntHave(relation, relationWhere(column, args))
 }
 
 // OrWhereDoesntHaveRelation is WhereDoesntHaveRelation with an "or" conjunction. Mirrors
 // orWhereDoesntHaveRelation.
-func (r *Query) OrWhereDoesntHaveRelation(relation string, column any, args ...any) contractsorm.Query {
+func (r *OrmBuilder) OrWhereDoesntHaveRelation(relation string, column any, args ...any) contractsorm.Query {
 	return r.OrWhereDoesntHave(relation, relationWhere(column, args))
 }
 
@@ -53,7 +54,7 @@ func relationWhere(column any, args []any) contractsorm.RelationCallback {
 // WithWhereHas constrains the query by the relation and eager loads the relation under the same
 // constraint. Mirrors withWhereHas: the relation may carry a column list ("Books:id,title"), which
 // applies to the eager load alone, as Str::before($relation, ':') strips it from the whereHas.
-func (r *Query) WithWhereHas(relation string, args ...any) contractsorm.Query {
+func (r *OrmBuilder) WithWhereHas(relation string, args ...any) contractsorm.Query {
 	name, _, _ := strings.Cut(relation, ":")
 
 	callback, _, _, err := parseRelationArgs(args)
@@ -72,16 +73,16 @@ func (r *Query) WithWhereHas(relation string, args ...any) contractsorm.Query {
 // WhereBelongsTo constrains the query to the rows that belong to the given model or models. Mirrors
 // whereBelongsTo: the parent's foreign key is matched against the related models' keys, and the
 // relation defaults to the related model's type name.
-func (r *Query) WhereBelongsTo(related any, relation ...string) contractsorm.Query {
+func (r *OrmBuilder) WhereBelongsTo(related any, relation ...string) contractsorm.Query {
 	return r.whereBelongsTo(related, relation, false)
 }
 
 // OrWhereBelongsTo is WhereBelongsTo with an "or" conjunction. Mirrors orWhereBelongsTo.
-func (r *Query) OrWhereBelongsTo(related any, relation ...string) contractsorm.Query {
+func (r *OrmBuilder) OrWhereBelongsTo(related any, relation ...string) contractsorm.Query {
 	return r.whereBelongsTo(related, relation, true)
 }
 
-func (r *Query) whereBelongsTo(related any, relation []string, or bool) contractsorm.Query {
+func (r *OrmBuilder) whereBelongsTo(related any, relation []string, or bool) contractsorm.Query {
 	models := relatedModels(related)
 	if len(models) == 0 {
 		return r.withError(errors.OrmWhereBelongsToEmpty)
@@ -100,26 +101,26 @@ func (r *Query) whereBelongsTo(related any, relation []string, or bool) contract
 		name = reflect.Indirect(reflect.ValueOf(models[0])).Type().Name()
 	}
 
-	desc, err := resolveRelation(parent, name)
+	desc, err := relations.ResolveRelation(parent, name)
 	if err != nil {
 		return r.withError(err)
 	}
-	if desc.kind != relKindBelongsTo || len(desc.references) == 0 {
+	if desc.Kind != relKindBelongsTo || len(desc.References) == 0 {
 		return r.withError(errors.OrmWhereBelongsToNotBelongsTo.Args(name, modelName(parent)))
 	}
 
 	// For a BelongsTo the parent carries the foreign key and the related model the owner key.
-	reference := desc.references[0]
+	reference := desc.References[0]
 	keys := make([]any, 0, len(models))
 	for _, model := range models {
-		key, err := readParentColumn(r, model, reference.primaryColumn)
+		key, err := readParentColumn(r, model, reference.PrimaryColumn)
 		if err != nil {
 			return r.withError(err)
 		}
 		keys = append(keys, key)
 	}
 
-	column := reference.foreignTable + "." + reference.foreignColumn
+	column := reference.ForeignTable + "." + reference.ForeignColumn
 	if or {
 		return r.OrWhereIn(column, keys)
 	}

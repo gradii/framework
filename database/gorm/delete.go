@@ -19,7 +19,7 @@ import (
 
 // deleteOrSoftDelete removes rows, rewriting the statement into a soft-delete update when the model
 // declares the framework's soft-delete type.
-func (r *Query) deleteOrSoftDelete() (*contractsdb.Result, error) {
+func (r *OrmBuilder) deleteOrSoftDelete() (*contractsdb.Result, error) {
 	column, ok := r.softDeleteColumn()
 	if !ok {
 		return r.execDelete()
@@ -36,7 +36,7 @@ func (r *Query) deleteOrSoftDelete() (*contractsdb.Result, error) {
 // The rewrite is skipped when the caller asked for the trashed rows too, when the statement was
 // unscoped, and when the model declares GORM's own soft-delete type, whose clause interfaces still
 // decide that case.
-func (r *Query) softDeleteColumn() (string, bool) {
+func (r *OrmBuilder) softDeleteColumn() (string, bool) {
 	if r.conditions.withTrashed || !r.usesFrameworkSoftDelete() {
 		return "", false
 	}
@@ -51,12 +51,12 @@ func (r *Query) softDeleteColumn() (string, bool) {
 
 // softDeleteValue is the value a soft delete stamps on the row: the column's own type carrying the
 // current time, so the driver writes the representation an insert would.
-func (r *Query) softDeleteValue() databaseorm.DeletedAt {
+func (r *OrmBuilder) softDeleteValue() databaseorm.DeletedAt {
 	return databaseorm.DeletedAt{Time: carbon.Now().StdTime(), Valid: true}
 }
 
 // execDelete compiles the query as a delete and runs it.
-func (r *Query) execDelete() (*contractsdb.Result, error) {
+func (r *OrmBuilder) execDelete() (*contractsdb.Result, error) {
 	statement, bindings, err := r.compileDelete()
 	if err != nil {
 		return nil, err
@@ -65,16 +65,22 @@ func (r *Query) execDelete() (*contractsdb.Result, error) {
 	return r.execStatement(statement, bindings)
 }
 
-// hasWhereConditions reports whether the query's conditions constrain the rows the statement
-// addresses, by a where clause, a relationship existence condition, or a raw statement.
+// hasWhereConditions reports whether the statement the builder compiles constrains the rows it
+// addresses: by a where clause - the caller's own, a global scope's, or the model's soft-delete
+// predicate - a relationship existence condition, or a raw statement.
 //
-// It deliberately ignores the soft-delete predicate: that one belongs to the model rather than to the
-// call, and is never recorded here — applySoftDelete adds it to the compiled builder — so it does not
-// make an otherwise unrestricted statement safe. A global scope's constraints are recorded here
-// before the guard runs (compileDelete and compileUpdateScoped fold the scopes in first), which is why
-// they do satisfy it.
-func (r *Query) hasWhereConditions() bool {
-	return len(r.conditions.where) > 0 || len(r.conditions.relations) > 0 || r.conditions.raw != nil
+// The decision is made on the compiled where list rather than on what the call recorded: compileDelete
+// and compileUpdateScoped fold the scopes in and build the statement first, so a scope's where and the
+// predicate applySoftDelete appends both count, exactly as they do for Laravel, whose
+// `User::query()->increment('id')` runs `update "users" set "id" = "id" + 1, "updated_at" = ? where
+// "users"."deleted_at" is null` over the live rows alone. Only a statement whose where clause would be
+// empty is refused - the one divergence kept on purpose, since Laravel runs such an update or delete
+// over the whole table. The conditions the ORM records internally are on the compiled where list
+// too, written to the builder when they were called; a deferred relationship existence condition and
+// a raw statement are the two constraints the list cannot show yet, so they are counted beside it.
+func (r *OrmBuilder) hasWhereConditions(builder *querybuilder.Builder) bool {
+	return len(builder.State().Wheres) > 0 ||
+		len(r.conditions.relations) > 0 || r.conditions.raw != nil
 }
 
 // applyUpdateKeyWhere scopes an update to the row its model identifies.
@@ -82,7 +88,7 @@ func (r *Query) hasWhereConditions() bool {
 // GORM added this itself while building the assignments: when the query addressed a model carrying a
 // key and the values being written were not that same model, the key joined the where clause. That is
 // what makes `Model(user).Update(...)` touch one row, and what `Update("name", "x")` relied on.
-func (r *Query) applyUpdateKeyWhere(builder *querybuilder.Builder) bool {
+func (r *OrmBuilder) applyUpdateKeyWhere(builder *querybuilder.Builder) bool {
 	if r.conditions.model == nil || sameModel(r.conditions.dest, r.conditions.model) {
 		return false
 	}
@@ -95,7 +101,7 @@ func (r *Query) applyUpdateKeyWhere(builder *querybuilder.Builder) bool {
 // A delete is named two ways, and GORM honoured both: `Delete(&user)` names the row through the
 // destination, while `Model(user).Delete()` names it through the model. The destination is applied
 // first, and the model joins it only when it is a different value.
-func (r *Query) applyDeleteKeyWhere(builder *querybuilder.Builder) bool {
+func (r *OrmBuilder) applyDeleteKeyWhere(builder *querybuilder.Builder) bool {
 	applied := false
 
 	if r.conditions.dest != nil {
@@ -110,7 +116,7 @@ func (r *Query) applyDeleteKeyWhere(builder *querybuilder.Builder) bool {
 
 // applyKeyWhere constrains a statement to the rows a model value identifies, by its primary key. One
 // row becomes an equality and many become an IN list.
-func (r *Query) applyKeyWhere(builder *querybuilder.Builder, model any) bool {
+func (r *OrmBuilder) applyKeyWhere(builder *querybuilder.Builder, model any) bool {
 	column, values := r.modelKey(model)
 	if column == "" || len(values) == 0 {
 		return false
@@ -129,7 +135,7 @@ func (r *Query) applyKeyWhere(builder *querybuilder.Builder, model any) bool {
 
 // modelKey reads a model value's primary key: the column it lives in, and the values it identifies.
 // A struct yields one value and a slice yields one per element; a value carrying no key yields none.
-func (r *Query) modelKey(model any) (string, []any) {
+func (r *OrmBuilder) modelKey(model any) (string, []any) {
 	if model == nil {
 		return "", nil
 	}
@@ -148,7 +154,7 @@ func (r *Query) modelKey(model any) (string, []any) {
 
 // valueKey reads one model value's primary key. The schema comes from the value's own type, which is
 // also how the key column is named, so the two cannot disagree.
-func (r *Query) valueKey(value reflect.Value) (string, []any) {
+func (r *OrmBuilder) valueKey(value reflect.Value) (string, []any) {
 	schema, err := parseSchemaWithTable(reflect.New(value.Type()).Interface(), r.declaredTable())
 	if err != nil || len(schema.PrimaryFields) == 0 {
 		return "", nil
@@ -163,7 +169,7 @@ func (r *Query) valueKey(value reflect.Value) (string, []any) {
 }
 
 // sliceKey reads a slice of models' primary keys, one per element.
-func (r *Query) sliceKey(values reflect.Value) (string, []any) {
+func (r *OrmBuilder) sliceKey(values reflect.Value) (string, []any) {
 	if values.Len() == 0 {
 		return "", nil
 	}

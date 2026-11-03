@@ -9,10 +9,11 @@ import (
 
 	contractsdatabase "github.com/gradii/framework/contracts/database"
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	"github.com/gradii/framework/database/gorm/relations"
 )
 
-// newRelQueryWith returns a Query whose conditions.model is preset, ready for build/compile tests.
-func newRelQueryWith(t *testing.T, model any) *Query {
+// newRelQueryWith returns an OrmBuilder whose conditions.model is preset, ready for build/compile tests.
+func newRelQueryWith(t *testing.T, model any) *OrmBuilder {
 	t.Helper()
 	db := stubWriter(t)
 	conditions := Conditions{model: model}
@@ -23,9 +24,9 @@ func newRelQueryWith(t *testing.T, model any) *Query {
 
 func TestCompileExistenceSubquery_HasMany(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(&relUser{}, "Books")
+	desc, err := relations.ResolveRelation(&relUser{}, "Books")
 	assert.NoError(t, err)
-	inner, err := q.compileExistenceSubquery(desc, nil)
+	inner, _, err := q.compileExistenceSubquery(desc, nil)
 	assert.NoError(t, err)
 	sql, _ := inner.ToSelectSQL()
 	assert.True(t, strings.Contains(sql, "rel_books"))
@@ -33,18 +34,18 @@ func TestCompileExistenceSubquery_HasMany(t *testing.T) {
 
 func TestCompileExistenceSubquery_BelongsTo(t *testing.T) {
 	q := newRelQueryWith(t, &relBook{})
-	desc, err := resolveRelation(&relBook{}, "Author")
+	desc, err := relations.ResolveRelation(&relBook{}, "Author")
 	assert.NoError(t, err)
-	inner, err := q.compileExistenceSubquery(desc, nil)
+	inner, _, err := q.compileExistenceSubquery(desc, nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, inner)
 }
 
 func TestCompileExistenceSubquery_Many2Many(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(&relUser{}, "Roles")
+	desc, err := relations.ResolveRelation(&relUser{}, "Roles")
 	assert.NoError(t, err)
-	inner, err := q.compileExistenceSubquery(desc, nil)
+	inner, _, err := q.compileExistenceSubquery(desc, nil)
 	assert.NoError(t, err)
 	sql, _ := inner.ToSelectSQL()
 	assert.Contains(t, sql, "rel_user_roles")
@@ -52,18 +53,18 @@ func TestCompileExistenceSubquery_Many2Many(t *testing.T) {
 
 func TestCompileExistenceSubquery_Morph(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(&relUser{}, "Houses")
+	desc, err := relations.ResolveRelation(&relUser{}, "Houses")
 	assert.NoError(t, err)
-	inner, err := q.compileExistenceSubquery(desc, nil)
+	inner, _, err := q.compileExistenceSubquery(desc, nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, inner)
 }
 
 func TestCompileExistenceSubquery_Through(t *testing.T) {
 	q := newRelQueryWith(t, &relCountry{})
-	desc, err := resolveRelation(&relCountry{}, "Posts")
+	desc, err := relations.ResolveRelation(&relCountry{}, "Posts")
 	assert.NoError(t, err)
-	inner, err := q.compileExistenceSubquery(desc, nil)
+	inner, _, err := q.compileExistenceSubquery(desc, nil)
 	assert.NoError(t, err)
 	sql, _ := inner.ToSelectSQL()
 	assert.Contains(t, sql, "rel_users") // through table
@@ -71,12 +72,12 @@ func TestCompileExistenceSubquery_Through(t *testing.T) {
 
 func TestCompileExistenceSubquery_WithCallback(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(&relUser{}, "Books")
+	desc, err := relations.ResolveRelation(&relUser{}, "Books")
 	assert.NoError(t, err)
 	cb := contractsorm.RelationCallback(func(qq contractsorm.Query) contractsorm.Query {
-		return qq.Where("title = ?", "x")
+		return qq.Where("title", "x")
 	})
-	inner, err := q.compileExistenceSubquery(desc, cb)
+	inner, _, err := q.compileExistenceSubquery(desc, cb)
 	assert.NoError(t, err)
 	sql, _ := inner.ToSelectSQL()
 	assert.Contains(t, sql, "title")
@@ -84,9 +85,9 @@ func TestCompileExistenceSubquery_WithCallback(t *testing.T) {
 
 func TestCompileExistenceSubquery_NestedRelation(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(&relUser{}, "Books.Author")
+	desc, err := relations.ResolveRelation(&relUser{}, "Books.Author")
 	assert.NoError(t, err)
-	inner, err := q.compileExistenceSubquery(desc, nil)
+	inner, _, err := q.compileExistenceSubquery(desc, nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, inner)
 }
@@ -95,7 +96,7 @@ func TestCompileExistenceSubquery_NestedRelation(t *testing.T) {
 
 func TestCompileAggregateSubquery_Count(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(&relUser{}, "Books")
+	desc, err := relations.ResolveRelation(&relUser{}, "Books")
 	assert.NoError(t, err)
 	sub := selectSub{relation: "Books", column: "*", function: "count"}
 	inner, err := q.compileAggregateSubquery(desc, sub)
@@ -106,7 +107,7 @@ func TestCompileAggregateSubquery_Count(t *testing.T) {
 
 func TestCompileAggregateSubquery_Sum(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(&relUser{}, "Books")
+	desc, err := relations.ResolveRelation(&relUser{}, "Books")
 	assert.NoError(t, err)
 	sub := selectSub{relation: "Books", column: "id", function: "sum"}
 	inner, err := q.compileAggregateSubquery(desc, sub)
@@ -117,7 +118,7 @@ func TestCompileAggregateSubquery_Sum(t *testing.T) {
 
 func TestCompileAggregateSubquery_Exists(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(&relUser{}, "Books")
+	desc, err := relations.ResolveRelation(&relUser{}, "Books")
 	assert.NoError(t, err)
 	sub := selectSub{relation: "Books", column: "*", function: "exists"}
 	inner, err := q.compileAggregateSubquery(desc, sub)

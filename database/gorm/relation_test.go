@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	"github.com/gradii/framework/database/gorm/relations"
 	"github.com/gradii/framework/errors"
 )
 
@@ -226,115 +227,115 @@ func TestTableNameFor_PointerReceiver(t *testing.T) {
 // --- resolveRelation across all kinds -------------------------------------
 
 func TestResolveRelation_Empty(t *testing.T) {
-	_, err := resolveRelation(&relUser{}, "")
+	_, err := relations.ResolveRelation(&relUser{}, "")
 	assert.True(t, errors.Is(err, errors.OrmQueryEmptyRelation))
 }
 
 func TestResolveRelation_NotFound(t *testing.T) {
-	_, err := resolveRelation(&relUser{}, "Missing")
+	_, err := relations.ResolveRelation(&relUser{}, "Missing")
 	assert.True(t, errors.Is(err, errors.OrmRelationNotFound))
 }
 
 func TestResolveRelation_HasMany(t *testing.T) {
-	desc, err := resolveRelation(&relUser{}, "Books")
+	desc, err := relations.ResolveRelation(&relUser{}, "Books")
 	assert.NoError(t, err)
-	assert.Equal(t, relKindHasMany, desc.kind)
-	assert.Equal(t, "rel_users", desc.parentTable)
-	assert.Equal(t, "rel_books", desc.relatedTable)
-	assert.NotEmpty(t, desc.references)
+	assert.Equal(t, relKindHasMany, desc.Kind)
+	assert.Equal(t, "rel_users", desc.ParentTable)
+	assert.Equal(t, "rel_books", desc.RelatedTable)
+	assert.NotEmpty(t, desc.References)
 }
 
 func TestResolveRelation_HasOne(t *testing.T) {
-	desc, err := resolveRelation(&relUser{}, "Profile")
+	desc, err := relations.ResolveRelation(&relUser{}, "Profile")
 	assert.NoError(t, err)
-	assert.Equal(t, relKindHasOne, desc.kind)
-	assert.Equal(t, "rel_profiles", desc.relatedTable)
+	assert.Equal(t, relKindHasOne, desc.Kind)
+	assert.Equal(t, "rel_profiles", desc.RelatedTable)
 }
 
 func TestResolveRelation_BelongsTo(t *testing.T) {
-	desc, err := resolveRelation(&relBook{}, "Author")
+	desc, err := relations.ResolveRelation(&relBook{}, "Author")
 	assert.NoError(t, err)
-	assert.Equal(t, relKindBelongsTo, desc.kind)
-	assert.Equal(t, "rel_users", desc.relatedTable)
+	assert.Equal(t, relKindBelongsTo, desc.Kind)
+	assert.Equal(t, "rel_users", desc.RelatedTable)
 }
 
 func TestResolveRelation_Many2Many(t *testing.T) {
-	desc, err := resolveRelation(&relUser{}, "Roles")
+	desc, err := relations.ResolveRelation(&relUser{}, "Roles")
 	assert.NoError(t, err)
-	assert.Equal(t, relKindMany2Many, desc.kind)
-	assert.Equal(t, "rel_user_roles", desc.pivotTable)
-	assert.Equal(t, "rel_users", desc.pivotParentRef.primaryTable)
-	assert.Equal(t, "rel_roles", desc.pivotRelatedRef.primaryTable)
+	assert.Equal(t, relKindMany2Many, desc.Kind)
+	assert.Equal(t, "rel_user_roles", desc.PivotTable)
+	assert.Equal(t, "rel_users", desc.PivotParentRef.PrimaryTable)
+	assert.Equal(t, "rel_roles", desc.PivotRelatedRef.PrimaryTable)
 }
 
 func TestResolveRelation_MorphMany(t *testing.T) {
-	desc, err := resolveRelation(&relUser{}, "Houses")
+	desc, err := relations.ResolveRelation(&relUser{}, "Houses")
 	assert.NoError(t, err)
-	assert.Equal(t, relKindMorphMany, desc.kind)
-	assert.Equal(t, "houseable_type", desc.morphTypeColumn)
-	assert.Equal(t, "houseable_id", desc.morphIDColumn)
-	assert.NotEmpty(t, desc.references)
+	assert.Equal(t, relKindMorphMany, desc.Kind)
+	assert.Equal(t, "houseable_type", desc.MorphTypeColumn)
+	assert.Equal(t, "houseable_id", desc.MorphIDColumn)
+	assert.NotEmpty(t, desc.References)
 }
 
 func TestResolveRelation_MorphOne(t *testing.T) {
-	desc, err := resolveRelation(&relUser{}, "Logo")
+	desc, err := relations.ResolveRelation(&relUser{}, "Logo")
 	assert.NoError(t, err)
-	assert.Equal(t, relKindMorphOne, desc.kind)
-	assert.Equal(t, "logoable_type", desc.morphTypeColumn)
+	assert.Equal(t, relKindMorphOne, desc.Kind)
+	assert.Equal(t, "logoable_type", desc.MorphTypeColumn)
 }
 
 func TestResolveRelation_Nested(t *testing.T) {
-	desc, err := resolveRelation(&relUser{}, "Books.Author")
+	desc, err := relations.ResolveRelation(&relUser{}, "Books.Author")
 	assert.NoError(t, err)
-	assert.Equal(t, "Books", desc.name)
-	assert.NotNil(t, desc.nested)
-	assert.Equal(t, "Author", desc.nested.name)
-	assert.Equal(t, relKindBelongsTo, desc.nested.kind)
+	assert.Equal(t, "Books", desc.Name)
+	assert.NotNil(t, desc.Nested)
+	assert.Equal(t, "Author", desc.Nested.Name)
+	assert.Equal(t, relKindBelongsTo, desc.Nested.Kind)
 }
 
 func TestResolveRelation_HasManyThrough(t *testing.T) {
-	desc, err := resolveRelation(&relCountry{}, "Posts")
+	desc, err := relations.ResolveRelation(&relCountry{}, "Posts")
 	assert.NoError(t, err)
-	assert.Equal(t, relKindHasManyThrough, desc.kind)
-	assert.Equal(t, "rel_posts", desc.relatedTable)
-	assert.Equal(t, "rel_users", desc.throughTable)
+	assert.Equal(t, relKindHasManyThrough, desc.Kind)
+	assert.Equal(t, "rel_posts", desc.RelatedTable)
+	assert.Equal(t, "rel_users", desc.ThroughTable)
 	// Through default keys come from naming conventions:
 	//   firstKey  = singular(parentTable) + "_id"
 	//   secondKey = singular(throughTable) + "_id"
 	//   localKey / secondLocalKey default to "id".
-	assert.Equal(t, "rel_country_id", desc.firstKey)
-	assert.Equal(t, "rel_user_id", desc.secondKey)
-	assert.Equal(t, "id", desc.localKey)
-	assert.Equal(t, "id", desc.secondLocalKey)
+	assert.Equal(t, "rel_country_id", desc.FirstKey)
+	assert.Equal(t, "rel_user_id", desc.SecondKey)
+	assert.Equal(t, "id", desc.LocalKey)
+	assert.Equal(t, "id", desc.SecondLocalKey)
 }
 
 func TestResolveRelation_HasOneThrough(t *testing.T) {
-	desc, err := resolveRelation(&relCountry{}, "FirstPost")
+	desc, err := relations.ResolveRelation(&relCountry{}, "FirstPost")
 	assert.NoError(t, err)
-	assert.Equal(t, relKindHasOneThrough, desc.kind)
+	assert.Equal(t, relKindHasOneThrough, desc.Kind)
 }
 
 func TestResolveRelation_ThroughNotConfigured(t *testing.T) {
-	_, err := resolveRelation(&relCountry{}, "NoRelated")
+	_, err := relations.ResolveRelation(&relCountry{}, "NoRelated")
 	assert.True(t, errors.Is(err, errors.OrmRelationThroughNotConfigured))
 }
 
 func TestResolveRelation_ThroughBadKind(t *testing.T) {
-	_, err := resolveRelation(&relCountry{}, "BadKind")
+	_, err := relations.ResolveRelation(&relCountry{}, "BadKind")
 	assert.True(t, errors.Is(err, errors.OrmMorphRelationKindUnknown))
 }
 
 func TestResolveRelation_ThroughNotImplemented(t *testing.T) {
 	// relUser does NOT implement ModelWithThroughRelations.
-	_, err := resolveRelation(&relUser{}, "Anything")
+	_, err := relations.ResolveRelation(&relUser{}, "Anything")
 	assert.True(t, errors.Is(err, errors.OrmRelationNotFound))
 }
 
 // Sanity: relatedModel is a fresh pointer to the related struct type.
 func TestResolveRelation_RelatedModelType(t *testing.T) {
-	desc, err := resolveRelation(&relUser{}, "Books")
+	desc, err := relations.ResolveRelation(&relUser{}, "Books")
 	assert.NoError(t, err)
-	rt := reflect.TypeOf(desc.relatedModel)
+	rt := reflect.TypeOf(desc.RelatedModel)
 	assert.Equal(t, reflect.Pointer, rt.Kind())
 	assert.Equal(t, "relBook", rt.Elem().Name())
 }
@@ -408,44 +409,44 @@ func (morphMissingRelated) Relations() map[string]contractsorm.Relation {
 // --- Morph relation resolution tests ---
 
 func TestResolveRelation_MorphTo(t *testing.T) {
-	desc, err := resolveRelation(&morphImage{}, "Imageable")
+	desc, err := relations.ResolveRelation(&morphImage{}, "Imageable")
 	assert.NoError(t, err)
-	assert.Equal(t, relKindMorphTo, desc.kind)
-	assert.Equal(t, "imageable_type", desc.morphTypeColumn)
-	assert.Equal(t, "imageable_id", desc.morphIDColumn)
-	assert.Equal(t, "id", desc.morphOwnerKey)
+	assert.Equal(t, relKindMorphTo, desc.Kind)
+	assert.Equal(t, "imageable_type", desc.MorphTypeColumn)
+	assert.Equal(t, "imageable_id", desc.MorphIDColumn)
+	assert.Equal(t, "id", desc.MorphOwnerKey)
 	// MorphTo has no single related model; it's resolved per-row.
-	assert.Nil(t, desc.relatedModel)
+	assert.Nil(t, desc.RelatedModel)
 }
 
 func TestResolveRelation_MorphToMany(t *testing.T) {
-	desc, err := resolveRelation(&morphPost{}, "Tags")
+	desc, err := relations.ResolveRelation(&morphPost{}, "Tags")
 	assert.NoError(t, err)
-	assert.Equal(t, relKindMorphToMany, desc.kind)
-	assert.Equal(t, "taggables", desc.pivotTable)
-	assert.Equal(t, "taggable_type", desc.morphTypeColumn)
-	assert.Equal(t, "taggable_id", desc.morphIDColumn)
-	assert.False(t, desc.morphInverse)
+	assert.Equal(t, relKindMorphToMany, desc.Kind)
+	assert.Equal(t, "taggables", desc.PivotTable)
+	assert.Equal(t, "taggable_type", desc.MorphTypeColumn)
+	assert.Equal(t, "taggable_id", desc.MorphIDColumn)
+	assert.False(t, desc.MorphInverse)
 	// morphValue defaults to the parent's table name when no MorphClass / morph map override.
-	assert.Equal(t, "morph_posts", desc.morphValue)
+	assert.Equal(t, "morph_posts", desc.MorphValue)
 }
 
 func TestResolveRelation_MorphedByMany(t *testing.T) {
-	desc, err := resolveRelation(&morphTag{}, "Posts")
+	desc, err := relations.ResolveRelation(&morphTag{}, "Posts")
 	assert.NoError(t, err)
-	assert.Equal(t, relKindMorphToMany, desc.kind)
-	assert.True(t, desc.morphInverse)
+	assert.Equal(t, relKindMorphToMany, desc.Kind)
+	assert.True(t, desc.MorphInverse)
 	// For inverse, the morph value pins on the related's morph value.
-	assert.Equal(t, "morph_posts", desc.morphValue)
+	assert.Equal(t, "morph_posts", desc.MorphValue)
 }
 
 func TestResolveRelation_MorphBadKind(t *testing.T) {
-	_, err := resolveRelation(&morphBadKind{}, "X")
+	_, err := relations.ResolveRelation(&morphBadKind{}, "X")
 	assert.True(t, errors.Is(err, errors.OrmMorphRelationKindUnknown))
 }
 
 func TestResolveRelation_MorphMissingRelated(t *testing.T) {
-	_, err := resolveRelation(&morphMissingRelated{}, "X")
+	_, err := relations.ResolveRelation(&morphMissingRelated{}, "X")
 	assert.True(t, errors.Is(err, errors.OrmMorphRelationMissingField))
 }
 
@@ -494,16 +495,16 @@ type forbiddenMany2ManyChild struct {
 func (forbiddenMany2ManyChild) TableName() string { return "forbidden_many_2_many_children" }
 
 func TestResolveRelation_ForbidsPolymorphicTag(t *testing.T) {
-	_, err := resolveRelation(&forbiddenPolymorphicParent{}, "Houses")
+	_, err := relations.ResolveRelation(&forbiddenPolymorphicParent{}, "Houses")
 	assert.True(t, errors.Is(err, errors.OrmRelationTagForbidden))
 }
 
 func TestResolveRelation_ForbidsForeignKeyTag(t *testing.T) {
-	_, err := resolveRelation(&forbiddenForeignKeyParent{}, "Books")
+	_, err := relations.ResolveRelation(&forbiddenForeignKeyParent{}, "Books")
 	assert.True(t, errors.Is(err, errors.OrmRelationTagForbidden))
 }
 
 func TestResolveRelation_ForbidsMany2ManyTag(t *testing.T) {
-	_, err := resolveRelation(&forbiddenMany2ManyParent{}, "Roles")
+	_, err := relations.ResolveRelation(&forbiddenMany2ManyParent{}, "Roles")
 	assert.True(t, errors.Is(err, errors.OrmRelationTagForbidden))
 }

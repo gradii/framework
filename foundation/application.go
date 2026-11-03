@@ -26,6 +26,7 @@ import (
 	contractsconsole "github.com/gradii/framework/contracts/console"
 	"github.com/gradii/framework/contracts/foundation"
 	"github.com/gradii/framework/contracts/validation"
+	contractsview "github.com/gradii/framework/contracts/view"
 	"github.com/gradii/framework/errors"
 	"github.com/gradii/framework/foundation/configuration"
 	"github.com/gradii/framework/foundation/console"
@@ -122,6 +123,7 @@ func (r *Application) Build() foundation.Application {
 	r.configureMiddleware()
 	r.configureGrpc()
 	r.providerRepository.Boot(r)
+	r.configureViews()
 	r.configureEventListeners()
 	r.configureCommands()
 	r.configureSchedule()
@@ -716,6 +718,37 @@ func (r *Application) configureServiceProviders() {
 		configuredServiceProviders := r.builder.configuredServiceProviders()
 		if len(configuredServiceProviders) > 0 {
 			r.providerRepository.Add(configuredServiceProviders)
+		}
+	}
+}
+
+// configureViews hands the application's template functions to the view registry
+// and asks the route driver to compile the view set. It runs after every service
+// provider has booted, so views and functions registered in a provider's Boot
+// are part of the compiled set regardless of provider order. A compile error is
+// reported here but does not stop Build(): Artisan commands build the
+// application too. The driver keeps the error and returns it from its first
+// serve call, so an HTTP process still fails before it serves without a renderer.
+func (r *Application) configureViews() {
+	if r.builder.viewFuncs != nil {
+		if funcs := r.builder.viewFuncs(); len(funcs) > 0 {
+			viewFacade := r.MakeView()
+			if viewFacade == nil {
+				color.Errorln("View facade not found, please install it first: ./artisan package:install View")
+			} else {
+				viewFacade.AddFuncs(funcs)
+			}
+		}
+	}
+
+	routeFacade := r.MakeRoute()
+	if routeFacade == nil {
+		return
+	}
+
+	if compiler, ok := routeFacade.(contractsview.Compiler); ok {
+		if err := compiler.CompileViews(); err != nil {
+			color.Errorln(errors.ViewCompileFailed.Args(err).SetModule(errors.ModuleView).Error())
 		}
 	}
 }

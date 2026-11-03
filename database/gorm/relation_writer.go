@@ -5,11 +5,15 @@ import (
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
 )
 
-// relationWriter binds (parent, name) to a Query session and forwards each write to the
+// relationWriter binds (parent, name) to an OrmBuilder session and forwards each write to the
 // matching *Relation-suffixed method on *Query. It implements contractsorm.RelationWriter so
 // callers can use a single chained entry — Query.Relation(parent, name) — for all writes.
+//
+// Deprecated: the flat RelationWriter path is legacy — use OrmBuilder.Related's relation builder
+// object (contractsorm.RelationQuery and its per-kind write interfaces) instead. relationWriter
+// is kept for compatibility and will be removed in a future major version.
 type relationWriter struct {
-	q      *Query
+	q      *OrmBuilder
 	parent any
 	name   string
 }
@@ -17,7 +21,11 @@ type relationWriter struct {
 // Relation returns a RelationWriter bound to the given parent and relation name. The returned
 // builder forwards all write operations to the receiver's session, so calls inside a Transaction
 // callback honor the transaction.
-func (r *Query) Relation(parent any, name string) contractsorm.RelationWriter {
+//
+// Deprecated: use Related(parent, name) instead, Relation will be removed in a future major
+// version. Related returns the relation builder object — contractsorm.RelationQuery and its
+// per-kind write interfaces — the Go form of Laravel's relation classes.
+func (r *OrmBuilder) Relation(parent any, name string) contractsorm.RelationWriter {
 	return &relationWriter{q: r, parent: parent, name: name}
 }
 
@@ -45,6 +53,14 @@ func (w *relationWriter) CreateMany(dests any) error {
 	return w.q.CreateManyRelation(w.parent, w.name, dests)
 }
 
+func (w *relationWriter) Make(attrs map[string]any, dest any) error {
+	return w.q.MakeRelation(w.parent, w.name, attrs, dest)
+}
+
+func (w *relationWriter) MakeMany(records []map[string]any, dests any) error {
+	return w.q.MakeManyRelation(w.parent, w.name, records, dests)
+}
+
 func (w *relationWriter) FindOrNew(id any, dest any) error {
 	return w.q.FindOrNewRelation(w.parent, w.name, id, dest)
 }
@@ -59,6 +75,14 @@ func (w *relationWriter) FirstOrCreate(attrs, values map[string]any, dest any) e
 
 func (w *relationWriter) UpdateOrCreate(attrs, values map[string]any, dest any) error {
 	return w.q.UpdateOrCreateRelation(w.parent, w.name, attrs, values, dest)
+}
+
+func (w *relationWriter) CreateOrFirst(attrs, values map[string]any, dest any) error {
+	return w.q.CreateOrFirstRelation(w.parent, w.name, attrs, values, dest)
+}
+
+func (w *relationWriter) Upsert(values []map[string]any, uniqueBy []string, update ...any) (*dbcontract.Result, error) {
+	return w.q.UpsertRelation(w.parent, w.name, values, uniqueBy, update...)
 }
 
 func (w *relationWriter) Associate(owner any) error {

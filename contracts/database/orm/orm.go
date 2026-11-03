@@ -21,9 +21,12 @@ type Orm interface {
 	DatabaseName() string
 	// Name gets the current connection name.
 	Name() string
-	// Related returns a Query pre-scoped to the related rows for the given parent and relation
-	// name. parent must be a non-nil pointer to a struct. The returned Query is a fresh chain —
-	// call any of Where / OrderBy / Get / First / Count / etc. on it.
+	// Related returns the relation builder object pre-scoped to the related rows for the given
+	// parent and relation name. parent must be a non-nil pointer to a struct. The returned
+	// RelationQuery is a fresh chain — call any of Where / OrderBy / Get / First / Count / etc.
+	// on it — and carries the relation semantics: GetResults / Is / IsNot / RawUpdate and,
+	// through the per-kind interface (a Go narrowing assertion, e.g. rel.(HasManyRelation)), the
+	// write families (Make / Save / Create / Attach / Sync / ...). See RelationQuery.
 	//
 	// Per-kind shape:
 	//   - HasOne / HasMany:                     Query().Model(related).Where("<id_col>", parent.<local_key>)
@@ -33,13 +36,24 @@ type Orm interface {
 	//   - Many2Many / MorphToMany / MorphedByMany: Query().Table(related).Joins("INNER JOIN <pivot> ON ...").Where("<pivot>.<parent_fk>", parent.<pk>)
 	//   - HasOneThrough / HasManyThrough:       Query().Table(related).Joins("INNER JOIN <through> ON ...").Where("<through>.<first_key>", parent.<local_key>)
 	//
-	// Mirrors fedaco's model.NewRelation('foo') for the read path. Write operations live on
-	// RelationWriter (see Orm.Relation) — they are not chained off this Query.
-	Related(parent any, relation string) Query
+	// When the relation declares an Inverse (HasOne / HasMany / MorphOne / MorphMany), a model-row
+	// read through the returned Query — Get / First, a key-list Find / FindOrFail, a chunked page
+	// or a cursor page — stores the parent instance on each result model's inverse relation: the
+	// write-back Eloquent's chaperone after-query callback performs on every execution of the
+	// relation query. The callback sees the actual result set, so a widened query links every row
+	// it returns, not only rows whose foreign key matches the parent.
+	//
+	// Mirrors fedaco's model.NewRelation('foo'). RelationWriter (see Orm.Relation) remains only
+	// as the deprecated flat compatibility entry for the write path.
+	Related(parent any, relation string) RelationQuery
 	// Relation returns a RelationWriter bound to (parent, name) for FK-safe write operations.
 	// All write methods (Save / Create / UpdateOrCreate / Attach / Sync / Detach / Toggle /
 	// Associate / Dissociate / etc.) are reached via this builder rather than as flat methods on
 	// Orm — the (parent, name) pair binds once.
+	//
+	// Deprecated: use Related(parent, relation) instead, Relation will be removed in a future
+	// major version. The relation builder object Related returns — RelationQuery and its per-kind
+	// write interfaces — carries the same write operations.
 	Relation(parent any, name string) RelationWriter
 
 	// Observe registers an observer with the Orm.
@@ -56,18 +70,30 @@ type Orm interface {
 	WithContext(ctx context.Context) Orm
 }
 
+// OfManyColumn is one column/aggregate pair of an OfManyColumns configuration — the Go form of one
+// entry in Laravel's ofMany(['published_at' => 'max', 'id' => 'max']): the column the aggregate is
+// taken over and the aggregate itself ("MAX" or "MIN").
+type OfManyColumn struct {
+	Column    string
+	Aggregate string
+}
+
 type Query interface {
 	// QueryWithRelations exposes the QueriesRelationships surface (Has / WhereHas / WithCount /
 	// HasMorph / etc.). Embedding it into Query lets users chain relationship queries with the
 	// rest of the builder: q.Where(...).Has("Books", ">=", 3).Get(&users).
 	QueryWithRelations
-	// Related returns a Query pre-scoped to the related rows for parent.name. Mirrors Orm.Related
-	// but lives on Query so it can be used inside a Transaction callback. parent must be a
-	// non-nil pointer to a struct.
-	Related(parent any, name string) Query
+	// Related returns the relation builder object pre-scoped to the related rows for parent.name.
+	// Mirrors Orm.Related but lives on Query so it can be used inside a Transaction callback.
+	// parent must be a non-nil pointer to a struct. See RelationQuery for the object surface.
+	Related(parent any, name string) RelationQuery
 	// Relation returns a RelationWriter bound to (parent, name) for FK-safe write operations.
 	// Mirrors Orm.Relation but lives on Query so writes inside a Transaction callback honor the
 	// transaction.
+	//
+	// Deprecated: use Related(parent, name) instead, Relation will be removed in a future major
+	// version. The relation builder object Related returns — RelationQuery and its per-kind write
+	// interfaces — carries the same write operations.
 	Relation(parent any, name string) RelationWriter
 	// Begin begins a new transaction
 	// DEPRECATED Use BeginTransaction instead.
@@ -80,8 +106,31 @@ type Query interface {
 	Context() context.Context
 	// Count retrieve the "count" result of the query.
 	Count() (int64, error)
+	// GetCountForPagination gets the count a paginator draws its page from, mirroring Laravel's
+	// Builder::getCountForPagination (Builder::runPaginationCountQuery): the count is built on a
+	// clone, so the query keeps its own clauses and bindings, and a grouped or having query is
+	// counted by wrapping its select in a derived table named "aggregate_table" — the count counts
+	// groups, not rows, unlike Count(), which keeps Laravel's count() semantics of one aggregate
+	// over the grouped result. Paginate feeds its total from this method.
+	GetCountForPagination(columns ...string) (int64, error)
 	// Create inserts new record into the database.
 	Create(value any) error
+	// Chunk reads the query in pages of size rows, scanning every page into dest — a non-nil
+	// pointer to a slice of models — and calling callback with the 1-based page number after the
+	// page was scanned, mirroring Eloquent's BuildsQueries::chunk: a query without an order is
+	// ordered by the model's qualified key ascending first, the caller's offset and limit are
+	// honoured, and a callback returning errors.DatabaseChunkStopped stops the walk cleanly — the
+	// Go form of Laravel's `return false`.
+	Chunk(size uint64, dest any, callback func(page int) error) error
+	// ChunkById chunks by comparing ids, mirroring BuildsQueries::chunkById: each page is fetched
+	// with ForPageAfterId using the last row's id as the keyset, so the walk pays no growing
+	// offset. On a relation read the key column defaults to the related model's qualified key and
+	// the alias to its bare key name, the way BelongsToMany / HasOneOrManyThrough::chunkById
+	// override the builder defaults for a joined read; elsewhere the column is the model's bare
+	// key name (Eloquent's Builder::defaultKeyName). column may be (column) or (column, alias).
+	ChunkById(size uint64, dest any, callback func(page int) error, column ...string) error
+	// ChunkByIdDesc is ChunkById in descending order, mirroring BuildsQueries::chunkByIdDesc.
+	ChunkByIdDesc(size uint64, dest any, callback func(page int) error, column ...string) error
 	// Cursor returns a cursor, use scan to iterate over the returned rows.
 	Cursor() chan db.Row
 	// CursorPaginate fetches a single keyset ("seek") page and scans it into dest, returning the
@@ -97,6 +146,15 @@ type Query interface {
 	Distinct(columns ...string) Query
 	// Driver gets the driver for the query.
 	Driver() string
+	// Each executes the callback over every matching model one at a time, reading 1000 rows per
+	// statement like BuildsQueries::each: dest — a non-nil pointer to a model — holds the current
+	// row, index is the model's key within its page, and a callback returning
+	// errors.DatabaseChunkStopped stops the walk cleanly (Laravel's `return false`).
+	Each(dest any, callback func(index int) error) error
+	// EachById executes the callback over every matching model one at a time, walking the keyset
+	// like BuildsQueries::eachById. dest holds the current row and index is the model's 0-based
+	// ordinal across the whole iteration — Laravel's ((page-1)*size + key) arithmetic.
+	EachById(size uint64, dest any, callback func(index int) error, column ...string) error
 	// Exec executes raw sql
 	Exec(sql string, values ...any) (*db.Result, error)
 	// Exists returns true if matching records exist; otherwise, it returns false.
@@ -115,11 +173,32 @@ type Query interface {
 	// FirstOrCreate finds the first record that matches the given attributes
 	// or create a new one with those attributes if none was found.
 	FirstOrCreate(dest any, conds ...any) error
+	// CreateOrFirst attempts to create a record with the attributes (and values) without reading
+	// first, mirroring Eloquent's Builder::createOrFirst: when the insert trips a unique
+	// constraint the row matching the attributes is read back — on the write connection — and
+	// returned instead of the error. The insert runs inside a savepoint when the query is bound
+	// to a transaction.
+	CreateOrFirst(dest any, conds ...any) error
 	// FirstOrFail finds the first record that matches the given conditions or throws an error.
 	FirstOrFail(dest any) error
-	// FirstOrNew finds the first record that matches the given conditions or
-	// return a new instance of the model initialized with those attributes.
+	// FirstOrNew finds the first record that matches the given conditions or return a new instance
+	// of the model initialized with those attributes and with the query's pending attributes
+	// (WithAttributes), which merge underneath them.
 	FirstOrNew(dest any, attributes any, values ...any) error
+	// Fresh reads model's row back from the database into dest — a new instance — mirroring
+	// Eloquent's Model::fresh: the read matches on the model's primary key (a pivot struct without
+	// one declares its keys through PivotKeys instead), global scopes are skipped, the read runs on
+	// the write connection, with names relations to eager-load on the fresh instance, and a model
+	// with no key — or one the database no longer holds — leaves dest zero-valued, Laravel's null.
+	// A model that declares neither a primary key nor PivotKeys is refused with a named error.
+	Fresh(model any, dest any, with ...string) error
+	// Refresh re-reads model's row into model itself, mirroring Eloquent's Model::refresh (which
+	// takes no $with): the same key match and scope-skipping read as Fresh, applied in place
+	// through firstOrFail — a missing row reports errors.OrmModelNotFoundNoIds, firstOrFail's
+	// id-less message — and every relation the model already carries loaded is re-loaded, the Go
+	// form of refresh()'s reload of its
+	// non-pivot relations. A model with no key reads nothing and is returned unchanged.
+	Refresh(model any) error
 	// FindMany retrieves the rows whose primary key is one of ids into dest, mirroring Laravel's
 	// Builder::findMany: an empty list reads nothing and leaves dest empty.
 	FindMany(dest any, ids []any, columns ...any) error
@@ -141,8 +220,32 @@ type Query interface {
 	InTransaction() bool
 	// Join specifying JOIN conditions for the query.
 	Join(query string, args ...any) Query
+	// Lazy walks the query in pages of chunkSize (default 1000) and hands each hydrated model to
+	// callback through dest — a non-nil pointer to a model — with index counting the models seen
+	// so far, mirroring BuildsQueries::lazy: a query without an order is ordered by the model's
+	// qualified key ascending, a chunk size below 1 is refused (errors.QueryInvalidChunkSize), and
+	// errors.DatabaseChunkStopped stops the walk cleanly. Go has no lazy collection, so the walk
+	// runs immediately and reports its error; the page sequence is the one Laravel's LazyCollection
+	// would pull.
+	Lazy(dest any, callback func(index int) error, chunkSize ...uint64) error
+	// LazyById is Lazy with chunkById's keyset, mirroring BuildsQueries::lazyById: each page is
+	// fetched with forPageAfterId using the last model's id as the keyset, with the same
+	// column/alias defaults as ChunkById.
+	LazyById(chunkSize uint64, dest any, callback func(index int) error, column ...string) error
+	// LazyByIdDesc is LazyById in descending order, mirroring BuildsQueries::lazyByIdDesc.
+	LazyByIdDesc(chunkSize uint64, dest any, callback func(index int) error, column ...string) error
 	// Limit the number of records returned.
 	Limit(limit int) Query
+	// Take is an alias of Limit, mirroring Eloquent's Builder::take. On the has-family and
+	// through relation objects both Take and Limit are Eloquent's relation-level limit
+	// (HasOneOrMany::limit HasOneOrMany.php:555, HasOneOrManyThrough::limit
+	// HasOneOrManyThrough.php:772): the plain limit for an existing parent, the per-parent group
+	// limit — the row_number() over (partition by <key>) derived table — for a parent that does
+	// not exist, returning the relation object (oracle
+	// /tmp/followup-take-grouplimit/take_grouplimit.php H1 / H7 / T1 / T5). The many-to-many
+	// object still promotes the builder's plain limit (BelongsToMany::take, BelongsToMany.php:1492,
+	// is not yet ported).
+	Take(limit int) Query
 	// Load loads a relationship for the model. args may be a callback or other
 	// shapes accepted by With (e.g. "Books:id,name" column pruning is supported by
 	// embedding the column list in relation; a callback may be passed via args).
@@ -152,21 +255,35 @@ type Query interface {
 	LoadMissing(dest any, relation string, args ...any) error
 	// LockForUpdate locks the selected rows in the table for updating.
 	LockForUpdate() Query
+	// Make builds an unsaved model instance carrying the query's pending attributes (recorded by
+	// WithAttributes) and the attributes it is given, mirroring Laravel's Builder::make: the
+	// pending attributes merge underneath, so an attribute passed here wins; nothing is written.
+	Make(dest any, attributes ...any) error
 	// Model sets the model instance to be queried.
 	Model(value any) Query
-	// OfMany configures a HasOne or MorphOne relation to return the row whose value of column
-	// matches the given SQL aggregate ("MAX" / "MIN") within each parent. Intended for use
-	// inside a With(...) callback so the rewrite is local to a single relation:
+	// OfMany configures a HasOne, MorphOne or HasOneThrough relation to return one row per parent
+	// through the aggregate join Laravel's ofMany installs, mirroring its string form: the
+	// column's aggregate is taken per parent and the related model's key joins the aggregate set
+	// with the same aggregate, so ties resolve to the extreme key. Column and aggregate default to
+	// "id" / "MAX". Intended for use inside a relation's OnQuery or a With(...) callback so the
+	// rewrite is local to a single relation:
 	//
 	//	q.With("LatestImage", func(q orm.Query) orm.Query {
 	//	    return q.OfMany("created_at", "MAX")
 	//	})
 	OfMany(column, aggregate string) Query
-	// LatestOfMany is shorthand for OfMany(column, "MAX") with column defaulting to "id" when
-	// empty. Mirrors fedaco's latestOfMany().
+	// OfManyColumns configures the relation the way ofMany's ordered column map does, e.g.
+	// ofMany(['published_at' => 'max', 'id' => 'max']): the pairs are taken in order with each
+	// later pair breaking ties in the earlier ones, and the related model's key is appended with
+	// MAX when the columns omit it.
+	OfManyColumns(columns ...OfManyColumn) Query
+	// LatestOfMany is shorthand for ofMany with every column aggregated "MAX" — Laravel's
+	// latestOfMany($column), which defaults to "id". The related model's key is appended as MAX
+	// when the columns omit it. Mirrors fedaco's latestOfMany().
 	LatestOfMany(column ...string) Query
-	// OldestOfMany is shorthand for OfMany(column, "MIN") with column defaulting to "id" when
-	// empty. Mirrors fedaco's oldestOfMany().
+	// OldestOfMany is shorthand for ofMany with every column aggregated "MIN" — Laravel's
+	// oldestOfMany($column), which defaults to "id". The related model's key is appended as MAX
+	// when the columns omit it, exactly as ofMany appends it. Mirrors fedaco's oldestOfMany().
 	OldestOfMany(column ...string) Query
 	// Offset specifies the number of records to skip before starting to return the records.
 	Offset(offset int) Query
@@ -175,7 +292,8 @@ type Query interface {
 	// Order specifies the order in which the results should be returned.
 	// DEPRECATED Use OrderByRaw instead.
 	Order(value any) Query
-	// OrderBy specifies the order should be ascending.
+	// OrderBy specifies the order should be ascending, or the given direction. The direction must be asc
+	// or desc, as Laravel requires; a custom direction such as "DESC NULLS LAST" goes through OrderByRaw.
 	OrderBy(column string, direction ...string) Query
 	// OrderByDesc specifies the order should be descending.
 	OrderByDesc(column string) Query
@@ -191,6 +309,10 @@ type Query interface {
 	OrWhere(query any, args ...any) Query
 	// OrWhereBetween adds an "or where column between x and y" clause to the query.
 	OrWhereBetween(column string, x, y any) Query
+	// OrWhereColumn adds an "or where column" comparison clause to the query, mirroring
+	// Builder::orWhereColumn. One trailing column means equality with that column; two mean the
+	// operator and then the column.
+	OrWhereColumn(column1 string, column2 ...string) Query
 	// OrWhereIn adds an "or where column in" clause to the query.
 	OrWhereIn(column string, values []any) Query
 	// OrWhereJsonContains adds an "or where JSON contains" clause to the query.
@@ -205,6 +327,13 @@ type Query interface {
 	// Laravel's Builder::orWhereJsonLength, so args is either (length) for an
 	// equality check or (operator, length) for a comparison.
 	OrWhereJsonLength(column string, args ...any) Query
+	// OrWhereNot adds a negated "or where" clause, mirroring Eloquent's Builder::orWhereNot
+	// (Builder.php:420). A callback with no other arguments runs as one nested group
+	// carrying the "or not" connector; a column with its value is handed to the underlying
+	// query builder, which renders "or not col = ?"; an array first argument expands through
+	// the inner builder's addArrayOfWheres under the "or not" boolean —
+	// `or not (not "b" = ? or not "c" = ?)`.
+	OrWhereNot(query any, args ...any) Query
 	// OrWhereNotBetween adds an "or where column not between x and y" clause to the query.
 	OrWhereNotBetween(column string, x, y any) Query
 	// OrWhereNotIn adds an "or where column not in" clause to the query.
@@ -213,8 +342,18 @@ type Query interface {
 	OrWhereNull(column string) Query
 	// Paginate the given query into a simple paginator.
 	Paginate(page, limit int, dest any, total *int64) error
-	// Pluck retrieves a single column from the database.
-	Pluck(column string, dest any) error
+	// SimplePaginate retrieves one page of rows without counting the total, mirroring Laravel's
+	// Builder::simplePaginate (Eloquent Builder.php:1143): page and limit follow the same
+	// conventions as Paginate — a non-positive page falls back to 1 and a non-positive limit to
+	// 15 — the query runs with one probe row (limit+1), dest — a pointer to a slice — receives at
+	// most limit rows with the probe row trimmed away, and the returned bool reports whether the
+	// probe row was present, which is Laravel's hasMorePages(). No count query runs, so the page
+	// carries no total; relation queries inherit the method through their embedded Query surface.
+	SimplePaginate(page, limit int, dest any) (bool, error)
+	// Pluck retrieves a single column from the database, mirroring Laravel's pluck($column, $key):
+	// dest is a pointer to a slice that receives the values, or — when a key column is given — a
+	// pointer to a map keyed by that column's values.
+	Pluck(column string, dest any, key ...string) error
 	// Sole retrieves the one row the query matches, mirroring Laravel's Builder::sole: no row is an
 	// error, and so is more than one.
 	Sole(dest any) error
@@ -230,7 +369,8 @@ type Query interface {
 	SaveQuietly(value any) error
 	// Scan scans the query result and populates the destination object.
 	Scan(dest any) error
-	// Scopes applies one or more query scopes.
+	// Scopes applies one or more query scopes immediately — Eloquent's Builder::scopes(), not the
+	// deferred global-scope registration — so clauses chained after the call follow the scope's.
 	Scopes(funcs ...func(Query) Query) Query
 	// Select specifies fields that should be retrieved from the database.
 	Select(columns ...string) Query
@@ -277,22 +417,45 @@ type Query interface {
 	// the created-at column is left alone on update, and the updated-at column is always refreshed.
 	// With no update columns every inserted column is updated; an empty update list inserts only.
 	Upsert(values any, uniqueBy []string, update ...any) (*db.Result, error)
+	// UsesTimestamps reports whether writes through the query stamp the model's automatic timestamps,
+	// the query-level form of Eloquent's HasTimestamps::usesTimestamps: false while a
+	// WithoutTimestamps scope is active, and false when the query's model carries the per-instance
+	// flag (a databaseorm.Timestamps whose Disabled field names it ignored, read through the model's
+	// own UsesTimestamps method). A query with no model attached reports the scope alone.
+	UsesTimestamps() bool
 	// Value retrieves a single column of the first row into dest, mirroring Laravel's
 	// Builder::value.
 	Value(column string, dest any) error
+	// ValueOrFail retrieves a single column of the first row into dest, mirroring Laravel's
+	// Builder::valueOrFail: a read that matches no row reports the model-not-found error naming
+	// the model instead of leaving dest untouched.
+	ValueOrFail(column string, dest any) error
 	// UseWritePdo forces the query's reads to run on the write connection rather than the reader
 	// replica. Mirrors Laravel's Builder::useWritePdo.
 	UseWritePdo() Query
 	// When executes the callback if the condition is true, otherwise the falseCallback if it is given.
 	When(condition bool, callback func(query Query) Query, falseCallback ...func(query Query) Query) Query
-	// Where add a "where" clause to the query.
+	// Where adds a "where" clause to the query, mirroring Eloquent's Builder::where. A callback
+	// with no other arguments runs against a new query without relationships: its eager loads
+	// merge into this query and its wheres join this query as one nested group. Every other
+	// condition is applied to the underlying query builder as it is written; raw SQL goes through
+	// WhereRaw, the way Eloquent separates where() from whereRaw().
 	Where(query any, args ...any) Query
+	// WhereRaw adds a raw where clause, mirroring Eloquent's Builder::whereRaw: the fragment renders
+	// verbatim and the values bind to its placeholders in order.
+	WhereRaw(query string, args ...any) Query
+	// OrWhereRaw adds a raw where clause with the "or" connector, mirroring Builder::orWhereRaw.
+	OrWhereRaw(query string, args ...any) Query
 	// WhereAll adds a "where all columns match" clause to the query.
 	WhereAll(columns []string, args ...any) Query
 	// WhereAny adds a "where any of columns match" clause to the query.
 	WhereAny(columns []string, args ...any) Query
 	// WhereBetween adds a "where column between x and y" clause to the query.
 	WhereBetween(column string, x, y any) Query
+	// WhereColumn adds a "where" clause comparing two columns to the query, mirroring
+	// Builder::whereColumn. One trailing column means equality with that column; two mean the
+	// operator and then the column.
+	WhereColumn(column1 string, column2 ...string) Query
 	// WhereIn adds a "where column in" clause to the query.
 	WhereIn(column string, values []any) Query
 	// WhereJsonContains add a "where JSON contains" clause to the query.
@@ -309,6 +472,15 @@ type Query interface {
 	WhereJsonLength(column string, args ...any) Query
 	// WhereNone adds a "where none of columns match" clause to the query.
 	WhereNone(columns []string, args ...any) Query
+	// WhereNot adds a negated where clause, mirroring Eloquent's Builder::whereNot
+	// (Builder.php:407), which is where($column, $operator, $value, $boolean.' not'). A callback
+	// with no other arguments runs as one nested group carrying the "and not" connector; a
+	// column with its value (or with no value) is handed to the underlying query builder, which
+	// renders "and not col = ?" — the negation rides the connector; an array first argument
+	// expands through the inner builder's addArrayOfWheres under the "and not" boolean,
+	// negating every column inside one group — `and not (not "b" = ? and not "c" = ?)` —
+	// where the raw Query\Builder::whereNot nests twice (`and not (("b" = ? and "c" = ?))`).
+	WhereNot(query any, args ...any) Query
 	// WhereNotBetween adds a "where column not between x and y" clause to the query.
 	WhereNotBetween(column string, x, y any) Query
 	// WhereNotIn adds a "where column not in" clause to the query.
@@ -336,6 +508,13 @@ type Query interface {
 	// Without removes the given relations from the eager-load list set by With.
 	// Mirrors fedaco's without().
 	Without(relations ...string) Query
+	// WithoutTimestamps runs the callback with the query's automatic created_at / updated_at
+	// stamping suspended, mirroring Eloquent's HasTimestamps::withoutTimestamps for the query-level
+	// Go surface: while a scope is active, writes through the query write neither column — a value
+	// the caller supplied is still written — nested scopes stay suspended with each restoring
+	// exactly its own, and the suspension is lifted before the callback's error (or panic)
+	// propagates. The callback's error is returned unchanged.
+	WithoutTimestamps(callback func() error) error
 	// WithTrashed allows soft deleted models to be included in the results.
 	WithTrashed() Query
 	// OnlyTrashed restricts the results to the soft deleted models, mirroring Laravel's
@@ -382,8 +561,37 @@ type ModelWithConnection interface {
 	Connection() string
 }
 
+// ModelWithTimestamps is implemented by a model that carries the per-instance timestamps flag — the
+// Go form of Eloquent's HasTimestamps::$timestamps. Models embedding databaseorm.Timestamps answer
+// through its promoted UsesTimestamps method, and the ORM reads the capability through this
+// interface when it decides whether a write stamps. A model that declares its own timestamp fields
+// without the embed reports nothing and keeps stamping.
+type ModelWithTimestamps interface {
+	// UsesTimestamps reports whether the model stamps its automatic timestamps.
+	UsesTimestamps() bool
+}
+
+// GlobalScope is one global scope a model declares. Name identifies the scope — WithoutGlobalScopes
+// takes the same names — and Scope constrains the query it is applied to.
+type GlobalScope struct {
+	Name  string
+	Scope func(Query) Query
+}
+
+// ModelWithGlobalScopes is implemented by a model that carries global scopes. The scopes apply in
+// the declared order, which is Laravel's registration order — the order a boot() method added its
+// scopes in. The order is observable when several scopes add wheres: a later scope's clauses follow
+// the earlier ones', the way Laravel appends them.
 type ModelWithGlobalScopes interface {
-	GlobalScopes() map[string]func(Query) Query
+	GlobalScopes() []GlobalScope
+}
+
+// PivotKeyed is implemented by a pivot struct that names the pivot-table columns identifying one
+// pivot row — AsPivot's (foreignKey, relatedKey) pair, plus the morph type on a MorphPivot, the
+// order setKeysForSelectQuery writes them. Fresh/Refresh match on these columns because a pivot
+// row carries no primary key of its own; the values come from the struct's current fields.
+type PivotKeyed interface {
+	PivotKeys() []string
 }
 
 type ToSql interface {

@@ -11,18 +11,18 @@ import (
 	"github.com/gradii/framework/errors"
 )
 
-// newRelQuery builds a Query backed by a stub gorm.DB. The DB is non-functional but is enough for
+// newRelQuery builds an OrmBuilder backed by a stub gorm.DB. The DB is non-functional but is enough for
 // the queueing methods (Has / WhereHas / WithCount / With / ...) which only mutate the
 // Conditions value and never execute SQL.
-func newRelQuery(t *testing.T) *Query {
+func newRelQuery(t *testing.T) *OrmBuilder {
 	t.Helper()
 	db := stubWriter(t)
 	conditions := Conditions{}
 	return newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, db, nil, nil, nil, nil, &conditions, nil)
 }
 
-func toQuery(q contractsorm.Query) *Query {
-	return q.(*Query)
+func toQuery(q contractsorm.Query) *OrmBuilder {
+	return q.(*OrmBuilder)
 }
 
 // --- Existence queueing ----------------------------------------------------
@@ -76,14 +76,14 @@ func TestWhereHasFamilyQueueing(t *testing.T) {
 	cb := contractsorm.RelationCallback(func(q contractsorm.Query) contractsorm.Query { return q })
 	tests := []struct {
 		name        string
-		invoke      func(*Query) contractsorm.Query
+		invoke      func(*OrmBuilder) contractsorm.Query
 		conjunction string
 		operator    string
 	}{
-		{"WhereHas", func(q *Query) contractsorm.Query { return q.WhereHas("Books", cb) }, "and", ">="},
-		{"OrWhereHas", func(q *Query) contractsorm.Query { return q.OrWhereHas("Books", cb) }, "or", ">="},
-		{"WhereDoesntHave", func(q *Query) contractsorm.Query { return q.WhereDoesntHave("Books", cb) }, "and", "<"},
-		{"OrWhereDoesntHave", func(q *Query) contractsorm.Query { return q.OrWhereDoesntHave("Books", cb) }, "or", "<"},
+		{"WhereHas", func(q *OrmBuilder) contractsorm.Query { return q.WhereHas("Books", cb) }, "and", ">="},
+		{"OrWhereHas", func(q *OrmBuilder) contractsorm.Query { return q.OrWhereHas("Books", cb) }, "or", ">="},
+		{"WhereDoesntHave", func(q *OrmBuilder) contractsorm.Query { return q.WhereDoesntHave("Books", cb) }, "and", "<"},
+		{"OrWhereDoesntHave", func(q *OrmBuilder) contractsorm.Query { return q.OrWhereDoesntHave("Books", cb) }, "or", "<"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -115,21 +115,33 @@ func TestHasMorphQueueing(t *testing.T) {
 	assert.Len(t, rel.morphTypes, 1)
 }
 
+func TestHasMorphAutoDiscoveryQueueing(t *testing.T) {
+	// A lone "*" marks auto-discovery (Laravel compares `$types === ['*']`): the clause stores
+	// the marker instead of model instances, and the values are read from the parent table at
+	// compile time.
+	q := newRelQuery(t)
+	got := toQuery(q.HasMorph("Houseable", []any{"*"}))
+	assert.Len(t, got.conditions.relations, 1)
+	rel := got.conditions.relations[0]
+	assert.True(t, rel.morphAuto)
+	assert.Empty(t, rel.morphTypes)
+}
+
 func TestMorphFamilyQueueing(t *testing.T) {
 	mcb := contractsorm.MorphRelationCallback(func(q contractsorm.Query, _ string) contractsorm.Query { return q })
 	tests := []struct {
 		name        string
-		invoke      func(*Query) contractsorm.Query
+		invoke      func(*OrmBuilder) contractsorm.Query
 		conjunction string
 		operator    string
 	}{
-		{"OrHasMorph", func(q *Query) contractsorm.Query { return q.OrHasMorph("X", []any{&relUser{}}) }, "or", ">="},
-		{"DoesntHaveMorph", func(q *Query) contractsorm.Query { return q.DoesntHaveMorph("X", []any{&relUser{}}) }, "and", "<"},
-		{"OrDoesntHaveMorph", func(q *Query) contractsorm.Query { return q.OrDoesntHaveMorph("X", []any{&relUser{}}) }, "or", "<"},
-		{"WhereHasMorph", func(q *Query) contractsorm.Query { return q.WhereHasMorph("X", []any{&relUser{}}, mcb) }, "and", ">="},
-		{"OrWhereHasMorph", func(q *Query) contractsorm.Query { return q.OrWhereHasMorph("X", []any{&relUser{}}, mcb) }, "or", ">="},
-		{"WhereDoesntHaveMorph", func(q *Query) contractsorm.Query { return q.WhereDoesntHaveMorph("X", []any{&relUser{}}) }, "and", "<"},
-		{"OrWhereDoesntHaveMorph", func(q *Query) contractsorm.Query { return q.OrWhereDoesntHaveMorph("X", []any{&relUser{}}) }, "or", "<"},
+		{"OrHasMorph", func(q *OrmBuilder) contractsorm.Query { return q.OrHasMorph("X", []any{&relUser{}}) }, "or", ">="},
+		{"DoesntHaveMorph", func(q *OrmBuilder) contractsorm.Query { return q.DoesntHaveMorph("X", []any{&relUser{}}) }, "and", "<"},
+		{"OrDoesntHaveMorph", func(q *OrmBuilder) contractsorm.Query { return q.OrDoesntHaveMorph("X", []any{&relUser{}}) }, "or", "<"},
+		{"WhereHasMorph", func(q *OrmBuilder) contractsorm.Query { return q.WhereHasMorph("X", []any{&relUser{}}, mcb) }, "and", ">="},
+		{"OrWhereHasMorph", func(q *OrmBuilder) contractsorm.Query { return q.OrWhereHasMorph("X", []any{&relUser{}}, mcb) }, "or", ">="},
+		{"WhereDoesntHaveMorph", func(q *OrmBuilder) contractsorm.Query { return q.WhereDoesntHaveMorph("X", []any{&relUser{}}) }, "and", "<"},
+		{"OrWhereDoesntHaveMorph", func(q *OrmBuilder) contractsorm.Query { return q.OrWhereDoesntHaveMorph("X", []any{&relUser{}}) }, "or", "<"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -223,8 +235,8 @@ func TestWithQueueing(t *testing.T) {
 	q := newRelQuery(t)
 	got := toQuery(q.With("Books", "Roles"))
 	assert.Len(t, got.conditions.eagerLoad, 2)
-	assert.Equal(t, "Books", got.conditions.eagerLoad[0].relation)
-	assert.Equal(t, "Roles", got.conditions.eagerLoad[1].relation)
+	assert.Equal(t, "Books", got.conditions.eagerLoad[0].Relation)
+	assert.Equal(t, "Roles", got.conditions.eagerLoad[1].Relation)
 }
 
 func TestWithInvalidArg(t *testing.T) {
@@ -239,7 +251,7 @@ func TestWithout(t *testing.T) {
 	q2 := toQuery(q1.Without("Roles"))
 	assert.Len(t, q2.conditions.eagerLoad, 2)
 	for _, e := range q2.conditions.eagerLoad {
-		assert.NotEqual(t, "Roles", e.relation)
+		assert.NotEqual(t, "Roles", e.Relation)
 	}
 }
 
@@ -247,12 +259,12 @@ func TestWithoutNoOps(t *testing.T) {
 	q := newRelQuery(t)
 	// no eager loads queued -> returns same query
 	q1 := q.Without("Books")
-	assert.Same(t, q, q1.(*Query))
+	assert.Same(t, q, q1.(*OrmBuilder))
 
 	// no relation names -> returns same query
 	q2 := toQuery(q.With("Books"))
 	q3 := q2.Without()
-	assert.Same(t, q2, q3.(*Query))
+	assert.Same(t, q2, q3.(*OrmBuilder))
 }
 
 func TestWithOnly(t *testing.T) {
@@ -260,7 +272,7 @@ func TestWithOnly(t *testing.T) {
 	q1 := toQuery(q.With("Books", "Roles"))
 	q2 := toQuery(q1.WithOnly("Logo"))
 	assert.Len(t, q2.conditions.eagerLoad, 1)
-	assert.Equal(t, "Logo", q2.conditions.eagerLoad[0].relation)
+	assert.Equal(t, "Logo", q2.conditions.eagerLoad[0].Relation)
 }
 
 // --- Pure helpers ---------------------------------------------------------
@@ -370,10 +382,23 @@ func TestAggregateAlias(t *testing.T) {
 		{"Books.Author", "count", "*", "books_author_count"},
 		{"BooksAuthor", "max", "id", "books_author_max_id"},
 		{"books_author", "sum", "price", "books_author_sum_price"},
+		{"foo", "min", "price - discount", "foo_min_price_discount"},
+		{"childFoos", "min", "created_at", "child_foos_min_created_at"},
+		{"foo", "sum", "TIMESTAMPDIFF(SECOND, `created_at`, `updated_at`)", "foo_sum_timestampdiffsecond_created_at_updated_at"},
 	}
 	for _, tc := range cases {
 		assert.Equal(t, tc.want, aggregateAlias(tc.relation, tc.fn, tc.col))
 	}
+}
+
+func TestParseAggregateRelationName(t *testing.T) {
+	name, alias := parseAggregateRelationName("foo as foo_bar")
+	assert.Equal(t, "foo", name)
+	assert.Equal(t, "foo_bar", alias)
+
+	name, alias = parseAggregateRelationName("Books")
+	assert.Equal(t, "Books", name)
+	assert.Empty(t, alias)
 }
 
 func TestParentTable(t *testing.T) {

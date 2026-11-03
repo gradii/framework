@@ -78,7 +78,7 @@ func TestIsIntegerKeyType(t *testing.T) {
 // key column; the statement itself compiles on the framework's base grammar, so no driver module is
 // needed. The dialect's own insert — its `returning` clause — is pinned in the integration corpus
 // (tests/database/gorm).
-func newPostgresKeyQuery(t *testing.T, model any) (*Query, *recordingSQLDriver) {
+func newPostgresKeyQuery(t *testing.T, model any) (*OrmBuilder, *recordingSQLDriver) {
 	t.Helper()
 
 	recordDriver := &recordingSQLDriver{}

@@ -1,6 +1,8 @@
 package gorm
 
 import (
+	"reflect"
+
 	"github.com/gradii/framework/database/internal/annotation"
 	"github.com/gradii/framework/database/internal/reflectx"
 	rowscan "github.com/gradii/framework/database/internal/scan"
@@ -19,7 +21,7 @@ var rowMapper = reflectx.NewMapperTagFunc("gorm", func(name string) string {
 
 type Row struct {
 	err   error
-	query *Query
+	query *OrmBuilder
 	row   map[string]any
 }
 
@@ -33,6 +35,15 @@ func (r *Row) Scan(value any) error {
 	}
 	if err := scanRow(r.row, value); err != nil {
 		return err
+	}
+
+	// A cursor row of a many-to-many relation read carries its pivot_ aliases like any other
+	// relation row, so the streamed row hydrates the model's declared Pivot struct before the
+	// caller sees it.
+	if r.query != nil {
+		if err := r.query.hydratePivotRow(r.row, reflect.ValueOf(value)); err != nil {
+			return err
+		}
 	}
 
 	if r.query == nil || len(r.query.conditions.eagerLoad) == 0 {

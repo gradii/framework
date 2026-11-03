@@ -15,6 +15,7 @@ import (
 
 	contractsdatabase "github.com/gradii/framework/contracts/database"
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	"github.com/gradii/framework/database/gorm/relations"
 	"github.com/gradii/framework/database/orm/morphmap"
 	"github.com/gradii/framework/errors"
 	mocksconfig "github.com/gradii/framework/mocks/config"
@@ -230,7 +231,7 @@ func TestSetRelationField_InterfaceEmptyClearsField(t *testing.T) {
 
 func TestRunEagerLoadsNoParents(t *testing.T) {
 	q := newRelQuery(t)
-	err := q.runEagerLoads(nil, []eagerLoadEntry{{relation: "Books"}})
+	err := q.runEagerLoads(nil, []eagerLoadEntry{{Relation: "Books"}})
 	assert.NoError(t, err)
 }
 
@@ -250,7 +251,7 @@ func TestApplyEagerLoadsNothingQueued(t *testing.T) {
 
 func TestApplyEagerLoadsEmptyDest(t *testing.T) {
 	q := newRelQuery(t)
-	q.conditions.eagerLoad = []eagerLoadEntry{{relation: "Books"}}
+	q.conditions.eagerLoad = []eagerLoadEntry{{Relation: "Books"}}
 	users := &[]relUser{}
 	err := q.applyEagerLoads(users)
 	assert.NoError(t, err)
@@ -258,7 +259,7 @@ func TestApplyEagerLoadsEmptyDest(t *testing.T) {
 
 func TestRecurseNestedNoop(t *testing.T) {
 	q := newRelQuery(t)
-	err := q.recurseNested(nil, []eagerLoadEntry{{relation: "X"}})
+	err := q.recurseNested(nil, []eagerLoadEntry{{Relation: "X"}})
 	assert.NoError(t, err)
 	err = q.recurseNested([]reflect.Value{reflect.ValueOf(relUser{})}, nil)
 	assert.NoError(t, err)
@@ -266,7 +267,7 @@ func TestRecurseNestedNoop(t *testing.T) {
 
 func TestMaybeRecurseEmpty_NotMany(t *testing.T) {
 	q := newRelQuery(t)
-	err := q.maybeRecurseEmpty(nil, "X", false, nil)
+	err := q.maybeRecurseEmpty(nil, "X", false, nil, nil)
 	assert.NoError(t, err)
 }
 
@@ -275,7 +276,7 @@ func TestMaybeRecurseEmpty_ManyAssignsEmptySlices(t *testing.T) {
 	u1 := &withSlicePtrRel{ID: 1, Books: []*relBook{{Title: "a"}}}
 	u2 := &withSlicePtrRel{ID: 2}
 	parents := []reflect.Value{reflect.ValueOf(u1).Elem(), reflect.ValueOf(u2).Elem()}
-	err := q.maybeRecurseEmpty(parents, "Books", true, nil)
+	err := q.maybeRecurseEmpty(parents, "Books", true, nil, nil)
 	assert.NoError(t, err)
 	assert.Empty(t, u1.Books)
 	assert.Empty(t, u2.Books)
@@ -386,8 +387,8 @@ func TestWritePivotField_UnknownColumn_Skipped(t *testing.T) {
 func TestPreparePivotHydration_NoFieldOnRelated_ReturnsNil(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
 	desc := &relationDescriptor{
-		relatedModel: &roleWithoutPivot{},
-		pivotField:   "Pivot",
+		RelatedModel: &roleWithoutPivot{},
+		PivotField:   "Pivot",
 	}
 	plan, err := preparePivotHydration(q, desc)
 	assert.NoError(t, err)
@@ -397,8 +398,8 @@ func TestPreparePivotHydration_NoFieldOnRelated_ReturnsNil(t *testing.T) {
 func TestPreparePivotHydration_FieldNotStruct_Errors(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
 	desc := &relationDescriptor{
-		relatedModel: &roleWithBadPivot{},
-		pivotField:   "Pivot",
+		RelatedModel: &roleWithBadPivot{},
+		PivotField:   "Pivot",
 	}
 	_, err := preparePivotHydration(q, desc)
 	assert.True(t, errors.Is(err, errors.OrmRelationPivotFieldNotStruct))
@@ -407,8 +408,8 @@ func TestPreparePivotHydration_FieldNotStruct_Errors(t *testing.T) {
 func TestPreparePivotHydration_DefaultPivot_FromFieldType(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
 	desc := &relationDescriptor{
-		relatedModel: &roleWithPivot{},
-		pivotField:   "Pivot",
+		RelatedModel: &roleWithPivot{},
+		PivotField:   "Pivot",
 	}
 	plan, err := preparePivotHydration(q, desc)
 	assert.NoError(t, err)
@@ -421,8 +422,8 @@ func TestPreparePivotHydration_DefaultPivot_FromFieldType(t *testing.T) {
 func TestPreparePivotHydration_CustomFieldName_FromFieldType(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
 	desc := &relationDescriptor{
-		relatedModel: &roleWithCustomPivotField{},
-		pivotField:   "UserPivot",
+		RelatedModel: &roleWithCustomPivotField{},
+		PivotField:   "UserPivot",
 	}
 	plan, err := preparePivotHydration(q, desc)
 	assert.NoError(t, err)
@@ -530,7 +531,7 @@ func TestNewSampleModel_WithPointer(t *testing.T) {
 
 func TestApplyEagerLoads_WithNilDest(t *testing.T) {
 	q := newRelQuery(t)
-	q.conditions.eagerLoad = []eagerLoadEntry{{relation: "Books"}}
+	q.conditions.eagerLoad = []eagerLoadEntry{{Relation: "Books"}}
 	err := q.applyEagerLoads(nil)
 	assert.NoError(t, err)
 }
@@ -538,7 +539,7 @@ func TestApplyEagerLoads_WithNilDest(t *testing.T) {
 func TestRunEagerLoads_InvalidRelation(t *testing.T) {
 	q := newRelQuery(t)
 	parents := []reflect.Value{reflect.ValueOf(relUser{ID: 1})}
-	err := q.runEagerLoads(parents, []eagerLoadEntry{{relation: "NonExistent"}})
+	err := q.runEagerLoads(parents, []eagerLoadEntry{{Relation: "NonExistent"}})
 	assert.Error(t, err)
 }
 
@@ -547,7 +548,7 @@ func TestRunEagerLoads_InvalidRelation(t *testing.T) {
 // The loader tests below pin the statement a loader builds and executes, so they must observe the
 // loader's own call site rather than a child the test rebuilt by hand. A loader compiles its child
 // and runs it through the connection pool (executor.go), which the nil writer stubWriter returns
-// cannot provide: it has no *sql.DB behind it. These helpers give the Query a real *sql.DB backed by
+// cannot provide: it has no *sql.DB behind it. These helpers give the OrmBuilder a real *sql.DB backed by
 // a recording driver, in the connector-with-a-stub-driver shape database/driver's tests use. Every
 // statement the loader executes is captured and an empty result set comes back, so the loader
 // completes its read path without a database and the assertion lands on the SQL the loader itself
@@ -735,9 +736,9 @@ func (c recordingConnector) Connect(context.Context) (driver.Conn, error) {
 }
 func (c recordingConnector) Driver() driver.Driver { return c.driver }
 
-// newRecordingRelQuery builds a Query shaped like newRelQueryWith, but whose connection pool records
+// newRecordingRelQuery builds an OrmBuilder shaped like newRelQueryWith, but whose connection pool records
 // the statements the loaders execute.
-func newRecordingRelQuery(t *testing.T, model any) (*Query, *recordingSQLDriver) {
+func newRecordingRelQuery(t *testing.T, model any) (*OrmBuilder, *recordingSQLDriver) {
 	t.Helper()
 
 	recordDriver := &recordingSQLDriver{}
@@ -798,14 +799,14 @@ func TestLoadBelongsTo_ChildQueryIsCompiled(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			q, recorder := newRecordingRelQuery(t, &relBook{})
-			desc, err := resolveRelation(&relBook{}, "Author")
+			desc, err := relations.ResolveRelation(&relBook{}, "Author")
 			assert.NoError(t, err)
 			if err != nil {
 				return
 			}
 
-			assert.Equal(t, relKindBelongsTo, desc.kind)
-			assert.Equal(t, "rel_users", desc.relatedTable)
+			assert.Equal(t, relKindBelongsTo, desc.Kind)
+			assert.Equal(t, "rel_users", desc.RelatedTable)
 
 			// The parents carry the owner key the loader reads for a BelongsTo: the related key sits
 			// on the parent's foreign key.
@@ -817,7 +818,7 @@ func TestLoadBelongsTo_ChildQueryIsCompiled(t *testing.T) {
 
 			// Drive the loader itself, so the assertion is on the statement the loader built and ran
 			// rather than on a child this test rebuilt by hand.
-			assert.NoError(t, q.loadBelongsTo(parents, &relBook{}, desc, eagerLoadEntry{relation: "Author"}, nil))
+			assert.NoError(t, q.loadBelongsTo(parents, &relBook{}, desc, eagerLoadEntry{Relation: "Author"}, nil))
 
 			recorded := recorder.last(t)
 			assert.Equal(t, c.sql, recorded.sql)
@@ -829,15 +830,15 @@ func TestLoadBelongsTo_ChildQueryIsCompiled(t *testing.T) {
 	// still selects it and the dictionary can be keyed off the related rows.
 	t.Run("pruned select keeps the owner key", func(t *testing.T) {
 		q := newRelQueryWith(t, &relBook{})
-		desc, err := resolveRelation(&relBook{}, "Author")
+		desc, err := relations.ResolveRelation(&relBook{}, "Author")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
-		ref := desc.references[0]
+		ref := desc.References[0]
 
-		child := q.relatedChild(desc.relatedTable, desc.relatedTable+"."+ref.primaryColumn, []any{uint(5)})
-		child.builder.SetSelects([]any{"name", ref.primaryColumn})
+		child := q.relatedChild(desc.RelatedTable, desc.RelatedTable+"."+ref.PrimaryColumn, []any{uint(5)})
+		child.query.SetSelects([]any{"name", ref.PrimaryColumn})
 
 		compiled, bindings, err := child.compileSelect()
 		assert.NoError(t, err)
@@ -851,20 +852,20 @@ func TestLoadBelongsTo_ChildQueryIsCompiled(t *testing.T) {
 	// compiled child carries no extra predicate.
 	t.Run("child carries no inherited conditions", func(t *testing.T) {
 		q := newRelQueryWith(t, &relBook{})
-		desc, err := resolveRelation(&relBook{}, "Author")
+		desc, err := relations.ResolveRelation(&relBook{}, "Author")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
-		ref := desc.references[0]
+		ref := desc.References[0]
 
-		child := q.relatedChild(desc.relatedTable, desc.relatedTable+"."+ref.primaryColumn, []any{uint(5)})
+		child := q.relatedChild(desc.RelatedTable, desc.RelatedTable+"."+ref.PrimaryColumn, []any{uint(5)})
 		assert.Nil(t, child.conditions.model)
 		assert.Nil(t, child.conditions.dest)
 		assert.False(t, child.conditions.withTrashed)
 		assert.Empty(t, child.conditions.withoutGlobalScopes)
 		assert.Empty(t, child.conditions.scopes)
-		assert.Len(t, child.conditions.where, 1)
+		assert.Len(t, child.query.State().Wheres, 1)
 	})
 }
 
@@ -917,14 +918,14 @@ func TestLoadHasOneOrMany_ChildQueryIsCompiled(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			q, recorder := newRecordingRelQuery(t, c.parent)
-			desc, err := resolveRelation(c.parent, c.relation)
+			desc, err := relations.ResolveRelation(c.parent, c.relation)
 			assert.NoError(t, err)
 			if err != nil {
 				return
 			}
 
-			assert.Equal(t, c.kind, desc.kind)
-			assert.Equal(t, c.table, desc.relatedTable)
+			assert.Equal(t, c.kind, desc.Kind)
+			assert.Equal(t, c.table, desc.RelatedTable)
 
 			// The parents carry the owner key the loader reads for a HasOne/HasMany: the parent's own
 			// primary key, which the child's foreign key matches.
@@ -936,7 +937,7 @@ func TestLoadHasOneOrMany_ChildQueryIsCompiled(t *testing.T) {
 
 			// Drive the loader itself, so the assertion is on the statement the loader built and ran
 			// rather than on a child this test rebuilt by hand.
-			assert.NoError(t, q.loadHasOneOrMany(parents, c.parent, desc, eagerLoadEntry{relation: c.relation}, nil, c.isMany))
+			assert.NoError(t, q.loadHasOneOrMany(parents, c.parent, desc, eagerLoadEntry{Relation: c.relation}, nil, c.isMany))
 
 			recorded := recorder.last(t)
 			assert.Equal(t, c.sql, recorded.sql)
@@ -948,15 +949,15 @@ func TestLoadHasOneOrMany_ChildQueryIsCompiled(t *testing.T) {
 	// child still selects it and the dictionary can be keyed off the related rows.
 	t.Run("pruned select keeps the foreign key", func(t *testing.T) {
 		q := newRelQueryWith(t, &relUser{})
-		desc, err := resolveRelation(&relUser{}, "Books")
+		desc, err := relations.ResolveRelation(&relUser{}, "Books")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
-		ref := desc.references[0]
+		ref := desc.References[0]
 
-		child := q.relatedChild(desc.relatedTable, desc.relatedTable+"."+ref.foreignColumn, []any{uint(3)})
-		child.builder.SetSelects([]any{"title", ref.foreignColumn})
+		child := q.relatedChild(desc.RelatedTable, desc.RelatedTable+"."+ref.ForeignColumn, []any{uint(3)})
+		child.query.SetSelects([]any{"title", ref.ForeignColumn})
 
 		compiled, bindings, err := child.compileSelect()
 		assert.NoError(t, err)
@@ -970,20 +971,20 @@ func TestLoadHasOneOrMany_ChildQueryIsCompiled(t *testing.T) {
 	// compiled child carries no extra predicate.
 	t.Run("child carries no inherited conditions", func(t *testing.T) {
 		q := newRelQueryWith(t, &relUser{})
-		desc, err := resolveRelation(&relUser{}, "Books")
+		desc, err := relations.ResolveRelation(&relUser{}, "Books")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
-		ref := desc.references[0]
+		ref := desc.References[0]
 
-		child := q.relatedChild(desc.relatedTable, desc.relatedTable+"."+ref.foreignColumn, []any{uint(3)})
+		child := q.relatedChild(desc.RelatedTable, desc.RelatedTable+"."+ref.ForeignColumn, []any{uint(3)})
 		assert.Nil(t, child.conditions.model)
 		assert.Nil(t, child.conditions.dest)
 		assert.False(t, child.conditions.withTrashed)
 		assert.Empty(t, child.conditions.withoutGlobalScopes)
 		assert.Empty(t, child.conditions.scopes)
-		assert.Len(t, child.conditions.where, 1)
+		assert.Len(t, child.query.State().Wheres, 1)
 	})
 }
 
@@ -1036,15 +1037,15 @@ func TestLoadMorph_ChildQueryIsCompiled(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			q, recorder := newRecordingRelQuery(t, c.parent)
-			desc, err := resolveRelation(c.parent, c.relation)
+			desc, err := relations.ResolveRelation(c.parent, c.relation)
 			assert.NoError(t, err)
 			if err != nil {
 				return
 			}
 
-			assert.Equal(t, c.kind, desc.kind)
-			assert.Equal(t, c.table, desc.relatedTable)
-			assert.Equal(t, c.typeCol, desc.morphTypeColumn)
+			assert.Equal(t, c.kind, desc.Kind)
+			assert.Equal(t, c.table, desc.RelatedTable)
+			assert.Equal(t, c.typeCol, desc.MorphTypeColumn)
 
 			// The parents carry the owner key the loader reads for a morph one / many: the parent's
 			// primary key.
@@ -1056,11 +1057,11 @@ func TestLoadMorph_ChildQueryIsCompiled(t *testing.T) {
 
 			// Drive the loader itself, so the assertion is on the statement the loader built and ran
 			// rather than on a child this test rebuilt by hand.
-			assert.NoError(t, q.loadMorph(parents, c.parent, desc, eagerLoadEntry{relation: c.relation}, nil, c.kind == relKindMorphMany))
+			assert.NoError(t, q.loadMorph(parents, c.parent, desc, eagerLoadEntry{Relation: c.relation}, nil, c.kind == relKindMorphMany))
 
 			recorded := recorder.last(t)
 			assert.Equal(t, c.sql, recorded.sql)
-			assert.Equal(t, append(driverBindings(c.chunk), desc.morphValue), recorded.args)
+			assert.Equal(t, append(driverBindings(c.chunk), desc.MorphValue), recorded.args)
 		})
 	}
 
@@ -1069,21 +1070,21 @@ func TestLoadMorph_ChildQueryIsCompiled(t *testing.T) {
 	// statement.
 	t.Run("pruned select keeps the foreign key and the morph type column", func(t *testing.T) {
 		q := newRelQueryWith(t, &relUser{})
-		desc, err := resolveRelation(&relUser{}, "Houses")
+		desc, err := relations.ResolveRelation(&relUser{}, "Houses")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
-		ref := desc.references[0]
+		ref := desc.References[0]
 
-		child := q.relatedChild(desc.relatedTable, desc.relatedTable+"."+ref.foreignColumn, []any{uint(9)}).
-			Where(desc.relatedTable+"."+desc.morphTypeColumn, desc.morphValue).(*Query)
-		child.builder.SetSelects([]any{"address", ref.foreignColumn, desc.morphTypeColumn})
+		child := q.relatedChild(desc.RelatedTable, desc.RelatedTable+"."+ref.ForeignColumn, []any{uint(9)}).
+			Where(desc.RelatedTable+"."+desc.MorphTypeColumn, desc.MorphValue).(*OrmBuilder)
+		child.query.SetSelects([]any{"address", ref.ForeignColumn, desc.MorphTypeColumn})
 
 		compiled, bindings, err := child.compileSelect()
 		assert.NoError(t, err)
 		assert.Equal(t, `select "address", "houseable_id", "houseable_type" from "rel_houses" where "rel_houses"."houseable_id" in (?) and "rel_houses"."houseable_type" = ?`, compiled)
-		assert.Equal(t, []any{uint(9), desc.morphValue}, bindings)
+		assert.Equal(t, []any{uint(9), desc.MorphValue}, bindings)
 	})
 
 	// The child addresses the related table alone, with no model of its own, so it inherits none of
@@ -1091,21 +1092,21 @@ func TestLoadMorph_ChildQueryIsCompiled(t *testing.T) {
 	// soft-delete scope and global scopes therefore stay off the eager load.
 	t.Run("child carries no inherited conditions", func(t *testing.T) {
 		q := newRelQueryWith(t, &relUser{})
-		desc, err := resolveRelation(&relUser{}, "Houses")
+		desc, err := relations.ResolveRelation(&relUser{}, "Houses")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
-		ref := desc.references[0]
+		ref := desc.References[0]
 
-		child := q.relatedChild(desc.relatedTable, desc.relatedTable+"."+ref.foreignColumn, []any{uint(9)}).
-			Where(desc.relatedTable+"."+desc.morphTypeColumn, desc.morphValue).(*Query)
+		child := q.relatedChild(desc.RelatedTable, desc.RelatedTable+"."+ref.ForeignColumn, []any{uint(9)}).
+			Where(desc.RelatedTable+"."+desc.MorphTypeColumn, desc.MorphValue).(*OrmBuilder)
 		assert.Nil(t, child.conditions.model)
 		assert.Nil(t, child.conditions.dest)
 		assert.False(t, child.conditions.withTrashed)
 		assert.Empty(t, child.conditions.withoutGlobalScopes)
 		assert.Empty(t, child.conditions.scopes)
-		assert.Len(t, child.conditions.where, 2)
+		assert.Len(t, child.query.State().Wheres, 2)
 	})
 }
 
@@ -1245,14 +1246,14 @@ func TestLoadMorphTo_BucketChildQueryIsCompiled(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			q, recorder := newRecordingRelQuery(t, c.parent)
-			desc, err := resolveRelation(c.parent, c.relation)
+			desc, err := relations.ResolveRelation(c.parent, c.relation)
 			assert.NoError(t, err)
 			if err != nil {
 				return
 			}
 
-			assert.Equal(t, relKindMorphTo, desc.kind)
-			assert.Nil(t, desc.relatedModel, "MorphTo resolves its model per row, not at descriptor time")
+			assert.Equal(t, relKindMorphTo, desc.Kind)
+			assert.Nil(t, desc.RelatedModel, "MorphTo resolves its model per row, not at descriptor time")
 
 			sample := morphmap.Find(c.morph)
 			assert.NotNil(t, sample)
@@ -1261,7 +1262,7 @@ func TestLoadMorphTo_BucketChildQueryIsCompiled(t *testing.T) {
 			assert.Equal(t, c.table, relatedTable)
 
 			// The loader's owner key: the descriptor's, defaulted to "id".
-			ownerKey := desc.morphOwnerKey
+			ownerKey := desc.MorphOwnerKey
 			if ownerKey == "" {
 				ownerKey = "id"
 			}
@@ -1270,7 +1271,7 @@ func TestLoadMorphTo_BucketChildQueryIsCompiled(t *testing.T) {
 			// Drive the loader itself, so the assertion is on the statement the loader built and ran
 			// rather than on a child this test rebuilt by hand. The parents carry the morph type and
 			// the owner-key value the loader buckets on.
-			assert.NoError(t, q.loadMorphTo(c.parents, c.parent, desc, eagerLoadEntry{relation: c.relation}, nil))
+			assert.NoError(t, q.loadMorphTo(c.parents, c.parent, desc, eagerLoadEntry{Relation: c.relation}, nil))
 
 			recorded := recorder.last(t)
 			assert.Equal(t, c.sql, recorded.sql)
@@ -1282,17 +1283,17 @@ func TestLoadMorphTo_BucketChildQueryIsCompiled(t *testing.T) {
 	// filters each resolved type's rows without the loader restating it per bucket.
 	t.Run("bucket child receives the relation scope", func(t *testing.T) {
 		q := newRelQueryWith(t, &morphScopedImage{})
-		desc, err := resolveRelation(&morphScopedImage{}, "Imageable")
+		desc, err := relations.ResolveRelation(&morphScopedImage{}, "Imageable")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
-		assert.NotNil(t, desc.onQuery)
+		assert.NotNil(t, desc.OnQuery)
 
 		child := q.relatedChild("morph_parent_like_posts", "morph_parent_like_posts.id", []any{uint(5)})
-		scoped, ok := desc.onQuery(child).(*Query)
+		scoped, ok := desc.OnQuery(child).(*OrmBuilder)
 		assert.True(t, ok)
-		assert.Len(t, scoped.conditions.where, 2, "owner-key IN plus the relation scope")
+		assert.Len(t, scoped.query.State().Wheres, 2, "owner-key IN plus the relation scope")
 
 		compiled, bindings, err := scoped.compileSelect()
 		assert.NoError(t, err)
@@ -1305,7 +1306,7 @@ func TestLoadMorphTo_BucketChildQueryIsCompiled(t *testing.T) {
 	t.Run("pruned select keeps the owner key", func(t *testing.T) {
 		q := newRelQueryWith(t, &morphImage{})
 		child := q.relatedChild("morph_parent_like_posts", "morph_parent_like_posts.id", []any{uint(5)})
-		child.builder.SetSelects([]any{"title", "id"})
+		child.query.SetSelects([]any{"title", "id"})
 
 		compiled, bindings, err := child.compileSelect()
 		assert.NoError(t, err)
@@ -1324,7 +1325,7 @@ func TestLoadMorphTo_BucketChildQueryIsCompiled(t *testing.T) {
 		assert.False(t, child.conditions.withTrashed)
 		assert.Empty(t, child.conditions.withoutGlobalScopes)
 		assert.Empty(t, child.conditions.scopes)
-		assert.Len(t, child.conditions.where, 1)
+		assert.Len(t, child.query.State().Wheres, 1)
 	})
 }
 
@@ -1367,24 +1368,24 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 	// fails rather than being normalised away.
 	t.Run("pivot read without a pivot scope", func(t *testing.T) {
 		q := newRelQueryWith(t, &relUser{})
-		desc, err := resolveRelation(&relUser{}, "Roles")
+		desc, err := relations.ResolveRelation(&relUser{}, "Roles")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
 
-		assert.Equal(t, relKindMany2Many, desc.kind)
-		assert.Equal(t, "rel_user_roles", desc.pivotTable)
-		assert.Equal(t, "rel_user_id", desc.pivotParentRef.foreignColumn)
-		assert.Equal(t, "rel_role_id", desc.pivotRelatedRef.foreignColumn)
+		assert.Equal(t, relKindMany2Many, desc.Kind)
+		assert.Equal(t, "rel_user_roles", desc.PivotTable)
+		assert.Equal(t, "rel_user_id", desc.PivotParentRef.ForeignColumn)
+		assert.Equal(t, "rel_role_id", desc.PivotRelatedRef.ForeignColumn)
 
-		cols := []string{desc.pivotParentRef.foreignColumn, desc.pivotRelatedRef.foreignColumn}
+		cols := []string{desc.PivotParentRef.ForeignColumn, desc.PivotRelatedRef.ForeignColumn}
 		chunk := []any{uint(1), uint(2)}
 
 		// The child is named the way the loader names it: the pivot table verbatim, the IN column
 		// unquoted and table-qualified, and the select list kept bare so the returned column names —
 		// which are the map keys the hydration loop indexes — stay the FK names.
-		child := q.pivotChild(desc.pivotTable, desc.pivotTable+"."+desc.pivotParentRef.foreignColumn, chunk, cols)
+		child := q.pivotChild(desc.PivotTable, desc.PivotTable+"."+desc.PivotParentRef.ForeignColumn, chunk, cols)
 		compiled, bindings, err := child.compileSelect()
 		assert.NoError(t, err)
 		assert.Equal(t,
@@ -1399,30 +1400,30 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 		assert.False(t, child.conditions.withTrashed)
 		assert.Empty(t, child.conditions.withoutGlobalScopes)
 		assert.Empty(t, child.conditions.scopes)
-		assert.Len(t, child.conditions.where, 1)
-		assert.Len(t, child.builder.Selects(), 2)
+		assert.Len(t, child.query.State().Wheres, 1)
+		assert.Len(t, child.query.Selects(), 2)
 	})
 
 	t.Run("pivot read receives the relation scope and the hydration plan's columns", func(t *testing.T) {
 		q := newRelQueryWith(t, &scopeUser{})
-		desc, err := resolveRelation(&scopeUser{}, "Roles")
+		desc, err := relations.ResolveRelation(&scopeUser{}, "Roles")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
-		assert.NotNil(t, desc.onPivotQuery, "the fixture declares OnePivotQuery")
+		assert.NotNil(t, desc.OnPivotQuery, "the fixture declares OnePivotQuery")
 
 		// The loader's select list is the two FK columns plus whatever the hydration plan reports.
 		plan, err := preparePivotHydration(q, desc)
 		assert.NoError(t, err)
-		cols := []string{desc.pivotParentRef.foreignColumn, desc.pivotRelatedRef.foreignColumn}
+		cols := []string{desc.PivotParentRef.ForeignColumn, desc.PivotRelatedRef.ForeignColumn}
 		if plan != nil {
 			cols = append(cols, plan.extraColumns...)
 		}
 		chunk := []any{uint(1), uint(2)}
 
-		child := q.pivotChild(desc.pivotTable, desc.pivotTable+"."+desc.pivotParentRef.foreignColumn, chunk, cols)
-		scoped, ok := applyOnPivotQueryToQuery(q.queryGrammar, child, desc).(*Query)
+		child := q.pivotChild(desc.PivotTable, desc.PivotTable+"."+desc.PivotParentRef.ForeignColumn, chunk, cols)
+		scoped, ok := applyOnPivotQueryToQuery(q.queryGrammar, child, desc).(*OrmBuilder)
 		assert.True(t, ok)
 
 		compiled, bindings, err := scoped.compileSelect()
@@ -1436,7 +1437,7 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 
 	t.Run("pivot read keeps the hydration plan's columns, duplicates included", func(t *testing.T) {
 		q := newRelQueryWith(t, &m2mPivotParent{})
-		desc, err := resolveRelation(&m2mPivotParent{}, "Roles")
+		desc, err := relations.ResolveRelation(&m2mPivotParent{}, "Roles")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -1450,16 +1451,16 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 		// The loader's list: the two FK columns first, then every column the plan reports. Because the
 		// plan reports the pivot struct's own columns, the FK columns appear a second time — exactly the
 		// list the loader used to hand to GORM's Select, and the compiled child must keep it: it sets the
-		// select list on the conditions directly, so nothing dedupes it the way Query.Select would.
-		cols := []string{desc.pivotParentRef.foreignColumn, desc.pivotRelatedRef.foreignColumn}
+		// select list on the conditions directly, so nothing dedupes it the way OrmBuilder.Select would.
+		cols := []string{desc.PivotParentRef.ForeignColumn, desc.PivotRelatedRef.ForeignColumn}
 		cols = append(cols, plan.extraColumns...)
-		assert.Equal(t, []string{desc.pivotParentRef.foreignColumn, desc.pivotRelatedRef.foreignColumn}, cols[:2])
+		assert.Equal(t, []string{desc.PivotParentRef.ForeignColumn, desc.PivotRelatedRef.ForeignColumn}, cols[:2])
 		assert.Len(t, cols, 6, "two FK columns plus the pivot struct's four")
-		assert.Equal(t, desc.pivotParentRef.foreignColumn, "m2m_pivot_parent_id")
-		assert.Equal(t, desc.pivotRelatedRef.foreignColumn, "role_with_pivot_id")
+		assert.Equal(t, desc.PivotParentRef.ForeignColumn, "m2m_pivot_parent_id")
+		assert.Equal(t, desc.PivotRelatedRef.ForeignColumn, "role_with_pivot_id")
 
 		chunk := []any{uint(1)}
-		child := q.pivotChild(desc.pivotTable, desc.pivotTable+"."+desc.pivotParentRef.foreignColumn, chunk, cols)
+		child := q.pivotChild(desc.PivotTable, desc.PivotTable+"."+desc.PivotParentRef.ForeignColumn, chunk, cols)
 		compiled, bindings, err := child.compileSelect()
 		assert.NoError(t, err)
 
@@ -1469,8 +1470,8 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 			quoted = append(quoted, `"`+col+`"`)
 		}
 		expected := "select " + strings.Join(quoted, ", ") +
-			" from \"" + desc.pivotTable + "\" where \"" + desc.pivotTable + "\".\"" +
-			desc.pivotParentRef.foreignColumn + "\" in (?)"
+			" from \"" + desc.PivotTable + "\" where \"" + desc.PivotTable + "\".\"" +
+			desc.PivotParentRef.ForeignColumn + "\" in (?)"
 		assert.Equal(t, expected, compiled)
 		assert.Equal(t, chunk, bindings)
 
@@ -1478,14 +1479,14 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 
 	t.Run("related read is compiled and keeps the related key when pruned", func(t *testing.T) {
 		q := newRelQueryWith(t, &relUser{})
-		desc, err := resolveRelation(&relUser{}, "Roles")
+		desc, err := relations.ResolveRelation(&relUser{}, "Roles")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
 
 		chunk := []any{uint(9)}
-		child := q.relatedChild(desc.relatedTable, desc.relatedTable+"."+desc.pivotRelatedRef.primaryColumn, chunk)
+		child := q.relatedChild(desc.RelatedTable, desc.RelatedTable+"."+desc.PivotRelatedRef.PrimaryColumn, chunk)
 		compiled, bindings, err := child.compileSelect()
 		assert.NoError(t, err)
 		assert.Equal(t, `select * from "rel_roles" where "rel_roles"."id" in (?)`, compiled)
@@ -1493,7 +1494,7 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 
 		// The loader passes the related key as a required column, so it survives column pruning and
 		// the dictionary can be keyed off the related rows.
-		child.builder.SetSelects([]any{"name", desc.pivotRelatedRef.primaryColumn})
+		child.query.SetSelects([]any{"name", desc.PivotRelatedRef.PrimaryColumn})
 		pruned, prunedBindings, err := child.compileSelect()
 		assert.NoError(t, err)
 		assert.Equal(t, `select "name", "id" from "rel_roles" where "rel_roles"."id" in (?)`, pruned)
@@ -1504,28 +1505,28 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 	// relation field is cleared rather than queried for an IN list that cannot match.
 	t.Run("no parent keys issues no statement", func(t *testing.T) {
 		q := newRelQueryWith(t, &relUser{})
-		desc, err := resolveRelation(&relUser{}, "Roles")
+		desc, err := relations.ResolveRelation(&relUser{}, "Roles")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
 
-		assert.NoError(t, q.loadMany2Many(nil, &relUser{}, desc, eagerLoadEntry{relation: "Roles"}, nil))
+		assert.NoError(t, q.loadMany2Many(nil, &relUser{}, desc, eagerLoadEntry{Relation: "Roles"}, nil))
 	})
 	// Drive the loader itself with parent keys. The recording driver hands back one pivot row,
 	// which is what makes loadMany2Many run its second read, so the assertion lands on the
 	// statements the loader built and executed rather than on children this test rebuilt by hand.
 	t.Run("loader reads the pivot table then the related table", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &relUser{})
-		desc, err := resolveRelation(&relUser{}, "Roles")
+		desc, err := relations.ResolveRelation(&relUser{}, "Roles")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
 
 		// One pivot row links parent 1 to related 9; the loader then reads the related row for key 9.
-		recorder.returnRows(`from "`+desc.pivotTable+`"`,
-			[]string{desc.pivotParentRef.foreignColumn, desc.pivotRelatedRef.foreignColumn},
+		recorder.returnRows(`from "`+desc.PivotTable+`"`,
+			[]string{desc.PivotParentRef.ForeignColumn, desc.PivotRelatedRef.ForeignColumn},
 			[]driver.Value{int64(1), int64(9)})
 
 		parents := []reflect.Value{
@@ -1533,7 +1534,7 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 			reflect.ValueOf(&relUser{ID: 2}).Elem(),
 		}
 
-		assert.NoError(t, q.loadMany2Many(parents, &relUser{}, desc, eagerLoadEntry{relation: "Roles"}, nil))
+		assert.NoError(t, q.loadMany2Many(parents, &relUser{}, desc, eagerLoadEntry{Relation: "Roles"}, nil))
 		assert.Equal(t, 2, recorder.count(), "the loader reads the pivot table and then the related table")
 
 		pivot := recorder.at(t, 0)
@@ -1552,15 +1553,15 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 	// the child this test could rebuild: findMapsCompiled threads it in before compiling.
 	t.Run("loader's pivot read carries the relation scope", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &scopeUser{})
-		desc, err := resolveRelation(&scopeUser{}, "Roles")
+		desc, err := relations.ResolveRelation(&scopeUser{}, "Roles")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
-		assert.NotNil(t, desc.onPivotQuery, "the fixture declares OnPivotQuery")
+		assert.NotNil(t, desc.OnPivotQuery, "the fixture declares OnPivotQuery")
 
-		recorder.returnRows(`from "`+desc.pivotTable+`"`,
-			[]string{desc.pivotParentRef.foreignColumn, desc.pivotRelatedRef.foreignColumn},
+		recorder.returnRows(`from "`+desc.PivotTable+`"`,
+			[]string{desc.PivotParentRef.ForeignColumn, desc.PivotRelatedRef.ForeignColumn},
 			[]driver.Value{int64(1), int64(9)})
 
 		parents := []reflect.Value{
@@ -1568,7 +1569,7 @@ func TestLoadMany2Many_ReadsAreCompiled(t *testing.T) {
 			reflect.ValueOf(&scopeUser{ID: 2}).Elem(),
 		}
 
-		assert.NoError(t, q.loadMany2Many(parents, &scopeUser{}, desc, eagerLoadEntry{relation: "Roles"}, nil))
+		assert.NoError(t, q.loadMany2Many(parents, &scopeUser{}, desc, eagerLoadEntry{Relation: "Roles"}, nil))
 
 		pivot := recorder.at(t, 0)
 		assert.Equal(t,
@@ -1611,12 +1612,12 @@ func (pivotUser) Relations() map[string]contractsorm.Relation {
 func TestLoadHasOneOrMany_AssignsHydratedRows(t *testing.T) {
 	t.Run("has many assigns per parent", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &relUser{})
-		desc, err := resolveRelation(&relUser{}, "Books")
+		desc, err := relations.ResolveRelation(&relUser{}, "Books")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
-		assert.Equal(t, relKindHasMany, desc.kind)
+		assert.Equal(t, relKindHasMany, desc.Kind)
 
 		// Two books for user 1, one for user 2, and none for the user the result set omits.
 		recorder.returnRows(`from "rel_books"`, []string{"id", "title", "user_id"},
@@ -1634,7 +1635,7 @@ func TestLoadHasOneOrMany_AssignsHydratedRows(t *testing.T) {
 			reflect.ValueOf(user3).Elem(),
 		}
 
-		assert.NoError(t, q.loadHasOneOrMany(parents, &relUser{}, desc, eagerLoadEntry{relation: "Books"}, nil, true))
+		assert.NoError(t, q.loadHasOneOrMany(parents, &relUser{}, desc, eagerLoadEntry{Relation: "Books"}, nil, true))
 
 		assert.Len(t, user1.Books, 2)
 		assert.Equal(t, uint(10), user1.Books[0].ID)
@@ -1647,12 +1648,12 @@ func TestLoadHasOneOrMany_AssignsHydratedRows(t *testing.T) {
 
 	t.Run("has one keeps the first match", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &relUser{})
-		desc, err := resolveRelation(&relUser{}, "Profile")
+		desc, err := relations.ResolveRelation(&relUser{}, "Profile")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
-		assert.Equal(t, relKindHasOne, desc.kind)
+		assert.Equal(t, relKindHasOne, desc.Kind)
 
 		// Two rows for the same parent: a HasOne keeps one, and it is the first in result order.
 		recorder.returnRows(`from "rel_profiles"`, []string{"id", "bio", "user_id"},
@@ -1663,7 +1664,7 @@ func TestLoadHasOneOrMany_AssignsHydratedRows(t *testing.T) {
 		user := &relUser{ID: 1}
 		parents := []reflect.Value{reflect.ValueOf(user).Elem()}
 
-		assert.NoError(t, q.loadHasOneOrMany(parents, &relUser{}, desc, eagerLoadEntry{relation: "Profile"}, nil, false))
+		assert.NoError(t, q.loadHasOneOrMany(parents, &relUser{}, desc, eagerLoadEntry{Relation: "Profile"}, nil, false))
 
 		assert.NotNil(t, user.Profile)
 		assert.Equal(t, uint(20), user.Profile.ID)
@@ -1672,12 +1673,12 @@ func TestLoadHasOneOrMany_AssignsHydratedRows(t *testing.T) {
 
 	t.Run("belongs to matches the foreign key and clears an unmatched parent", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &relBook{})
-		desc, err := resolveRelation(&relBook{}, "Author")
+		desc, err := relations.ResolveRelation(&relBook{}, "Author")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
-		assert.Equal(t, relKindBelongsTo, desc.kind)
+		assert.Equal(t, relKindBelongsTo, desc.Kind)
 
 		// The dictionary is keyed by the related primary key, which is what the parent's FK matches.
 		recorder.returnRows(`from "rel_users"`, []string{"id", "name"},
@@ -1698,7 +1699,7 @@ func TestLoadHasOneOrMany_AssignsHydratedRows(t *testing.T) {
 			reflect.ValueOf(bookMissing).Elem(),
 		}
 
-		assert.NoError(t, q.loadBelongsTo(parents, &relBook{}, desc, eagerLoadEntry{relation: "Author"}, nil))
+		assert.NoError(t, q.loadBelongsTo(parents, &relBook{}, desc, eagerLoadEntry{Relation: "Author"}, nil))
 
 		assert.NotNil(t, book5.Author)
 		assert.Equal(t, "Ada", book5.Author.Name)
@@ -1715,26 +1716,26 @@ func TestLoadHasOneOrMany_AssignsHydratedRows(t *testing.T) {
 // own pivot row, and two parents sharing one related row get distinct instances.
 func TestLoadMany2Many_HydratesPivotThroughTheLoader(t *testing.T) {
 	q, recorder := newRecordingRelQuery(t, &pivotUser{})
-	desc, err := resolveRelation(&pivotUser{}, "Roles")
+	desc, err := relations.ResolveRelation(&pivotUser{}, "Roles")
 	assert.NoError(t, err)
 	if err != nil {
 		return
 	}
-	assert.Equal(t, relKindMany2Many, desc.kind)
-	assert.Equal(t, "Pivot", desc.pivotField)
+	assert.Equal(t, relKindMany2Many, desc.Kind)
+	assert.Equal(t, "Pivot", desc.PivotField)
 
-	pivotParentCol := desc.pivotParentRef.foreignColumn
-	pivotRelatedCol := desc.pivotRelatedRef.foreignColumn
+	pivotParentCol := desc.PivotParentRef.ForeignColumn
+	pivotRelatedCol := desc.PivotRelatedRef.ForeignColumn
 
 	// Both parents pivot-attach the same role 99, each with its own priority and notes. The pivot
 	// columns are the FK columns plus the Pivot struct's own fields, in the order the plan reports
 	// them — the same list the loader put in the SELECT above.
-	recorder.returnRows(`from "`+desc.pivotTable+`"`,
+	recorder.returnRows(`from "`+desc.PivotTable+`"`,
 		[]string{pivotParentCol, pivotRelatedCol, "user_id", "role_id", "priority", "notes"},
 		[]driver.Value{int64(1), int64(99), int64(1), int64(99), "high", "one"},
 		[]driver.Value{int64(2), int64(99), int64(2), int64(99), "low", "two"},
 	)
-	recorder.returnRows(`from "`+desc.relatedTable+`"`,
+	recorder.returnRows(`from "`+desc.RelatedTable+`"`,
 		[]string{"id", "name"},
 		[]driver.Value{int64(99), "admin"},
 	)
@@ -1743,18 +1744,18 @@ func TestLoadMany2Many_HydratesPivotThroughTheLoader(t *testing.T) {
 	user2 := &pivotUser{ID: 2}
 	parents := []reflect.Value{reflect.ValueOf(user1).Elem(), reflect.ValueOf(user2).Elem()}
 
-	assert.NoError(t, q.loadMany2Many(parents, &pivotUser{}, desc, eagerLoadEntry{relation: "Roles"}, nil))
+	assert.NoError(t, q.loadMany2Many(parents, &pivotUser{}, desc, eagerLoadEntry{Relation: "Roles"}, nil))
 
 	assert.Equal(t, 2, recorder.count(), "the loader reads the pivot table and then the related table")
 	pivot := recorder.at(t, 0)
 	assert.Equal(t,
-		`select "`+pivotParentCol+`", "`+pivotRelatedCol+`", "user_id", "role_id", "priority", "notes" from "`+desc.pivotTable+
-			`" where "`+desc.pivotTable+`"."`+pivotParentCol+`" in (?, ?)`,
+		`select "`+pivotParentCol+`", "`+pivotRelatedCol+`", "user_id", "role_id", "priority", "notes" from "`+desc.PivotTable+
+			`" where "`+desc.PivotTable+`"."`+pivotParentCol+`" in (?, ?)`,
 		pivot.sql)
 	assert.Equal(t, driverBindings([]any{uint(1), uint(2)}), pivot.args)
 
 	related := recorder.at(t, 1)
-	assert.Equal(t, `select * from "`+desc.relatedTable+`" where "`+desc.relatedTable+`"."id" in (?)`, related.sql)
+	assert.Equal(t, `select * from "`+desc.RelatedTable+`" where "`+desc.RelatedTable+`"."id" in (?)`, related.sql)
 	assert.Equal(t, []driver.Value{int64(99)}, related.args)
 
 	if !assert.Len(t, user1.Roles, 1) || !assert.Len(t, user2.Roles, 1) {
@@ -1783,7 +1784,7 @@ func TestLoadRelatedRows_ChunkedPerChunkSize(t *testing.T) {
 	cfg.EXPECT().GetInt("database.eager_load_chunk_size", mock.Anything).Return(2)
 	q.config = cfg
 
-	desc, err := resolveRelation(&relUser{}, "Books")
+	desc, err := relations.ResolveRelation(&relUser{}, "Books")
 	assert.NoError(t, err)
 	if err != nil {
 		return
@@ -1807,7 +1808,7 @@ func TestLoadRelatedRows_ChunkedPerChunkSize(t *testing.T) {
 		reflect.ValueOf(user3).Elem(),
 	}
 
-	assert.NoError(t, q.loadHasOneOrMany(parents, &relUser{}, desc, eagerLoadEntry{relation: "Books"}, nil, true))
+	assert.NoError(t, q.loadHasOneOrMany(parents, &relUser{}, desc, eagerLoadEntry{Relation: "Books"}, nil, true))
 
 	assert.Equal(t, 2, recorder.count(), "three keys at a chunk size of two are two statements")
 	first := recorder.at(t, 0)
@@ -1835,7 +1836,7 @@ func TestLoadRelatedRows_ChunkedPerChunkSize(t *testing.T) {
 func TestLoadRelatedRows_PrunesToRequestedColumns(t *testing.T) {
 	t.Run("loader's own child", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &relUser{})
-		desc, err := resolveRelation(&relUser{}, "Books")
+		desc, err := relations.ResolveRelation(&relUser{}, "Books")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -1849,7 +1850,7 @@ func TestLoadRelatedRows_PrunesToRequestedColumns(t *testing.T) {
 		parents := []reflect.Value{reflect.ValueOf(user).Elem()}
 
 		assert.NoError(t, q.loadHasOneOrMany(parents, &relUser{}, desc,
-			eagerLoadEntry{relation: "Books", columns: []string{"title"}}, nil, true))
+			eagerLoadEntry{Relation: "Books", Columns: []string{"title"}}, nil, true))
 
 		recorded := recorder.last(t)
 		assert.Equal(t, `select "title", "user_id" from "rel_books" where "rel_books"."user_id" in (?)`, recorded.sql)
@@ -1862,7 +1863,7 @@ func TestLoadRelatedRows_PrunesToRequestedColumns(t *testing.T) {
 
 	t.Run("required key already present under a table qualifier", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &relUser{})
-		desc, err := resolveRelation(&relUser{}, "Books")
+		desc, err := relations.ResolveRelation(&relUser{}, "Books")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -1877,7 +1878,7 @@ func TestLoadRelatedRows_PrunesToRequestedColumns(t *testing.T) {
 		parents := []reflect.Value{reflect.ValueOf(user).Elem()}
 
 		assert.NoError(t, q.loadHasOneOrMany(parents, &relUser{}, desc,
-			eagerLoadEntry{relation: "Books", columns: []string{"rel_books.title", "rel_books.user_id"}}, nil, true))
+			eagerLoadEntry{Relation: "Books", Columns: []string{"rel_books.title", "rel_books.user_id"}}, nil, true))
 
 		assert.Equal(t,
 			`select "rel_books"."title", "rel_books"."user_id" from "rel_books" where "rel_books"."user_id" in (?)`,
@@ -1889,8 +1890,8 @@ func TestLoadRelatedRows_PrunesToRequestedColumns(t *testing.T) {
 
 	t.Run("through With", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &relUser{})
-		q = q.With("Books:title").(*Query)
-		assert.True(t, q.conditions.eagerLoad[0].columns[0] == "title")
+		q = q.With("Books:title").(*OrmBuilder)
+		assert.True(t, q.conditions.eagerLoad[0].Columns[0] == "title")
 
 		recorder.returnRows(`from "rel_users"`, []string{"id", "name"},
 			[]driver.Value{int64(1), "Ada"},
@@ -1923,14 +1924,14 @@ func TestAssignToParents(t *testing.T) {
 	t.Run("zero key is skipped for a has-one", func(t *testing.T) {
 		// The parent's owner key is zero, but the dictionary holds a row under the zero key's
 		// spelling. A skipped parent must not take it: the loader never queried for that key.
-		desc, err := resolveRelation(&relUser{}, "Profile")
+		desc, err := relations.ResolveRelation(&relUser{}, "Profile")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
 		schema, err := parseSchema(&relUser{})
 		assert.NoError(t, err)
-		parentField := schema.FieldsByDBName[desc.references[0].primaryColumn]
+		parentField := schema.FieldsByDBName[desc.References[0].PrimaryColumn]
 		assert.NotNil(t, parentField)
 
 		user := &relUser{}
@@ -1939,19 +1940,19 @@ func TestAssignToParents(t *testing.T) {
 			"0": {reflect.ValueOf(&relProfile{ID: 1, Bio: "belongs to nobody"})},
 		}
 
-		assert.NoError(t, q.assignToParents(parents, parentField, "Profile", dict, false))
+		assert.NoError(t, q.assignToParents(parents, parentField, "Profile", dict, false, nil))
 		assert.Nil(t, user.Profile, "a parent with no owner key must not take a row keyed zero")
 	})
 
 	t.Run("zero key is skipped for a has-many", func(t *testing.T) {
-		desc, err := resolveRelation(&relUser{}, "Books")
+		desc, err := relations.ResolveRelation(&relUser{}, "Books")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
 		schema, err := parseSchema(&relUser{})
 		assert.NoError(t, err)
-		parentField := schema.FieldsByDBName[desc.references[0].primaryColumn]
+		parentField := schema.FieldsByDBName[desc.References[0].PrimaryColumn]
 
 		// The dictionary holds a row for user 1 only. This parent has no key, so it must not reach
 		// the empty-slice branch for it: a has-many parent the query never asked about keeps the
@@ -1962,7 +1963,7 @@ func TestAssignToParents(t *testing.T) {
 			"1": {reflect.ValueOf(&relBook{ID: 1, Title: "belongs to user 1"})},
 		}
 
-		assert.NoError(t, q.assignToParents(parents, parentField, "Books", dict, true))
+		assert.NoError(t, q.assignToParents(parents, parentField, "Books", dict, true, nil))
 		assert.Empty(t, user.Books, "a parent with no owner key must not take another parent's rows")
 	})
 
@@ -1971,14 +1972,14 @@ func TestAssignToParents(t *testing.T) {
 		// observable on: a pointer field takes the first row either way. With isMany=false the
 		// dictionary entry is cut to one row before the write, so the slice gets exactly one element
 		// instead of the two the related read returned.
-		desc, err := resolveRelation(&relUser{}, "Books")
+		desc, err := relations.ResolveRelation(&relUser{}, "Books")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
 		schema, err := parseSchema(&relUser{})
 		assert.NoError(t, err)
-		parentField := schema.FieldsByDBName[desc.references[0].primaryColumn]
+		parentField := schema.FieldsByDBName[desc.References[0].PrimaryColumn]
 
 		user := &relUser{ID: 1}
 		parents := []reflect.Value{reflect.ValueOf(user).Elem()}
@@ -1989,21 +1990,21 @@ func TestAssignToParents(t *testing.T) {
 			},
 		}
 
-		assert.NoError(t, q.assignToParents(parents, parentField, "Books", dict, false))
+		assert.NoError(t, q.assignToParents(parents, parentField, "Books", dict, false, nil))
 		if assert.Len(t, user.Books, 1) {
 			assert.Equal(t, uint(10), user.Books[0].ID, "a has-one keeps the first match")
 		}
 	})
 
 	t.Run("has-many keeps every match in order", func(t *testing.T) {
-		desc, err := resolveRelation(&relUser{}, "Books")
+		desc, err := relations.ResolveRelation(&relUser{}, "Books")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
 		schema, err := parseSchema(&relUser{})
 		assert.NoError(t, err)
-		parentField := schema.FieldsByDBName[desc.references[0].primaryColumn]
+		parentField := schema.FieldsByDBName[desc.References[0].PrimaryColumn]
 
 		user := &relUser{ID: 1}
 		parents := []reflect.Value{reflect.ValueOf(user).Elem()}
@@ -2014,7 +2015,7 @@ func TestAssignToParents(t *testing.T) {
 			},
 		}
 
-		assert.NoError(t, q.assignToParents(parents, parentField, "Books", dict, true))
+		assert.NoError(t, q.assignToParents(parents, parentField, "Books", dict, true, nil))
 		if assert.Len(t, user.Books, 2) {
 			assert.Equal(t, uint(10), user.Books[0].ID)
 			assert.Equal(t, uint(11), user.Books[1].ID)

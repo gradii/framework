@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/gradii/framework/database/gorm/relations"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -19,34 +20,34 @@ import (
 func TestLoadMorphToMany_ReadsAreCompiled(t *testing.T) {
 	t.Run("pivot read without a pivot scope", func(t *testing.T) {
 		q := newRelQueryWith(t, &morphPost{})
-		desc, err := resolveRelation(&morphPost{}, "Tags")
+		desc, err := relations.ResolveRelation(&morphPost{}, "Tags")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
 
-		assert.Equal(t, relKindMorphToMany, desc.kind)
-		assert.Equal(t, "taggables", desc.pivotTable)
-		assert.Equal(t, "taggable_id", desc.pivotParentRef.foreignColumn)
-		assert.Equal(t, "morph_tag_id", desc.pivotRelatedRef.foreignColumn)
-		assert.Equal(t, "taggable_type", desc.morphTypeColumn)
-		assert.Equal(t, "morph_tags", desc.relatedTable)
+		assert.Equal(t, relKindMorphToMany, desc.Kind)
+		assert.Equal(t, "taggables", desc.PivotTable)
+		assert.Equal(t, "taggable_id", desc.PivotParentRef.ForeignColumn)
+		assert.Equal(t, "morph_tag_id", desc.PivotRelatedRef.ForeignColumn)
+		assert.Equal(t, "taggable_type", desc.MorphTypeColumn)
+		assert.Equal(t, "morph_tags", desc.RelatedTable)
 
-		cols := []string{desc.pivotParentRef.foreignColumn, desc.pivotRelatedRef.foreignColumn}
+		cols := []string{desc.PivotParentRef.ForeignColumn, desc.PivotRelatedRef.ForeignColumn}
 		chunk := []any{uint(1), uint(2)}
 
 		// The child is named the way the loader names it: the pivot table verbatim, the IN column
 		// unquoted and table-qualified, the select list bare so the returned column names — the map
 		// keys the hydration loop indexes — stay the FK names, and the morph-type predicate the
 		// descriptor carries.
-		child := q.pivotChild(desc.pivotTable, desc.pivotTable+"."+desc.pivotParentRef.foreignColumn, chunk, cols).
-			Where(desc.pivotTable+"."+desc.morphTypeColumn, desc.morphValue).(*Query)
+		child := q.pivotChild(desc.PivotTable, desc.PivotTable+"."+desc.PivotParentRef.ForeignColumn, chunk, cols).
+			Where(desc.PivotTable+"."+desc.MorphTypeColumn, desc.MorphValue).(*OrmBuilder)
 		compiled, bindings, err := child.compileSelect()
 		assert.NoError(t, err)
 		assert.Equal(t,
 			`select "taggable_id", "morph_tag_id" from "taggables" where "taggables"."taggable_id" in (?, ?) and "taggables"."taggable_type" = ?`,
 			compiled)
-		assert.Equal(t, []any{uint(1), uint(2), desc.morphValue}, bindings)
+		assert.Equal(t, []any{uint(1), uint(2), desc.MorphValue}, bindings)
 
 		// No model is attached, so the child starts from the pivot table alone and inherits none of
 		// the parent query's state — the same shape the fresh GORM session had. The morph-type
@@ -56,54 +57,54 @@ func TestLoadMorphToMany_ReadsAreCompiled(t *testing.T) {
 		assert.False(t, child.conditions.withTrashed)
 		assert.Empty(t, child.conditions.withoutGlobalScopes)
 		assert.Empty(t, child.conditions.scopes)
-		assert.Len(t, child.conditions.where, 2)
-		assert.Len(t, child.builder.Selects(), 2)
+		assert.Len(t, child.query.State().Wheres, 2)
+		assert.Len(t, child.query.Selects(), 2)
 	})
 
 	t.Run("pivot read receives the relation scope", func(t *testing.T) {
 		q := newRelQueryWith(t, &scopeMorphPost{})
-		desc, err := resolveRelation(&scopeMorphPost{}, "Tags")
+		desc, err := relations.ResolveRelation(&scopeMorphPost{}, "Tags")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
-		assert.NotNil(t, desc.onPivotQuery, "the fixture declares OnPivotQuery")
+		assert.NotNil(t, desc.OnPivotQuery, "the fixture declares OnPivotQuery")
 
 		// scopeMorphTag declares no Pivot field, so the select list stays the two FK columns.
 		plan, err := preparePivotHydration(q, desc)
 		assert.NoError(t, err)
 		assert.Nil(t, plan)
 
-		cols := []string{desc.pivotParentRef.foreignColumn, desc.pivotRelatedRef.foreignColumn}
+		cols := []string{desc.PivotParentRef.ForeignColumn, desc.PivotRelatedRef.ForeignColumn}
 		chunk := []any{uint(1), uint(2)}
 
-		child := q.pivotChild(desc.pivotTable, desc.pivotTable+"."+desc.pivotParentRef.foreignColumn, chunk, cols).
-			Where(desc.pivotTable+"."+desc.morphTypeColumn, desc.morphValue).(*Query)
-		scoped, ok := applyOnPivotQueryToQuery(q.queryGrammar, child, desc).(*Query)
+		child := q.pivotChild(desc.PivotTable, desc.PivotTable+"."+desc.PivotParentRef.ForeignColumn, chunk, cols).
+			Where(desc.PivotTable+"."+desc.MorphTypeColumn, desc.MorphValue).(*OrmBuilder)
+		scoped, ok := applyOnPivotQueryToQuery(q.queryGrammar, child, desc).(*OrmBuilder)
 		assert.True(t, ok)
 
 		compiled, bindings, err := scoped.compileSelect()
 		assert.NoError(t, err)
 		// Order: parent IN clause, morph-type clause, then OnPivotQuery scope.
 		assert.Equal(t,
-			`select "taggable_id", "scope_morph_tag_id" from "taggables" where "taggables"."taggable_id" in (?, ?) and "taggables"."taggable_type" = ? and "taggables"."deleted_at" IS NULL`,
+			`select "taggable_id", "scope_morph_tag_id" from "taggables" where "taggables"."taggable_id" in (?, ?) and "taggables"."taggable_type" = ? and "taggables"."deleted_at" is null`,
 			compiled)
 		// The chunk's keys and the morph value first, then the scope's own binding (none here: the
-		// scope is an IS NULL predicate).
-		assert.Equal(t, []any{uint(1), uint(2), desc.morphValue}, bindings)
+		// scope is an `is null` predicate).
+		assert.Equal(t, []any{uint(1), uint(2), desc.MorphValue}, bindings)
 
 	})
 
 	t.Run("related read is compiled", func(t *testing.T) {
 		q := newRelQueryWith(t, &morphPost{})
-		desc, err := resolveRelation(&morphPost{}, "Tags")
+		desc, err := relations.ResolveRelation(&morphPost{}, "Tags")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
 
 		chunk := []any{uint(9)}
-		child := q.relatedChild(desc.relatedTable, desc.relatedTable+"."+desc.pivotRelatedRef.primaryColumn, chunk)
+		child := q.relatedChild(desc.RelatedTable, desc.RelatedTable+"."+desc.PivotRelatedRef.PrimaryColumn, chunk)
 		compiled, bindings, err := child.compileSelect()
 		assert.NoError(t, err)
 		assert.Equal(t, `select * from "morph_tags" where "morph_tags"."id" in (?)`, compiled)
@@ -113,32 +114,32 @@ func TestLoadMorphToMany_ReadsAreCompiled(t *testing.T) {
 	// MorphedByMany is the same loader with the morph value taken from the related side; the
 	// descriptor is the only place that differs, so both directions must pin the same value.
 	t.Run("inverse pins the same morph value as the forward relation", func(t *testing.T) {
-		forwardDesc, err := resolveRelation(&morphPost{}, "Tags")
+		forwardDesc, err := relations.ResolveRelation(&morphPost{}, "Tags")
 		assert.NoError(t, err)
 
-		inverseDesc, err := resolveRelation(&morphTag{}, "Posts")
+		inverseDesc, err := relations.ResolveRelation(&morphTag{}, "Posts")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
 
-		assert.Equal(t, relKindMorphToMany, inverseDesc.kind)
-		assert.Equal(t, "taggables", inverseDesc.pivotTable)
-		assert.Equal(t, "morph_post_id", inverseDesc.pivotRelatedRef.foreignColumn)
-		assert.Equal(t, forwardDesc.morphValue, inverseDesc.morphValue)
+		assert.Equal(t, relKindMorphToMany, inverseDesc.Kind)
+		assert.Equal(t, "taggables", inverseDesc.PivotTable)
+		assert.Equal(t, "morph_post_id", inverseDesc.PivotRelatedRef.ForeignColumn)
+		assert.Equal(t, forwardDesc.MorphValue, inverseDesc.MorphValue)
 	})
 
 	// No parent keys: the loader takes its empty path and never reaches a statement at all, so the
 	// relation field is cleared rather than queried for an IN list that cannot match.
 	t.Run("no parent keys issues no statement", func(t *testing.T) {
 		q := newRelQueryWith(t, &morphPost{})
-		desc, err := resolveRelation(&morphPost{}, "Tags")
+		desc, err := relations.ResolveRelation(&morphPost{}, "Tags")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
 
-		assert.NoError(t, q.loadMorphToMany(nil, &morphPost{}, desc, eagerLoadEntry{relation: "Tags"}, nil))
+		assert.NoError(t, q.loadMorphToMany(nil, &morphPost{}, desc, eagerLoadEntry{Relation: "Tags"}, nil))
 	})
 	// Drive the loader itself with parent keys. The recording driver hands back one pivot row, which
 	// is what makes loadMorphToMany run its second read, so the assertion lands on the statements the
@@ -146,7 +147,7 @@ func TestLoadMorphToMany_ReadsAreCompiled(t *testing.T) {
 	// read. A change to either half of the loader's body fails the test.
 	t.Run("loader reads the pivot table then the related table", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &morphPost{})
-		desc, err := resolveRelation(&morphPost{}, "Tags")
+		desc, err := relations.ResolveRelation(&morphPost{}, "Tags")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -154,7 +155,7 @@ func TestLoadMorphToMany_ReadsAreCompiled(t *testing.T) {
 
 		// One pivot row links parent 1 to related 9; the loader then reads the related row for key 9.
 		recorder.returnRows(`from "taggables"`,
-			[]string{desc.pivotParentRef.foreignColumn, desc.pivotRelatedRef.foreignColumn},
+			[]string{desc.PivotParentRef.ForeignColumn, desc.PivotRelatedRef.ForeignColumn},
 			[]driver.Value{int64(1), int64(9)})
 
 		parents := []reflect.Value{
@@ -162,14 +163,16 @@ func TestLoadMorphToMany_ReadsAreCompiled(t *testing.T) {
 			reflect.ValueOf(&morphPost{ID: 2}).Elem(),
 		}
 
-		assert.NoError(t, q.loadMorphToMany(parents, &morphPost{}, desc, eagerLoadEntry{relation: "Tags"}, nil))
+		assert.NoError(t, q.loadMorphToMany(parents, &morphPost{}, desc, eagerLoadEntry{Relation: "Tags"}, nil))
 		assert.Equal(t, 2, recorder.count(), "the loader reads the pivot table and then the related table")
 
 		pivot := recorder.at(t, 0)
+		// The morph type column rides along with the two pivot keys — MorphToMany::aliasedPivotColumns
+		// interleaves it — so the hydrated pivot struct can carry it.
 		assert.Equal(t,
-			`select "taggable_id", "morph_tag_id" from "taggables" where "taggables"."taggable_id" in (?, ?) and "taggables"."taggable_type" = ?`,
+			`select "taggable_id", "morph_tag_id", "taggable_type" from "taggables" where "taggables"."taggable_id" in (?, ?) and "taggables"."taggable_type" = ?`,
 			pivot.sql)
-		assert.Equal(t, append(driverBindings([]any{uint(1), uint(2)}), desc.morphValue), pivot.args)
+		assert.Equal(t, append(driverBindings([]any{uint(1), uint(2)}), desc.MorphValue), pivot.args)
 
 		related := recorder.at(t, 1)
 		assert.Equal(t, `select * from "morph_tags" where "morph_tags"."id" in (?)`, related.sql)
@@ -181,15 +184,15 @@ func TestLoadMorphToMany_ReadsAreCompiled(t *testing.T) {
 	// the child this test could rebuild: findMapsCompiled threads it in before compiling.
 	t.Run("loader's pivot read carries the relation scope", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &scopeMorphPost{})
-		desc, err := resolveRelation(&scopeMorphPost{}, "Tags")
+		desc, err := relations.ResolveRelation(&scopeMorphPost{}, "Tags")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
-		assert.NotNil(t, desc.onPivotQuery, "the fixture declares OnPivotQuery")
+		assert.NotNil(t, desc.OnPivotQuery, "the fixture declares OnPivotQuery")
 
 		recorder.returnRows(`from "taggables"`,
-			[]string{desc.pivotParentRef.foreignColumn, desc.pivotRelatedRef.foreignColumn},
+			[]string{desc.PivotParentRef.ForeignColumn, desc.PivotRelatedRef.ForeignColumn},
 			[]driver.Value{int64(1), int64(9)})
 
 		parents := []reflect.Value{
@@ -197,14 +200,14 @@ func TestLoadMorphToMany_ReadsAreCompiled(t *testing.T) {
 			reflect.ValueOf(&scopeMorphPost{ID: 2}).Elem(),
 		}
 
-		assert.NoError(t, q.loadMorphToMany(parents, &scopeMorphPost{}, desc, eagerLoadEntry{relation: "Tags"}, nil))
+		assert.NoError(t, q.loadMorphToMany(parents, &scopeMorphPost{}, desc, eagerLoadEntry{Relation: "Tags"}, nil))
 
 		pivot := recorder.at(t, 0)
 		assert.Equal(t,
-			`select "taggable_id", "scope_morph_tag_id" from "taggables" where "taggables"."taggable_id" in (?, ?) and "taggables"."taggable_type" = ? and "taggables"."deleted_at" IS NULL`,
+			`select "taggable_id", "scope_morph_tag_id", "taggable_type" from "taggables" where "taggables"."taggable_id" in (?, ?) and "taggables"."taggable_type" = ? and "taggables"."deleted_at" is null`,
 			pivot.sql)
 		// The chunk's keys and the morph value first, then the scope's own binding (none here: the
-		// scope is an IS NULL predicate).
-		assert.Equal(t, append(driverBindings([]any{uint(1), uint(2)}), desc.morphValue), pivot.args)
+		// scope is an `is null` predicate).
+		assert.Equal(t, append(driverBindings([]any{uint(1), uint(2)}), desc.MorphValue), pivot.args)
 	})
 }

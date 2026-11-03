@@ -74,7 +74,7 @@ func TestWildcardSelectionMatchesObserverAndWrite(t *testing.T) {
 			} {
 				t.Run(changes.name, func(t *testing.T) {
 					model := &selectOmitUser{ID: 1, Name: "before", Avatar: "before"}
-					query := compiledQuery(t, model, Conditions{}).Select(selection.columns...).(*Query)
+					query := compiledQuery(t, model, Conditions{}).Select(selection.columns...).(*OrmBuilder)
 					want := map[string]any{"name": "after", "avatar": ""}
 
 					assignments, err := query.updateAssignments(changes.value)
@@ -105,7 +105,7 @@ func TestWildcardSelectionMatchesObserverAndWrite(t *testing.T) {
 // `insert into t () values ()` that every dialect rejects, and Omit("Name") deleted nothing, so an
 // omitted value reached the row.
 func TestFilterInsertColumnsResolvesGoFieldNames(t *testing.T) {
-	selectQuery := compiledQuery(t, &SchemaOuter{}, Conditions{}).Select("Name").(*Query)
+	selectQuery := compiledQuery(t, &SchemaOuter{}, Conditions{}).Select("Name").(*OrmBuilder)
 
 	records, err := selectQuery.insertRecords(&SchemaOuter{Name: "kept"})
 	assert.NoError(t, err)
@@ -129,7 +129,7 @@ func TestFilterInsertColumnsResolvesGoFieldNames(t *testing.T) {
 // A column named by its database name already matched, and a bare "*" selects every column, so it
 // must restrict nothing rather than filter the record down to nothing.
 func TestFilterInsertColumnsAcceptsDBColumnNamesAndWildcard(t *testing.T) {
-	columnQuery := compiledQuery(t, &SchemaOuter{}, Conditions{}).Select("name").(*Query)
+	columnQuery := compiledQuery(t, &SchemaOuter{}, Conditions{}).Select("name").(*OrmBuilder)
 
 	records, err := columnQuery.insertRecords(&SchemaOuter{Name: "kept"})
 	assert.NoError(t, err)
@@ -137,7 +137,7 @@ func TestFilterInsertColumnsAcceptsDBColumnNamesAndWildcard(t *testing.T) {
 		assert.Equal(t, "kept", records[0]["name"])
 	}
 
-	wildcardQuery := compiledQuery(t, &SchemaOuter{}, Conditions{}).Select("*").(*Query)
+	wildcardQuery := compiledQuery(t, &SchemaOuter{}, Conditions{}).Select("*").(*OrmBuilder)
 
 	records, err = wildcardQuery.insertRecords(&SchemaOuter{Name: "kept"})
 	assert.NoError(t, err)

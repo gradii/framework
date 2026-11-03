@@ -34,11 +34,11 @@ func TestRefreshConnectionRebindsTheDialect(t *testing.T) {
 	target.dbConfig = contractsdatabase.Config{Driver: "postgres", Connection: "target"}
 
 	// The connection being moved to is already built, so no config lookup happens here.
-	source.queries = map[string]*Query{"target": target}
+	source.queries = map[string]*OrmBuilder{"target": target}
 
 	refreshed, err := source.refreshConnection()
 	require.NoError(t, err)
-	assert.Same(t, target.components.Processor, refreshed.builder.Processor())
+	assert.Same(t, target.components.Processor, refreshed.query.Processor())
 
 	statement, bindings, err := refreshed.compileSelect()
 	require.NoError(t, err)
@@ -57,8 +57,8 @@ func TestRefreshConnectionRebindsTheDialect(t *testing.T) {
 // makes branching safe now that a fluent call writes to its receiver instead of returning a new
 // query.
 func TestCloneOwnsItsClauses(t *testing.T) {
-	base := compiledQuery(t, &getColumnsUser{}, Conditions{}).Select("a").(*Query)
-	branch := base.Clone().(*Query)
+	base := compiledQuery(t, &getColumnsUser{}, Conditions{}).Select("a").(*OrmBuilder)
+	branch := base.Clone().(*OrmBuilder)
 	branch.Where("id", 1)
 
 	baseStatement, _, err := base.compileSelect()

@@ -69,7 +69,7 @@ func (r *Repository) GetMigrationsByBatch(batch int) ([]migration.File, error) {
 
 func (r *Repository) GetMigrationsByStep(steps int) ([]migration.File, error) {
 	var files []migration.File
-	if err := r.schema.Orm().Query().Table(r.table).Where("batch >= 1").OrderByDesc("batch").OrderByDesc("migration").Limit(steps).Get(&files); err != nil {
+	if err := r.schema.Orm().Query().Table(r.table).Where("batch", ">=", 1).OrderByDesc("batch").OrderByDesc("migration").Limit(steps).Get(&files); err != nil {
 		return nil, err
 	}
 

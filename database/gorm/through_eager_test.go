@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	"github.com/gradii/framework/database/gorm/relations"
 )
 
 // hasOneThroughCountry declares a HasOneThrough whose relation field is slice-shaped. The shape is
@@ -61,27 +62,27 @@ func (throughScopeCountry) Relations() map[string]contractsorm.Relation {
 func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 	t.Run("through read collects the second keys", func(t *testing.T) {
 		q := newRelQueryWith(t, &relCountry{})
-		desc, err := resolveRelation(&relCountry{}, "Posts")
+		desc, err := relations.ResolveRelation(&relCountry{}, "Posts")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
 
-		assert.Equal(t, relKindHasManyThrough, desc.kind)
-		assert.Equal(t, "rel_users", desc.throughTable)
-		assert.Equal(t, "rel_country_id", desc.firstKey)
-		assert.Equal(t, "rel_user_id", desc.secondKey)
-		assert.Equal(t, "id", desc.secondLocalKey)
-		assert.Equal(t, "rel_posts", desc.relatedTable)
-		assert.Nil(t, desc.onPivotQuery, "a through relation carries no pivot scope")
+		assert.Equal(t, relKindHasManyThrough, desc.Kind)
+		assert.Equal(t, "rel_users", desc.ThroughTable)
+		assert.Equal(t, "rel_country_id", desc.FirstKey)
+		assert.Equal(t, "rel_user_id", desc.SecondKey)
+		assert.Equal(t, "id", desc.SecondLocalKey)
+		assert.Equal(t, "rel_posts", desc.RelatedTable)
+		assert.Nil(t, desc.OnPivotQuery, "a through relation carries no pivot scope")
 
 		chunk := []any{uint(1), uint(2)}
 
 		// The child is named the way the loader names it: the through table verbatim, the IN column
 		// unquoted and table-qualified, and the select list kept bare so the returned column names —
 		// the map keys the hydration loop indexes — stay the two key names.
-		child := q.pivotChild(desc.throughTable, desc.throughTable+"."+desc.firstKey, chunk,
-			[]string{desc.firstKey, desc.secondLocalKey})
+		child := q.pivotChild(desc.ThroughTable, desc.ThroughTable+"."+desc.FirstKey, chunk,
+			[]string{desc.FirstKey, desc.SecondLocalKey})
 		compiled, bindings, err := child.compileSelect()
 		assert.NoError(t, err)
 		assert.Equal(t,
@@ -96,20 +97,20 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 		assert.False(t, child.conditions.withTrashed)
 		assert.Empty(t, child.conditions.withoutGlobalScopes)
 		assert.Empty(t, child.conditions.scopes)
-		assert.Len(t, child.conditions.where, 1)
-		assert.Equal(t, []any{desc.firstKey, desc.secondLocalKey}, child.builder.Selects())
+		assert.Len(t, child.query.State().Wheres, 1)
+		assert.Equal(t, []any{desc.FirstKey, desc.SecondLocalKey}, child.query.Selects())
 	})
 
 	t.Run("related read is compiled and keeps the related key when pruned", func(t *testing.T) {
 		q := newRelQueryWith(t, &relCountry{})
-		desc, err := resolveRelation(&relCountry{}, "Posts")
+		desc, err := relations.ResolveRelation(&relCountry{}, "Posts")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
 
 		chunk := []any{uint(7)}
-		child := q.relatedChild(desc.relatedTable, desc.relatedTable+"."+desc.secondKey, chunk)
+		child := q.relatedChild(desc.RelatedTable, desc.RelatedTable+"."+desc.SecondKey, chunk)
 		compiled, bindings, err := child.compileSelect()
 		assert.NoError(t, err)
 		assert.Equal(t, `select * from "rel_posts" where "rel_posts"."rel_user_id" in (?)`, compiled)
@@ -117,7 +118,7 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 
 		// The loader passes the related key as a required column, so it survives column pruning and
 		// the dictionary can be keyed off the related rows.
-		child.builder.SetSelects([]any{"title", desc.secondKey})
+		child.query.SetSelects([]any{"title", desc.SecondKey})
 		pruned, prunedBindings, err := child.compileSelect()
 		assert.NoError(t, err)
 		assert.Equal(t, `select "title", "rel_user_id" from "rel_posts" where "rel_posts"."rel_user_id" in (?)`, pruned)
@@ -126,16 +127,16 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 
 	t.Run("related read receives the relation scope", func(t *testing.T) {
 		q := newRelQueryWith(t, &throughScopeCountry{})
-		desc, err := resolveRelation(&throughScopeCountry{}, "Posts")
+		desc, err := relations.ResolveRelation(&throughScopeCountry{}, "Posts")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
-		assert.NotNil(t, desc.onQuery, "the fixture declares OnQuery")
+		assert.NotNil(t, desc.OnQuery, "the fixture declares OnQuery")
 
 		chunk := []any{uint(1), uint(2)}
-		child := q.relatedChild(desc.relatedTable, desc.relatedTable+"."+desc.secondKey, chunk)
-		scoped, ok := desc.onQuery(child).(*Query)
+		child := q.relatedChild(desc.RelatedTable, desc.RelatedTable+"."+desc.SecondKey, chunk)
+		scoped, ok := desc.OnQuery(child).(*OrmBuilder)
 		assert.True(t, ok)
 
 		compiled, bindings, err := scoped.compileSelect()
@@ -154,13 +155,13 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 	// relation field is cleared rather than queried for an IN list that cannot match.
 	t.Run("no parent keys issues no statement", func(t *testing.T) {
 		q := newRelQueryWith(t, &relCountry{})
-		desc, err := resolveRelation(&relCountry{}, "Posts")
+		desc, err := relations.ResolveRelation(&relCountry{}, "Posts")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
 
-		assert.NoError(t, q.loadThrough(nil, &relCountry{}, desc, eagerLoadEntry{relation: "Posts"}, nil, true))
+		assert.NoError(t, q.loadThrough(nil, &relCountry{}, desc, eagerLoadEntry{Relation: "Posts"}, nil, true))
 	})
 	// Drive the loader itself with parent keys. The recording driver hands back one through row,
 	// which is what makes loadThrough run its second read, so the assertion lands on the statements
@@ -168,15 +169,15 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 	// related read. A change to either half of the loader's body fails the test.
 	t.Run("loader reads the through table then the related table", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &relCountry{})
-		desc, err := resolveRelation(&relCountry{}, "Posts")
+		desc, err := relations.ResolveRelation(&relCountry{}, "Posts")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
 
 		// One through row links parent 1 to second key 7; the loader then reads the related row for 7.
-		recorder.returnRows(`from "`+desc.throughTable+`"`,
-			[]string{desc.firstKey, desc.secondLocalKey},
+		recorder.returnRows(`from "`+desc.ThroughTable+`"`,
+			[]string{desc.FirstKey, desc.SecondLocalKey},
 			[]driver.Value{int64(1), int64(7)})
 
 		parents := []reflect.Value{
@@ -184,7 +185,7 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 			reflect.ValueOf(&relCountry{ID: 2}).Elem(),
 		}
 
-		assert.NoError(t, q.loadThrough(parents, &relCountry{}, desc, eagerLoadEntry{relation: "Posts"}, nil, true))
+		assert.NoError(t, q.loadThrough(parents, &relCountry{}, desc, eagerLoadEntry{Relation: "Posts"}, nil, true))
 		assert.Equal(t, 2, recorder.count(), "the loader reads the through table and then the related table")
 
 		through := recorder.at(t, 0)
@@ -203,15 +204,15 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 	// on top of the second-key IN clause the loader builds.
 	t.Run("loader's related read carries the relation scope", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &throughScopeCountry{})
-		desc, err := resolveRelation(&throughScopeCountry{}, "Posts")
+		desc, err := relations.ResolveRelation(&throughScopeCountry{}, "Posts")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
-		assert.NotNil(t, desc.onQuery, "the fixture declares OnQuery")
+		assert.NotNil(t, desc.OnQuery, "the fixture declares OnQuery")
 
-		recorder.returnRows(`from "`+desc.throughTable+`"`,
-			[]string{desc.firstKey, desc.secondLocalKey},
+		recorder.returnRows(`from "`+desc.ThroughTable+`"`,
+			[]string{desc.FirstKey, desc.SecondLocalKey},
 			[]driver.Value{int64(1), int64(7)})
 
 		parents := []reflect.Value{
@@ -219,7 +220,7 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 			reflect.ValueOf(&throughScopeCountry{ID: 2}).Elem(),
 		}
 
-		assert.NoError(t, q.loadThrough(parents, &throughScopeCountry{}, desc, eagerLoadEntry{relation: "Posts"}, nil, true))
+		assert.NoError(t, q.loadThrough(parents, &throughScopeCountry{}, desc, eagerLoadEntry{Relation: "Posts"}, nil, true))
 
 		related := recorder.at(t, 1)
 		assert.Equal(t,
@@ -237,27 +238,27 @@ func TestLoadThrough_ReadsAreCompiled(t *testing.T) {
 func TestLoadThrough_HasOneBranch(t *testing.T) {
 	t.Run("assigns the single related row", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &relCountry{})
-		desc, err := resolveRelation(&relCountry{}, "FirstPost")
+		desc, err := relations.ResolveRelation(&relCountry{}, "FirstPost")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
-		assert.Equal(t, relKindHasOneThrough, desc.kind)
+		assert.Equal(t, relKindHasOneThrough, desc.Kind)
 
 		// One through row links parent 1 to user 7; one related row hangs off user 7.
-		recorder.returnRows(`from "`+desc.throughTable+`"`,
-			[]string{desc.firstKey, desc.secondLocalKey},
+		recorder.returnRows(`from "`+desc.ThroughTable+`"`,
+			[]string{desc.FirstKey, desc.SecondLocalKey},
 			[]driver.Value{int64(1), int64(7)},
 		)
-		recorder.returnRows(`from "`+desc.relatedTable+`"`,
-			[]string{"id", "title", "user_id", desc.secondKey},
+		recorder.returnRows(`from "`+desc.RelatedTable+`"`,
+			[]string{"id", "title", "user_id", desc.SecondKey},
 			[]driver.Value{int64(70), "only", int64(9), int64(7)},
 		)
 
 		country := &relCountry{ID: 1}
 		parents := []reflect.Value{reflect.ValueOf(country).Elem()}
 
-		assert.NoError(t, q.loadThrough(parents, &relCountry{}, desc, eagerLoadEntry{relation: "FirstPost"}, nil, false))
+		assert.NoError(t, q.loadThrough(parents, &relCountry{}, desc, eagerLoadEntry{Relation: "FirstPost"}, nil, false))
 
 		assert.Equal(t, 2, recorder.count(), "the loader reads the through table and then the related table")
 		if assert.NotNil(t, country.FirstPost, "a has-one-through parent gets the related row itself, not a slice") {
@@ -269,7 +270,7 @@ func TestLoadThrough_HasOneBranch(t *testing.T) {
 
 	t.Run("keeps the first of several related rows", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &relCountry{})
-		desc, err := resolveRelation(&relCountry{}, "FirstPost")
+		desc, err := relations.ResolveRelation(&relCountry{}, "FirstPost")
 		assert.NoError(t, err)
 		if err != nil {
 			return
@@ -277,13 +278,13 @@ func TestLoadThrough_HasOneBranch(t *testing.T) {
 
 		// The same parent reaches two users through the through table, each with its own post: a
 		// HasOneThrough keeps one, and it is the first in through-row order.
-		recorder.returnRows(`from "`+desc.throughTable+`"`,
-			[]string{desc.firstKey, desc.secondLocalKey},
+		recorder.returnRows(`from "`+desc.ThroughTable+`"`,
+			[]string{desc.FirstKey, desc.SecondLocalKey},
 			[]driver.Value{int64(1), int64(7)},
 			[]driver.Value{int64(1), int64(8)},
 		)
-		recorder.returnRows(`from "`+desc.relatedTable+`"`,
-			[]string{"id", "title", "user_id", desc.secondKey},
+		recorder.returnRows(`from "`+desc.RelatedTable+`"`,
+			[]string{"id", "title", "user_id", desc.SecondKey},
 			[]driver.Value{int64(70), "first", int64(9), int64(7)},
 			[]driver.Value{int64(80), "second", int64(9), int64(8)},
 		)
@@ -291,7 +292,7 @@ func TestLoadThrough_HasOneBranch(t *testing.T) {
 		country := &relCountry{ID: 1}
 		parents := []reflect.Value{reflect.ValueOf(country).Elem()}
 
-		assert.NoError(t, q.loadThrough(parents, &relCountry{}, desc, eagerLoadEntry{relation: "FirstPost"}, nil, false))
+		assert.NoError(t, q.loadThrough(parents, &relCountry{}, desc, eagerLoadEntry{Relation: "FirstPost"}, nil, false))
 
 		if assert.NotNil(t, country.FirstPost) {
 			assert.Equal(t, uint(70), country.FirstPost.ID, "a has-one-through keeps the first related row")
@@ -300,18 +301,18 @@ func TestLoadThrough_HasOneBranch(t *testing.T) {
 
 	t.Run("unmatched parent is cleared", func(t *testing.T) {
 		q, recorder := newRecordingRelQuery(t, &relCountry{})
-		desc, err := resolveRelation(&relCountry{}, "FirstPost")
+		desc, err := relations.ResolveRelation(&relCountry{}, "FirstPost")
 		assert.NoError(t, err)
 		if err != nil {
 			return
 		}
 
-		recorder.returnRows(`from "`+desc.throughTable+`"`,
-			[]string{desc.firstKey, desc.secondLocalKey},
+		recorder.returnRows(`from "`+desc.ThroughTable+`"`,
+			[]string{desc.FirstKey, desc.SecondLocalKey},
 			[]driver.Value{int64(1), int64(7)},
 		)
-		recorder.returnRows(`from "`+desc.relatedTable+`"`,
-			[]string{"id", "title", "user_id", desc.secondKey},
+		recorder.returnRows(`from "`+desc.RelatedTable+`"`,
+			[]string{"id", "title", "user_id", desc.SecondKey},
 			[]driver.Value{int64(70), "first", int64(9), int64(7)},
 		)
 
@@ -320,7 +321,7 @@ func TestLoadThrough_HasOneBranch(t *testing.T) {
 		unmatched := &relCountry{ID: 2, FirstPost: &relPost{ID: 999, Title: "stale"}}
 		parents := []reflect.Value{reflect.ValueOf(matched).Elem(), reflect.ValueOf(unmatched).Elem()}
 
-		assert.NoError(t, q.loadThrough(parents, &relCountry{}, desc, eagerLoadEntry{relation: "FirstPost"}, nil, false))
+		assert.NoError(t, q.loadThrough(parents, &relCountry{}, desc, eagerLoadEntry{Relation: "FirstPost"}, nil, false))
 
 		if assert.NotNil(t, matched.FirstPost) {
 			assert.Equal(t, "first", matched.FirstPost.Title)
@@ -338,7 +339,7 @@ func TestLoadThrough_HasOneBranch(t *testing.T) {
 // branch would have matched and assigned both.
 func TestLoadOneRelation_HasOneThroughFixture(t *testing.T) {
 	q, recorder := newRecordingRelQuery(t, &hasOneThroughCountry{})
-	q = q.With("FirstPost").(*Query)
+	q = q.With("FirstPost").(*OrmBuilder)
 
 	recorder.returnRows(`from "through_scope_countries"`, []string{"id", "name"},
 		[]driver.Value{int64(1), "Ada"},

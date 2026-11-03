@@ -22,4 +22,18 @@ type SoftDeletes struct {
 type Timestamps struct {
 	CreatedAt *carbon.DateTime `gorm:"autoCreateTime;column:created_at" json:"created_at"`
 	UpdatedAt *carbon.DateTime `gorm:"autoUpdateTime;column:updated_at" json:"updated_at"`
+
+	// Disabled mirrors Eloquent's per-instance $timestamps = false flag: while true, a write leaves
+	// created_at and updated_at to the caller — a value the caller set is still written, an unset
+	// column is left out of an insert so the database's own default applies. Go's zero value must
+	// mean "timestamps on", so the flag is Eloquent's negated, hence the name.
+	Disabled bool `gorm:"-" json:"-"`
+}
+
+// UsesTimestamps reports whether the model instance stamps its automatic timestamps — the
+// per-instance half of Eloquent's HasTimestamps::usesTimestamps, read from Disabled. Eloquent's
+// other half, the suspension a withoutTimestamps scope installs, lives on the query in Go
+// (Query.WithoutTimestamps); the query folds both when it decides whether a write stamps.
+func (t Timestamps) UsesTimestamps() bool {
+	return !t.Disabled
 }

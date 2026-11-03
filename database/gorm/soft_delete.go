@@ -9,7 +9,7 @@ import (
 // Soft-delete decisions shared by the delete path (delete.go) and the compiled read path (sql.go).
 //
 // The predicates themselves are built by the compiled twins — applySoftDelete (sql.go) for reads and
-// compileSoftDeleteUpdate (delete.go) for writes — so nothing here touches a GORM statement. GORM's
+// compileSoftDeleteUpdate (sql.go) for writes — so nothing here touches a GORM statement. GORM's
 // own soft-delete clause deliberately does not apply: the framework models carry
 // orm.DeletedAt, which implements none of the clause interfaces GORM recognises. Both
 // helpers below are gated on the model actually declaring that type, which keeps GORM's behaviour
@@ -17,7 +17,7 @@ import (
 
 // usesFrameworkSoftDelete reports whether the model's soft-delete field is the framework's own
 // type, and therefore needs the predicate built by the compiled path rather than by GORM.
-func (r *Query) usesFrameworkSoftDelete() bool {
+func (r *OrmBuilder) usesFrameworkSoftDelete() bool {
 	return usesFrameworkSoftDeleteModel(r.parentModel())
 }
 

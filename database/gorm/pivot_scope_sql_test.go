@@ -8,7 +8,7 @@ import (
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
 )
 
-// This file pins the exact SQL produced when OnPivotQuery is wired up on the Query.Related(...)
+// This file pins the exact SQL produced when OnPivotQuery is wired up on the OrmBuilder.Related(...)
 // read path for Many2Many / MorphToMany -> new_relation.go:newMany2ManyQuery, by inspecting the
 // SQL Related() emits. The eager-load pivot reads that this file used to replicate through the
 // retired gorm chain are covered where they are built: eager_loader_test.go and
@@ -45,7 +45,7 @@ type scopeRole struct {
 func (scopeRole) TableName() string { return "scope_roles" }
 
 // scopeMorphPost declares a MorphToMany to scopeMorphTag with an OnPivotQuery filtering on
-// deleted_at IS NULL.
+// deleted_at is null.
 type scopeMorphPost struct {
 	ID    uint
 	Title string
@@ -79,8 +79,9 @@ func TestRelated_Many2Many_WithOnPivotQuery_SQL(t *testing.T) {
 	q := newRelQueryWith(t, &scopeUser{})
 	rel := q.Related(&scopeUser{ID: 7}, "Roles")
 	sql := newRelationSQL(t, rel, &[]scopeRole{})
+	// The aliased pivot select rides along with the pivot scope, the shape get() runs.
 	assert.Equal(t,
-		`select * from "scope_roles" inner join "scope_user_roles" ON "scope_user_roles"."scope_role_id" = "scope_roles"."id" where "scope_user_roles"."scope_user_id" = ? and "scope_user_roles"."active" = ?`,
+		`select "scope_roles".*, "scope_user_roles"."scope_user_id" as "pivot_scope_user_id", "scope_user_roles"."scope_role_id" as "pivot_scope_role_id" from "scope_roles" inner join "scope_user_roles" ON "scope_user_roles"."scope_role_id" = "scope_roles"."id" where "scope_user_roles"."scope_user_id" = ? and "scope_user_roles"."active" = ?`,
 		sql,
 	)
 }
@@ -90,7 +91,7 @@ func TestRelated_MorphToMany_WithOnPivotQuery_SQL(t *testing.T) {
 	rel := q.Related(&scopeMorphPost{ID: 3}, "Tags")
 	sql := newRelationSQL(t, rel, &[]scopeMorphTag{})
 	assert.Equal(t,
-		`select * from "scope_morph_tags" inner join "taggables" ON "taggables"."scope_morph_tag_id" = "scope_morph_tags"."id" where "taggables"."taggable_id" = ? and "taggables"."taggable_type" = ? and "taggables"."deleted_at" IS NULL`,
+		`select "scope_morph_tags".*, "taggables"."taggable_id" as "pivot_taggable_id", "taggables"."scope_morph_tag_id" as "pivot_scope_morph_tag_id", "taggables"."taggable_type" as "pivot_taggable_type" from "scope_morph_tags" inner join "taggables" ON "taggables"."scope_morph_tag_id" = "scope_morph_tags"."id" where "taggables"."taggable_id" = ? and "taggables"."taggable_type" = ? and "taggables"."deleted_at" is null`,
 		sql,
 	)
 }
@@ -101,7 +102,7 @@ func TestRelated_Many2Many_WithoutOnPivotQuery_SQL(t *testing.T) {
 	rel := q.Related(&relUser{ID: 7}, "Roles")
 	sql := newRelationSQL(t, rel, &[]relRole{})
 	assert.Equal(t,
-		`select * from "rel_roles" inner join "rel_user_roles" ON "rel_user_roles"."rel_role_id" = "rel_roles"."id" where "rel_user_roles"."rel_user_id" = ?`,
+		`select "rel_roles".*, "rel_user_roles"."rel_user_id" as "pivot_rel_user_id", "rel_user_roles"."rel_role_id" as "pivot_rel_role_id" from "rel_roles" inner join "rel_user_roles" ON "rel_user_roles"."rel_role_id" = "rel_roles"."id" where "rel_user_roles"."rel_user_id" = ?`,
 		sql,
 	)
 }

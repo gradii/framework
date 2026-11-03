@@ -9,6 +9,7 @@ import (
 
 	dbcontract "github.com/gradii/framework/contracts/database/db"
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	"github.com/gradii/framework/database/gorm/relations"
 	"github.com/gradii/framework/errors"
 )
 
@@ -17,24 +18,24 @@ import (
 
 func TestSetRelationFKOnChild_HasMany(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(&relUser{}, "Books")
+	desc, err := relations.ResolveRelation(&relUser{}, "Books")
 	assert.NoError(t, err)
 
 	parent := &relUser{ID: 7}
 	child := &relBook{Title: "x"}
-	err = q.setRelationFKOnChild(parent, child, desc)
+	err = relations.SetRelationFKOnChild(q, relationInfoFromDescriptor(desc, nil, parent), parent, child)
 	assert.NoError(t, err)
 	assert.Equal(t, uint(7), child.UserID)
 }
 
 func TestSetRelationFKOnChild_MorphMany(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(&relUser{}, "Houses")
+	desc, err := relations.ResolveRelation(&relUser{}, "Houses")
 	assert.NoError(t, err)
 
 	parent := &relUser{ID: 9}
 	child := &relHouse{Address: "x"}
-	err = q.setRelationFKOnChild(parent, child, desc)
+	err = relations.SetRelationFKOnChild(q, relationInfoFromDescriptor(desc, nil, parent), parent, child)
 	assert.NoError(t, err)
 	assert.Equal(t, uint(9), child.HouseableID)
 	assert.Equal(t, "rel_users", child.HouseableType)
@@ -42,12 +43,12 @@ func TestSetRelationFKOnChild_MorphMany(t *testing.T) {
 
 func TestSetRelationFKOnChild_MorphOne(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(&relUser{}, "Logo")
+	desc, err := relations.ResolveRelation(&relUser{}, "Logo")
 	assert.NoError(t, err)
 
 	parent := &relUser{ID: 11}
 	child := &relLogo{URL: "x"}
-	err = q.setRelationFKOnChild(parent, child, desc)
+	err = relations.SetRelationFKOnChild(q, relationInfoFromDescriptor(desc, nil, parent), parent, child)
 	assert.NoError(t, err)
 	assert.Equal(t, uint(11), child.LogoableID)
 	assert.Equal(t, "rel_users", child.LogoableType)
@@ -99,8 +100,8 @@ var _ interface {
 	SaveManyRelation(parent any, relation string, children any) error
 	AssociateRelation(parent any, relation string, owner any) error
 	DissociateRelation(parent any, relation string) error
-} = (*Query)(nil)
-var _ contractsorm.Query = (*Query)(nil)
+} = (*OrmBuilder)(nil)
+var _ contractsorm.Query = (*OrmBuilder)(nil)
 
 // --- Sync / Toggle / UpdateExistingPivot ----------------------------------
 
@@ -149,39 +150,39 @@ func TestUpdateExistingPivotRelation_EmptyAttrs_NoOp(t *testing.T) {
 
 func TestBasePivotRow_Many2Many(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(&relUser{}, "Roles")
+	desc, err := relations.ResolveRelation(&relUser{}, "Roles")
 	assert.NoError(t, err)
 
-	row := q.basePivotRow(desc, uint(7), uint(99), nil)
-	assert.Equal(t, uint(7), row[desc.pivotParentRef.foreignColumn])
-	assert.Equal(t, uint(99), row[desc.pivotRelatedRef.foreignColumn])
-	_, hasMorphType := row[desc.morphTypeColumn]
+	row := relations.BasePivotRow(q.writeInfo(desc, &relUser{}), uint(7), uint(99), nil)
+	assert.Equal(t, uint(7), row[desc.PivotParentRef.ForeignColumn])
+	assert.Equal(t, uint(99), row[desc.PivotRelatedRef.ForeignColumn])
+	_, hasMorphType := row[desc.MorphTypeColumn]
 	assert.False(t, hasMorphType, "pure Many2Many must not include morph_type")
 }
 
 func TestBasePivotRow_MorphToMany_IncludesType(t *testing.T) {
 	q := newRelQueryWith(t, &morphPost{})
-	desc, err := resolveRelation(&morphPost{}, "Tags")
+	desc, err := relations.ResolveRelation(&morphPost{}, "Tags")
 	assert.NoError(t, err)
 
-	row := q.basePivotRow(desc, uint(3), uint(11), nil)
+	row := relations.BasePivotRow(q.writeInfo(desc, &morphPost{}), uint(3), uint(11), nil)
 	assert.Equal(t, uint(3), row["taggable_id"])
 	assert.Equal(t, "morph_posts", row["taggable_type"]) // table-name fallback
-	assert.Equal(t, uint(11), row[desc.pivotRelatedRef.foreignColumn])
+	assert.Equal(t, uint(11), row[desc.PivotRelatedRef.ForeignColumn])
 }
 
 func TestBasePivotRow_AttrsOverlay(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(&relUser{}, "Roles")
+	desc, err := relations.ResolveRelation(&relUser{}, "Roles")
 	assert.NoError(t, err)
 
-	row := q.basePivotRow(desc, uint(7), uint(99), map[string]any{
+	row := relations.BasePivotRow(q.writeInfo(desc, &relUser{}), uint(7), uint(99), map[string]any{
 		"priority": "high",
 		"notes":    "x",
 	})
 	assert.Equal(t, "high", row["priority"])
 	assert.Equal(t, "x", row["notes"])
-	assert.Equal(t, uint(7), row[desc.pivotParentRef.foreignColumn])
+	assert.Equal(t, uint(7), row[desc.PivotParentRef.ForeignColumn])
 }
 
 func TestAttachRelation_NotPointerParent(t *testing.T) {
@@ -228,23 +229,23 @@ func TestDetachRelation_NotPointerParent(t *testing.T) {
 
 func TestMutateAssociate_BelongsTo_SetsFK(t *testing.T) {
 	q := newRelQueryWith(t, &relBook{})
-	desc, err := resolveRelation(&relBook{}, "Author")
+	desc, err := relations.ResolveRelation(&relBook{}, "Author")
 	assert.NoError(t, err)
 
 	parent := &relBook{Title: "x", AuthorID: 0}
 	owner := &relUser{ID: 42}
-	err = q.mutateAssociate(parent, owner, desc, false)
+	err = relations.MutateAssociate(q, relationInfoFromDescriptor(desc, nil, parent), parent, owner, false)
 	assert.NoError(t, err)
 	assert.Equal(t, uint(42), parent.AuthorID)
 }
 
 func TestMutateDissociate_BelongsTo_ClearsFK(t *testing.T) {
 	q := newRelQueryWith(t, &relBook{})
-	desc, err := resolveRelation(&relBook{}, "Author")
+	desc, err := relations.ResolveRelation(&relBook{}, "Author")
 	assert.NoError(t, err)
 
 	parent := &relBook{Title: "x", AuthorID: 99}
-	err = q.mutateDissociate(parent, desc, false)
+	err = relations.MutateDissociate(q, relationInfoFromDescriptor(desc, nil, parent), parent, false)
 	assert.NoError(t, err)
 	assert.Equal(t, uint(0), parent.AuthorID)
 }
@@ -255,10 +256,19 @@ func TestAssociateRelation_NotPointerParent(t *testing.T) {
 	assert.True(t, errors.Is(err, errors.OrmRelationParentNotPointer))
 }
 
-func TestAssociateRelation_NilOwner(t *testing.T) {
+// A nil owner is Laravel's associate(null): the write's attribute effect is the dissociate one —
+// foreign key and morph type cleared — so the call must get past the owner guard instead of being
+// rejected as an invalid pointer. The stub dialector cannot execute the save the call ends with, so
+// the guard's outcome is asserted here; the end-to-end clear-and-persist behaviour is covered by
+// the morph_to corpus (TestMorphTo_AssociateMethodIgnoresNullValue).
+func TestAssociateRelation_NilOwnerRoutesToDissociate(t *testing.T) {
+	assert.True(t, relationOwnerIsNil(nil))
+	assert.True(t, relationOwnerIsNil((*relUser)(nil)))
+	assert.False(t, relationOwnerIsNil(&relUser{}))
+
 	q := newRelQueryWith(t, &relBook{})
 	err := q.AssociateRelation(&relBook{}, "Author", nil)
-	assert.True(t, errors.Is(err, errors.OrmRelationParentNotPointer))
+	assert.False(t, errors.Is(err, errors.OrmRelationParentNotPointer))
 }
 
 func TestAssociateRelation_UnsupportedKind_HasMany(t *testing.T) {
@@ -278,12 +288,12 @@ func TestDissociateRelation_UnsupportedKind_HasMany(t *testing.T) {
 
 func TestMutateAssociate_MorphTo_SetsFKAndType(t *testing.T) {
 	q := newRelQueryWith(t, &morphImage{})
-	desc, err := resolveRelation(&morphImage{}, "Imageable")
+	desc, err := relations.ResolveRelation(&morphImage{}, "Imageable")
 	assert.NoError(t, err)
 
 	parent := &morphImage{}
 	owner := &relUser{ID: 3, Name: "n"}
-	err = q.mutateAssociate(parent, owner, desc, true)
+	err = relations.MutateAssociate(q, relationInfoFromDescriptor(desc, nil, parent), parent, owner, true)
 	assert.NoError(t, err)
 	assert.Equal(t, uint(3), parent.ImageableID)
 	assert.Equal(t, "rel_users", parent.ImageableType) // table-name fallback when not registered
@@ -291,11 +301,11 @@ func TestMutateAssociate_MorphTo_SetsFKAndType(t *testing.T) {
 
 func TestMutateDissociate_MorphTo_ClearsFKAndType(t *testing.T) {
 	q := newRelQueryWith(t, &morphImage{})
-	desc, err := resolveRelation(&morphImage{}, "Imageable")
+	desc, err := relations.ResolveRelation(&morphImage{}, "Imageable")
 	assert.NoError(t, err)
 
 	parent := &morphImage{ImageableID: 5, ImageableType: "post"}
-	err = q.mutateDissociate(parent, desc, true)
+	err = relations.MutateDissociate(q, relationInfoFromDescriptor(desc, nil, parent), parent, true)
 	assert.NoError(t, err)
 	assert.Equal(t, uint(0), parent.ImageableID)
 	assert.Equal(t, "", parent.ImageableType)
@@ -322,11 +332,16 @@ func TestFindOrNewRelation_UnsupportedKind_BelongsTo(t *testing.T) {
 	assert.True(t, errors.Is(err, errors.OrmRelationKindNotSupported))
 }
 
-func TestFirstOrNewRelation_UnsupportedKind_Through(t *testing.T) {
+// Through kinds joined the create-or-first family: Laravel routes them through
+// HasOneOrManyThrough's own firstOrNew/firstOrCreate/createOrFirst/updateOrCreate, so the dispatch
+// no longer rejects them before the joined read. The stub dialector cannot execute that read, so
+// the test asserts the call moves past the kind gate; the end-to-end behaviour is covered by
+// tests/database/orm_relation/has_many_through_create_or_first.
+func TestFirstOrNewRelation_ThroughKindIsDispatched(t *testing.T) {
 	q := newRelQueryWith(t, &relCountry{})
 	var dest relPost
 	err := q.FirstOrNewRelation(&relCountry{ID: 1}, "Posts", map[string]any{"title": "x"}, nil, &dest)
-	assert.True(t, errors.Is(err, errors.OrmRelationKindNotSupported))
+	assert.False(t, errors.Is(err, errors.OrmRelationKindNotSupported))
 }
 
 func TestFirstOrCreateRelation_UnsupportedKind_BelongsTo(t *testing.T) {
@@ -336,27 +351,31 @@ func TestFirstOrCreateRelation_UnsupportedKind_BelongsTo(t *testing.T) {
 	assert.True(t, errors.Is(err, errors.OrmRelationKindNotSupported))
 }
 
-func TestUpdateOrCreateRelation_UnsupportedKind_Through(t *testing.T) {
+// Through kinds joined the create-or-first family (see TestFirstOrNewRelation_ThroughKindIsDispatched):
+// updateOrCreate dispatches into the found-or-create flow over the joined read instead of being
+// refused. The stub dialector cannot execute that read; the end-to-end behaviour is covered by
+// tests/database/orm_relation/has_many_through_create_or_first.
+func TestUpdateOrCreateRelation_ThroughKindIsDispatched(t *testing.T) {
 	q := newRelQueryWith(t, &relCountry{})
 	var dest relPost
 	err := q.UpdateOrCreateRelation(&relCountry{ID: 1}, "Posts", map[string]any{"title": "x"}, map[string]any{"content": "y"}, &dest)
-	assert.True(t, errors.Is(err, errors.OrmRelationKindNotSupported))
+	assert.False(t, errors.Is(err, errors.OrmRelationKindNotSupported))
 }
 
 // Phase C tests: PivotTimestamps
 
 func TestBasePivotRow_Timestamps_IncludesCreatedUpdatedAt(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(&relUser{}, "Roles")
+	desc, err := relations.ResolveRelation(&relUser{}, "Roles")
 	assert.NoError(t, err)
 
 	// Enable timestamps by setting the resolved column names directly.
-	desc.pivotCreatedAtColumn = "created_at"
-	desc.pivotUpdatedAtColumn = "updated_at"
+	desc.PivotCreatedAtColumn = "created_at"
+	desc.PivotUpdatedAtColumn = "updated_at"
 
-	row := q.basePivotRow(desc, uint(7), uint(99), nil)
-	assert.Equal(t, uint(7), row[desc.pivotParentRef.foreignColumn])
-	assert.Equal(t, uint(99), row[desc.pivotRelatedRef.foreignColumn])
+	row := relations.BasePivotRow(q.writeInfo(desc, &relUser{}), uint(7), uint(99), nil)
+	assert.Equal(t, uint(7), row[desc.PivotParentRef.ForeignColumn])
+	assert.Equal(t, uint(99), row[desc.PivotRelatedRef.ForeignColumn])
 
 	_, hasCreatedAt := row["created_at"]
 	assert.True(t, hasCreatedAt, "pivot row must include created_at when desc.pivotCreatedAtColumn is set")
@@ -367,14 +386,14 @@ func TestBasePivotRow_Timestamps_IncludesCreatedUpdatedAt(t *testing.T) {
 
 func TestBasePivotRow_Timestamps_AttrsCanOverride(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(&relUser{}, "Roles")
+	desc, err := relations.ResolveRelation(&relUser{}, "Roles")
 	assert.NoError(t, err)
 
-	desc.pivotCreatedAtColumn = "created_at"
-	desc.pivotUpdatedAtColumn = "updated_at"
+	desc.PivotCreatedAtColumn = "created_at"
+	desc.PivotUpdatedAtColumn = "updated_at"
 
 	customTime := "2024-01-01 00:00:00"
-	row := q.basePivotRow(desc, uint(7), uint(99), map[string]any{
+	row := relations.BasePivotRow(q.writeInfo(desc, &relUser{}), uint(7), uint(99), map[string]any{
 		"created_at": customTime,
 	})
 
@@ -385,11 +404,11 @@ func TestBasePivotRow_Timestamps_AttrsCanOverride(t *testing.T) {
 
 func TestBasePivotRow_NoTimestamps_OmitsBoth(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(&relUser{}, "Roles")
+	desc, err := relations.ResolveRelation(&relUser{}, "Roles")
 	assert.NoError(t, err)
 
 	// Empty resolved columns mean "don't auto-stamp".
-	row := q.basePivotRow(desc, uint(7), uint(99), nil)
+	row := relations.BasePivotRow(q.writeInfo(desc, &relUser{}), uint(7), uint(99), nil)
 	_, hasCreatedAt := row["created_at"]
 	_, hasUpdatedAt := row["updated_at"]
 	assert.False(t, hasCreatedAt)
@@ -398,13 +417,13 @@ func TestBasePivotRow_NoTimestamps_OmitsBoth(t *testing.T) {
 
 func TestBasePivotRow_OnlyUpdatedAt_OmitsCreatedAt(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
-	desc, err := resolveRelation(&relUser{}, "Roles")
+	desc, err := relations.ResolveRelation(&relUser{}, "Roles")
 	assert.NoError(t, err)
 
 	// Pivot struct may declare only UpdatedAt (e.g. ledger-style writes); only stamp updated_at.
-	desc.pivotUpdatedAtColumn = "updated_at"
+	desc.PivotUpdatedAtColumn = "updated_at"
 
-	row := q.basePivotRow(desc, uint(7), uint(99), nil)
+	row := relations.BasePivotRow(q.writeInfo(desc, &relUser{}), uint(7), uint(99), nil)
 	_, hasCreatedAt := row["created_at"]
 	_, hasUpdatedAt := row["updated_at"]
 	assert.False(t, hasCreatedAt)
@@ -437,7 +456,7 @@ func TestToggleRelationWithPivot_UnsupportedKind_HasMany(t *testing.T) {
 	assert.True(t, errors.Is(err, errors.OrmRelationKindNotSupported))
 }
 
-// Phase H tests: castKey — normalises SyncResult ids back to the related model's PK type.
+// Phase H tests: relations.CastKey — normalises SyncResult ids back to the related model's PK type.
 
 func TestCastKey(t *testing.T) {
 	uintT := reflect.TypeFor[uint]()
@@ -471,7 +490,7 @@ func TestCastKey(t *testing.T) {
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
-			got := castKey(tt.in, tt.t)
+			got := relations.CastKey(tt.in, tt.t)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -481,32 +500,32 @@ func TestCastKeys(t *testing.T) {
 	uintT := reflect.TypeFor[uint]()
 
 	t.Run("nil slice passthrough", func(t *testing.T) {
-		assert.Nil(t, castKeys(nil, uintT))
+		assert.Nil(t, relations.CastKeys(nil, uintT))
 	})
 	t.Run("empty slice", func(t *testing.T) {
-		assert.Equal(t, []any{}, castKeys([]any{}, uintT))
+		assert.Equal(t, []any{}, relations.CastKeys([]any{}, uintT))
 	})
 	t.Run("mixed input types -> uniform uint", func(t *testing.T) {
-		got := castKeys([]any{int(1), int64(2), "3", uint(4)}, uintT)
+		got := relations.CastKeys([]any{int(1), int64(2), "3", uint(4)}, uintT)
 		assert.Equal(t, []any{uint(1), uint(2), uint(3), uint(4)}, got)
 	})
 	t.Run("nil keyType leaves values untouched", func(t *testing.T) {
-		got := castKeys([]any{int(1), "2"}, nil)
+		got := relations.CastKeys([]any{int(1), "2"}, nil)
 		assert.Equal(t, []any{int(1), "2"}, got)
 	})
 }
 
 // relatedKeyType wiring: descriptor must carry the related model's PK type so castKey can use it.
 func TestDescriptor_RelatedKeyType_Many2Many(t *testing.T) {
-	desc, err := resolveRelation(&relUser{}, "Roles")
+	desc, err := relations.ResolveRelation(&relUser{}, "Roles")
 	assert.NoError(t, err)
-	assert.Equal(t, reflect.TypeFor[uint](), desc.relatedKeyType)
+	assert.Equal(t, reflect.TypeFor[uint](), desc.RelatedKeyType)
 }
 
 func TestDescriptor_RelatedKeyType_MorphToMany(t *testing.T) {
-	desc, err := resolveRelation(&morphPost{}, "Tags")
+	desc, err := relations.ResolveRelation(&morphPost{}, "Tags")
 	assert.NoError(t, err)
-	assert.Equal(t, reflect.TypeFor[uint](), desc.relatedKeyType)
+	assert.Equal(t, reflect.TypeFor[uint](), desc.RelatedKeyType)
 }
 
 // Pivot timestamp resolution tests — exercise the priority order between Pivot struct
@@ -579,28 +598,28 @@ type tsCustomColumnRole struct {
 func (tsCustomColumnRole) TableName() string { return "ts_custom_column_roles" }
 
 func TestResolvePivotTimestamps_AutoCreateTimeTag(t *testing.T) {
-	created, updated, err := resolvePivotTimestamps(&tsTaggedRole{}, "Pivot", false)
+	created, updated, err := relations.ResolvePivotTimestamps(&tsTaggedRole{}, "Pivot", false)
 	assert.NoError(t, err)
 	assert.Equal(t, "stamped", created)
 	assert.Equal(t, "edited", updated)
 }
 
 func TestResolvePivotTimestamps_Convention(t *testing.T) {
-	created, updated, err := resolvePivotTimestamps(&tsConventionRole{}, "Pivot", false)
+	created, updated, err := relations.ResolvePivotTimestamps(&tsConventionRole{}, "Pivot", false)
 	assert.NoError(t, err)
 	assert.Equal(t, "created_at", created)
 	assert.Equal(t, "updated_at", updated)
 }
 
 func TestResolvePivotTimestamps_OnlyCreatedAt(t *testing.T) {
-	created, updated, err := resolvePivotTimestamps(&tsCreatedOnlyRole{}, "Pivot", false)
+	created, updated, err := relations.ResolvePivotTimestamps(&tsCreatedOnlyRole{}, "Pivot", false)
 	assert.NoError(t, err)
 	assert.Equal(t, "created_at", created)
 	assert.Equal(t, "", updated, "no UpdatedAt field means don't auto-stamp on update")
 }
 
 func TestResolvePivotTimestamps_CustomColumnTag(t *testing.T) {
-	created, updated, err := resolvePivotTimestamps(&tsCustomColumnRole{}, "Pivot", false)
+	created, updated, err := relations.ResolvePivotTimestamps(&tsCustomColumnRole{}, "Pivot", false)
 	assert.NoError(t, err)
 	assert.Equal(t, "made_on", created)
 	assert.Equal(t, "edited_at", updated)
@@ -608,14 +627,14 @@ func TestResolvePivotTimestamps_CustomColumnTag(t *testing.T) {
 
 func TestResolvePivotTimestamps_NoStruct_FallbackEnabled(t *testing.T) {
 	// roleWithoutPivot has no Pivot field — falls through to relation-level PivotTimestamps.
-	created, updated, err := resolvePivotTimestamps(&roleWithoutPivot{}, "Pivot", true)
+	created, updated, err := relations.ResolvePivotTimestamps(&roleWithoutPivot{}, "Pivot", true)
 	assert.NoError(t, err)
 	assert.Equal(t, "created_at", created)
 	assert.Equal(t, "updated_at", updated)
 }
 
 func TestResolvePivotTimestamps_NoStruct_FallbackDisabled(t *testing.T) {
-	created, updated, err := resolvePivotTimestamps(&roleWithoutPivot{}, "Pivot", false)
+	created, updated, err := relations.ResolvePivotTimestamps(&roleWithoutPivot{}, "Pivot", false)
 	assert.NoError(t, err)
 	assert.Equal(t, "", created)
 	assert.Equal(t, "", updated)
@@ -623,38 +642,38 @@ func TestResolvePivotTimestamps_NoStruct_FallbackDisabled(t *testing.T) {
 
 func TestResolvePivotTimestamps_StructHasOneCol_FallbackFillsOther(t *testing.T) {
 	// Struct provides only CreatedAt; PivotTimestamps: true fills updated_at default.
-	created, updated, err := resolvePivotTimestamps(&tsCreatedOnlyRole{}, "Pivot", true)
+	created, updated, err := relations.ResolvePivotTimestamps(&tsCreatedOnlyRole{}, "Pivot", true)
 	assert.NoError(t, err)
 	assert.Equal(t, "created_at", created, "struct-provided column wins")
 	assert.Equal(t, "updated_at", updated, "fallback fills the column the struct didn't provide")
 }
 
-// syncResultChanged is a pure function used by syncCore/syncCoreWithPivot to decide whether to
-// call touchIfTouching. Test all branches.
+// relations.SyncResultChanged is the pure function SyncCore / SyncCoreWithPivot use to decide
+// whether to call TouchIfTouching. Test all branches.
 
 func TestSyncResultChanged_AllEmpty(t *testing.T) {
 	out := &dbcontract.SyncResult{}
-	assert.False(t, syncResultChanged(out))
+	assert.False(t, relations.SyncResultChanged(out))
 }
 
 func TestSyncResultChanged_HasAttached(t *testing.T) {
 	out := &dbcontract.SyncResult{Attached: []any{1}}
-	assert.True(t, syncResultChanged(out))
+	assert.True(t, relations.SyncResultChanged(out))
 }
 
 func TestSyncResultChanged_HasDetached(t *testing.T) {
 	out := &dbcontract.SyncResult{Detached: []any{2}}
-	assert.True(t, syncResultChanged(out))
+	assert.True(t, relations.SyncResultChanged(out))
 }
 
 func TestSyncResultChanged_HasUpdated(t *testing.T) {
 	out := &dbcontract.SyncResult{Updated: []any{3}}
-	assert.True(t, syncResultChanged(out))
+	assert.True(t, relations.SyncResultChanged(out))
 }
 
 func TestSyncResultChanged_AllPopulated(t *testing.T) {
 	out := &dbcontract.SyncResult{Attached: []any{1}, Detached: []any{2}, Updated: []any{3}}
-	assert.True(t, syncResultChanged(out))
+	assert.True(t, relations.SyncResultChanged(out))
 }
 
 // applyAttrMap overlays an attrs map onto a target struct via GORM's schema. Tests cover the
@@ -663,7 +682,7 @@ func TestSyncResultChanged_AllPopulated(t *testing.T) {
 func TestApplyAttrMap_EmptyAttrs_NoOp(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
 	dest := &relUser{ID: 5}
-	err := q.applyAttrMap(dest, nil)
+	err := relations.ApplyAttrMap(q, dest, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, uint(5), dest.ID, "dest unchanged")
 }
@@ -671,7 +690,7 @@ func TestApplyAttrMap_EmptyAttrs_NoOp(t *testing.T) {
 func TestApplyAttrMap_EmptyMap_NoOp(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
 	dest := &relUser{ID: 5}
-	err := q.applyAttrMap(dest, map[string]any{})
+	err := relations.ApplyAttrMap(q, dest, map[string]any{})
 	assert.NoError(t, err)
 	assert.Equal(t, uint(5), dest.ID, "dest unchanged")
 }
@@ -680,7 +699,7 @@ func TestApplyAttrMap_UnknownColumn_Skipped(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
 	dest := &relUser{ID: 5}
 	// "no_such_column" doesn't map to any field — applyAttrMap silently skips.
-	err := q.applyAttrMap(dest, map[string]any{"no_such_column": "x"})
+	err := relations.ApplyAttrMap(q, dest, map[string]any{"no_such_column": "x"})
 	assert.NoError(t, err)
 	assert.Equal(t, uint(5), dest.ID, "dest unchanged")
 }
@@ -764,4 +783,153 @@ func TestPivotInsertStatementCarriesEveryColumnARowHolds(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, `insert into "rel_user_roles" ("priority", "role_id", "user_id") values (?, ?, ?), (?, ?, ?)`, statement)
 	assert.Equal(t, []any{nil, 1, 1, "high", 2, 1}, bindings)
+}
+
+// --- the BtM trio dispatch (D1) ------------------------------------------------------------
+
+// The m2m leaf forwards (database/gorm/relations/many2many.go:17/:21/:33 -> the write shells)
+// must reach the shells' m2m branches: before the D1 repair FindOrNew/FirstOrNew/CreateOrFirst on
+// a Many2Many relation stopped at OrmRelationKindNotSupported before doing anything (Laravel's
+// BelongsToMany.php:621/:637/:681 has no such gate). The stub harness has no connection
+// (stubWriter returns nil), so each call now fails later, in the pool lookup; the assertion is
+// that the failure is the missing connection, not the kind gate.
+func TestFindOrNewRelation_Many2Many_Dispatches(t *testing.T) {
+	q := newRelQueryWith(t, &relUser{})
+	err := q.FindOrNewRelation(&relUser{ID: 7}, "Roles", uint(1), &relRole{})
+	assert.True(t, errors.Is(err, errors.DatabaseConnectionIsNil), "want the pool error, got %v", err)
+}
+
+func TestFirstOrNewRelation_Many2Many_Dispatches(t *testing.T) {
+	q := newRelQueryWith(t, &relUser{})
+	err := q.FirstOrNewRelation(&relUser{ID: 7}, "Roles", map[string]any{"name": "admin"}, nil, &relRole{})
+	assert.True(t, errors.Is(err, errors.DatabaseConnectionIsNil), "want the pool error, got %v", err)
+}
+
+func TestFirstOrCreateRelation_Many2Many_Dispatches(t *testing.T) {
+	q := newRelQueryWith(t, &relUser{})
+	err := q.FirstOrCreateRelation(&relUser{ID: 7}, "Roles", map[string]any{"name": "admin"}, nil, &relRole{})
+	assert.True(t, errors.Is(err, errors.DatabaseConnectionIsNil), "want the pool error, got %v", err)
+}
+
+func TestCreateOrFirstRelation_Many2Many_Dispatches(t *testing.T) {
+	q := newRelQueryWith(t, &relUser{})
+	err := q.CreateOrFirstRelation(&relUser{ID: 7}, "Roles", map[string]any{"name": "admin"}, nil, &relRole{})
+	assert.True(t, errors.Is(err, errors.DatabaseConnectionIsNil), "want the pool error, got %v", err)
+}
+
+// --- quiet and OrFail write families -----------------------------------------
+
+// The quiet shells delegate to their base shells on an event-suppressed session, so the base
+// guards still gate them (the same sentinels the base tests assert); the OrFail shells validate
+// the parent before the transaction opens, so their guard paths are testable without a writer.
+
+func TestSaveRelationQuietly_NotPointerParent(t *testing.T) {
+	q := newRelQueryWith(t, &relUser{})
+	err := q.SaveRelationQuietly(relUser{ID: 1}, "Books", &relBook{})
+	assert.True(t, errors.Is(err, errors.OrmRelationParentNotPointer))
+}
+
+func TestSaveRelationQuietly_NilChild(t *testing.T) {
+	q := newRelQueryWith(t, &relUser{})
+	err := q.SaveRelationQuietly(&relUser{ID: 1}, "Books", nil)
+	assert.True(t, errors.Is(err, errors.OrmRelationParentNotPointer))
+}
+
+func TestSaveRelationQuietly_UnsupportedKind_BelongsTo(t *testing.T) {
+	q := newRelQueryWith(t, &relBook{})
+	err := q.SaveRelationQuietly(&relBook{}, "Author", &relUser{})
+	assert.True(t, errors.Is(err, errors.OrmRelationKindNotSupported))
+}
+
+func TestSaveManyRelationQuietly_NonSlice(t *testing.T) {
+	q := newRelQueryWith(t, &relUser{})
+	err := q.SaveManyRelationQuietly(&relUser{ID: 1}, "Books", "not a slice")
+	assert.True(t, errors.Is(err, errors.OrmRelationKindNotSupported))
+}
+
+func TestCreateRelationQuietly_UnsupportedKind_HasManyThrough(t *testing.T) {
+	q := newRelQueryWith(t, &relCountry{})
+	err := q.CreateRelationQuietly(&relCountry{ID: 1}, "Posts", &relPost{})
+	assert.True(t, errors.Is(err, errors.OrmRelationKindNotSupported))
+}
+
+func TestCreateRelationQuietly_UnsupportedKind_BelongsTo(t *testing.T) {
+	q := newRelQueryWith(t, &relBook{})
+	err := q.CreateRelationQuietly(&relBook{ID: 1}, "Author", &relUser{})
+	assert.True(t, errors.Is(err, errors.OrmRelationKindNotSupported))
+}
+
+func TestCreateManyRelationQuietly_NonSlice(t *testing.T) {
+	q := newRelQueryWith(t, &relUser{})
+	err := q.CreateManyRelationQuietly(&relUser{ID: 1}, "Books", "not a slice")
+	assert.True(t, errors.Is(err, errors.OrmRelationUnsupported))
+}
+
+func TestAttachRelationOrFail_NotPointerParent(t *testing.T) {
+	q := newRelQueryWith(t, &relUser{})
+	err := q.AttachRelationOrFail(relUser{}, "Roles", []any{1})
+	assert.True(t, errors.Is(err, errors.OrmRelationParentNotPointer))
+}
+
+func TestDetachRelationOrFail_NotPointerParent(t *testing.T) {
+	q := newRelQueryWith(t, &relUser{})
+	_, err := q.DetachRelationOrFail(relUser{}, "Roles", nil)
+	assert.True(t, errors.Is(err, errors.OrmRelationParentNotPointer))
+}
+
+func TestSyncRelationOrFail_NotPointerParent(t *testing.T) {
+	q := newRelQueryWith(t, &relUser{})
+	_, err := q.SyncRelationOrFail(relUser{}, "Roles", []any{1})
+	assert.True(t, errors.Is(err, errors.OrmRelationParentNotPointer))
+}
+
+func TestSyncWithoutDetachingRelationOrFail_NotPointerParent(t *testing.T) {
+	q := newRelQueryWith(t, &relUser{})
+	_, err := q.SyncWithoutDetachingRelationOrFail(relUser{}, "Roles", []any{1})
+	assert.True(t, errors.Is(err, errors.OrmRelationParentNotPointer))
+}
+
+func TestSyncRelationWithPivotValuesOrFail_NotPointerParent(t *testing.T) {
+	q := newRelQueryWith(t, &relUser{})
+	_, err := q.SyncRelationWithPivotValuesOrFail(relUser{}, "Roles", []any{1}, map[string]any{"priority": "high"})
+	assert.True(t, errors.Is(err, errors.OrmRelationParentNotPointer))
+}
+
+func TestToggleRelationOrFail_NotPointerParent(t *testing.T) {
+	q := newRelQueryWith(t, &relUser{})
+	_, err := q.ToggleRelationOrFail(relUser{}, "Roles", []any{1})
+	assert.True(t, errors.Is(err, errors.OrmRelationParentNotPointer))
+}
+
+func TestUpdateExistingPivotRelationOrFail_NotPointerParent(t *testing.T) {
+	q := newRelQueryWith(t, &relUser{})
+	_, err := q.UpdateExistingPivotRelationOrFail(relUser{}, "Roles", 1, map[string]any{"priority": "high"})
+	assert.True(t, errors.Is(err, errors.OrmRelationParentNotPointer))
+}
+
+// Compile assertion: *OrmBuilder carries the quiet / OrFail shells the object layer forwards to
+// (the relations.Builder widening for the write families).
+var _ interface {
+	SaveRelationQuietly(parent any, relation string, child any) error
+	SaveManyRelationQuietly(parent any, relation string, children any) error
+	CreateRelationQuietly(parent any, relation string, dest any) error
+	CreateManyRelationQuietly(parent any, relation string, dests any) error
+	AttachRelationOrFail(parent any, relation string, ids []any) error
+	DetachRelationOrFail(parent any, relation string, ids []any) (int64, error)
+	SyncRelationOrFail(parent any, relation string, ids []any) (*dbcontract.SyncResult, error)
+	SyncWithoutDetachingRelationOrFail(parent any, relation string, ids []any) (*dbcontract.SyncResult, error)
+	SyncRelationWithPivotValuesOrFail(parent any, relation string, ids []any, pivotValues map[string]any) (*dbcontract.SyncResult, error)
+	ToggleRelationOrFail(parent any, relation string, ids []any) (*dbcontract.SyncResult, error)
+	UpdateExistingPivotRelationOrFail(parent any, relation string, id any, attrs map[string]any) (int64, error)
+} = (*OrmBuilder)(nil)
+
+// UpdateOrCreateRelation's Many2Many arm is Laravel's BelongsToMany::updateOrCreate — firstOrCreate's
+// three-level search (firstOrCreateMany2Many) plus the conditional fill/save — so it must reach that
+// search, whose first read is the pivot-joined relation read: with no connection the call fails in
+// the pool lookup, not at a kind gate (a gate is what the pre-D1 shells had, BelongsToMany.php:707
+// has none).
+func TestUpdateOrCreateRelation_Many2Many_Dispatches(t *testing.T) {
+	q := newRelQueryWith(t, &relUser{})
+	err := q.UpdateOrCreateRelation(&relUser{ID: 7}, "Roles", map[string]any{"name": "admin"}, map[string]any{"name": "root"}, &relRole{})
+	assert.True(t, errors.Is(err, errors.DatabaseConnectionIsNil), "want the pool error, got %v", err)
 }

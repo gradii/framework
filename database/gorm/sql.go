@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	contractsdriver "github.com/gradii/framework/contracts/database/driver"
-	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	"github.com/gradii/framework/database/gorm/relations"
 	querybuilder "github.com/gradii/framework/database/query"
 	"github.com/gradii/framework/database/query/core"
 	"github.com/gradii/framework/errors"
@@ -23,7 +23,7 @@ import (
 //
 // A raw statement is used as given: the caller wrote the whole thing, so none of the query's own
 // clauses — including the soft-delete predicate — are applied to it.
-func (r *Query) compileSelect() (string, []any, error) {
+func (r *OrmBuilder) compileSelect() (string, []any, error) {
 	if raw := r.conditions.raw; raw != nil {
 		return fmt.Sprint(raw.query), raw.args, nil
 	}
@@ -32,6 +32,16 @@ func (r *Query) compileSelect() (string, []any, error) {
 	if err != nil {
 		return "", nil, err
 	}
+
+	// A many-to-many relation read wears its own select list — the related columns plus the pivot
+	// columns aliased pivot_<column> — the way BelongsToMany::shouldSelect gives get()/first()/
+	// sole()/find()/cursor() theirs (and prepareQueryBuilder gives chunk()/each()/lazy()).
+	r.applyPivotReadSelect(builder)
+
+	// A through relation read wears its own select list — the related columns plus the
+	// laravel_through_key alias — the way HasOneOrManyThrough::shouldSelect gives get()/first()/
+	// cursor()/find() theirs.
+	r.applyThroughReadSelect(builder)
 
 	sql, bindings := builder.ToSelectSQL()
 	if err := builder.Error(); err != nil {
@@ -43,14 +53,14 @@ func (r *Query) compileSelect() (string, []any, error) {
 
 // compileFirst renders the query as the single-row select First uses: the model's primary key
 // orders it when the caller asked for no order, and one row is returned.
-func (r *Query) compileFirst() (string, []any, error) {
-	if len(r.builder.State().Orders) == 0 {
+func (r *OrmBuilder) compileFirst() (string, []any, error) {
+	if len(r.query.State().Orders) == 0 {
 		if column := r.primaryKeyColumn(); column != "" {
-			r.builder.OrderByRaw(column, nil)
+			r.query.OrderByRaw(column, nil)
 		}
 	}
 
-	r.builder.Limit(1)
+	r.query.Limit(1)
 
 	sql, bindings, err := r.compileSelect()
 	if err != nil {
@@ -60,25 +70,21 @@ func (r *Query) compileFirst() (string, []any, error) {
 	return sql, bindings, nil
 }
 
-// primaryKeyColumnName returns the model's first primary key column, unqualified, or "" when the
-// model declares none.
-func (r *Query) primaryKeyColumnName() string {
-	model := r.parentModel()
-	if model == nil {
-		return ""
+// compileFind renders the read Find performs. Laravel's find($id) is whereKey($id)->first(): the
+// scalar form reads one row and its statement carries `limit 1` with no ordering — unlike first(),
+// which this ORM also orders by the model's key. A key list or a caller's own conditions keep the
+// query's shape, so findMany's get() stays unlimited.
+func (r *OrmBuilder) compileFind(conds []any) (string, []any, error) {
+	if isScalarFindKey(conds) {
+		r.query.Limit(1)
 	}
 
-	schema, err := parseSchema(model)
-	if err != nil || len(schema.PrimaryFields) == 0 {
-		return ""
-	}
-
-	return schema.PrimaryFields[0].DBName
+	return r.compileSelect()
 }
 
 // primaryKeyColumn returns the model's first primary key column, qualified by its table, or "" when
 // the model declares none.
-func (r *Query) primaryKeyColumn() string {
+func (r *OrmBuilder) primaryKeyColumn() string {
 	model := r.parentModel()
 	if model == nil {
 		return ""
@@ -93,7 +99,7 @@ func (r *Query) primaryKeyColumn() string {
 }
 
 // compileAggregate renders the query as an aggregate select, such as a count.
-func (r *Query) compileAggregate(function string, columns []any) (string, []any, error) {
+func (r *OrmBuilder) compileAggregate(function string, columns []any) (string, []any, error) {
 	builder, err := r.newBuilder()
 	if err != nil {
 		return "", nil, err
@@ -117,8 +123,9 @@ func (r *Query) compileAggregate(function string, columns []any) (string, []any,
 // that would remove every row is refused rather than compiled. The query's scopes — the caller's own
 // and the model's global ones — are folded in first, so a scope's where is what the guard sees: GORM
 // built the scopes onto the statement and then checked it, and a scoped delete is safe for the same
-// reason an explicit one is.
-func (r *Query) compileDelete() (string, []any, error) {
+// reason an explicit one is. The guard reads the compiled where clause (hasWhereConditions), so the
+// model's soft-delete predicate counts the same way.
+func (r *OrmBuilder) compileDelete() (string, []any, error) {
 	query := r.withScopesApplied()
 
 	builder, err := query.newBuilder()
@@ -126,7 +133,7 @@ func (r *Query) compileDelete() (string, []any, error) {
 		return "", nil, err
 	}
 
-	if !query.applyDeleteKeyWhere(builder) && !query.hasWhereConditions() {
+	if !query.applyDeleteKeyWhere(builder) && !query.hasWhereConditions(builder) {
 		return "", nil, errors.OrmMissingWhereClause
 	}
 
@@ -139,13 +146,13 @@ func (r *Query) compileDelete() (string, []any, error) {
 }
 
 // compileUpdate renders the query as an update statement for the given values.
-func (r *Query) compileUpdate(values map[string]any) (string, []any, error) {
+func (r *OrmBuilder) compileUpdate(values map[string]any) (string, []any, error) {
 	return r.compileUpdateScoped(values, false)
 }
 
 // compileSoftDeleteUpdate renders the update a soft delete rewrites into, which is scoped the way a
 // delete is rather than the way an update is.
-func (r *Query) compileSoftDeleteUpdate(values map[string]any) (string, []any, error) {
+func (r *OrmBuilder) compileSoftDeleteUpdate(values map[string]any) (string, []any, error) {
 	return r.compileUpdateScoped(values, true)
 }
 
@@ -157,8 +164,11 @@ func (r *Query) compileSoftDeleteUpdate(values map[string]any) (string, []any, e
 // statement that would write every row is refused rather than compiled.
 //
 // The query's scopes — the caller's own and the model's global ones — are folded in before the guard,
-// as they are for a delete, so a scope's where satisfies it.
-func (r *Query) compileUpdateScoped(values map[string]any, byDest bool) (string, []any, error) {
+// as they are for a delete, so a scope's where satisfies it, and so does the model's soft-delete
+// predicate: the guard reads the compiled where clause (hasWhereConditions), which is how Laravel's
+// `User::query()->increment('id')` updates the live rows alone. Only a statement whose where clause
+// would be empty is refused.
+func (r *OrmBuilder) compileUpdateScoped(values map[string]any, byDest bool) (string, []any, error) {
 	query := r.withScopesApplied()
 
 	builder, err := query.newBuilder()
@@ -171,7 +181,7 @@ func (r *Query) compileUpdateScoped(values map[string]any, byDest bool) (string,
 		keyed = query.applyDeleteKeyWhere(builder) || keyed
 	}
 
-	if !keyed && !query.hasWhereConditions() {
+	if !keyed && !query.hasWhereConditions(builder) {
 		return "", nil, errors.OrmMissingWhereClause
 	}
 
@@ -188,9 +198,11 @@ func (r *Query) compileUpdateScoped(values map[string]any, byDest bool) (string,
 //
 // The subqueries are appended to whatever columns the caller already asked for, so the parent's own
 // columns still come first and the row can be scanned into the model. Each alias is the one fixed when
-// the sub-select was queued: aggregateAlias' `<relation>_<fn>[_<column>]` shape, or the explicit alias
-// of a contractsorm.RelationCount, so the column comes back under the name the caller expects.
-func (r *Query) applySelectSubAggregates(builder *querybuilder.Builder) error {
+// the sub-select was queued - a "rel as alias" rename, the explicit alias of a
+// contractsorm.RelationCount, or aggregateAlias' Str::snake derivation - so the column comes back
+// under the name the caller expects and the connector renders lowercase `as`, the way
+// Builder::selectSub emits it.
+func (r *OrmBuilder) applySelectSubAggregates(builder *querybuilder.Builder) error {
 	if len(r.conditions.selectSubs) == 0 {
 		return nil
 	}
@@ -201,7 +213,7 @@ func (r *Query) applySelectSubAggregates(builder *querybuilder.Builder) error {
 	}
 
 	for _, sub := range r.conditions.selectSubs {
-		desc, err := resolveRelation(parent, sub.relation)
+		desc, err := relations.ResolveRelation(parent, sub.relation)
 		if err != nil {
 			return err
 		}
@@ -218,7 +230,8 @@ func (r *Query) applySelectSubAggregates(builder *querybuilder.Builder) error {
 
 		alias := sub.alias
 		if alias == "" {
-			alias = aggregateAlias(sub.relation, sub.function, sub.column)
+			columnValue, _ := aggregateColumnValue(sub.column)
+			alias = aggregateAlias(sub.relation, sub.function, columnValue)
 		}
 
 		if sub.function == "exists" {
@@ -229,7 +242,7 @@ func (r *Query) applySelectSubAggregates(builder *querybuilder.Builder) error {
 			continue
 		}
 
-		builder.SelectRaw("("+subquery+") AS "+r.ident(alias), bindings)
+		builder.SelectRaw("("+subquery+") as "+r.ident(alias), bindings)
 	}
 
 	return nil
@@ -239,9 +252,12 @@ func (r *Query) applySelectSubAggregates(builder *querybuilder.Builder) error {
 // builder already holds the SQL clauses (select, join, where, group, having, order, limit, offset,
 // distinct, lock); this clones it and adds the ORM-specific parts that compile differently per
 // statement: table, where, relation-existence subqueries, soft-delete predicate, and select-subs.
-func (r *Query) newBuilder() (*querybuilder.Builder, error) {
-	// A scope is a function the caller queued with Scopes, or one addGlobalScopes folded in from the
-	// model. They mutate the query, so they're applied first.
+func (r *OrmBuilder) newBuilder() (*querybuilder.Builder, error) {
+	// A queued scope is one of the model's global scopes, folded in by addGlobalScopes: Laravel
+	// registers global scopes with withGlobalScope() and applies them when the statement compiles
+	// (applyScopes), and this is that compile-time application. The caller's own Scopes() call
+	// applied immediately (Builder::scopes) and left nothing queued. The scopes mutate the query,
+	// so they run first.
 	if len(r.conditions.scopes) > 0 {
 		scoped := r.withScopesApplied()
 		if scoped.conditions.err != nil {
@@ -259,7 +275,7 @@ func (r *Query) newBuilder() (*querybuilder.Builder, error) {
 
 	// Clone the persistent builder so compiling multiple statements from the same query doesn't
 	// accumulate state (soft-delete predicate, relation subqueries).
-	builder := r.builder.Clone()
+	builder := r.query.Clone()
 
 	if err := r.applyTable(builder); err != nil {
 		return nil, err
@@ -277,7 +293,9 @@ func (r *Query) newBuilder() (*querybuilder.Builder, error) {
 		return nil, err
 	}
 
-	r.applyWhere(builder)
+	// The where clause is already complete on the clone: the declared where methods and the
+	// conditions the ORM records internally (Find's, the FirstOr* fold's, the pivot chain's) all
+	// write to the persistent builder when they are called.
 
 	// Relation existence conditions join the where clause before the soft-delete predicate, which is
 	// the order GORM built them in.
@@ -295,15 +313,26 @@ func (r *Query) newBuilder() (*querybuilder.Builder, error) {
 	return builder, nil
 }
 
-// applySoftDelete adds the soft-delete predicate when the model declares the framework's soft-delete
-// type and the statement is not unscoped: "deleted_at IS NULL" by default, "deleted_at IS NOT NULL"
-// when OnlyTrashed asked for the trashed rows alone. WithTrashed drops the predicate entirely, so it
-// is only ignored here when OnlyTrashed has not overridden it.
-func (r *Query) applySoftDelete(builder *querybuilder.Builder) error {
+// applySoftDelete adds the model's soft-delete predicate when the statement is not unscoped:
+// "is null" by default, "is not null" when OnlyTrashed asked for the trashed rows alone. The
+// predicate is written as a structured where so the grammar compiles it through compileWhereNull -
+// the same lowercase path Laravel's SoftDeletingScope::apply uses - instead of as a raw fragment.
+// WithTrashed drops the predicate entirely, so it is only ignored here when OnlyTrashed has not
+// overridden it.
+func (r *OrmBuilder) applySoftDelete(builder *querybuilder.Builder) error {
 	if (r.conditions.withTrashed && !r.conditions.onlyTrashed) || !r.usesFrameworkSoftDelete() {
 		return nil
 	}
 
+	return r.appendSoftDeletePredicate(builder, r.conditions.onlyTrashed)
+}
+
+// appendSoftDeletePredicate writes the model's soft-delete predicate onto a compiled builder through
+// the builder's own WhereNull, so the grammar renders Laravel's compileWhereNull output ("is null",
+// lowercase - "is not null" for the trashed side). It is shared by the compiled reads
+// (applySoftDelete) and by the nested where closure a child query merges from, whose OnlyTrashed
+// cannot wait for applySoftDelete: the child is never compiled on its own.
+func (r *OrmBuilder) appendSoftDeletePredicate(builder *querybuilder.Builder, not bool) error {
 	model := r.parentModel()
 	if model == nil {
 		return nil
@@ -319,22 +348,16 @@ func (r *Query) applySoftDelete(builder *querybuilder.Builder) error {
 		return err
 	}
 
-	operator := "IS NULL"
-	if r.conditions.onlyTrashed {
-		operator = "IS NOT NULL"
-	}
-
-	builder.WhereRaw(r.ident(table, column)+" "+operator, nil, core.BooleanAnd)
+	builder.WhereNull(table+"."+column, core.BooleanAnd, not)
 
 	return nil
 }
 
-// applyTable points the builder at the query's table, whether it was named directly or derived from
-// the model.
-func (r *Query) applyTable(builder *querybuilder.Builder) error {
-	if r.conditions.table != nil {
-		builder.From(r.conditions.table.name, "")
-
+// applyTable points the builder at the query's table when it was not named directly: a table named
+// through Table() is already the from clause the clone carries, and only a query without one derives
+// it from the model.
+func (r *OrmBuilder) applyTable(builder *querybuilder.Builder) error {
+	if builder.State().From != nil {
 		return nil
 	}
 
@@ -352,80 +375,54 @@ func (r *Query) applyTable(builder *querybuilder.Builder) error {
 	return nil
 }
 
-// applyWhere translates the conditions' where clauses onto the builder.
-//
-// The shapes are the ones the ORM accepts: a raw fragment with its bindings, a column with its
-// value, a slice standing for an IN list, a callback producing a nested group, and the JSON
-// operators the conditions mark with a type.
-func (r *Query) applyWhere(builder *querybuilder.Builder) *querybuilder.Builder {
-	for _, item := range r.conditions.where {
-		boolean := core.BooleanAnd
-		if item.Or {
-			boolean = core.BooleanOr
-		}
-
-		r.applySingleWhere(builder, item, boolean)
-	}
-
-	return builder
+// applySingleWhere writes one internally recorded condition onto a builder in the shape the ORM
+// records it: a raw fragment with its bindings, a column with its value, or the "col in ?"
+// shorthand. addWhere routes the pivot chain's conditions through it at call time; the declared
+// where methods write straight to the query builder when they are called, the way Eloquent's do.
+func (r *OrmBuilder) applySingleWhere(builder *querybuilder.Builder, item contractsdriver.Where, boolean string) {
+	applyWhereShape(builder, item.Query, item.Args, boolean, item.IsNot)
 }
 
-func (r *Query) applySingleWhere(builder *querybuilder.Builder, item contractsdriver.Where, boolean string) {
-	switch item.Type {
-	case contractsdriver.WhereTypeJsonContains:
-		builder.WhereJsonContains(fmt.Sprint(item.Query), firstArg(item.Args), boolean, item.IsNot)
-
-		return
-	case contractsdriver.WhereTypeJsonContainsKey:
-		builder.WhereJsonContainsKey(fmt.Sprint(item.Query), boolean, item.IsNot)
-
-		return
-	case contractsdriver.WhereTypeJsonLength:
-		// WhereJsonLength is the one shape with no boolean argument on the builder: its plain method
-		// is hard-wired to "and", so an OrWhereJsonLength used to compile to "and" and its clause
-		// could only match when the other side also matched. The builder's own orWhereJsonLength is
-		// the OR counterpart, so pick it when the condition carries the "or" connector.
-		if boolean == core.BooleanOr {
-			builder.OrWhereJsonLength(fmt.Sprint(item.Query), item.Args...)
-		} else {
-			builder.WhereJsonLength(fmt.Sprint(item.Query), item.Args...)
-		}
+// applyWhereShape applies one condition to the builder in the shape the ORM records internally: a
+// raw fragment with its bindings, a column with its value, a slice standing for an IN list, or a
+// string carrying a slice for the "col in ?" shorthand Find's conditions and the pivot chain queue.
+// The declared where methods do not pass through here; they write to the inner builder directly, and
+// raw SQL has its own entry point in WhereRaw.
+func applyWhereShape(builder *querybuilder.Builder, query any, args []any, boolean string, not bool) {
+	if column, ok := query.(string); ok {
+		applyRawOrColumnWhere(builder, column, args, boolean, not)
 
 		return
 	}
 
-	switch query := item.Query.(type) {
-	case string:
-		switch {
-		case len(item.Args) == 0:
-			builder.WhereRaw(query, nil, boolean)
-		case len(item.Args) == 1 && isSlice(item.Args[0]) && !isByteSlice(item.Args[0]) && containsPlaceholder(query):
-			// A raw fragment whose one placeholder is fed a slice is the ORM's "col in ?" shorthand
-			// (the pivot and WhereAny chains emit the same "… IN ?" shape). The GORM-backed builder
-			// expanded the slice into one placeholder per value, wrapped in parentheses; binding the
-			// slice whole leaves one placeholder against N bindings, and the database rejects the
-			// statement. Expand it the same way, leaving every other fragment shape on the WhereRaw
-			// path below.
-			//
-			// A byte slice is not a list: isSlice also matches []byte, but a caller binds bytes to the
-			// fragment's placeholder as one binary value, so it must keep the single placeholder and
-			// fall through to WhereRaw below. Laravel renders the same fragment with one placeholder,
-			// because a PHP string (its only byte-string type) is a single value (oracle.php).
-			expanded, bindings := expandPlaceholderSlice(query, item.Args[0])
-			builder.WhereRaw(expanded, bindings, boolean)
-		case containsPlaceholder(query):
-			builder.WhereRaw(query, item.Args, boolean)
-		case len(item.Args) == 1 && isSlice(item.Args[0]) && !isByteSlice(item.Args[0]):
-			builder.WhereIn(query, item.Args[0], boolean, item.IsNot)
-		default:
-			applySimpleWhere(builder, query, item.Args, boolean)
-		}
-	case func(contractsorm.Query) contractsorm.Query:
-		builder.WhereNested(func(nested *querybuilder.Builder) *querybuilder.Builder {
-			return r.applyNestedWhere(query, nested)
-		}, boolean)
+	applySimpleWhere(builder, query, args, boolean)
+}
+
+// applyRawOrColumnWhere routes a string condition: a fragment carrying a placeholder is rendered raw
+// (the shape Builder::whereRaw takes), a bare fragment with no bindings likewise, and anything else
+// is a column with its value.
+func applyRawOrColumnWhere(builder *querybuilder.Builder, column string, args []any, boolean string, not bool) {
+	switch {
+	case len(args) == 0:
+		builder.WhereRaw(column, nil, boolean)
+	case len(args) == 1 && isSlice(args[0]) && !isByteSlice(args[0]) && containsPlaceholder(column):
+		// A raw fragment whose one placeholder is fed a slice is the ORM's "col in ?" shorthand,
+		// which the pivot chain and Find's conditions queue. The builder expands the slice into one
+		// placeholder per value, wrapped in parentheses; binding the slice whole leaves one
+		// placeholder against N bindings, and the database rejects the statement.
+		//
+		// A byte slice is not a list: isSlice also matches []byte, but a caller binds bytes to the
+		// fragment's placeholder as one binary value, so it must keep the single placeholder and
+		// fall through to WhereRaw below. Laravel renders the same fragment with one placeholder,
+		// because a PHP string (its only byte-string type) is a single value (oracle.php).
+		expanded, bindings := expandPlaceholderSlice(column, args[0])
+		builder.WhereRaw(expanded, bindings, boolean)
+	case containsPlaceholder(column):
+		builder.WhereRaw(column, args, boolean)
+	case len(args) == 1 && isSlice(args[0]) && !isByteSlice(args[0]):
+		builder.WhereIn(column, args[0], boolean, not)
 	default:
-		applySimpleWhere(builder, item.Query, item.Args, boolean)
+		applySimpleWhere(builder, column, args, boolean)
 	}
 }
 
@@ -445,23 +442,6 @@ func applySimpleWhere(builder *querybuilder.Builder, query any, args []any, bool
 	default:
 		builder.Where(query, args...)
 	}
-}
-
-// applyNestedWhere runs a callback against a child builder, so an `or` group the caller wrote keeps
-// its own grouping.
-func (r *Query) applyNestedWhere(callback func(contractsorm.Query) contractsorm.Query, builder *querybuilder.Builder) *querybuilder.Builder {
-	child := NewQuery(r.ctx, r.config, r.dbConfig, r.writer, r.tx, r.grammar, r.log, r.modelToObserver, nil, r.telemetryResolver, r.components)
-	child.queryGrammar = r.queryGrammar
-	child.conditions = r.conditions
-	child.conditions.where = nil
-
-	// The child compiles its own wheres onto the builder it was handed.
-	result := callback(child)
-	if nested, ok := result.(*Query); ok {
-		return nested.applyWhere(builder)
-	}
-
-	return builder
 }
 
 // expandPlaceholderSlice rewrites the fragment's first binding placeholder into one placeholder per
@@ -521,11 +501,38 @@ func containsPlaceholder(query string) bool {
 	return false
 }
 
-// firstArg returns the first binding, or nil when there is none.
-func firstArg(args []any) any {
-	if len(args) == 0 {
-		return nil
+// applyInSliceGroup compiles an IN or NOT IN condition whose value is a slice for the WhereAll /
+// WhereAny / WhereNone family: one WhereIn per column, joined by inner and wrapped in one nested
+// group carrying group. Mirrors database/db's expandInGroup, and the empty list keeps the grammar's
+// "0 = 1" (matches nothing) and "1 = 1" (matches everything) constants. It reports false when the
+// condition is not an IN against a slice, so the caller falls back to the family's builder method.
+func applyInSliceGroup(builder *querybuilder.Builder, columns []string, operator, value any, inner, group string) bool {
+	if !isInOperator(operator) {
+		return false
+	}
+	values, ok := sliceValues(value)
+	if !ok {
+		return false
 	}
 
-	return args[0]
+	not := isNotInOperator(operator)
+	builder.WhereNested(func(b *querybuilder.Builder) *querybuilder.Builder {
+		for _, column := range columns {
+			b.WhereIn(column, values, inner, not)
+		}
+
+		return b
+	}, group)
+
+	return true
+}
+
+// toStrings converts a string slice to []any for the builder.
+func toStrings(values []string) []any {
+	out := make([]any, len(values))
+	for i, value := range values {
+		out[i] = value
+	}
+
+	return out
 }

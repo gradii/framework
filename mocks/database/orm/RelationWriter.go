@@ -250,6 +250,54 @@ func (_c *RelationWriter_CreateMany_Call) RunAndReturn(run func(interface{}) err
 	return _c
 }
 
+// CreateOrFirst provides a mock function with given fields: attrs, values, dest
+func (_m *RelationWriter) CreateOrFirst(attrs map[string]interface{}, values map[string]interface{}, dest interface{}) error {
+	ret := _m.Called(attrs, values, dest)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreateOrFirst")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(map[string]interface{}, map[string]interface{}, interface{}) error); ok {
+		r0 = rf(attrs, values, dest)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// RelationWriter_CreateOrFirst_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateOrFirst'
+type RelationWriter_CreateOrFirst_Call struct {
+	*mock.Call
+}
+
+// CreateOrFirst is a helper method to define mock.On call
+//   - attrs map[string]interface{}
+//   - values map[string]interface{}
+//   - dest interface{}
+func (_e *RelationWriter_Expecter) CreateOrFirst(attrs interface{}, values interface{}, dest interface{}) *RelationWriter_CreateOrFirst_Call {
+	return &RelationWriter_CreateOrFirst_Call{Call: _e.mock.On("CreateOrFirst", attrs, values, dest)}
+}
+
+func (_c *RelationWriter_CreateOrFirst_Call) Run(run func(attrs map[string]interface{}, values map[string]interface{}, dest interface{})) *RelationWriter_CreateOrFirst_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(map[string]interface{}), args[1].(map[string]interface{}), args[2].(interface{}))
+	})
+	return _c
+}
+
+func (_c *RelationWriter_CreateOrFirst_Call) Return(_a0 error) *RelationWriter_CreateOrFirst_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *RelationWriter_CreateOrFirst_Call) RunAndReturn(run func(map[string]interface{}, map[string]interface{}, interface{}) error) *RelationWriter_CreateOrFirst_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Detach provides a mock function with given fields: ids
 func (_m *RelationWriter) Detach(ids ...interface{}) (int64, error) {
 	var _ca []interface{}
@@ -499,6 +547,100 @@ func (_c *RelationWriter_FirstOrNew_Call) Return(_a0 error) *RelationWriter_Firs
 }
 
 func (_c *RelationWriter_FirstOrNew_Call) RunAndReturn(run func(map[string]interface{}, map[string]interface{}, interface{}) error) *RelationWriter_FirstOrNew_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Make provides a mock function with given fields: attrs, dest
+func (_m *RelationWriter) Make(attrs map[string]interface{}, dest interface{}) error {
+	ret := _m.Called(attrs, dest)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Make")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(map[string]interface{}, interface{}) error); ok {
+		r0 = rf(attrs, dest)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// RelationWriter_Make_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Make'
+type RelationWriter_Make_Call struct {
+	*mock.Call
+}
+
+// Make is a helper method to define mock.On call
+//   - attrs map[string]interface{}
+//   - dest interface{}
+func (_e *RelationWriter_Expecter) Make(attrs interface{}, dest interface{}) *RelationWriter_Make_Call {
+	return &RelationWriter_Make_Call{Call: _e.mock.On("Make", attrs, dest)}
+}
+
+func (_c *RelationWriter_Make_Call) Run(run func(attrs map[string]interface{}, dest interface{})) *RelationWriter_Make_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(map[string]interface{}), args[1].(interface{}))
+	})
+	return _c
+}
+
+func (_c *RelationWriter_Make_Call) Return(_a0 error) *RelationWriter_Make_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *RelationWriter_Make_Call) RunAndReturn(run func(map[string]interface{}, interface{}) error) *RelationWriter_Make_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// MakeMany provides a mock function with given fields: records, dests
+func (_m *RelationWriter) MakeMany(records []map[string]interface{}, dests interface{}) error {
+	ret := _m.Called(records, dests)
+
+	if len(ret) == 0 {
+		panic("no return value specified for MakeMany")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func([]map[string]interface{}, interface{}) error); ok {
+		r0 = rf(records, dests)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// RelationWriter_MakeMany_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'MakeMany'
+type RelationWriter_MakeMany_Call struct {
+	*mock.Call
+}
+
+// MakeMany is a helper method to define mock.On call
+//   - records []map[string]interface{}
+//   - dests interface{}
+func (_e *RelationWriter_Expecter) MakeMany(records interface{}, dests interface{}) *RelationWriter_MakeMany_Call {
+	return &RelationWriter_MakeMany_Call{Call: _e.mock.On("MakeMany", records, dests)}
+}
+
+func (_c *RelationWriter_MakeMany_Call) Run(run func(records []map[string]interface{}, dests interface{})) *RelationWriter_MakeMany_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].([]map[string]interface{}), args[1].(interface{}))
+	})
+	return _c
+}
+
+func (_c *RelationWriter_MakeMany_Call) Return(_a0 error) *RelationWriter_MakeMany_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *RelationWriter_MakeMany_Call) RunAndReturn(run func([]map[string]interface{}, interface{}) error) *RelationWriter_MakeMany_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1197,6 +1339,76 @@ func (_c *RelationWriter_UpdateOrCreate_Call) Return(_a0 error) *RelationWriter_
 }
 
 func (_c *RelationWriter_UpdateOrCreate_Call) RunAndReturn(run func(map[string]interface{}, map[string]interface{}, interface{}) error) *RelationWriter_UpdateOrCreate_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Upsert provides a mock function with given fields: values, uniqueBy, update
+func (_m *RelationWriter) Upsert(values []map[string]interface{}, uniqueBy []string, update ...interface{}) (*db.Result, error) {
+	var _ca []interface{}
+	_ca = append(_ca, values, uniqueBy)
+	_ca = append(_ca, update...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Upsert")
+	}
+
+	var r0 *db.Result
+	var r1 error
+	if rf, ok := ret.Get(0).(func([]map[string]interface{}, []string, ...interface{}) (*db.Result, error)); ok {
+		return rf(values, uniqueBy, update...)
+	}
+	if rf, ok := ret.Get(0).(func([]map[string]interface{}, []string, ...interface{}) *db.Result); ok {
+		r0 = rf(values, uniqueBy, update...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*db.Result)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func([]map[string]interface{}, []string, ...interface{}) error); ok {
+		r1 = rf(values, uniqueBy, update...)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// RelationWriter_Upsert_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Upsert'
+type RelationWriter_Upsert_Call struct {
+	*mock.Call
+}
+
+// Upsert is a helper method to define mock.On call
+//   - values []map[string]interface{}
+//   - uniqueBy []string
+//   - update ...interface{}
+func (_e *RelationWriter_Expecter) Upsert(values interface{}, uniqueBy interface{}, update ...interface{}) *RelationWriter_Upsert_Call {
+	return &RelationWriter_Upsert_Call{Call: _e.mock.On("Upsert",
+		append([]interface{}{values, uniqueBy}, update...)...)}
+}
+
+func (_c *RelationWriter_Upsert_Call) Run(run func(values []map[string]interface{}, uniqueBy []string, update ...interface{})) *RelationWriter_Upsert_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]interface{}, len(args)-2)
+		for i, a := range args[2:] {
+			if a != nil {
+				variadicArgs[i] = a.(interface{})
+			}
+		}
+		run(args[0].([]map[string]interface{}), args[1].([]string), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *RelationWriter_Upsert_Call) Return(_a0 *db.Result, _a1 error) *RelationWriter_Upsert_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RelationWriter_Upsert_Call) RunAndReturn(run func([]map[string]interface{}, []string, ...interface{}) (*db.Result, error)) *RelationWriter_Upsert_Call {
 	_c.Call.Return(run)
 	return _c
 }

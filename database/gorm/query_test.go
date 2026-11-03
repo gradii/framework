@@ -3,6 +3,7 @@ package gorm
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"reflect"
 	"testing"
 	"time"
@@ -18,6 +19,7 @@ import (
 	databasedriver "github.com/gradii/framework/database/driver"
 	databaseorm "github.com/gradii/framework/database/orm"
 	querybuilder "github.com/gradii/framework/database/query"
+	"github.com/gradii/framework/database/query/core"
 	"github.com/gradii/framework/errors"
 	mocksconfig "github.com/gradii/framework/mocks/config"
 	"github.com/gradii/framework/support/carbon"
@@ -27,13 +29,13 @@ func TestAddGlobalScopes(t *testing.T) {
 
 	tests := []struct {
 		name                  string
-		setupQuery            func() *Query
+		setupQuery            func() *OrmBuilder
 		expectedScopesApplied bool
 		expectedScopesCount   int
 	}{
 		{
 			name: "should apply global scopes when model implements ModelWithGlobalScopes",
-			setupQuery: func() *Query {
+			setupQuery: func() *OrmBuilder {
 				conditions := Conditions{}
 				conditions.model = &ModelWithGlobalScopes{}
 				query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
@@ -44,7 +46,7 @@ func TestAddGlobalScopes(t *testing.T) {
 		},
 		{
 			name: "should not apply global scopes when model does not implement ModelWithGlobalScopes",
-			setupQuery: func() *Query {
+			setupQuery: func() *OrmBuilder {
 				conditions := Conditions{}
 				conditions.model = &ModelWithoutGlobalScopes{}
 				query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
@@ -55,7 +57,7 @@ func TestAddGlobalScopes(t *testing.T) {
 		},
 		{
 			name: "should not apply global scopes when withoutGlobalScopes contains '*'",
-			setupQuery: func() *Query {
+			setupQuery: func() *OrmBuilder {
 				conditions := Conditions{}
 				conditions.model = &ModelWithGlobalScopes{}
 				conditions.withoutGlobalScopes = []string{"*"}
@@ -67,7 +69,7 @@ func TestAddGlobalScopes(t *testing.T) {
 		},
 		{
 			name: "should exclude specific scope when in withoutGlobalScopes",
-			setupQuery: func() *Query {
+			setupQuery: func() *OrmBuilder {
 				conditions := Conditions{}
 				conditions.model = &ModelWithGlobalScopes{}
 				conditions.withoutGlobalScopes = []string{"active"}
@@ -79,7 +81,7 @@ func TestAddGlobalScopes(t *testing.T) {
 		},
 		{
 			name: "should not apply scopes when model is nil",
-			setupQuery: func() *Query {
+			setupQuery: func() *OrmBuilder {
 				conditions := Conditions{}
 				query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
 				return query
@@ -89,7 +91,7 @@ func TestAddGlobalScopes(t *testing.T) {
 		},
 		{
 			name: "should use dest when model is nil but dest is set",
-			setupQuery: func() *Query {
+			setupQuery: func() *OrmBuilder {
 				conditions := Conditions{}
 				conditions.dest = &ModelWithGlobalScopes{}
 				query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
@@ -99,8 +101,8 @@ func TestAddGlobalScopes(t *testing.T) {
 			expectedScopesCount:   2, // active and verified scopes
 		},
 		{
-			name: "should not apply scopes when model has empty GlobalScopes map",
-			setupQuery: func() *Query {
+			name: "should not apply scopes when model has empty GlobalScopes list",
+			setupQuery: func() *OrmBuilder {
 				conditions := Conditions{}
 				conditions.model = &ModelWithEmptyGlobalScopes{}
 				query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
@@ -110,19 +112,19 @@ func TestAddGlobalScopes(t *testing.T) {
 			expectedScopesCount:   0,
 		},
 		{
-			name: "should apply scopes in sorted order by name",
-			setupQuery: func() *Query {
+			name: "should apply scopes in declaration order",
+			setupQuery: func() *OrmBuilder {
 				conditions := Conditions{}
 				conditions.model = &ModelWithGlobalScopes{}
 				query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
 				return query
 			},
 			expectedScopesApplied: true,
-			expectedScopesCount:   2, // Scopes applied in order: active, verified (alphabetically)
+			expectedScopesCount:   2, // Scopes applied in declaration order: active, verified
 		},
 		{
 			name: "should exclude multiple scopes when multiple names in withoutGlobalScopes",
-			setupQuery: func() *Query {
+			setupQuery: func() *OrmBuilder {
 				conditions := Conditions{}
 				conditions.model = &ModelWithGlobalScopes{}
 				conditions.withoutGlobalScopes = []string{"active", "verified"}
@@ -225,62 +227,80 @@ func TestAddGlobalScopesWithSliceAndArray(t *testing.T) {
 	}
 }
 
+// basicWhereColumns reads the (column, value) pairs off a builder's where list, so the pins below
+// observe the single ordered list the statement compiles from.
+func basicWhereColumns(t *testing.T, query *OrmBuilder) []contractsdriver.Where {
+	t.Helper()
+
+	var out []contractsdriver.Where
+	for _, item := range query.query.State().Wheres {
+		require.Equal(t, core.WhereBasic, item.Type)
+		require.Equal(t, "=", item.Operator)
+		out = append(out, contractsdriver.Where{Query: item.Column, Args: []any{item.Value}})
+	}
+
+	return out
+}
+
+// addWhere writes to the query builder when it is called — each condition is on State().Wheres at
+// once, in call order — and a clone owns its own list, so a condition added to the clone never
+// reaches the original.
 func TestAddWhere(t *testing.T) {
-	query := &Query{builder: querybuilder.NewBuilder(nil)}
+	query := &OrmBuilder{query: querybuilder.NewBuilder(nil)}
 	query = query.addWhere(contractsdriver.Where{
 		Query: "name",
 		Args:  []any{"test"},
-	}).(*Query)
+	}).(*OrmBuilder)
 	query = query.addWhere(contractsdriver.Where{
 		Query: "name1",
 		Args:  []any{"test1"},
-	}).(*Query)
+	}).(*OrmBuilder)
 	query = query.addWhere(contractsdriver.Where{
 		Query: "name2",
 		Args:  []any{"test2"},
-	}).(*Query)
+	}).(*OrmBuilder)
 	query1 := query.clone().addWhere(contractsdriver.Where{
 		Query: "name3",
 		Args:  []any{"test3"},
-	}).(*Query)
+	}).(*OrmBuilder)
 
 	assert.Equal(t, []contractsdriver.Where{
 		{Query: "name", Args: []any{"test"}},
 		{Query: "name1", Args: []any{"test1"}},
 		{Query: "name2", Args: []any{"test2"}},
-	}, query.conditions.where)
+	}, basicWhereColumns(t, query))
 
 	assert.Equal(t, []contractsdriver.Where{
 		{Query: "name", Args: []any{"test"}},
 		{Query: "name1", Args: []any{"test1"}},
 		{Query: "name2", Args: []any{"test2"}},
 		{Query: "name3", Args: []any{"test3"}},
-	}, query1.conditions.where)
+	}, basicWhereColumns(t, query1))
 
 	query2 := query.clone().addWhere(contractsdriver.Where{
 		Query: "name4",
 		Args:  []any{"test4"},
-	}).(*Query)
+	}).(*OrmBuilder)
 
 	assert.Equal(t, []contractsdriver.Where{
 		{Query: "name", Args: []any{"test"}},
 		{Query: "name1", Args: []any{"test1"}},
 		{Query: "name2", Args: []any{"test2"}},
 		{Query: "name4", Args: []any{"test4"}},
-	}, query2.conditions.where)
+	}, basicWhereColumns(t, query2))
 
 	assert.Equal(t, []contractsdriver.Where{
 		{Query: "name", Args: []any{"test"}},
 		{Query: "name1", Args: []any{"test1"}},
 		{Query: "name2", Args: []any{"test2"}},
-	}, query.conditions.where)
+	}, basicWhereColumns(t, query))
 
 	assert.Equal(t, []contractsdriver.Where{
 		{Query: "name", Args: []any{"test"}},
 		{Query: "name1", Args: []any{"test1"}},
 		{Query: "name2", Args: []any{"test2"}},
 		{Query: "name3", Args: []any{"test3"}},
-	}, query1.conditions.where)
+	}, basicWhereColumns(t, query1))
 }
 
 func TestFilterFindConditions(t *testing.T) {
@@ -405,7 +425,7 @@ func TestGetModelConnection(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			query := &Query{builder: querybuilder.NewBuilder(nil),
+			query := &OrmBuilder{query: querybuilder.NewBuilder(nil),
 				conditions: Conditions{
 					model: test.model,
 				},
@@ -418,7 +438,7 @@ func TestGetModelConnection(t *testing.T) {
 }
 
 func TestGetObserver(t *testing.T) {
-	query := &Query{
+	query := &OrmBuilder{
 		modelToObserver: []contractsorm.ModelToObserver{
 			{
 				Model:    User{},
@@ -962,9 +982,9 @@ func TestObserverEvent(t *testing.T) {
 }
 
 func TestWhen(t *testing.T) {
-	query := &Query{}
-	trueQuery := &Query{builder: querybuilder.NewBuilder(nil)}
-	falseQuery := &Query{builder: querybuilder.NewBuilder(nil)}
+	query := &OrmBuilder{}
+	trueQuery := &OrmBuilder{query: querybuilder.NewBuilder(nil)}
+	falseQuery := &OrmBuilder{query: querybuilder.NewBuilder(nil)}
 
 	callback := func(q contractsorm.Query) contractsorm.Query {
 		assert.Same(t, query, q)
@@ -1093,14 +1113,14 @@ type ModelWithGlobalScopes struct {
 
 func (ModelWithGlobalScopes) TableName() string { return "model_with_global_scopes" }
 
-func (m *ModelWithGlobalScopes) GlobalScopes() map[string]func(contractsorm.Query) contractsorm.Query {
-	return map[string]func(contractsorm.Query) contractsorm.Query{
-		"active": func(query contractsorm.Query) contractsorm.Query {
+func (m *ModelWithGlobalScopes) GlobalScopes() []contractsorm.GlobalScope {
+	return []contractsorm.GlobalScope{
+		{Name: "active", Scope: func(query contractsorm.Query) contractsorm.Query {
 			return query.Where("active", true)
-		},
-		"verified": func(query contractsorm.Query) contractsorm.Query {
+		}},
+		{Name: "verified", Scope: func(query contractsorm.Query) contractsorm.Query {
 			return query.Where("verified", true)
-		},
+		}},
 	}
 }
 
@@ -1109,8 +1129,8 @@ type ModelWithEmptyGlobalScopes struct {
 	Name string
 }
 
-func (m *ModelWithEmptyGlobalScopes) GlobalScopes() map[string]func(contractsorm.Query) contractsorm.Query {
-	return map[string]func(contractsorm.Query) contractsorm.Query{}
+func (m *ModelWithEmptyGlobalScopes) GlobalScopes() []contractsorm.GlobalScope {
+	return nil
 }
 
 // getColumnsUser is the fixture for TestBasicSelectWithGetColumns: a bare model whose table is
@@ -1126,7 +1146,7 @@ func (getColumnsUser) TableName() string { return "users" }
 // the compiled read executes, so the SQL Get sends can be inspected with no database behind it. The
 // connection names no driver, so the identifiers are quoted with double quotes and bindings stay "?",
 // which is Laravel's generic grammar and the shape the corpus pins.
-func newGetColumnsQuery(t *testing.T) (*Query, *recordingSQLDriver) {
+func newGetColumnsQuery(t *testing.T) (*OrmBuilder, *recordingSQLDriver) {
 	t.Helper()
 
 	recorder := &recordingSQLDriver{}
@@ -1152,37 +1172,37 @@ func TestBasicSelectWithGetColumns(t *testing.T) {
 	var first []getColumnsUser
 	assert.NoError(t, query.Get(&first))
 	assert.Equal(t, `select * from "users"`, recorder.last(t).sql)
-	assert.Empty(t, query.builder.Selects())
+	assert.Empty(t, query.query.Selects())
 
 	// get(['foo', 'bar']) renders the two columns transiently.
 	var second []getColumnsUser
 	assert.NoError(t, query.Get(&second, []string{"foo", "bar"}))
 	assert.Equal(t, `select "foo", "bar" from "users"`, recorder.last(t).sql)
-	assert.Empty(t, query.builder.Selects())
+	assert.Empty(t, query.query.Selects())
 
 	// get('baz') wraps the single column name.
 	var third []getColumnsUser
 	assert.NoError(t, query.Get(&third, "baz"))
 	assert.Equal(t, `select "baz" from "users"`, recorder.last(t).sql)
-	assert.Empty(t, query.builder.Selects())
+	assert.Empty(t, query.query.Selects())
 
 	// toSql() is unchanged: the transient columns never touched the query.
 	statement, _, err := query.compileSelect()
 	assert.NoError(t, err)
 	assert.Equal(t, `select * from "users"`, statement)
-	assert.Empty(t, query.builder.Selects())
+	assert.Empty(t, query.query.Selects())
 }
 
 // Laravel's onceWithColumns ignores the Get columns whenever a raw selection is already present.
 func TestGetColumnsKeepsExistingRawSelect(t *testing.T) {
 	base, recorder := newGetColumnsQuery(t)
-	query := base.clone().SelectRaw("count(*) as total").(*Query)
+	query := base.clone().SelectRaw("count(*) as total").(*OrmBuilder)
 	var rows []struct{ Total int64 }
 
 	require.NoError(t, query.Get(&rows, "name"))
 	assert.Equal(t, `select count(*) as total from "users"`, recorder.last(t).sql)
 	assert.Empty(t, recorder.last(t).args)
-	assert.Empty(t, base.builder.Selects())
+	assert.Empty(t, base.query.Selects())
 
 	statement, bindings, err := query.compileSelect()
 	require.NoError(t, err)
@@ -1250,3 +1270,42 @@ func (discardQueryLogger) Warningf(context.Context, string, ...any)             
 func (discardQueryLogger) Errorf(context.Context, string, ...any)                      {}
 func (discardQueryLogger) Panicf(context.Context, string, ...any)                      {}
 func (discardQueryLogger) Trace(context.Context, *carbon.Carbon, string, int64, error) {}
+
+// TestGetColumnsKeepsAScopeProvidedSelectMatchesTheOracle pins the scope-before-onceWithColumns
+// timing for Get: Eloquent's get($columns) applies the scopes first, so a model whose global scope
+// writes the select list keeps that list for the read and the requested columns are never
+// installed (oracle, illuminate/database v12.55.1, executed against sqlite: scope
+// selectRaw('name') + get(['email']) compiles `select name from "users"` and the rows carry only
+// name; scope select('name') + get(['email']) compiles `select "name" from "users"`).
+func TestGetColumnsKeepsAScopeProvidedSelectMatchesTheOracle(t *testing.T) {
+	t.Run("selectRaw scope", func(t *testing.T) {
+		query, recorder := newRecordingRelQuery(t, &pluckScopeRawUser{})
+		recorder.returnRows(`from "users"`, []string{"name"},
+			[]driver.Value{"Taylor"},
+			[]driver.Value{"Abigail"})
+
+		users := []pluckScopeRawUser{}
+		require.NoError(t, query.Get(&users, "users.email"))
+
+		assert.Equal(t, `select name from "users"`, recorder.last(t).sql)
+		assert.Equal(t, []pluckScopeRawUser{{Name: "Taylor"}, {Name: "Abigail"}}, users)
+
+		// The receiver keeps its own state: nothing was installed on it, and the scope still
+		// applies to a statement compiled from it.
+		assert.Empty(t, query.query.Selects())
+		statement, _, err := query.addGlobalScopes().compileSelect()
+		require.NoError(t, err)
+		assert.Equal(t, `select name from "users"`, statement)
+	})
+
+	t.Run("select scope", func(t *testing.T) {
+		query, recorder := newRecordingRelQuery(t, &pluckScopeSelectUser{})
+		recorder.returnRows(`from "users"`, []string{"name"}, []driver.Value{"Taylor"})
+
+		users := []pluckScopeSelectUser{}
+		require.NoError(t, query.Get(&users, "users.email"))
+
+		assert.Equal(t, `select "name" from "users"`, recorder.last(t).sql)
+		assert.Equal(t, []pluckScopeSelectUser{{Name: "Taylor"}}, users)
+	})
+}

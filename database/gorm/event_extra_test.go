@@ -11,7 +11,7 @@ import (
 // unset).
 func TestEvent_Context_NilCtx(t *testing.T) {
 	// A query built for compilation alone carries no context, so neither does the event.
-	q := &Query{}
+	q := &OrmBuilder{}
 	e := NewEvent(q, &testEventModel, nil)
 	assert.Nil(t, e.Context())
 }
@@ -21,7 +21,7 @@ func TestEvent_Context_ReturnsCtx(t *testing.T) {
 	type ctxKey int
 	const k ctxKey = 1
 	ctx := context.WithValue(context.Background(), k, "value")
-	q := &Query{ctx: ctx}
+	q := &OrmBuilder{ctx: ctx}
 	e := NewEvent(q, &testEventModel, nil)
 	assert.Equal(t, "value", e.Context().Value(k))
 }
@@ -39,7 +39,7 @@ func TestEvent_IsClean_InverseOfIsDirty(t *testing.T) {
 // itself carries — the same one the compiled statement writes by.
 func TestEvent_ValidColumnFollowsTheQueryFilter(t *testing.T) {
 	selecting := compiledQuery(t, &testEventModel, Conditions{})
-	selecting.builder.Select("Name")
+	selecting.query.Select("Name")
 
 	event := NewEvent(selecting, &testEventModel, &TestEventModel{})
 

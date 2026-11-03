@@ -51,7 +51,7 @@ func TestQueryPoolResolvesTheTransactionHandle(t *testing.T) {
 	t.Cleanup(func() { _ = sqlDB.Close() })
 
 	// Outside a transaction the pool is the base *sql.DB.
-	plain := &Query{writer: sqlDB, builder: querybuilder.NewBuilder(nil)}
+	plain := &OrmBuilder{writer: sqlDB, query: querybuilder.NewBuilder(nil)}
 	assert.False(t, plain.inTransaction())
 
 	writer, err := plain.queryPool()
@@ -62,7 +62,7 @@ func TestQueryPoolResolvesTheTransactionHandle(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = tx.Rollback() })
 
-	inTx := &Query{writer: sqlDB, tx: tx, builder: querybuilder.NewBuilder(nil)}
+	inTx := &OrmBuilder{writer: sqlDB, tx: tx, query: querybuilder.NewBuilder(nil)}
 	assert.True(t, inTx.inTransaction())
 
 	pool, err := inTx.queryPool()

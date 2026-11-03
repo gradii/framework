@@ -631,14 +631,15 @@ type GlobalScope struct {
 
 func (GlobalScope) TableName() string { return "global_scopes" }
 
-func (r *GlobalScope) GlobalScopes() map[string]func(contractsorm.Query) contractsorm.Query {
-	return map[string]func(contractsorm.Query) contractsorm.Query{
-		"name": func(query contractsorm.Query) contractsorm.Query {
-			return query.Where("name", "name_scope")
-		},
-		"avatar": func(query contractsorm.Query) contractsorm.Query {
+func (r *GlobalScope) GlobalScopes() []contractsorm.GlobalScope {
+	// Declared in the order the global-scope pins read: avatar first, then name.
+	return []contractsorm.GlobalScope{
+		{Name: "avatar", Scope: func(query contractsorm.Query) contractsorm.Query {
 			return query.Where("avatar", "avatar_scope")
-		},
+		}},
+		{Name: "name", Scope: func(query contractsorm.Query) contractsorm.Query {
+			return query.Where("name", "name_scope")
+		}},
 	}
 }
 

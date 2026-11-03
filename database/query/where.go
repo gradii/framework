@@ -875,6 +875,17 @@ func (b *Builder) addArrayOfWheres(column any, boolean string, method string) *B
 	}, boolean)
 }
 
+// AddArrayOfWheres expands an array first argument under an explicit boolean. Mirrors
+// Builder::addArrayOfWheres() (Query/Builder.php:928), reached from where()'s is_array branch
+// (Query/Builder.php:823); the ORM's Eloquent level needs it because Eloquent's whereNot is
+// where($column, $operator, $value, $boolean.' not') (Eloquent Builder.php:407), so its array form
+// arrives here as where(array, 'and not') and every column entry is negated inside the one nested
+// group — `and not (not "b" = ? and not "c" = ?)`. (The raw builder's own WhereNot deliberately
+// keeps Query\Builder::whereNot's shape, which nests twice: `and not (("b" = ? and "c" = ?))`.)
+func (b *Builder) AddArrayOfWheres(column any, boolean string) *Builder {
+	return b.addArrayOfWheres(column, boolean, "where")
+}
+
 // addArrayWhere adds one entry of an array of wheres. Laravel splats the entry's values into the target
 // method as ($column, $operator, $value, boolean: $boolean); args is the operator/value tail after the
 // column, so a two-element entry is the "=" shorthand and a three-element entry carries its operator.

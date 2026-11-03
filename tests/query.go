@@ -77,7 +77,7 @@ func NewTestQuery(ctx context.Context, driver contractsdriver.Driver, config con
 		config: config,
 		db:     db,
 		driver: driver,
-		query:  databasegorm.NewQuery(ctx, config, pool.Writers[0], writer, nil, driver.Grammar(), utils.NewTestLog(), nil, nil, nil, components),
+		query:  databasegorm.NewOrmBuilder(ctx, config, pool.Writers[0], writer, nil, driver.Grammar(), utils.NewTestLog(), nil, nil, nil, components),
 	}
 
 	return testQuery, nil

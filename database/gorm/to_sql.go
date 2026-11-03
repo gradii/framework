@@ -14,11 +14,11 @@ import (
 // so the reported statement is the one that would actually run — dialect placeholders and all.
 type ToSql struct {
 	log   log.Log
-	query *Query
+	query *OrmBuilder
 	raw   bool
 }
 
-func NewToSql(query *Query, log log.Log, raw bool) *ToSql {
+func NewToSql(query *OrmBuilder, log log.Log, raw bool) *ToSql {
 	return &ToSql{
 		log:   log,
 		query: query,
@@ -54,7 +54,7 @@ func (r *ToSql) Create(value any) string {
 func (r *ToSql) Delete(dests ...any) string {
 	var (
 		dest  any
-		query *Query
+		query *OrmBuilder
 	)
 
 	if len(dests) > 0 {
@@ -86,7 +86,7 @@ func (r *ToSql) Find(dest any, conds ...any) string {
 	query := r.query.dest(dest).addGlobalScopes().buildConditions()
 	query = query.withFindConditions(conds)
 
-	statement, bindings, err := query.compileSelect()
+	statement, bindings, err := query.compileFind(conds)
 
 	return r.render(statement, bindings, err)
 }
@@ -102,14 +102,14 @@ func (r *ToSql) First(dest any) string {
 func (r *ToSql) ForceDelete(dests ...any) string {
 	var (
 		dest  any
-		query *Query
+		query *OrmBuilder
 	)
 
 	if len(dests) > 0 {
 		dest = dests[0]
-		query = r.query.dest(dest).WithTrashed().(*Query).addGlobalScopes().buildConditions()
+		query = r.query.dest(dest).WithTrashed().(*OrmBuilder).addGlobalScopes().buildConditions()
 	} else {
-		query = r.query.WithTrashed().(*Query).addGlobalScopes().buildConditions()
+		query = r.query.WithTrashed().(*OrmBuilder).addGlobalScopes().buildConditions()
 	}
 
 	statement, bindings, err := query.compileDelete()
@@ -125,12 +125,35 @@ func (r *ToSql) Get(dest any) string {
 func (r *ToSql) Pluck(column string, dest any) string {
 	// dest names the model the plucked column belongs to, exactly as it does when the ORM runs
 	// Pluck through the model: without it the select compiles with no FROM clause.
-	query := r.query.dest(dest).addGlobalScopes().buildConditions()
+	//
+	// The global scopes are folded in before the onceWithColumns decision, the way pluck() reads
+	// through toBase() (applyScopes()->getQuery()): a scope's select()/selectRaw() is already in
+	// the columns when the decision runs, so the preview reports `select name from "users"` for a
+	// selectRaw('name') scope and `select "name" from "users"` for a select('name') scope (oracle,
+	// illuminate/database v12.55.1, executed against sqlite).
+	query := r.query.dest(dest).addGlobalScopes().withScopesApplied().buildConditions()
 
-	// The column replaces whatever select list the query carried, which is what the executed form does.
-	query.builder.SetSelects([]any{column})
-	_ = query.builder.SetBindings(nil, "select")
-	query.conditions.raw = nil
+	// Builder::pluck installs the column through onceWithColumns, which writes the select list
+	// only when the query carries none: a select list the caller pre-set survives, a queued
+	// selectSub counts as one (withAggregate writes `from.*` and the subselect into Laravel's
+	// columns before pluck runs), and the receiver keeps the state the caller gave it, so a
+	// preview compiled afterwards does not wear the pluck select (oracle, illuminate/database
+	// v12.55.1, executed against sqlite: withCount('posts')->pluck('email') compiles
+	// `select "users".*, (select count(*) from "posts" where "users"."id" = "posts"."user_id") as
+	// "posts_count" from "users"`; `$q->pluck('email'); $q->pluck('name')` compiles `select
+	// "email" from "users"` then `select "name" from "users"`). withScopesApplied hands back a
+	// private copy, which also satisfies the restore half of onceWithColumns: the installed column
+	// is written back when the preview completes because the copy is dropped.
+	if query.query.Selects() == nil && len(query.conditions.selectSubs) == 0 {
+		query.query.SetSelects([]any{column})
+		_ = query.query.SetBindings(nil, "select")
+		query.conditions.raw = nil
+	}
+
+	// pluck() is forwarded to the Eloquent builder in Laravel, which writes its own select list —
+	// or keeps the caller's — so neither relation read's aliases are appended (the oracle measures
+	// `select "email" from "users" inner join "friends" ...` for a many-to-many read).
+	query = query.withoutThroughReadSelect().withoutPivotReadSelect()
 
 	statement, bindings, err := query.compileSelect()
 

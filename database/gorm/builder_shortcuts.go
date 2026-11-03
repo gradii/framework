@@ -27,22 +27,22 @@ import (
 // WhereKey constrains the query to the row(s) with the given primary key. Mirrors Builder::whereKey:
 // a model stands for its own key, a slice for several keys, and the column is qualified by the
 // model's table so a joined statement still compares the model's own id.
-func (r *Query) WhereKey(id any) contractsorm.Query {
+func (r *OrmBuilder) WhereKey(id any) contractsorm.Query {
 	return r.whereKey(id, false)
 }
 
 // WhereKeyNot excludes the row(s) with the given primary key. Mirrors Builder::whereKeyNot.
-func (r *Query) WhereKeyNot(id any) contractsorm.Query {
+func (r *OrmBuilder) WhereKeyNot(id any) contractsorm.Query {
 	return r.whereKey(id, true)
 }
 
 // Except excludes the given models by primary key. Mirrors Builder::except, which is whereKeyNot
 // over the models' keys.
-func (r *Query) Except(models any) contractsorm.Query {
+func (r *OrmBuilder) Except(models any) contractsorm.Query {
 	return r.whereKey(models, true)
 }
 
-func (r *Query) whereKey(id any, not bool) contractsorm.Query {
+func (r *OrmBuilder) whereKey(id any, not bool) contractsorm.Query {
 	// The column is table-qualified but left bare: the compiler quotes each segment itself, and a
 	// name that arrived already quoted would be quoted a second time.
 	column := r.qualifiedPrimaryKeyColumn()
@@ -74,7 +74,7 @@ func (r *Query) whereKey(id any, not bool) contractsorm.Query {
 
 // qualifiedPrimaryKeyColumn returns the model's first primary key column prefixed with its table,
 // unquoted ("users.id"), or "" when the model declares none.
-func (r *Query) qualifiedPrimaryKeyColumn() string {
+func (r *OrmBuilder) qualifiedPrimaryKeyColumn() string {
 	model := r.parentModel()
 	if model == nil {
 		return ""
@@ -92,7 +92,7 @@ func (r *Query) qualifiedPrimaryKeyColumn() string {
 // the model's schema so an untagged ID column counts as the key the way it does everywhere else in
 // the ORM; a slice of models or of scalars yields one key per element; and a scalar yields itself.
 // The second result reports whether the argument was a list, which chooses IN over equality.
-func (r *Query) keyValues(id any) ([]any, bool) {
+func (r *OrmBuilder) keyValues(id any) ([]any, bool) {
 	if id == nil {
 		return []any{nil}, false
 	}
@@ -130,17 +130,17 @@ func (r *Query) keyValues(id any) ([]any, bool) {
 
 // Latest orders by the column descending, defaulting to the model's created-at column. Mirrors
 // Builder::latest.
-func (r *Query) Latest(column ...string) contractsorm.Query {
+func (r *OrmBuilder) Latest(column ...string) contractsorm.Query {
 	return r.orderByTimestamp(column, "desc")
 }
 
 // Oldest orders by the column ascending, defaulting to the model's created-at column. Mirrors
 // Builder::oldest.
-func (r *Query) Oldest(column ...string) contractsorm.Query {
+func (r *OrmBuilder) Oldest(column ...string) contractsorm.Query {
 	return r.orderByTimestamp(column, "asc")
 }
 
-func (r *Query) orderByTimestamp(column []string, direction string) contractsorm.Query {
+func (r *OrmBuilder) orderByTimestamp(column []string, direction string) contractsorm.Query {
 	name := ""
 	if len(column) > 0 {
 		name = column[0]
@@ -158,12 +158,18 @@ func (r *Query) orderByTimestamp(column []string, direction string) contractsorm
 
 // createdAtColumn returns the column stamped only on insert, which is the model's created-at
 // column, or "" when the model declares none.
-func (r *Query) createdAtColumn() string {
+func (r *OrmBuilder) createdAtColumn() string {
 	schema := r.insertSchema()
 	if schema == nil {
 		return ""
 	}
 
+	return schemaCreatedAtColumn(schema)
+}
+
+// schemaCreatedAtColumn scans a parsed schema for the column stamped only on insert — the model's
+// created-at column, "" when the schema declares none.
+func schemaCreatedAtColumn(schema *modelSchema) string {
 	for _, field := range schema.Fields {
 		if field.AutoCreateTime != 0 && field.AutoUpdateTime == 0 {
 			return field.DBName
@@ -173,14 +179,33 @@ func (r *Query) createdAtColumn() string {
 	return ""
 }
 
+// modelCreatedAtColumn resolves a model's created-at column from its schema — the column
+// Relation::createdAt reads off the parent model (`$this->parent->getCreatedAtColumn()`,
+// Relations/Relation.php:373; Eloquent's Model::getCreatedAtColumn reports static::CREATED_AT).
+// "" when the model declares none.
+func modelCreatedAtColumn(model any) (string, error) {
+	schema, err := parseSchema(model)
+	if err != nil {
+		return "", err
+	}
+
+	return schemaCreatedAtColumn(schema), nil
+}
+
 // updatedAtColumn returns the column stamped on update, which is the model's updated-at column,
 // or "" when the model declares none.
-func (r *Query) updatedAtColumn() string {
+func (r *OrmBuilder) updatedAtColumn() string {
 	schema := r.insertSchema()
 	if schema == nil {
 		return ""
 	}
 
+	return schemaUpdatedAtColumn(schema)
+}
+
+// schemaUpdatedAtColumn scans a parsed schema for the column stamped on update — the model's
+// updated-at column, "" when the schema declares none.
+func schemaUpdatedAtColumn(schema *modelSchema) string {
 	for _, field := range schema.Fields {
 		if field.AutoUpdateTime != 0 {
 			return field.DBName
@@ -190,23 +215,33 @@ func (r *Query) updatedAtColumn() string {
 	return ""
 }
 
+// modelUpdatedAtColumn resolves a model's updated-at column from its schema — the column
+// Relation::updatedAt reads off the parent model (`$this->parent->getUpdatedAtColumn()`,
+// Relations/Relation.php:383; Eloquent's Model::getUpdatedAtColumn reports static::UPDATED_AT).
+// "" when the model declares none.
+func modelUpdatedAtColumn(model any) (string, error) {
+	schema, err := parseSchema(model)
+	if err != nil {
+		return "", err
+	}
+
+	return schemaUpdatedAtColumn(schema), nil
+}
+
 // --- single-value and single-row reads --------------------------------------------------------
 
-// Value retrieves one column of the first row. Mirrors Builder::value, which is first([$column])
-// read back by the column's bare name.
-func (r *Query) Value(column string, dest any) error {
+// Value retrieves one column of the first row, read back by the column's bare name. Mirrors
+// Builder::value, which is first([$column]) — the scopes are applied before the onceWithColumns
+// decision, exactly as in pluck() — so a selection the caller pre-set or a global scope wrote
+// survives and the single column is installed only when the scoped query carries none (oracle
+// pins in singleColumnFirstQuery).
+func (r *OrmBuilder) Value(column string, dest any) error {
 	destValue := reflect.ValueOf(dest)
 	if destValue.Kind() != reflect.Pointer || destValue.IsNil() {
 		return errors.DatabaseUnsupportedType.Args(reflect.TypeOf(dest).String(), "pointer")
 	}
 
-	query := r.clone()
-	query.builder.SetSelects([]any{column})
-	_ = query.builder.SetBindings(nil, "select")
-	query.conditions.raw = nil
-	query.builder.Limit(1)
-
-	scoped := query.addGlobalScopes().buildConditions()
+	scoped := r.singleColumnFirstQuery(column)
 
 	statement, bindings, err := scoped.compileSelect()
 	if err != nil {
@@ -214,18 +249,311 @@ func (r *Query) Value(column string, dest any) error {
 	}
 
 	// value() is first([$column]) read back, and first() answers a missing row with null rather than
-	// an exception, so a read that matches nothing leaves dest as it was and reports no error. That
-	// is also what First does here.
-	if err := scoped.queryScalar(dest, statement, bindings); err != nil && !errors.Is(err, sql.ErrNoRows) {
+	// an exception, so a read that matches nothing leaves dest as it was and reports no error. A
+	// kept select list that no longer carries the column answers null the same way: the read is
+	// keyed by the result columns' bare names, so a missing one leaves dest as it was. That is also
+	// what First does here.
+	if err := scoped.queryColumnValue(dest, column, statement, bindings); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
 
 	return nil
 }
 
+// singleColumnFirstQuery prepares the read Value and ValueOrFail share: first([$column]) with
+// the select list narrowed to the column for this statement only and the read limited to one
+// row. It runs on the Eloquent builder in Laravel, not the relation, so the through read's
+// laravel_through_key alias is not appended: the oracle measures `select "title" from "posts"
+// inner join "users" ... limit 1` for value() and for valueOrFail() alike, and a many-to-many
+// read's alias list is dropped the same way (`select "email" from "users" inner join "friends"
+// ... limit 1`).
+func (r *OrmBuilder) singleColumnFirstQuery(column string) *OrmBuilder {
+	// Eloquent's value() and valueOrFail() read through first([$column]) -> limit(1)->get($columns):
+	// the one-row limit is applied before get() runs applyScopes(), so the scopes run over it and a
+	// scope's own limit() overrides the read's (oracle, illuminate/database v12.55.1, executed
+	// against sqlite: a scope doing selectRaw('name')->limit(5) then value('users.email') compiles
+	// `select name from "users" limit 5` and answers null, while value('users.name') reads "Taylor"
+	// back; a scope doing limit(0) compiles `select "users"."email" from "users" limit 0`, answers
+	// null, and makes valueOrFail throw ModelNotFoundException). The global scopes are applied
+	// before onceWithColumns decides: a scope's select()/selectRaw() is already in the columns and
+	// survives, and the single column is installed only when nothing is set then — the same
+	// onceWithColumns guard pluck() uses (oracle, illuminate/database v12.55.1, executed against
+	// sqlite: a scope doing selectRaw('name') then value('email') compiles `select name from "users"
+	// limit 1` and answers null; scope select('name') + value('email') compiles `select "name" from
+	// "users" limit 1` and answers null; select('id','email')->value('email') keeps `select "id",
+	// "email" from "users" limit 1` and reads the email back by name; a withCount('posts') list is
+	// kept as well and value('email') reads it back by name).
+	query := r.withoutThroughReadSelect().withoutPivotReadSelect()
+	query.query.Limit(1)
+
+	scoped := query.addGlobalScopes().withScopesApplied().buildConditions()
+
+	if scoped.query.Selects() == nil && len(scoped.conditions.selectSubs) == 0 {
+		scoped.query.SetSelects([]any{column})
+		_ = scoped.query.SetBindings(nil, "select")
+		scoped.conditions.raw = nil
+	}
+
+	return scoped
+}
+
+// queryColumnValue runs a compiled single-row read and sets dest to the requested column of the
+// first row, the way Builder::value reads $result->{Str::afterLast($column, '.')} back from
+// first([$column]). The row is keyed by its result columns' bare names (pluckRow), so the column is
+// found whether the statement selected it alone, as part of a caller's select list, or as part of a
+// scope's or a withCount list's; a kept list that does not carry it answers null, which leaves dest
+// as it was. A read that matches no row reports sql.ErrNoRows, which Value answers like first()'s
+// null and ValueOrFail as a model miss.
+func (r *OrmBuilder) queryColumnValue(dest any, column string, statement string, bindings []any) error {
+	rows, err := r.queryRows(statement, bindings)
+	if err != nil {
+		return err
+	}
+	defer errors.Ignore(rows.Close)
+
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return err
+		}
+
+		return sql.ErrNoRows
+	}
+
+	resultColumns, err := rows.Columns()
+	if err != nil {
+		return err
+	}
+
+	row, err := pluckRow(resultColumns, rows)
+	if err != nil {
+		return err
+	}
+
+	value, ok := row[stripTableForPluck(column)]
+	if !ok {
+		return nil
+	}
+
+	destValue := reflect.ValueOf(dest)
+	destValue.Elem().Set(pluckValue(value, destValue.Elem().Type()))
+
+	return nil
+}
+
+// Pluck retrieves a single column from the database, mirroring Laravel's pluck($column, $key): the
+// select list becomes the plucked column — plus the key column when one is given — but only when
+// the scoped query carries no selection, because Builder::pluck installs the pair through
+// onceWithColumns, which writes the columns solely when they are null and restores them when the
+// read completes: a select() the caller already wrote survives verbatim, and the installed pair
+// lives only for this statement, so the query can still be executed afterwards (oracle,
+// illuminate/database v12.55.1, executed against sqlite: select('name')->pluck('email') compiles
+// `select "name" from "users"`; `$q->pluck('email'); $q->pluck('name')` compiles `select "email"
+// from "users"` then `select "name" from "users"`). A queued selectSub — a WithCount / WithMax
+// and the like — counts as an installed select list, because withAggregate wrote `from.*` and the
+// subselect into the columns before pluck ran (oracle: withCount('posts')->pluck('email') compiles
+// `select "users".*, (select count(*) ...) as "posts_count" from "users"`). The fold matches
+// pluckFromArrayColumn, reading a row's columns by name, and a key equal to the column reuses the
+// value (Laravel's onceWithColumns collapses that pair to a one-column select). dest receives the
+// values, a pointer to a slice for the flat form or a pointer to a map keyed by the key column's
+// values.
+func (r *OrmBuilder) Pluck(column string, dest any, key ...string) error {
+	keyColumn := ""
+	if len(key) > 0 {
+		keyColumn = key[0]
+	}
+
+	// The global scopes are folded in before the onceWithColumns decision, the way pluck() reads
+	// through toBase() — applyScopes()->getQuery() — in Eloquent's Builder: a scope's
+	// select()/selectRaw() is already in the columns when the decision runs (oracle,
+	// illuminate/database v12.55.1, executed against sqlite: scope selectRaw('name') +
+	// pluck('email') compiles `select name from "users"` and yields [null,null]; scope
+	// select('name') + pluck('email') compiles `select "name" from "users"` and yields [null,null];
+	// a keyed pluck('email','id') keeps the same scope-written list and folds {"":null}).
+	query := r.addGlobalScopes().withScopesApplied().buildConditions()
+
+	destValue := reflect.ValueOf(dest)
+	if destValue.Kind() != reflect.Pointer || destValue.IsNil() {
+		return errors.DatabaseUnsupportedType.Args(reflect.TypeOf(dest).String(), "pointer to slice")
+	}
+
+	destType := destValue.Elem().Type()
+	if keyColumn == "" {
+		if destType.Kind() != reflect.Slice {
+			return errors.DatabaseUnsupportedType.Args(reflect.TypeOf(dest).String(), "pointer to slice")
+		}
+	} else if destType.Kind() != reflect.Map {
+		return errors.DatabaseUnsupportedType.Args(reflect.TypeOf(dest).String(), "pointer to map")
+	}
+
+	columns := []any{column}
+	if keyColumn != "" && keyColumn != column {
+		columns = append(columns, keyColumn)
+	}
+
+	// onceWithColumns writes the columns only when the scoped query carries none, and restores them
+	// once the callback returns, so the pair is installed under both rules here: a select list the
+	// caller pre-set survives, a scope-written list survives (see above), and a queued selectSub
+	// counts as one, because withAggregate wrote `from.*` and the subselect into Laravel's columns
+	// before pluck ran (oracle, illuminate/database v12.55.1, executed against sqlite:
+	// withCount('posts')->pluck('email') compiles `select "users".*, (select count(*) from "posts"
+	// where "users"."id" = "posts"."user_id") as "posts_count" from "users"`). withScopesApplied
+	// hands back a private copy, which also satisfies the restore half of onceWithColumns: the pair
+	// installed here is written back when the read completes because the copy is dropped, never
+	// because the receiver was mutated (oracle: `$q->pluck('email'); $q->pluck('name')` compiles
+	// `select "email" from "users"` then `select "name" from "users"`; `pluck('email')` followed by
+	// `get()` compiles `select * from "users"`). The fold below reads the plucked column out of the
+	// kept statement by name either way — from the pair, from the caller's select list, from a
+	// scope's list, or from `from.*`.
+	if query.query.Selects() == nil && len(query.conditions.selectSubs) == 0 {
+		query.query.SetSelects(columns)
+		_ = query.query.SetBindings(nil, "select")
+		query.conditions.raw = nil
+	}
+
+	// pluck() is forwarded to the Eloquent builder in Laravel, which writes its own select list —
+	// or keeps the caller's — without going through the relation, so neither relation read's
+	// aliases are appended: the oracle measures `select "title" from "posts" inner join "users"
+	// ...` for a through read and `select "email" from "users" inner join "friends" ...` for a
+	// many-to-many read.
+	query = query.withoutThroughReadSelect().withoutPivotReadSelect()
+
+	statement, bindings, err := query.compileSelect()
+	if err != nil {
+		return err
+	}
+
+	rows, err := query.queryRows(statement, bindings)
+	if err != nil {
+		return err
+	}
+	defer errors.Ignore(rows.Close)
+
+	// The fold reads each row's columns by name — the way pluckFromArrayColumn keys its results —
+	// so the requested column is found whether it came from the pair installed above or from a
+	// select list the caller pre-set; a column the statement did not carry reads as null, which
+	// the Go destination holds as its zero value.
+	resultColumns, err := rows.Columns()
+	if err != nil {
+		return err
+	}
+	valueKey := stripTableForPluck(column)
+	keyKey := stripTableForPluck(keyColumn)
+
+	// The scanned value is converted to the destination's type, because a driver may report a
+	// column as a different but equivalent Go type than the destination holds.
+	target := destValue.Elem()
+
+	if keyColumn != "" {
+		keyType := destType.Key()
+		elementType := destType.Elem()
+		shared := keyColumn == column
+
+		if target.IsNil() {
+			target.Set(reflect.MakeMap(destType))
+		}
+
+		for rows.Next() {
+			row, err := pluckRow(resultColumns, rows)
+			if err != nil {
+				return err
+			}
+
+			value := row[valueKey]
+			if shared {
+				target.SetMapIndex(pluckValue(value, keyType), pluckValue(value, elementType))
+				continue
+			}
+
+			target.SetMapIndex(pluckValue(row[keyKey], keyType), pluckValue(value, elementType))
+		}
+
+		if err := rows.Err(); err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	elementType := destType.Elem()
+	for rows.Next() {
+		row, err := pluckRow(resultColumns, rows)
+		if err != nil {
+			return err
+		}
+
+		target = reflect.Append(target, pluckValue(row[valueKey], elementType))
+	}
+
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	destValue.Elem().Set(target)
+
+	return nil
+}
+
+// pluckRow scans one row into a column-keyed map, the way pluckFromArrayColumn reads a result row:
+// the keys are the result columns' bare names, so the requested column is found whether the pluck
+// installed the select list or a caller had already set one.
+func pluckRow(columns []string, rows *sql.Rows) (map[string]any, error) {
+	values := make([]any, len(columns))
+	pointers := make([]any, len(columns))
+	for index := range values {
+		pointers[index] = &values[index]
+	}
+
+	if err := rows.Scan(pointers...); err != nil {
+		return nil, err
+	}
+
+	row := make(map[string]any, len(columns))
+	for index, name := range columns {
+		row[stripTableForPluck(name)] = values[index]
+	}
+
+	return row, nil
+}
+
+// stripTableForPluck strips the table name or alias from a column identifier, mirroring Laravel's
+// Builder::stripTableForPluck: a plucked result set is keyed by the bare column name only, so the
+// requested `users.email` (or `users.email AS user_email`) and the driver's own column name land
+// on the same key.
+func stripTableForPluck(column string) string {
+	lower := strings.ToLower(column)
+	separator := "."
+	if strings.Contains(lower, " as ") {
+		separator = " as "
+	}
+
+	if index := strings.LastIndex(lower, separator); index != -1 {
+		return column[index+len(separator):]
+	}
+
+	return column
+}
+
+// pluckValue converts a scanned column value to the destination's type, the way the flat pluck
+// converts a column to its slice element; a value that cannot be converted stays the zero value of
+// the target type.
+func pluckValue(value any, targetType reflect.Type) reflect.Value {
+	element := reflect.New(targetType).Elem()
+	if converted := castKey(value, targetType); converted != nil {
+		convertedValue := reflect.ValueOf(converted)
+		switch {
+		case convertedValue.Type().AssignableTo(targetType):
+			element.Set(convertedValue)
+		case convertedValue.Type().ConvertibleTo(targetType):
+			element.Set(convertedValue.Convert(targetType))
+		}
+	}
+
+	return element
+}
+
 // Sole retrieves the one row the query matches. Mirrors BuildsQueries::sole: the statement is limited
 // to two rows, so no row and more than one row are each reported as their own error.
-func (r *Query) Sole(dest any) error {
+func (r *OrmBuilder) Sole(dest any) error {
 	destValue := reflect.ValueOf(dest)
 	if destValue.Kind() != reflect.Pointer || destValue.IsNil() {
 		return errors.DatabaseUnsupportedType.Args(reflect.TypeOf(dest).String(), "pointer")
@@ -234,7 +562,7 @@ func (r *Query) Sole(dest any) error {
 	rows := reflect.New(reflect.SliceOf(destValue.Elem().Type()))
 
 	query := r.clone()
-	query.builder.Limit(2)
+	query.query.Limit(2)
 	if err := query.Find(rows.Interface()); err != nil {
 		return err
 	}
@@ -253,12 +581,12 @@ func (r *Query) Sole(dest any) error {
 
 // FindMany retrieves the rows whose primary key is one of ids. Mirrors Builder::findMany: an empty
 // list reads nothing.
-func (r *Query) FindMany(dest any, ids []any, columns ...any) error {
+func (r *OrmBuilder) FindMany(dest any, ids []any, columns ...any) error {
 	if len(ids) == 0 {
 		return nil
 	}
 
-	query, ok := r.WhereKey(ids).(*Query)
+	query, ok := r.WhereKey(ids).(*OrmBuilder)
 	if !ok {
 		return errors.OrmQueryInvalidModel.Args(fmt.Sprintf("%T", r.WhereKey(ids)))
 	}
@@ -271,7 +599,7 @@ func (r *Query) FindMany(dest any, ids []any, columns ...any) error {
 // WithAttributes records attributes for every model the query creates and, unless asConditions is
 // false, adds each as a where equality. Mirrors Builder::withAttributes. The attributes may be a map
 // or a single column followed by its value; a trailing bool is asConditions.
-func (r *Query) WithAttributes(attributes any, args ...any) contractsorm.Query {
+func (r *OrmBuilder) WithAttributes(attributes any, args ...any) contractsorm.Query {
 	asConditions := true
 	mapping, ok := asColumnMap(attributes)
 	if !ok {
@@ -307,7 +635,7 @@ func (r *Query) WithAttributes(attributes any, args ...any) contractsorm.Query {
 // written by a shortcut compares the model's own column when the statement also joins another
 // table. A Go field name is resolved to its column first; a name that already carries a table, or a
 // query with no model, is left as written.
-func (r *Query) qualifyColumn(column string) string {
+func (r *OrmBuilder) qualifyColumn(column string) string {
 	if strings.Contains(column, ".") {
 		return column
 	}
@@ -323,7 +651,7 @@ func (r *Query) qualifyColumn(column string) string {
 // applyPendingAttributes writes the recorded attributes onto a model about to be created, as
 // newModelInstance merges $pendingAttributes into the attributes it is given. The caller's own
 // values win: an attribute the model already carries a non-zero value for is left alone.
-func (r *Query) applyPendingAttributes(dest any) error {
+func (r *OrmBuilder) applyPendingAttributes(dest any) error {
 	if len(r.conditions.pendingAttributes) == 0 || dest == nil {
 		return nil
 	}
@@ -383,17 +711,17 @@ func (r *Query) applyPendingAttributes(dest any) error {
 // Increment adds amount (default 1) to the column of every matching row, refreshing the model's
 // updated-at column and writing any extra values. Mirrors Builder::increment: args are an optional
 // amount followed by an optional map of extra columns.
-func (r *Query) Increment(column string, args ...any) (*contractsdb.Result, error) {
+func (r *OrmBuilder) Increment(column string, args ...any) (*contractsdb.Result, error) {
 	return r.step(column, "+", args)
 }
 
 // Decrement subtracts amount (default 1) from the column of every matching row, refreshing the
 // model's updated-at column and writing any extra values. Mirrors Builder::decrement.
-func (r *Query) Decrement(column string, args ...any) (*contractsdb.Result, error) {
+func (r *OrmBuilder) Decrement(column string, args ...any) (*contractsdb.Result, error) {
 	return r.step(column, "-", args)
 }
 
-func (r *Query) step(column, operator string, args []any) (*contractsdb.Result, error) {
+func (r *OrmBuilder) step(column, operator string, args []any) (*contractsdb.Result, error) {
 	for _, arg := range args {
 		if _, ok := asColumnMap(arg); ok {
 			continue
@@ -412,13 +740,22 @@ func (r *Query) step(column, operator string, args []any) (*contractsdb.Result, 
 
 	// Laravel's addUpdatedAtColumn stamps updated_at unless the extra values already name it; the
 	// ORM's update path does the same through addAutoUpdateTime, so the map goes straight in.
-	return r.Update(r.stepValues(column, operator, args))
+	//
+	// The step runs on a copy carrying withoutTouch: neither Builder::increment nor
+	// Model::increment propagates touches (they never reach finishSave), while the model-update
+	// branch the step shares with Update does; the copy keeps the caller's query as it was.
+	stepped := r.clone()
+	conditions := stepped.conditions
+	conditions.withoutTouch = true
+	stepped.setConditions(conditions)
+
+	return stepped.Update(stepped.stepValues(column, operator, args))
 }
 
 // stepValues builds the assignment map an increment or decrement writes: the extra values, plus the
 // column rewritten to a raw `<column> <op> <amount>` expression. The arguments are the ones step has
 // already validated.
-func (r *Query) stepValues(column, operator string, args []any) map[string]any {
+func (r *OrmBuilder) stepValues(column, operator string, args []any) map[string]any {
 	amount := "1"
 	var extra map[string]any
 
@@ -462,12 +799,21 @@ func numericString(value any) (string, bool) {
 
 // Touch sets the model's updated-at column, or the named column, to now on every matching row.
 // Mirrors Builder::touch: a model without an updated-at column touches nothing and reports it.
-func (r *Query) Touch(column ...string) (*contractsdb.Result, error) {
+//
+// On a query bound to a model — Model(m) — the touch also walks m's Touches owners once the row
+// is stamped: Eloquent's Model::touch saves the model, so its save path runs touchOwners, while
+// the unbound builder form only stamps, exactly as Builder::touch does.
+func (r *OrmBuilder) Touch(column ...string) (*contractsdb.Result, error) {
 	name := ""
 	if len(column) > 0 {
 		name = column[0]
 	}
 	if name == "" {
+		// Eloquent's Builder::touch reads usesTimestamps before it decides: an ignored model touches
+		// nothing (Laravel's `return false`), rather than failing over a missing column.
+		if !r.usesTimestamps(r.parentModel()) {
+			return &contractsdb.Result{}, nil
+		}
 		name = r.updatedAtColumn()
 		if name == "" {
 			return nil, errors.OrmQueryTimestampColumnNotFound.Args(modelName(r.parentModel()), "updated at")
@@ -480,7 +826,7 @@ func (r *Query) Touch(column ...string) (*contractsdb.Result, error) {
 // Upsert inserts the rows, updating the listed columns of a row whose uniqueBy columns already
 // exist. Mirrors Builder::upsert on a model: timestamps are added to every row, the created-at
 // column is never in the update list, and the updated-at column always is.
-func (r *Query) Upsert(values any, uniqueBy []string, update ...any) (*contractsdb.Result, error) {
+func (r *OrmBuilder) Upsert(values any, uniqueBy []string, update ...any) (*contractsdb.Result, error) {
 	query := r.addGlobalScopes().buildConditions()
 
 	records, err := query.insertRecords(values)
@@ -492,7 +838,11 @@ func (r *Query) Upsert(values any, uniqueBy []string, update ...any) (*contracts
 	}
 
 	records = uniformInsertRecords(records)
-	query.addUpsertTimestamps(records)
+	// Eloquent's addTimestampsToUpsertValues stamps the columns onto every row only while the model
+	// uses timestamps.
+	if query.usesTimestamps(query.parentModel()) {
+		query.addUpsertTimestamps(records)
+	}
 
 	updates, insertOnly, err := query.upsertUpdates(records, update)
 	if err != nil {
@@ -522,7 +872,7 @@ func (r *Query) Upsert(values any, uniqueBy []string, update ...any) (*contracts
 
 // addUpsertTimestamps stamps the model's timestamp columns onto every row, the way
 // addTimestampsToUpsertValues does: a value the caller supplied is kept.
-func (r *Query) addUpsertTimestamps(records []map[string]any) {
+func (r *OrmBuilder) addUpsertTimestamps(records []map[string]any) {
 	schema := r.insertSchema()
 	if schema == nil {
 		return
@@ -552,7 +902,7 @@ func (r *Query) addUpsertTimestamps(records []map[string]any) {
 // upsertUpdates resolves the update list the way addUpdatedAtToUpsertColumns does: no list means
 // every inserted column except created-at, an explicit list is used as given, and updated-at joins
 // either. An empty explicit list means insert only.
-func (r *Query) upsertUpdates(records []map[string]any, update []any) ([]core.UpsertUpdate, bool, error) {
+func (r *OrmBuilder) upsertUpdates(records []map[string]any, update []any) ([]core.UpsertUpdate, bool, error) {
 	schema := r.insertSchema()
 	createdAt := r.createdAtColumn()
 	updatedAt := r.updatedAtColumn()
@@ -578,7 +928,9 @@ func (r *Query) upsertUpdates(records []map[string]any, update []any) ([]core.Up
 			for _, column := range slices.Sorted(maps.Keys(given)) {
 				result = append(result, core.UpsertUpdate{Column: resolveColumn(schema, column), Value: given[column], Bound: true})
 			}
-			if updatedAt != "" && !hasUpsertColumn(result, updatedAt) {
+			// Eloquent's addUpdatedAtToUpsertColumns joins updated-at to the update list only while
+			// the model uses timestamps.
+			if r.usesTimestamps(r.parentModel()) && updatedAt != "" && !hasUpsertColumn(result, updatedAt) {
 				result = append(result, core.UpsertUpdate{Column: updatedAt})
 			}
 
@@ -588,7 +940,7 @@ func (r *Query) upsertUpdates(records []map[string]any, update []any) ([]core.Up
 		}
 	}
 
-	if updatedAt != "" && !slices.Contains(columns, updatedAt) {
+	if r.usesTimestamps(r.parentModel()) && updatedAt != "" && !slices.Contains(columns, updatedAt) {
 		columns = append(columns, updatedAt)
 	}
 

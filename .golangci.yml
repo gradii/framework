@@ -1,0 +1,19 @@
+version: "2"
+
+# The explicit `.Builder.` qualifier on relation-leaf calls is the preferred style (kept by
+# user decision 2026-11-01): it documents that the call is served through the embedded builder
+# interface. QF1008 ("could remove embedded field Builder from selector") is therefore excluded
+# for database/gorm/relations only; all other linters and checks stay at their defaults.
+linters:
+  exclusions:
+    rules:
+      - path: database/gorm/relations/
+        linters:
+          - staticcheck
+        text: QF1008
+      # The Deprecated markers on the flat RelationWriter path (user decision 2026-11-02) are
+      # exercised by that path's own test file; SA1019 is excluded for it alone.
+      - path: database/gorm/relation_writer_test.go
+        linters:
+          - staticcheck
+        text: SA1019

@@ -24,13 +24,13 @@ type PivotQuery interface {
 	// Where adds a `column op value` clause to the pivot query. operator defaults to "=" when
 	// only two args are passed (column, value).
 	Where(column string, args ...any) PivotQuery
-	// WhereIn adds a `column IN (...)` clause to the pivot query.
+	// WhereIn adds a `column in (...)` clause to the pivot query.
 	WhereIn(column string, values []any) PivotQuery
-	// WhereNotIn adds a `column NOT IN (...)` clause to the pivot query.
+	// WhereNotIn adds a `column not in (...)` clause to the pivot query.
 	WhereNotIn(column string, values []any) PivotQuery
-	// WhereNull adds a `column IS NULL` clause to the pivot query.
+	// WhereNull adds a `column is null` clause to the pivot query.
 	WhereNull(column string) PivotQuery
-	// WhereNotNull adds a `column IS NOT NULL` clause to the pivot query.
+	// WhereNotNull adds a `column is not null` clause to the pivot query.
 	WhereNotNull(column string) PivotQuery
 }
 
@@ -86,10 +86,10 @@ type QueryWithRelations interface {
 
 	// HasMorph adds a polymorphic relationship count / exists condition to the query.
 	// types is a slice of model instances (e.g. []any{&Post{}, &Video{}}); the morph value
-	// used in the type column is derived from each model's table name.
-	//
-	// Note: auto-discovery of distinct morph values via `types = ['*']` is not supported.
-	// An explicit list of model instances is required.
+	// used in the type column is derived from each model's table name. Pass []any{"*"} to
+	// resolve the distinct morph values from the parent table's type column at compile time,
+	// mirroring Eloquent's hasMorph(['*']) auto-discovery; Has()/WhereHas() on a MorphTo
+	// relation takes that path automatically, the way Eloquent's has() delegates to hasMorph.
 	HasMorph(relation string, types []any, args ...any) Query
 	// OrHasMorph adds a polymorphic relationship count / exists condition with an "or" conjunction.
 	OrHasMorph(relation string, types []any, args ...any) Query
@@ -110,19 +110,23 @@ type QueryWithRelations interface {
 	OrWhereDoesntHaveMorph(relation string, types []any, args ...any) Query
 
 	// WithAggregate adds a sub-select query to include an aggregate value for a relationship.
-	// fn must be one of: count, max, min, sum, avg, exists.
-	WithAggregate(relation, column, fn string, args ...any) Query
+	// fn must be one of: count, max, min, sum, avg, exists. column accepts a column name, a
+	// table-qualified name, "*", or a raw expression (database/query's Raw/Expression), the
+	// string|Expression union Laravel's withAggregate accepts; relation may carry an "as" rename
+	// ("Books as book_total").
+	WithAggregate(relation string, column any, fn string, args ...any) Query
 	// WithCount adds sub-select queries to count the relations. Each entry may be either a
-	// string ("Books") or a RelationCount struct for scoped/aliased counts.
+	// string ("Books", or "Books as book_total" for a rename) or a RelationCount struct for
+	// scoped/aliased counts.
 	WithCount(relations ...any) Query
 	// WithMax adds sub-select queries to include the max of the relation's column.
-	WithMax(relation, column string, args ...any) Query
+	WithMax(relation string, column any, args ...any) Query
 	// WithMin adds sub-select queries to include the min of the relation's column.
-	WithMin(relation, column string, args ...any) Query
+	WithMin(relation string, column any, args ...any) Query
 	// WithSum adds sub-select queries to include the sum of the relation's column.
-	WithSum(relation, column string, args ...any) Query
+	WithSum(relation string, column any, args ...any) Query
 	// WithAvg adds sub-select queries to include the average of the relation's column.
-	WithAvg(relation, column string, args ...any) Query
+	WithAvg(relation string, column any, args ...any) Query
 	// WithExists adds sub-select queries to include the existence of related models. The result
 	// is emitted as `CASE WHEN EXISTS (...) THEN 1 ELSE 0 END` for cross-dialect portability
 	// (SQL Server has no boolean literal), but the dest field may be either `bool` or an integer
@@ -150,6 +154,19 @@ type QueryWithRelations interface {
 	WhereBelongsTo(related any, relation ...string) Query
 	// OrWhereBelongsTo is WhereBelongsTo with an "or" conjunction.
 	OrWhereBelongsTo(related any, relation ...string) Query
+	// WhereAttachedTo constrains the query to the rows attached to the given model through a
+	// many-to-many relation, mirroring Laravel's whereAttachedTo: the relation defaults to the
+	// plural camel form of the related model's type name, and the related model's key list matches
+	// inside the relation's existence subquery the way whereKey writes it (integer keys inlined
+	// through whereIntegerInRaw, other keys bound).
+	WhereAttachedTo(related any, relation ...string) Query
+	// OrWhereAttachedTo is WhereAttachedTo with an "or" conjunction. Mirrors Laravel's
+	// orWhereAttachedTo.
+	OrWhereAttachedTo(related any, relation ...string) Query
+	// WhereAttachedToCollection is WhereAttachedTo for a collection of models, mirroring Laravel's
+	// whereAttachedTo called with a collection: every model's key joins the list the existence
+	// subquery matches against the related table's key.
+	WhereAttachedToCollection(related any, relation ...string) Query
 }
 
 // RelationCount is an entry accepted by WithCount that pairs a relation name with an optional
@@ -223,6 +240,37 @@ type HasOne struct {
 	// OnQuery is a default scope applied to every query built for this relation (eager loads,
 	// existence checks, aggregates, Related). Applied before any caller-supplied callback.
 	OnQuery RelationCallback
+	// Inverse names a relation on the related model that every loader read of this relation fills
+	// with the parent instance — Laravel's ->inverse('user') / ->chaperone() on HasOne / HasMany /
+	// MorphOne / MorphMany. Lazy loads (Load / LoadMissing), eager loads (With and the parent
+	// collections it reads) and a read that falls back to the WithDefault instance all store the
+	// same parent — the Go form of assertSame($parent, $child->inverse) — with no extra query.
+	// The name must be declared in the related model's Relations() map; resolving this relation
+	// otherwise reports OrmRelationNotFound. Loading without the write-back is a relation declared
+	// without this field: the declaration is static metadata, so Laravel's per-call withoutInverse()
+	// reaches the same state one call earlier instead.
+	Inverse string
+	// WithDefault mirrors Laravel's withDefault(): a relation read that finds no related row —
+	// or whose parent local key is empty — loads a default related instance in place of nil.
+	// Accepted values:
+	//
+	//   - true: a fresh instance of the related model with its foreign key pre-set to the
+	//     parent's local-key value (HasOne::newRelatedInstanceFor).
+	//   - map[string]any: the fresh instance, force-filled with the map's attributes; keys name
+	//     the related model's columns. An empty map is falsy in Laravel's check, like
+	//     withDefault([]), and yields no default.
+	//   - func(related, parent any) any: the fresh instance and the actual parent model are
+	//     passed to the callback. A PHP-truthy return replaces the instance; a PHP-falsy return
+	//     — false, 0, 0.0, "", "0", an empty slice or map, nil — keeps it (Laravel's
+	//     `call_user_func($callback, $instance, $parent) ?: $instance`).
+	//
+	// A related row, when one exists, always wins: the default only stands in where the read
+	// found nothing. false / nil mean no default. Defaults apply to Load / LoadMissing / With;
+	// the raw Related() relation query keeps returning no rows, exactly as
+	// `$parent->relation()->first()` does in Laravel.
+	WithDefault any
+	// Touches — see BelongsTo.Touches.
+	Touches bool
 }
 
 func (HasOne) Kind() RelationKind { return KindHasOne }
@@ -235,6 +283,10 @@ type HasMany struct {
 	ForeignKey string
 	LocalKey   string
 	OnQuery    RelationCallback
+	// Inverse — see HasOne.Inverse.
+	Inverse string
+	// Touches — see BelongsTo.Touches.
+	Touches bool
 }
 
 func (HasMany) Kind() RelationKind { return KindHasMany }
@@ -250,6 +302,21 @@ type BelongsTo struct {
 	// OwnerKey is the column on the related table referenced by ForeignKey. Optional, "id".
 	OwnerKey string
 	OnQuery  RelationCallback
+	// WithDefault — the BelongsTo form of HasOne.WithDefault. The default instance is a plain
+	// newInstance of the related model with no attributes set (BelongsTo::newRelatedInstanceFor),
+	// and it also stands in when the parent's foreign key is null (getResults' is_null
+	// short-circuit).
+	WithDefault any
+	// Touches, when true, makes saving or deleting the declaring model touch the rows this
+	// relation resolves to — their updated-at column is stamped, and the loaded related models'
+	// own Touches declarations carry the propagation onward — mirroring an entry in Eloquent's
+	// `protected $touches` array and the HasRelationships::touchOwners walk behind it. The stamp
+	// itself is skipped while the related model's class is in a withoutTouching ignore list
+	// (Model::isIgnoringTouch), while the walk still resolves the related models — reusing the
+	// relation the model already carries loaded, or lazy-loading and caching it — and continues
+	// through them either way. Declared on the BelongsTo / HasOne / HasMany kinds the corpus's
+	// touching family exercises.
+	Touches bool
 }
 
 func (BelongsTo) Kind() RelationKind { return KindBelongsTo }
@@ -307,8 +374,10 @@ type Many2Many struct {
 	OnPivotQuery PivotCallback
 	// Touches, when true, causes Sync / Attach / Detach / Toggle / UpdateExistingPivot on this
 	// relation to bump the parent's `updated_at` after the pivot write completes (and only when
-	// the operation actually changed pivot rows). Mirrors fedaco's `touchIfTouching`. Silently
-	// no-ops when the parent's schema doesn't carry an updated_at field.
+	// the operation actually changed pivot rows). The bump is skipped while the parent's class
+	// ignores touches (Model::isIgnoringTouch) — the gate Eloquent's per-pivot touch rides through
+	// Relation::touch. Mirrors fedaco's `touchIfTouching`. Silently no-ops when the parent's
+	// schema doesn't carry an updated_at field.
 	Touches bool
 }
 
@@ -329,6 +398,13 @@ type MorphOne struct {
 	// LocalKey is the column on the parent referenced by IDColumn. Optional, "id".
 	LocalKey string
 	OnQuery  RelationCallback
+	// Inverse — see HasOne.Inverse.
+	Inverse string
+	// WithDefault — the MorphOne form of HasOne.WithDefault. The default instance is a fresh
+	// related instance whose polymorphic id column is pre-set from the parent's local key and
+	// whose type column carries the relation's morph value (MorphOne::newRelatedInstanceFor);
+	// accepted values and the falsy-closure rule match HasOne.WithDefault.
+	WithDefault any
 }
 
 func (MorphOne) Kind() RelationKind { return KindMorphOne }
@@ -341,6 +417,8 @@ type MorphMany struct {
 	IDColumn   string
 	LocalKey   string
 	OnQuery    RelationCallback
+	// Inverse — see HasOne.Inverse.
+	Inverse string
 }
 
 func (MorphMany) Kind() RelationKind { return KindMorphMany }
@@ -360,6 +438,62 @@ type MorphTo struct {
 	// OwnerKey is the column on each related table referenced by IDColumn. Optional, "id".
 	OwnerKey string
 	OnQuery  RelationCallback
+	// MorphWith names extra relations to eager load for one polymorphic type — Laravel's
+	// MorphTo::morphWith([Class => ['relation', ...]]) (MorphTo.php:311-322), applied by
+	// getResultsByType to each resolved type's query. The map key is the type's morph-map alias —
+	// the string the type column carries, the 1:1 Go counterpart of Laravel's class-name key —
+	// and each value is a nested eager-load list in the With grammar ("user", "comments.author",
+	// "user:id,name"). The class's list merges into the relation's own nested loads the way
+	// getResultsByType's array_merge places it: being a plain relation list, its entries sit beside
+	// the relation-keyed nested loads and never overwrite one — a name the nested loads already
+	// carry is absorbed, the nested entry keeping its constraint and select list (oracle,
+	// illuminate/database v12.55.1, executed, /tmp/morphverify-probes/collision_dotted.php: the
+	// caller's `with(['commentable.author' => ...])` constraint survives the collision and the
+	// author read still carries `"name" = ?`, the author null). Applies to the eager and Load
+	// paths only, the paths Eloquent's getEager serves (oracle, illuminate/database v12.55.1,
+	// executed: /tmp/morphport-probes/morph_with.php — the Post type loads its author in a
+	// follow-up `select * from "mpw_authors" where "mpw_authors"."id" in (1)`, the unconfigured
+	// Video type receives no such query).
+	MorphWith map[string][]string
+	// MorphWithCount names relationship counts to load for one polymorphic type — Laravel's
+	// MorphTo::morphWithCount (MorphTo.php:337-346), applied per resolved type like MorphWith.
+	// Entries are the shapes Query.WithCount accepts (a "relation" or "relation as alias" string,
+	// or a RelationCount struct); the map key is the type's morph-map alias. Oracle (same probe):
+	// the Post type's rows carry `(select count(*) from "mpw_comments" where "mpw_posts"."id" =
+	// "mpw_comments"."post_id") as "comments_count"`, the unconfigured Video type no count column.
+	MorphWithCount map[string][]any
+	// Constrain holds one query constraint per polymorphic type — Laravel's
+	// MorphTo::constrain([Class => fn ($query) => ...]) (MorphTo.php:352-361), applied to the
+	// type's query after its eager loads and counts and before the owner-key in-list, the position
+	// getResultsByType gives it. The map key is the type's morph-map alias. Oracle (same probe):
+	// `where "title" != ? and "mpw_posts"."id" in (1, 2)` — the constraint's where leads the
+	// in-list, and the constrained row drops out of the loaded set.
+	Constrain map[string]RelationCallback
+	// WithTrashed / WithoutTrashed / OnlyTrashed carry the trashed-scope family Laravel's MorphTo
+	// buffers and replays per type (MorphTo::withTrashed / withoutTrashed / onlyTrashed,
+	// MorphTo.php:366/383/400 — each records a `when(true, callback)` macro and applies it
+	// immediately). Every flag is a no-op for a related type that declares no soft deletes — the
+	// state Laravel's macro-existence check leaves (`$query->hasMacro('withTrashed') ? $query->
+	// withTrashed() : $query`). Precedence when several flags are declared: OnlyTrashed >
+	// WithoutTrashed > WithTrashed. Oracle (illuminate/database v12.55.1, executed,
+	// /tmp/morphport-probes/trashed.php): Laravel's per-type read carries `"mpt_posts"."deleted_at"
+	// is null` by default, WithTrashed drops the predicate (include — `select * from "mpt_posts"
+	// where "mpt_posts"."id" in (2, 1)`), OnlyTrashed renders `"mpt_posts"."deleted_at" is not
+	// null`, WithoutTrashed keeps the default exclusion. The Go per-type eager read applies no
+	// related-model predicate when no flag is declared (the pre-existing divergence the
+	// soft-deletes corpus pins at laravel_port_soft_deletes_integration_test.go:1098): a declared
+	// WithTrashed therefore matches that Go default outcome, while WithoutTrashed forces Laravel's
+	// exclude-trashed default on the eager path; the object-path read, which carries the related
+	// model, honors all three flags directly.
+	WithTrashed    bool
+	WithoutTrashed bool
+	OnlyTrashed    bool
+	// WithDefault — the MorphTo form of HasOne.WithDefault. The default instance's class follows
+	// the type column: a value in the morph map (or a morph class name) yields that class, while
+	// an empty type column yields the parent's own class — MorphTo::newRelatedInstanceFor
+	// re-invokes $parent->relation(), and the null-type branch (morphEagerTo) carries the
+	// parent's own query as the related model. No attributes are set on the instance.
+	WithDefault any
 }
 
 func (MorphTo) Kind() RelationKind { return KindMorphTo }
@@ -442,6 +576,11 @@ type HasOneThrough struct {
 	// SecondLocalKey is the PK on the through table referenced by SecondKey. Optional, "id".
 	SecondLocalKey string
 	OnQuery        RelationCallback
+	// WithDefault — the HasOneThrough form of HasOne.WithDefault. The default instance is a
+	// plain fresh instance of the related model with no attributes set
+	// (HasOneThrough::newRelatedInstanceFor); accepted values and the falsy-closure rule match
+	// HasOne.WithDefault.
+	WithDefault any
 }
 
 func (HasOneThrough) Kind() RelationKind { return KindHasOneThrough }

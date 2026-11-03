@@ -19,6 +19,9 @@ var SelectComponents = []string{
 
 var leadingBoolean = regexp.MustCompile(`(?i)^(and|or) `)
 
+// aliasedValueSeparator is Laravel wrapAliasedValue's preg_split('/\s+as\s+/i').
+var aliasedValueSeparator = regexp.MustCompile(`(?i)\s+as\s+`)
+
 // BaseGrammar implements the shared parts of Laravel's query grammar. Dialects embed it and
 // override only the methods whose SQL differs. Go embedding does not dispatch virtually, so
 // BaseGrammar keeps a self reference to the concrete dialect and routes shared logic through it.
@@ -67,13 +70,31 @@ func (g *BaseGrammar) Prefix() string { return g.prefix }
 
 // --- wrapping and parameters ---
 
-// Wrap quotes a column or value. Mirrors Grammar::wrap().
+// Wrap quotes a column or value. Mirrors Grammar::wrap(): an expression is taken as written, an
+// aliased string is wrapped on both sides of its " as " connector — Laravel's wrapAliasedValue,
+// which runs before the JSON-selector test — and anything else is quoted segment by segment.
 func (g *BaseGrammar) Wrap(value any) string {
 	if core.IsExpression(value) {
 		return core.ExpressionValue(value)
 	}
 
 	if s, ok := value.(string); ok {
+		// Laravel's wrapAliasedValue splits the value on /\s+as\s+/i and wraps the first two
+		// segments, re-emitting the connector as " as ": the split consumes the whole whitespace
+		// run, and anything past a second connector is dropped (preg_split's third segment is
+		// never wrapped). The stripos gate stays the literal " as ", so a tab-separated "as" is
+		// not an alias.
+		if strings.Contains(strings.ToLower(s), " as ") {
+			if matches := aliasedValueSeparator.FindAllStringIndex(s, 2); len(matches) > 0 {
+				alias := s[matches[0][1]:]
+				if len(matches) > 1 {
+					alias = s[matches[0][1]:matches[1][0]]
+				}
+
+				return g.Wrap(s[:matches[0][0]]) + " as " + g.WrapValue(alias)
+			}
+		}
+
 		if g.dialect().IsJsonSelector(s) {
 			return g.dialect().WrapJsonSelector(s)
 		}
@@ -530,6 +551,16 @@ func (g *BaseGrammar) CompileGroupLimit(b core.Query) string {
 	for i, component := range components {
 		if strings.HasPrefix(component, "select ") {
 			columns = component
+			components = append(components[:i], components[i+1:]...)
+			break
+		}
+	}
+
+	// The orders moved into the row_number() window: Laravel unsets the compiled component
+	// (`unset($components['orders'])`) so the derived table carries no order of its own and the
+	// outer statement orders by laravel_row alone.
+	for i, component := range components {
+		if strings.HasPrefix(component, "order by ") {
 			components = append(components[:i], components[i+1:]...)
 			break
 		}

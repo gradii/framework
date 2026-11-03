@@ -12,7 +12,7 @@ import (
 // The integration module's TestWith_ChunkedIN writes `u := &User{…}` and then `Create(&u)`, a pointer
 // to a pointer, and GORM accepted that shape. reflect.Indirect dereferences once, so the record
 // builders used to report the surviving pointer as an unsupported type instead of inserting the row.
-func newPointerTestQuery(t *testing.T) *Query {
+func newPointerTestQuery(t *testing.T) *OrmBuilder {
 	t.Helper()
 
 	return newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, stubWriter(t), nil, nil, nil, nil, &Conditions{}, nil)
@@ -31,7 +31,7 @@ func TestInsertRecordsAcceptsPointerToPointer(t *testing.T) {
 }
 
 func TestUpdateAssignmentsAcceptsPointerToPointer(t *testing.T) {
-	modeled, ok := newPointerTestQuery(t).Model(&SchemaOuter{}).(*Query)
+	modeled, ok := newPointerTestQuery(t).Model(&SchemaOuter{}).(*OrmBuilder)
 	assert.True(t, ok)
 
 	outer := &SchemaOuter{Name: "update by pointer to pointer"}
@@ -42,7 +42,7 @@ func TestUpdateAssignmentsAcceptsPointerToPointer(t *testing.T) {
 }
 
 func TestSaveAssignmentsAcceptsPointerToPointer(t *testing.T) {
-	modeled, ok := newPointerTestQuery(t).Model(&SchemaOuter{}).(*Query)
+	modeled, ok := newPointerTestQuery(t).Model(&SchemaOuter{}).(*OrmBuilder)
 	assert.True(t, ok)
 
 	outer := &SchemaOuter{Name: "save by pointer to pointer"}
@@ -66,7 +66,7 @@ func TestInsertRecordsRejectsNilPointer(t *testing.T) {
 // path with reflect.Value.Field. Field panics on a pointer value, so the path has to be dereferenced
 // fully there too: TestWith_ChunkedIN reached this panic after the insert itself succeeded.
 func TestAssignInsertedKeysAcceptsPointerToPointer(t *testing.T) {
-	modeled, ok := newPointerTestQuery(t).Model(&SchemaOuter{}).(*Query)
+	modeled, ok := newPointerTestQuery(t).Model(&SchemaOuter{}).(*OrmBuilder)
 	assert.True(t, ok)
 
 	outer := &SchemaOuter{}
@@ -79,7 +79,7 @@ func TestAssignInsertedKeysAcceptsPointerToPointer(t *testing.T) {
 
 // A nil destination must be refused rather than panicking.
 func TestAssignInsertedKeyIgnoresNilDestination(t *testing.T) {
-	modeled, ok := newPointerTestQuery(t).Model(&SchemaOuter{}).(*Query)
+	modeled, ok := newPointerTestQuery(t).Model(&SchemaOuter{}).(*OrmBuilder)
 	assert.True(t, ok)
 
 	var outer *SchemaOuter

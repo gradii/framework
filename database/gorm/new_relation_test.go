@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	"github.com/gradii/framework/database/gorm/relations"
 	"github.com/gradii/framework/database/orm/morphmap"
 	"github.com/gradii/framework/errors"
 )
@@ -17,7 +18,7 @@ import (
 // SQL a caller really gets.
 func newRelationSQL(t *testing.T, q contractsorm.Query, dest any) string {
 	t.Helper()
-	gq, ok := q.(*Query)
+	gq, ok := ormBuilderOf(q)
 	if !ok {
 		t.Fatalf("expected *gorm.Query, got %T", q)
 	}
@@ -72,7 +73,7 @@ func TestRelated_HasManyThrough(t *testing.T) {
 func TestRelated_NotPointer(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
 	rel := q.Related(relUser{ID: 1}, "Books") // value, not pointer
-	gq, ok := rel.(*Query)
+	gq, ok := ormBuilderOf(rel)
 	assert.True(t, ok)
 	assert.True(t, errors.Is(gq.conditions.err, errors.OrmRelationParentNotPointer))
 }
@@ -80,7 +81,7 @@ func TestRelated_NotPointer(t *testing.T) {
 func TestRelated_NilParent(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
 	rel := q.Related(nil, "Books")
-	gq, ok := rel.(*Query)
+	gq, ok := ormBuilderOf(rel)
 	assert.True(t, ok)
 	assert.True(t, errors.Is(gq.conditions.err, errors.OrmRelationParentNotPointer))
 }
@@ -90,7 +91,7 @@ func TestRelated_NilParent(t *testing.T) {
 func TestRelated_RelationNotFound(t *testing.T) {
 	q := newRelQueryWith(t, &relUser{})
 	rel := q.Related(&relUser{ID: 1}, "DoesNotExist")
-	gq, ok := rel.(*Query)
+	gq, ok := ormBuilderOf(rel)
 	assert.True(t, ok)
 	assert.True(t, errors.Is(gq.conditions.err, errors.OrmRelationNotFound))
 }
@@ -113,8 +114,10 @@ func TestRelated_MorphTo_ResolvedViaMorphMap(t *testing.T) {
 	q := newRelQueryWith(t, &morphImage{})
 	rel := q.Related(&morphImage{ID: 1, ImageableID: 42, ImageableType: "post"}, "Imageable")
 	sql := newRelationSQL(t, rel, &morphParentLikePost{})
-	assert.Contains(t, sql, "morph_parent_like_posts")
-	assert.Contains(t, sql, "id")
+	// The owner key wears the resolved table's qualification; oracle (sqlite, v12.55.1):
+	// `select * from "ghost_relateds" where "ghost_relateds"."id" = ?` — the same statement with
+	// this fixture's table name.
+	assert.Equal(t, `select * from "morph_parent_like_posts" where "morph_parent_like_posts"."id" = ?`, sql)
 }
 
 func TestRelated_MorphTo_UnregisteredType(t *testing.T) {
@@ -123,7 +126,7 @@ func TestRelated_MorphTo_UnregisteredType(t *testing.T) {
 
 	q := newRelQueryWith(t, &morphImage{})
 	rel := q.Related(&morphImage{ID: 1, ImageableID: 42, ImageableType: "unknown"}, "Imageable")
-	gq, ok := rel.(*Query)
+	gq, ok := ormBuilderOf(rel)
 	assert.True(t, ok)
 	assert.True(t, errors.Is(gq.conditions.err, errors.OrmMorphTypeUnknown))
 }
@@ -134,10 +137,10 @@ func TestRelated_MorphTo_EmptyType_YieldsZeroRowQuery(t *testing.T) {
 
 	q := newRelQueryWith(t, &morphImage{})
 	rel := q.Related(&morphImage{ID: 1, ImageableID: 0, ImageableType: ""}, "Imageable")
-	gq, ok := rel.(*Query)
+	gq, ok := ormBuilderOf(rel)
 	assert.True(t, ok)
 	// The zero-row guard compiles to a WHERE that cannot match.
-	stmt, _, err := gq.Table("any_table").(*Query).compileSelect()
+	stmt, _, err := gq.Table("any_table").(*OrmBuilder).compileSelect()
 	require.NoError(t, err)
 	assert.Contains(t, stmt, "1 = 0")
 }
@@ -197,9 +200,9 @@ func TestRelated_OnQuery_AppliedToReturnedQuery(t *testing.T) {
 
 func TestCompileExistenceSubquery_OnQuery_AppliedInExistenceCheck(t *testing.T) {
 	q := newRelQueryWith(t, &scopedUser{})
-	desc, err := resolveRelation(&scopedUser{}, "Books")
+	desc, err := relations.ResolveRelation(&scopedUser{}, "Books")
 	assert.NoError(t, err)
-	inner, err := q.compileExistenceSubquery(desc, nil)
+	inner, _, err := q.compileExistenceSubquery(desc, nil)
 	assert.NoError(t, err)
 	sql, _ := inner.ToSelectSQL()
 	assert.Contains(t, sql, "published")

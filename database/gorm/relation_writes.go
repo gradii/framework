@@ -2,60 +2,73 @@ package gorm
 
 import (
 	"fmt"
+	"maps"
 	"reflect"
-	"strconv"
-	"time"
+	"slices"
 
 	dbcontract "github.com/gradii/framework/contracts/database/db"
 	contractsdriver "github.com/gradii/framework/contracts/database/driver"
+	"github.com/gradii/framework/database/gorm/relations"
 	"github.com/gradii/framework/errors"
 )
 
+// writeInfo projects a resolved descriptor for the relation write workers of
+// database/gorm/relations — relationInfoFromDescriptor with no bound read builder, the shape
+// Builder.RelationInfoOf hands out: the write shells resolve the descriptor themselves and cross
+// the seam with its projection.
+func (r *OrmBuilder) writeInfo(desc *relationDescriptor, parent any) relations.RelationInfo {
+	return relationInfoFromDescriptor(desc, nil, parent)
+}
+
 // SaveRelation inserts or updates child as a member of parent's relation. Sets child's foreign
 // key (and morph_type for MorphOne/MorphMany) from parent's local key, then persists child via
-// Query.Save. For BelongsToMany kinds (Many2Many, MorphToMany, MorphedByMany) persists child first,
-// then writes a pivot row linking parent and child.
+// Query.Save. The FK stamp also links child back to parent in memory under the relation's inverse
+// name when one is in effect — the write-back SupportsInverseRelations::applyInverseRelationToModel
+// applies (oracle: save.same-instance true). For BelongsToMany kinds (Many2Many, MorphToMany,
+// MorphedByMany) persists child first, then writes a pivot row linking parent and child.
 //
-// Public Query-level helper used by Orm.Save. Named "SaveRelation" to avoid clashing with the
+// RelationWriter.Save shell (contracts/database/orm/relation_writer.go:32) — reached through
+// Query.Relation(parent, name); the flat Orm.Save(parent, relation, child) form intentionally
+// does not exist (relation_writer.go:9). Named "SaveRelation" to avoid clashing with the
 // existing single-arg Query.Save(value any) which persists a model directly.
 //
 // Supported kinds: HasOne, HasMany, MorphOne, MorphMany, Many2Many, MorphToMany, MorphedByMany.
 // Other kinds error with OrmRelationKindNotSupported.
-func (r *Query) SaveRelation(parent any, relation string, child any) error {
+func (r *OrmBuilder) SaveRelation(parent any, relation string, child any) error {
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
 	if !isValidParent(child) {
 		return errors.OrmRelationParentNotPointer.Args(child)
 	}
-	desc, err := resolveRelation(parent, relation)
+	desc, err := relations.ResolveRelation(parent, relation)
 	if err != nil {
 		return err
 	}
-	switch desc.kind {
+	switch desc.Kind {
 	case relKindHasOne, relKindHasMany, relKindMorphOne, relKindMorphMany:
-		if err := r.setRelationFKOnChild(parent, child, desc); err != nil {
+		if err := relations.SetRelationFKOnChild(r, r.writeInfo(desc, parent), parent, child); err != nil {
 			return err
 		}
-		return r.fresh().Save(child)
+		return r.relationWriteSession().Save(child)
 	case relKindMany2Many, relKindMorphToMany:
 		// Persist child first, then attach via pivot.
-		if err := r.fresh().Save(child); err != nil {
+		if err := r.relationWriteSession().Save(child); err != nil {
 			return err
 		}
-		childPK, err := readParentColumn(r, child, desc.pivotRelatedRef.primaryColumn)
+		childPK, err := readParentColumn(r, child, desc.PivotRelatedRef.PrimaryColumn)
 		if err != nil {
 			return err
 		}
 		return r.AttachRelation(parent, relation, []any{childPK})
 	default:
-		return errors.OrmRelationKindNotSupported.Args("Save", relation, kindName(desc.kind))
+		return errors.OrmRelationKindNotSupported.Args("Save", relation, kindName(desc.Kind))
 	}
 }
 
 // SaveManyRelation is the slice form of SaveRelation. children must be a slice or pointer-to-
 // slice of either pointer-to-struct or struct elements. Iterates and bails on first error.
-func (r *Query) SaveManyRelation(parent any, relation string, children any) error {
+func (r *OrmBuilder) SaveManyRelation(parent any, relation string, children any) error {
 	rv := reflect.ValueOf(children)
 	if rv.Kind() == reflect.Pointer {
 		rv = rv.Elem()
@@ -87,41 +100,59 @@ func (r *Query) SaveManyRelation(parent any, relation string, children any) erro
 	return nil
 }
 
+// SaveRelationQuietly is SaveRelation without raising model events — Eloquent's
+// HasOneOrMany::saveQuietly (illuminate/database v12.55.1, HasOneOrMany.php:345,
+// `Model::withoutEvents(fn () => $this->save($model))`) and BelongsToMany::saveQuietly
+// (BelongsToMany.php:1366) on the relation object. The whole save runs on an event-suppressed
+// session — the child's insert or update, the pivot attach and the owner touches are all quiet,
+// the reach Eloquent's dispatcher swap has (Model::withoutEvents swaps the dispatcher for a
+// NullDispatcher around the callback, HasEvents.php:445-460). Everything else is SaveRelation's.
+func (r *OrmBuilder) SaveRelationQuietly(parent any, relation string, child any) error {
+	return r.quietSession().SaveRelation(parent, relation, child)
+}
+
+// SaveManyRelationQuietly is the slice form of SaveRelationQuietly — HasOneOrMany::saveManyQuietly
+// (HasOneOrMany.php:373) and BelongsToMany::saveManyQuietly (BelongsToMany.php:1402): the whole
+// slice saves inside one event-suppressed scope.
+func (r *OrmBuilder) SaveManyRelationQuietly(parent any, relation string, children any) error {
+	return r.quietSession().SaveManyRelation(parent, relation, children)
+}
+
 // SaveRelationWithPivot is SaveRelation with caller-supplied pivot column values for the
 // BelongsToMany family. On HasOneOrMany kinds attrs is ignored (no pivot row).
-func (r *Query) SaveRelationWithPivot(parent any, relation string, child any, attrs map[string]any) error {
+func (r *OrmBuilder) SaveRelationWithPivot(parent any, relation string, child any, attrs map[string]any) error {
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
 	if !isValidParent(child) {
 		return errors.OrmRelationParentNotPointer.Args(child)
 	}
-	desc, err := resolveRelation(parent, relation)
+	desc, err := relations.ResolveRelation(parent, relation)
 	if err != nil {
 		return err
 	}
-	switch desc.kind {
+	switch desc.Kind {
 	case relKindHasOne, relKindHasMany, relKindMorphOne, relKindMorphMany:
 		// No pivot — just delegate to SaveRelation.
 		return r.SaveRelation(parent, relation, child)
 	case relKindMany2Many, relKindMorphToMany:
 		// Persist child first, then attach via pivot with attrs.
-		if err := r.fresh().Save(child); err != nil {
+		if err := r.relationWriteSession().Save(child); err != nil {
 			return err
 		}
-		childPK, err := readParentColumn(r, child, desc.pivotRelatedRef.primaryColumn)
+		childPK, err := readParentColumn(r, child, desc.PivotRelatedRef.PrimaryColumn)
 		if err != nil {
 			return err
 		}
 		return r.AttachWithPivotRelation(parent, relation, map[any]map[string]any{childPK: attrs})
 	default:
-		return errors.OrmRelationKindNotSupported.Args("SaveWithPivot", relation, kindName(desc.kind))
+		return errors.OrmRelationKindNotSupported.Args("SaveWithPivot", relation, kindName(desc.Kind))
 	}
 }
 
 // SaveManyRelationWithPivot is the slice form of SaveRelationWithPivot. attrsPerChild is keyed by
 // the related PK of each child; an entry may be nil to attach without extra columns.
-func (r *Query) SaveManyRelationWithPivot(parent any, relation string, children any, attrsPerChild map[any]map[string]any) error {
+func (r *OrmBuilder) SaveManyRelationWithPivot(parent any, relation string, children any, attrsPerChild map[any]map[string]any) error {
 	rv := reflect.ValueOf(children)
 	if rv.Kind() == reflect.Pointer {
 		rv = rv.Elem()
@@ -129,7 +160,7 @@ func (r *Query) SaveManyRelationWithPivot(parent any, relation string, children 
 	if rv.Kind() != reflect.Slice {
 		return errors.OrmRelationKindNotSupported.Args("SaveManyWithPivot", relation, fmt.Sprintf("children=%T (must be slice)", children))
 	}
-	desc, err := resolveRelation(parent, relation)
+	desc, err := relations.ResolveRelation(parent, relation)
 	if err != nil {
 		return err
 	}
@@ -151,7 +182,7 @@ func (r *Query) SaveManyRelationWithPivot(parent any, relation string, children 
 			return errors.OrmRelationKindNotSupported.Args("SaveManyWithPivot", relation, fmt.Sprintf("children element=%s", item.Kind()))
 		}
 		// Read child's PK to look up attrs.
-		childPK, err := readParentColumn(r, elem, desc.pivotRelatedRef.primaryColumn)
+		childPK, err := readParentColumn(r, elem, desc.PivotRelatedRef.PrimaryColumn)
 		if err != nil {
 			return err
 		}
@@ -163,206 +194,147 @@ func (r *Query) SaveManyRelationWithPivot(parent any, relation string, children 
 	return nil
 }
 
-// AssociateRelation sets parent's foreign key (and morph_type for MorphTo) to point at owner,
-// then persists parent. Supported kinds: BelongsTo, MorphTo. owner must be a non-nil pointer to
-// a struct.
+// --- D2 write-family wrappers ----------------------------------------------------------------
 //
-// Public Query-level helper used by Orm.Associate.
-func (r *Query) AssociateRelation(parent any, relation string, owner any) error {
+// The quiet and OrFail families of the 1:1 alignment round: thin wrappers over the base write
+// shells — the quiet family suppresses the builder's event dispatch for the whole call, the Go
+// reading of Eloquent's Model::withoutEvents (HasEvents.php:445-460, the dispatcher swap), and
+// the OrFail family runs the base call inside a transaction on the connection the relation
+// writes run on — Eloquent's `$this->parent->getConnection()->transaction(...)` around each
+// InteractsWithPivotTable OrFail method.
+
+// quietSession returns a copy of the builder with its event dispatch suppressed — the flag
+// WithoutEvents records (database/gorm/orm_builder.go:3230), written onto a clone. The clone is
+// load-bearing: setConditions changes the receiver, and the relation object's own builder must
+// stay loud for the calls that follow the quiet one.
+func (r *OrmBuilder) quietSession() *OrmBuilder {
+	quiet := r.clone()
+	conditions := quiet.conditions
+	conditions.withoutEvents = true
+
+	return quiet.setConditions(conditions)
+}
+
+// relationWriteSession returns the session a relation write persists through: a fresh builder
+// that keeps the receiver's event suppression. Eloquent's Model::withoutEvents swaps the
+// dispatcher for the whole callback, so a nested write inside a quiet relation write is quiet
+// too; a plain fresh() would drop the flag and the nested Save / Create would fire events
+// again. Only the session the write shells spawn carries the flag — every other fresh() call
+// site keeps its clean conditions.
+func (r *OrmBuilder) relationWriteSession() *OrmBuilder {
+	session := r.fresh()
+	if !r.conditions.withoutEvents {
+		return session
+	}
+
+	conditions := session.conditions
+	conditions.withoutEvents = true
+
+	return session.setConditions(conditions)
+}
+
+// AssociateRelation sets parent's foreign key (and morph_type for MorphTo) to point at owner,
+// then persists parent. Supported kinds: BelongsTo, MorphTo. A nil owner clears the foreign key
+// (and the morph type) instead of erroring — Laravel's associate(null); a non-nil owner must be a
+// pointer to a struct.
+//
+// RelationWriter.Associate shell (contracts/database/orm/relation_writer.go:122) — reached through Query.Relation(parent, name); the flat Orm.Associate form intentionally does not exist (relation_writer.go:9).
+func (r *OrmBuilder) AssociateRelation(parent any, relation string, owner any) error {
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
-	if !isValidParent(owner) {
+	if !relationOwnerIsNil(owner) && !isValidParent(owner) {
 		return errors.OrmRelationParentNotPointer.Args(owner)
 	}
-	desc, err := resolveRelation(parent, relation)
+	desc, err := relations.ResolveRelation(parent, relation)
 	if err != nil {
 		return err
 	}
-	switch desc.kind {
+	if relationOwnerIsNil(owner) {
+		// Laravel: associate(null) sets the foreign key (and the morph type) to null and clears
+		// the relation — the same write dissociate() performs.
+		switch desc.Kind {
+		case relKindBelongsTo:
+			return relations.ApplyDissociate(r, r.writeInfo(desc, parent), parent, false)
+		case relKindMorphTo:
+			return relations.ApplyDissociate(r, r.writeInfo(desc, parent), parent, true)
+		default:
+			return errors.OrmRelationKindNotSupported.Args("Associate", relation, kindName(desc.Kind))
+		}
+	}
+	switch desc.Kind {
 	case relKindBelongsTo:
-		return r.applyAssociate(parent, owner, desc, false)
+		return relations.ApplyAssociate(r, r.writeInfo(desc, parent), parent, owner, false)
 	case relKindMorphTo:
-		return r.applyAssociate(parent, owner, desc, true)
+		return relations.ApplyAssociate(r, r.writeInfo(desc, parent), parent, owner, true)
 	default:
-		return errors.OrmRelationKindNotSupported.Args("Associate", relation, kindName(desc.kind))
+		return errors.OrmRelationKindNotSupported.Args("Associate", relation, kindName(desc.Kind))
 	}
 }
 
 // DissociateRelation clears parent's foreign key (and morph_type for MorphTo) and persists
 // parent. Supported kinds: BelongsTo, MorphTo.
-func (r *Query) DissociateRelation(parent any, relation string) error {
+func (r *OrmBuilder) DissociateRelation(parent any, relation string) error {
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
-	desc, err := resolveRelation(parent, relation)
+	desc, err := relations.ResolveRelation(parent, relation)
 	if err != nil {
 		return err
 	}
-	switch desc.kind {
+	switch desc.Kind {
 	case relKindBelongsTo:
-		return r.applyDissociate(parent, desc, false)
+		return relations.ApplyDissociate(r, r.writeInfo(desc, parent), parent, false)
 	case relKindMorphTo:
-		return r.applyDissociate(parent, desc, true)
+		return relations.ApplyDissociate(r, r.writeInfo(desc, parent), parent, true)
 	default:
-		return errors.OrmRelationKindNotSupported.Args("Dissociate", relation, kindName(desc.kind))
+		return errors.OrmRelationKindNotSupported.Args("Dissociate", relation, kindName(desc.Kind))
 	}
-}
-
-// applyAssociate writes owner's PK into parent's FK column (and the morph_type column for
-// MorphTo, resolved from the morph map / MorphClass()), then persists parent.
-func (r *Query) applyAssociate(parent, owner any, desc *relationDescriptor, isMorph bool) error {
-	if err := r.mutateAssociate(parent, owner, desc, isMorph); err != nil {
-		return err
-	}
-	return r.fresh().Save(parent)
-}
-
-// mutateAssociate is the pure-mutation half of applyAssociate. Writes owner's PK into parent's
-// FK column (and the morph_type column for MorphTo). No persistence.
-func (r *Query) mutateAssociate(parent, owner any, desc *relationDescriptor, isMorph bool) error {
-	parentSchema, err := parseSchema(parent)
-	if err != nil {
-		return err
-	}
-	parentRV := reflect.ValueOf(parent).Elem()
-
-	var fkColumn string
-	if isMorph {
-		fkColumn = desc.morphIDColumn
-	} else {
-		if len(desc.references) == 0 {
-			return errors.OrmRelationUnsupported.Args(desc.name, desc.parentTable, "no references")
-		}
-		fkColumn = desc.references[0].foreignColumn
-	}
-	fkField, ok := parentSchema.FieldsByDBName[fkColumn]
-	if !ok {
-		return errors.OrmRelationUnsupported.Args(desc.name, parentSchema.Name, "no FK field "+fkColumn)
-	}
-
-	ownerPKColumn := "id"
-	if !isMorph && len(desc.references) > 0 {
-		ownerPKColumn = desc.references[0].primaryColumn
-	} else if isMorph && desc.morphOwnerKey != "" {
-		ownerPKColumn = desc.morphOwnerKey
-	}
-	ownerPK, err := readParentColumn(r, owner, ownerPKColumn)
-	if err != nil {
-		return err
-	}
-	if err := fkField.Set(r.ctx, parentRV, ownerPK); err != nil {
-		return err
-	}
-
-	if isMorph {
-		typeField, ok := parentSchema.FieldsByDBName[desc.morphTypeColumn]
-		if !ok {
-			return errors.OrmRelationUnsupported.Args(desc.name, parentSchema.Name, "no morph type field "+desc.morphTypeColumn)
-		}
-		alias, ok := resolveMorphAlias(owner)
-		if !ok {
-			tbl, terr := tableNameFor(owner)
-			if terr != nil {
-				return terr
-			}
-			alias = tbl
-		}
-		if err := typeField.Set(r.ctx, parentRV, alias); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// applyDissociate sets parent's FK to the zero value (and morph_type to "" for MorphTo), then
-// persists parent.
-func (r *Query) applyDissociate(parent any, desc *relationDescriptor, isMorph bool) error {
-	if err := r.mutateDissociate(parent, desc, isMorph); err != nil {
-		return err
-	}
-	return r.fresh().Save(parent)
-}
-
-// mutateDissociate is the pure-mutation half of applyDissociate.
-func (r *Query) mutateDissociate(parent any, desc *relationDescriptor, isMorph bool) error {
-	parentSchema, err := parseSchema(parent)
-	if err != nil {
-		return err
-	}
-	parentRV := reflect.ValueOf(parent).Elem()
-
-	var fkColumn string
-	if isMorph {
-		fkColumn = desc.morphIDColumn
-	} else {
-		if len(desc.references) == 0 {
-			return errors.OrmRelationUnsupported.Args(desc.name, desc.parentTable, "no references")
-		}
-		fkColumn = desc.references[0].foreignColumn
-	}
-	fkField, ok := parentSchema.FieldsByDBName[fkColumn]
-	if !ok {
-		return errors.OrmRelationUnsupported.Args(desc.name, parentSchema.Name, "no FK field "+fkColumn)
-	}
-	zero := reflect.Zero(fkField.FieldType).Interface()
-	if err := fkField.Set(r.ctx, parentRV, zero); err != nil {
-		return err
-	}
-
-	if isMorph {
-		typeField, ok := parentSchema.FieldsByDBName[desc.morphTypeColumn]
-		if !ok {
-			return errors.OrmRelationUnsupported.Args(desc.name, parentSchema.Name, "no morph type field "+desc.morphTypeColumn)
-		}
-		zeroType := reflect.Zero(typeField.FieldType).Interface()
-		if err := typeField.Set(r.ctx, parentRV, zeroType); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // CreateRelation persists a new related row. For HasOneOrMany kinds (HasOne, HasMany, MorphOne,
 // MorphMany) the framework first sets the FK (and morph type column) on dest from parent, then
-// inserts. dest must be a non-nil pointer to a struct of the related type.
+// inserts. The created child is linked back to parent in memory under the relation's inverse name
+// when one is in effect — HasOneOrMany::create applies applyInverseRelationToModel after the save
+// (v12.55.1, HasOneOrMany.php:393; oracle: create.same-instance true). dest must be a non-nil
+// pointer to a struct of the related type.
 //
-// Public Query-level helper used by Orm.Create.
-func (r *Query) CreateRelation(parent any, relation string, dest any) error {
+// RelationWriter.Create shell (contracts/database/orm/relation_writer.go:53) — reached through Query.Relation(parent, name); the flat Orm.Create form intentionally does not exist (relation_writer.go:9).
+func (r *OrmBuilder) CreateRelation(parent any, relation string, dest any) error {
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
 	if !isValidParent(dest) {
 		return errors.OrmRelationParentNotPointer.Args(dest)
 	}
-	desc, err := resolveRelation(parent, relation)
+	desc, err := relations.ResolveRelation(parent, relation)
 	if err != nil {
 		return err
 	}
-	switch desc.kind {
+	switch desc.Kind {
 	case relKindHasOne, relKindHasMany, relKindMorphOne, relKindMorphMany:
-		if err := r.setRelationFKOnChild(parent, dest, desc); err != nil {
+		if err := relations.SetRelationFKOnChild(r, r.writeInfo(desc, parent), parent, dest); err != nil {
 			return err
 		}
-		return r.fresh().Create(dest)
+		return r.relationWriteSession().Create(dest)
 	case relKindMany2Many, relKindMorphToMany:
 		// Create dest first, then attach via pivot.
-		if err := r.fresh().Create(dest); err != nil {
+		if err := r.relationWriteSession().Create(dest); err != nil {
 			return err
 		}
-		childPK, err := readParentColumn(r, dest, desc.pivotRelatedRef.primaryColumn)
+		childPK, err := readParentColumn(r, dest, desc.PivotRelatedRef.PrimaryColumn)
 		if err != nil {
 			return err
 		}
 		return r.AttachRelation(parent, relation, []any{childPK})
 	default:
-		return errors.OrmRelationKindNotSupported.Args("Create", relation, kindName(desc.kind))
+		return errors.OrmRelationKindNotSupported.Args("Create", relation, kindName(desc.Kind))
 	}
 }
 
 // CreateManyRelation is the slice form of CreateRelation. dests must be a slice or a pointer to a
 // slice; iterates and calls CreateRelation per element, bailing on the first error.
-func (r *Query) CreateManyRelation(parent any, relation string, dests any) error {
+func (r *OrmBuilder) CreateManyRelation(parent any, relation string, dests any) error {
 	rv := reflect.ValueOf(dests)
 	if rv.Kind() == reflect.Pointer {
 		rv = rv.Elem()
@@ -382,281 +354,485 @@ func (r *Query) CreateManyRelation(parent any, relation string, dests any) error
 	return nil
 }
 
+// CreateRelationQuietly is CreateRelation without raising model events — Eloquent's
+// HasOneOrMany::createQuietly (HasOneOrMany.php:403). The foreign key (and morph type) stamp and
+// the insert are CreateRelation's; only the event dispatch is suppressed.
+func (r *OrmBuilder) CreateRelationQuietly(parent any, relation string, dest any) error {
+	return r.quietSession().CreateRelation(parent, relation, dest)
+}
+
+// CreateManyRelationQuietly is the slice form of CreateRelationQuietly —
+// HasOneOrMany::createManyQuietly (HasOneOrMany.php:455): the whole slice creates inside one
+// event-suppressed scope.
+func (r *OrmBuilder) CreateManyRelationQuietly(parent any, relation string, dests any) error {
+	return r.quietSession().CreateManyRelation(parent, relation, dests)
+}
+
 // FindOrNewRelation finds the related row with primary key id. If absent, fills dest with a new
 // instance of the related model and pre-sets the FK (and morph type) — but does NOT persist.
+// For the BelongsToMany kinds the lookup is the pivot-joined relation read, a hit hydrates the
+// Pivot struct, and a miss leaves dest as it was (no foreign key lands on the related row).
 // dest must be a pointer to a struct.
-func (r *Query) FindOrNewRelation(parent any, relation string, id any, dest any) error {
+func (r *OrmBuilder) FindOrNewRelation(parent any, relation string, id any, dest any) error {
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
 	if !isValidParent(dest) {
 		return errors.OrmRelationParentNotPointer.Args(dest)
 	}
-	desc, err := resolveRelation(parent, relation)
+	desc, err := relations.ResolveRelation(parent, relation)
 	if err != nil {
 		return err
 	}
-	switch desc.kind {
+	switch desc.Kind {
 	case relKindHasOne, relKindHasMany, relKindMorphOne, relKindMorphMany:
-		q := r.newRelationQuery(parent, relation)
-		if err := q.Find(dest, id); err != nil {
-			return err
-		}
-		// Check if Find actually populated dest by inspecting the PK field.
-		schema, err := parseSchema(dest)
-		if err != nil {
-			return err
-		}
-		if len(schema.PrimaryFields) == 0 {
-			return errors.OrmRelationUnsupported.Args(relation, schema.Name, "no primary key")
-		}
-		pkField := schema.PrimaryFields[0]
-		rv := reflect.ValueOf(dest).Elem()
-		pkVal, isZero := pkField.ValueOf(r.ctx, rv)
-		_ = pkVal
-		if isZero {
-			// Not found — set FK on the zero-valued dest.
-			return r.setRelationFKOnChild(parent, dest, desc)
-		}
-		return nil
+		return relations.FindOrNew(r, r.writeInfo(desc, parent), parent, relation, id, dest)
+	case relKindMany2Many, relKindMorphToMany:
+		// Laravel BelongsToMany::findOrNew (vendor BelongsToMany.php:621) delegates to
+		// BelongsToMany::find (:729): where(<related key> = id)->first() through the pivot-joined
+		// relation read, which selects the pivot aliases and hydrates the related model's Pivot
+		// struct (oracle v12.55.1, executed: select "related_table".*, "pivot_table"."source_id"
+		// as "pivot_source_id", "pivot_table"."related_id" as "pivot_related_id" from
+		// "related_table" inner join "pivot_table" on "related_table"."id" =
+		// "pivot_table"."related_id" where "pivot_table"."source_id" = ? and
+		// "related_table"."id" = ? limit 1). On a miss Laravel returns a bare newInstance() --
+		// no foreign key lands on the related row -- so a miss leaves dest as it was.
+		return r.newRelationQuery(parent, relation).Find(dest, id)
 	default:
-		return errors.OrmRelationKindNotSupported.Args("FindOrNew", relation, kindName(desc.kind))
+		return errors.OrmRelationKindNotSupported.Args("FindOrNew", relation, kindName(desc.Kind))
 	}
 }
 
 // FirstOrNewRelation finds the first related row matching attrs. If absent, fills dest with a new
-// instance carrying attrs+values and pre-set FK — does NOT persist.
-func (r *Query) FirstOrNewRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any) error {
+// instance carrying attrs+values (values win) and the pre-set FK (and morph type) — does NOT
+// persist. Supported kinds: HasOne, HasMany, MorphOne, MorphMany, HasOneThrough, HasManyThrough
+// (through kinds carry no key on the related row, so newInstance() alone is the whole response),
+// Many2Many, MorphToMany (the search is the plain related read and the miss response is the
+// attrs+values overlay; the pivot row is a later, explicit write).
+func (r *OrmBuilder) FirstOrNewRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any) error {
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
 	if !isValidParent(dest) {
 		return errors.OrmRelationParentNotPointer.Args(dest)
 	}
-	desc, err := resolveRelation(parent, relation)
+	desc, err := relations.ResolveRelation(parent, relation)
 	if err != nil {
 		return err
 	}
-	switch desc.kind {
-	case relKindHasOne, relKindHasMany, relKindMorphOne, relKindMorphMany:
-		q := r.newRelationQuery(parent, relation)
-		for col, val := range attrs {
-			q = q.Where(col, val)
+	switch desc.Kind {
+	case relKindHasOne, relKindHasMany, relKindMorphOne, relKindMorphMany,
+		relKindHasOneThrough, relKindHasManyThrough:
+		return relations.FirstOrNew(r, r.writeInfo(desc, parent), parent, relation, attrs, values, dest)
+	case relKindMany2Many, relKindMorphToMany:
+		// Laravel BelongsToMany::firstOrNew (vendor BelongsToMany.php:637) searches the related
+		// table directly -- $this->related->where($attributes)->first(), the plain read behind the
+		// pivot join (oracle v12.55.1, executed: select * from "related_table" where ("attr" = ?)
+		// limit 1, no join) -- and on a miss returns newInstance(array_merge($attributes,
+		// $values)). The pivot row is a later, explicit write: nothing is attached here and no
+		// foreign key is pre-set.
+		query := r.relatedQuery(desc.RelatedModel)
+		// Sorted keys keep the compiled where list stable across runs (Go map iteration is unordered).
+		for _, col := range slices.Sorted(maps.Keys(attrs)) {
+			query = query.Where(col, attrs[col])
 		}
-		if err := q.First(dest); err != nil {
-			// Not found — overlay attrs+values and set FK.
-			if err := r.applyAttrMap(dest, attrs); err != nil {
-				return err
-			}
-			if err := r.applyAttrMap(dest, values); err != nil {
-				return err
-			}
-			return r.setRelationFKOnChild(parent, dest, desc)
+		found, err := firstFoundOn(query, dest)
+		if err != nil {
+			return err
 		}
-		return nil
+		if found {
+			return nil
+		}
+		if err := relations.ApplyAttrMap(r, dest, attrs); err != nil {
+			return err
+		}
+		return relations.ApplyAttrMap(r, dest, values)
 	default:
-		return errors.OrmRelationKindNotSupported.Args("FirstOrNew", relation, kindName(desc.kind))
+		return errors.OrmRelationKindNotSupported.Args("FirstOrNew", relation, kindName(desc.Kind))
 	}
 }
 
-// FirstOrCreateRelation is FirstOrNewRelation that persists when no matching row exists.
-func (r *Query) FirstOrCreateRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any) error {
+// firstOrCreateMany2Many is the BelongsToMany arm of the firstOrCreate family — Laravel
+// BelongsToMany::firstOrCreate (vendor v12.55.1, BelongsToMany.php:655). It is the three-level
+// search FirstOrCreateRelation's Many2Many branch and UpdateOrCreateRelation's both run: the
+// pivot-joined relation read (which hydrates the Pivot struct and returns an attached hit
+// untouched), the plain related read whose hit is attached inside a savepoint (a
+// unique-constraint violation swallowed, "the model was already attached"), and finally
+// createOrFirst. The bool reports whether the related row was freshly created — Laravel's
+// wasRecentlyCreated(), read off createOrFirst's insert: true only when that insert went
+// through, false for every read / attach / read-back path. It is the flag
+// BelongsToMany::updateOrCreate branches on (:707-712).
+func (r *OrmBuilder) firstOrCreateMany2Many(desc *relationDescriptor, parent any, relation string, attrs, values map[string]any, dest any) (bool, error) {
+	// Level 1: the pivot-joined relation read — (clone $this)->where($attributes)->first()
+	// (:657), which hydrates the Pivot struct; an attached hit comes back untouched.
+	found, err := relations.RelationFirst(r, parent, relation, attrs, dest, false)
+	if err != nil {
+		return false, err
+	}
+	if found {
+		return false, nil
+	}
+	// Level 2: the global related read — $this->related->where($attributes)->first() (:659) —
+	// whose hit is attached (:661, withSavepointIfNeeded); a unique-constraint violation from
+	// that attach is swallowed ("the model was already attached").
+	query := r.relatedQuery(desc.RelatedModel)
+	// Sorted keys keep the compiled where list stable across runs (Go map iteration is unordered).
+	for _, col := range slices.Sorted(maps.Keys(attrs)) {
+		query = query.Where(col, attrs[col])
+	}
+	found, err = firstFoundOn(query, dest)
+	if err != nil {
+		return false, err
+	}
+	if found {
+		childPK, err := readParentColumn(r, dest, desc.PivotRelatedRef.PrimaryColumn)
+		if err != nil {
+			return false, err
+		}
+		attachErr := r.withSavepointIfNeeded(func() error {
+			return r.AttachRelation(parent, relation, []any{childPK})
+		})
+		if attachErr != nil && !isUniqueConstraintViolation(attachErr) {
+			return false, attachErr
+		}
+
+		return false, nil
+	}
+	// Level 3: both reads missed — Laravel funnels into createOrFirst($attributes, $values,
+	// $joining, $touch) (:664), which inserts related + pivot or resolves the unique-violation
+	// race.
+	return r.createOrFirstMany2Many(desc, parent, relation, attrs, values, dest)
+}
+
+// createOrFirstMany2Many is the BelongsToMany arm of CreateOrFirstRelation — Laravel
+// BelongsToMany::createOrFirst (vendor v12.55.1, BelongsToMany.php:681): the try inserts the
+// related row and attaches the pivot row — create(array_merge($attributes, $values), $joining,
+// $touch) (:1417), inside withSavepointIfNeeded — and the bool it reports is Laravel's
+// wasRecentlyCreated(): true (oracle v12.55.1, executed: `insert into "related_table" ...` then
+// `insert into "pivot_table" ("related_id", "source_id") values (?, ?)`, wasRecentlyCreated =
+// true, pivot=(no pivot loaded)), false on every catch.
+func (r *OrmBuilder) createOrFirstMany2Many(desc *relationDescriptor, parent any, relation string, attrs, values map[string]any, dest any) (bool, error) {
+	if err := relations.ApplyAttrMap(r, dest, attrs); err != nil {
+		return false, err
+	}
+	if err := relations.ApplyAttrMap(r, dest, values); err != nil {
+		return false, err
+	}
+	err := r.withSavepointIfNeeded(func() error {
+		if err := r.fresh().Create(dest); err != nil {
+			return err
+		}
+		childPK, err := readParentColumn(r, dest, desc.PivotRelatedRef.PrimaryColumn)
+		if err != nil {
+			return err
+		}
+
+		return r.AttachRelation(parent, relation, []any{childPK})
+	})
+	if err == nil {
+		return true, nil
+	}
+	if !isUniqueConstraintViolation(err) {
+		return false, err
+	}
+	// First catch (:687): read the row the attributes name back — the plain related read
+	// $this->related->where($attributes)->first() (:690; oracle: `select * from
+	// "related_table" where ("attr" = ?) limit 1`). A miss rethrows into the second catch, whose
+	// write-PDO pivot-joined read still runs (:694; oracle v12.55.1, executed: the pivot-joined
+	// select after the plain select, then the rethrow), so the write connection gets its chance to
+	// surface a row the read connection missed; the violation is reraised only if that read misses
+	// too.
+	query := r.relatedQuery(desc.RelatedModel)
+	// Sorted keys keep the compiled where list stable across runs (Go map iteration is unordered).
+	for _, col := range slices.Sorted(maps.Keys(attrs)) {
+		query = query.Where(col, attrs[col])
+	}
+	found, readErr := firstFoundOn(query, dest)
+	if readErr != nil {
+		return false, readErr
+	}
+	if !found {
+		relookupFound, relookupErr := relations.RelationFirst(r, parent, relation, attrs, dest, true)
+		if relookupErr != nil {
+			return false, relookupErr
+		}
+		if !relookupFound {
+			return false, errors.OrmUniqueConstraintViolation.Args(err)
+		}
+
+		return false, nil
+	}
+	// The tap's attach (:691) runs in its own savepoint. Our Attach de-duplicates instead of
+	// raising when the pivot row already exists (a documented divergence), so the second catch
+	// (:693) — (clone $this)->useWritePdo()->where($attributes)->first(), the pivot-joined
+	// relation read on the write PDO — is taken when the attach trips a unique constraint, when it
+	// finds the row already attached (affected == 0), and when the plain read-back missed (above).
+	childPK, err := readParentColumn(r, dest, desc.PivotRelatedRef.PrimaryColumn)
+	if err != nil {
+		return false, err
+	}
+	parentVal, err := readParentColumn(r, parent, desc.PivotParentRef.PrimaryColumn)
+	if err != nil {
+		return false, err
+	}
+	var affected int64
+	attachErr := r.withSavepointIfNeeded(func() error {
+		var inner error
+		affected, inner = relations.DoAttach(r, r.writeInfo(desc, parent), parentVal, []any{childPK}, nil)
+
+		return inner
+	})
+	if attachErr == nil && affected > 0 {
+		return false, r.touchIfTouching(desc, parent, parentVal)
+	}
+	if attachErr != nil && !isUniqueConstraintViolation(attachErr) {
+		return false, attachErr
+	}
+	found, relookupErr := relations.RelationFirst(r, parent, relation, attrs, dest, true)
+	if relookupErr != nil {
+		return false, relookupErr
+	}
+	if !found {
+		if attachErr != nil {
+			return false, errors.OrmUniqueConstraintViolation.Args(attachErr)
+		}
+
+		return false, errors.OrmUniqueConstraintViolation.Args(err)
+	}
+
+	return false, nil
+}
+
+// FirstOrCreateRelation is FirstOrNewRelation that persists when no matching row exists: the
+// lookup runs first, and a miss routes through createOrFirst — the insert is attempted, and a
+// unique-constraint violation reads the row the attributes name back instead of failing. For the
+// BelongsToMany kinds the lookup is Laravel's two-level search — the pivot-joined relation read,
+// then the plain related read whose hit is attached — before the createOrFirst fallback
+// (firstOrCreateMany2Many, shared with UpdateOrCreateRelation).
+func (r *OrmBuilder) FirstOrCreateRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any) error {
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
 	if !isValidParent(dest) {
 		return errors.OrmRelationParentNotPointer.Args(dest)
 	}
-	desc, err := resolveRelation(parent, relation)
+	desc, err := relations.ResolveRelation(parent, relation)
 	if err != nil {
 		return err
 	}
-	switch desc.kind {
-	case relKindHasOne, relKindHasMany, relKindMorphOne, relKindMorphMany:
-		q := r.newRelationQuery(parent, relation)
-		for col, val := range attrs {
-			q = q.Where(col, val)
-		}
-		if err := q.First(dest); err != nil {
-			// Not found — overlay attrs+values, set FK, persist.
-			if err := r.applyAttrMap(dest, attrs); err != nil {
-				return err
-			}
-			if err := r.applyAttrMap(dest, values); err != nil {
-				return err
-			}
-			if err := r.setRelationFKOnChild(parent, dest, desc); err != nil {
-				return err
-			}
-			return r.fresh().Create(dest)
-		}
-		return nil
+	switch desc.Kind {
+	case relKindHasOne, relKindHasMany, relKindMorphOne, relKindMorphMany,
+		relKindHasOneThrough, relKindHasManyThrough:
+		return relations.FirstOrCreate(r, r.writeInfo(desc, parent), parent, relation, attrs, values, dest)
 	case relKindMany2Many, relKindMorphToMany:
-		// For m2m: search the related table directly (no FK constraint), create+attach if missing.
-		q := r.relatedQuery(desc.relatedModel)
-		for col, val := range attrs {
-			q = q.Where(col, val)
-		}
-		if err := q.First(dest); err != nil {
-			// Not found — overlay attrs+values, create, attach.
-			if err := r.applyAttrMap(dest, attrs); err != nil {
-				return err
-			}
-			if err := r.applyAttrMap(dest, values); err != nil {
-				return err
-			}
-			if err := r.fresh().Create(dest); err != nil {
-				return err
-			}
-			childPK, err := readParentColumn(r, dest, desc.pivotRelatedRef.primaryColumn)
-			if err != nil {
-				return err
-			}
-			return r.AttachRelation(parent, relation, []any{childPK})
-		}
-		return nil
+		_, err := r.firstOrCreateMany2Many(desc, parent, relation, attrs, values, dest)
+
+		return err
 	default:
-		return errors.OrmRelationKindNotSupported.Args("FirstOrCreate", relation, kindName(desc.kind))
+		return errors.OrmRelationKindNotSupported.Args("FirstOrCreate", relation, kindName(desc.Kind))
 	}
 }
 
 // UpdateOrCreateRelation finds the first related row matching attrs (or creates one), then overlays
-// values onto it and persists. Always saves dest.
-func (r *Query) UpdateOrCreateRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any) error {
+// values onto it and persists. A miss creates through createOrFirst, and a row read back from a
+// unique-constraint race is filled with the values and saved too — Laravel's wasRecentlyCreated()
+// branch. Always saves dest on the found and race-read paths. For the BelongsToMany kinds the
+// lookup is BelongsToMany::firstOrCreate's three-level search (firstOrCreateMany2Many): an
+// attached hit comes back with its Pivot, an unattached hit is attached first, a miss is created
+// and attached — and only that fresh insert skips the fill+save (BelongsToMany::updateOrCreate,
+// BelongsToMany.php:707).
+func (r *OrmBuilder) UpdateOrCreateRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any) error {
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
 	if !isValidParent(dest) {
 		return errors.OrmRelationParentNotPointer.Args(dest)
 	}
-	desc, err := resolveRelation(parent, relation)
+	desc, err := relations.ResolveRelation(parent, relation)
 	if err != nil {
 		return err
 	}
-	switch desc.kind {
-	case relKindHasOne, relKindHasMany, relKindMorphOne, relKindMorphMany:
-		// FirstOrNew logic.
-		q := r.newRelationQuery(parent, relation)
-		for col, val := range attrs {
-			q = q.Where(col, val)
-		}
-		if err := q.First(dest); err != nil {
-			// Not found — overlay attrs+values and set FK.
-			if err := r.applyAttrMap(dest, attrs); err != nil {
-				return err
-			}
-			if err := r.applyAttrMap(dest, values); err != nil {
-				return err
-			}
-			if err := r.setRelationFKOnChild(parent, dest, desc); err != nil {
-				return err
-			}
-		} else {
-			// Found — overlay values only.
-			if err := r.applyAttrMap(dest, values); err != nil {
-				return err
-			}
-		}
-		return r.fresh().Save(dest)
+	switch desc.Kind {
+	case relKindHasOne, relKindHasMany, relKindMorphOne, relKindMorphMany,
+		relKindHasOneThrough, relKindHasManyThrough:
+		return relations.UpdateOrCreate(r, r.writeInfo(desc, parent), parent, relation, attrs, values, dest)
 	case relKindMany2Many, relKindMorphToMany:
-		// For m2m: search the related table directly, create+attach if missing, otherwise update.
-		q := r.relatedQuery(desc.relatedModel)
-		for col, val := range attrs {
-			q = q.Where(col, val)
+		// Laravel BelongsToMany::updateOrCreate (vendor v12.55.1, BelongsToMany.php:707) is
+		// firstOrCreate followed by a conditional fill+save (:709-712): a row that already
+		// existed -- an attached hit, an unattached hit firstOrCreate's level-2 read just
+		// linked, or a createOrFirst unique-constraint read-back -- comes back with
+		// wasRecentlyCreated() false, so its values are overlaid and it is saved; only a
+		// freshly inserted row (wasRecentlyCreated() true, its insert already carrying
+		// attrs+values) is left as it stands. Oracle v12.55.1, executed:
+		//   hit-attached   -> pivot-joined select, then update (pivot stays hydrated)
+		//   hit-unattached -> pivot-joined select, plain select, pivot insert, then update
+		//   miss           -> pivot-joined select, plain select, related insert, pivot insert, no update
+		created, err := r.firstOrCreateMany2Many(desc, parent, relation, attrs, values, dest)
+		if err != nil {
+			return err
 		}
-		var freshlyCreated bool
-		if err := q.First(dest); err != nil {
-			// Not found — overlay attrs+values, create.
-			if err := r.applyAttrMap(dest, attrs); err != nil {
-				return err
-			}
-			if err := r.applyAttrMap(dest, values); err != nil {
-				return err
-			}
-			if err := r.fresh().Create(dest); err != nil {
-				return err
-			}
-			freshlyCreated = true
-		} else {
-			// Found — overlay values only.
-			if err := r.applyAttrMap(dest, values); err != nil {
-				return err
-			}
-			if err := r.fresh().Save(dest); err != nil {
-				return err
-			}
+		if created {
+			return nil
 		}
-		// Attach if freshly created.
-		if freshlyCreated {
-			childPK, err := readParentColumn(r, dest, desc.pivotRelatedRef.primaryColumn)
-			if err != nil {
-				return err
-			}
-			return r.AttachRelation(parent, relation, []any{childPK})
+		// ! wasRecentlyCreated: fill($values) and save(['touch' => false]) -- Eloquent's
+		// finishSave touch step is skipped, so the related model's own $touches relations are
+		// NOT stamped (oracle v12.55.1, executed: with the related declaring $touches = ['owner'],
+		// updateOrCreate's attached-hit and unattached-hit both leave owner.updated_at untouched,
+		// where a plain $related->save() stamps it).
+		if err := relations.ApplyAttrMap(r, dest, values); err != nil {
+			return err
 		}
-		return nil
+		saver := r.fresh()
+		conditions := saver.conditions
+		conditions.withoutTouch = true
+		saver.setConditions(conditions)
+
+		return saver.Save(dest)
 	default:
-		return errors.OrmRelationKindNotSupported.Args("UpdateOrCreate", relation, kindName(desc.kind))
+		return errors.OrmRelationKindNotSupported.Args("UpdateOrCreate", relation, kindName(desc.Kind))
 	}
 }
+
+// --- the many-to-many / pivot shells (S2 step 3) ----------------------------------------------
+//
+// Every shell below is a one-line forwarder into database/gorm/relations/pivot_workers.go, where
+// the attach / detach / sync / toggle / update-existing-pivot engines live as free functions over
+// (relations.Builder, relations.RelationInfo). The methods stay here because Go method ownership
+// keeps them on *OrmBuilder — they are the relations.Builder write-shell set the relation leaves
+// and the OrFail transaction re-dispatch call. Bodies, Laravel anchors and oracle evidence: the
+// relations file.
 
 // AttachRelation inserts pivot rows linking parent to each id in ids. Skips ids that already
 // have a pivot row. Supported kinds: Many2Many, MorphToMany, MorphedByMany.
 //
-// Public Query-level helper used by Orm.Attach.
-func (r *Query) AttachRelation(parent any, relation string, ids []any) error {
-	desc, parentVal, err := r.resolvePivot(parent, relation, "Attach")
-	if err != nil {
-		return err
-	}
-	affected, err := r.doAttach(desc, parentVal, ids, nil)
-	if err != nil {
-		return err
-	}
-	if affected > 0 {
-		return r.touchIfTouching(desc, parent, parentVal)
-	}
-	return nil
+// RelationWriter.Attach shell (contracts/database/orm/relation_writer.go:134) — reached through Query.Relation(parent, name); the flat Orm.Attach form intentionally does not exist (relation_writer.go:9).
+func (r *OrmBuilder) AttachRelation(parent any, relation string, ids []any) error {
+	return relations.Attach(r, parent, relation, ids)
+}
+
+// AttachRelationOrFail is AttachRelation inside a transaction — InteractsWithPivotTable::attachOrFail
+// (InteractsWithPivotTable.php:365).
+func (r *OrmBuilder) AttachRelationOrFail(parent any, relation string, ids []any) error {
+	return relations.AttachOrFail(r, parent, relation, ids)
 }
 
 // AttachWithPivotRelation is Attach with per-row pivot column values.
-func (r *Query) AttachWithPivotRelation(parent any, relation string, idsWithAttrs map[any]map[string]any) error {
-	desc, parentVal, err := r.resolvePivot(parent, relation, "AttachWithPivot")
-	if err != nil {
-		return err
-	}
-	affected, err := r.doAttachWithPivot(desc, parentVal, idsWithAttrs)
-	if err != nil {
-		return err
-	}
-	if affected > 0 {
-		return r.touchIfTouching(desc, parent, parentVal)
-	}
-	return nil
+func (r *OrmBuilder) AttachWithPivotRelation(parent any, relation string, idsWithAttrs map[any]map[string]any) error {
+	return relations.AttachWithPivot(r, parent, relation, idsWithAttrs)
+}
+
+// DetachRelation removes pivot rows linking parent to the given ids. With nil ids, removes all
+// pivot rows for parent (and morph type, for polymorphic); an explicitly empty (non-nil) id list
+// is Laravel's detach([]) no-op — 0, no statement. Returns the number of rows removed.
+func (r *OrmBuilder) DetachRelation(parent any, relation string, ids []any) (int64, error) {
+	return relations.Detach(r, parent, relation, ids)
+}
+
+// DetachRelationOrFail is DetachRelation inside a transaction — InteractsWithPivotTable::detachOrFail
+// (:562).
+func (r *OrmBuilder) DetachRelationOrFail(parent any, relation string, ids []any) (int64, error) {
+	return relations.DetachOrFail(r, parent, relation, ids)
+}
+
+// SyncRelation replaces parent's pivot rows so they exactly match ids: detaches missing entries,
+// attaches new ones, leaves existing untouched. Returns the per-id outcome.
+//
+// RelationWriter.Sync shell (contracts/database/orm/relation_writer.go:150) — reached through Query.Relation(parent, name); the flat Orm.Sync form intentionally does not exist (relation_writer.go:9).
+func (r *OrmBuilder) SyncRelation(parent any, relation string, ids []any) (*dbcontract.SyncResult, error) {
+	return relations.Sync(r, parent, relation, ids)
+}
+
+// SyncRelationOrFail is SyncRelation inside a transaction — InteractsWithPivotTable::syncOrFail (:157).
+func (r *OrmBuilder) SyncRelationOrFail(parent any, relation string, ids []any) (*dbcontract.SyncResult, error) {
+	return relations.SyncOrFail(r, parent, relation, ids)
+}
+
+// SyncWithoutDetachingRelation is SyncRelation minus the detach step.
+func (r *OrmBuilder) SyncWithoutDetachingRelation(parent any, relation string, ids []any) (*dbcontract.SyncResult, error) {
+	return relations.SyncWithoutDetaching(r, parent, relation, ids)
+}
+
+// SyncWithoutDetachingRelationOrFail is SyncWithoutDetachingRelation inside a transaction —
+// InteractsWithPivotTable::syncWithoutDetachingOrFail (:170, `$this->syncOrFail($ids, false)`).
+func (r *OrmBuilder) SyncWithoutDetachingRelationOrFail(parent any, relation string, ids []any) (*dbcontract.SyncResult, error) {
+	return relations.SyncWithoutDetachingOrFail(r, parent, relation, ids)
+}
+
+// ToggleRelation attaches missing entries and detaches existing ones.
+func (r *OrmBuilder) ToggleRelation(parent any, relation string, ids []any) (*dbcontract.SyncResult, error) {
+	return relations.Toggle(r, parent, relation, ids)
+}
+
+// ToggleRelationOrFail is ToggleRelation inside a transaction — InteractsWithPivotTable::toggleOrFail
+// (:75).
+func (r *OrmBuilder) ToggleRelationOrFail(parent any, relation string, ids []any) (*dbcontract.SyncResult, error) {
+	return relations.ToggleOrFail(r, parent, relation, ids)
+}
+
+// SyncRelationWithPivot is SyncRelation with per-ID pivot column values. The map key is the
+// related id; the map value is the column-name-to-value map applied to that pivot row. For
+// existing pivot rows with non-empty attrs, updates the pivot columns (reported in
+// SyncResult.Updated). Mirrors fedaco's sync(map).
+func (r *OrmBuilder) SyncRelationWithPivot(parent any, relation string, idsWithAttrs map[any]map[string]any) (*dbcontract.SyncResult, error) {
+	return relations.SyncWithPivot(r, parent, relation, idsWithAttrs)
+}
+
+// SyncRelationWithPivotValues applies the same pivot column values to all ids. Mirrors fedaco's
+// syncWithPivotValues.
+func (r *OrmBuilder) SyncRelationWithPivotValues(parent any, relation string, ids []any, pivotValues map[string]any) (*dbcontract.SyncResult, error) {
+	return relations.SyncWithPivotValues(r, parent, relation, ids, pivotValues)
+}
+
+// SyncRelationWithPivotValuesOrFail is SyncRelationWithPivotValues inside a transaction —
+// InteractsWithPivotTable::syncWithPivotValuesOrFail (:200).
+func (r *OrmBuilder) SyncRelationWithPivotValuesOrFail(parent any, relation string, ids []any, pivotValues map[string]any) (*dbcontract.SyncResult, error) {
+	return relations.SyncWithPivotValuesOrFail(r, parent, relation, ids, pivotValues)
+}
+
+// SyncWithoutDetachingRelationWithPivot is SyncRelationWithPivot minus the detach step.
+func (r *OrmBuilder) SyncWithoutDetachingRelationWithPivot(parent any, relation string, idsWithAttrs map[any]map[string]any) (*dbcontract.SyncResult, error) {
+	return relations.SyncWithoutDetachingWithPivot(r, parent, relation, idsWithAttrs)
+}
+
+// ToggleRelationWithPivot is ToggleRelation with per-ID pivot column values for newly attached rows.
+func (r *OrmBuilder) ToggleRelationWithPivot(parent any, relation string, idsWithAttrs map[any]map[string]any) (*dbcontract.SyncResult, error) {
+	return relations.ToggleWithPivot(r, parent, relation, idsWithAttrs)
+}
+
+// UpdateExistingPivotRelation updates pivot columns for an already-attached id. When
+// pivotTimestamps is enabled and attrs doesn't already set updated_at, injects time.Now() into
+// the update map. No-op (returns 0) if no matching pivot row exists.
+func (r *OrmBuilder) UpdateExistingPivotRelation(parent any, relation string, id any, attrs map[string]any) (int64, error) {
+	return relations.UpdateExistingPivot(r, parent, relation, id, attrs)
+}
+
+// UpdateExistingPivotRelationOrFail is UpdateExistingPivotRelation inside a transaction —
+// InteractsWithPivotTable::updateExistingPivotOrFail (:299).
+func (r *OrmBuilder) UpdateExistingPivotRelationOrFail(parent any, relation string, id any, attrs map[string]any) (int64, error) {
+	return relations.UpdateExistingPivotOrFail(r, parent, relation, id, attrs)
 }
 
 // pivotTableQuery returns a fresh query addressing the given table directly, so pivot reads,
 // inserts, updates and deletes compile through the framework builder instead of being handed to
 // GORM. The name is bare, like every table name the ORM holds, so the grammar applies the connection
 // prefix once when the statement is rendered.
-func (r *Query) pivotTableQuery(table string) *Query {
+func (r *OrmBuilder) pivotTableQuery(table string) *OrmBuilder {
 	child := r.fresh()
-	conditions := child.conditions
-	conditions.table = &Table{name: table}
+	child.query.From(table, "")
 
-	return child.setConditions(conditions)
+	return child
 }
 
 // pivotWhere appends one predicate to the query and returns it. An equality passes the dialect-quoted
 // column and a "?" placeholder; an IN list passes the unquoted qualified column with the id slice as
 // its single binding, which the compiler renders as a typed IN clause.
-func (r *Query) pivotWhere(query string, args ...any) *Query {
-	return r.addWhere(contractsdriver.Where{Query: query, Args: args}).(*Query)
+func (r *OrmBuilder) pivotWhere(query string, args ...any) *OrmBuilder {
+	return r.addWhere(contractsdriver.Where{Query: query, Args: args}).(*OrmBuilder)
 }
 
 // insertPivotRows inserts the given rows into the pivot table through the framework builder and runs
 // the statement on the connection pool. It replaces the GORM Create the pivot writers used.
-func (r *Query) insertPivotRows(table string, rows []map[string]any) error {
+func (r *OrmBuilder) insertPivotRows(table string, rows []map[string]any) error {
 	child := r.pivotTableQuery(table)
 
 	statement, bindings, err := child.pivotInsertStatement(rows)
@@ -673,7 +849,7 @@ func (r *Query) insertPivotRows(table string, rows []map[string]any) error {
 // per-id pivot attributes (AttachWithPivotRelation, and sync's attach map) let one row carry a column
 // another does not, and the grammar would otherwise key the whole statement off the first row and drop
 // the later column, losing its value on the rows that do not carry it in the same position.
-func (r *Query) pivotInsertStatement(rows []map[string]any) (string, []any, error) {
+func (r *OrmBuilder) pivotInsertStatement(rows []map[string]any) (string, []any, error) {
 	builder, err := r.newBuilder()
 	if err != nil {
 		return "", nil, err
@@ -687,590 +863,18 @@ func (r *Query) pivotInsertStatement(rows []map[string]any) (string, []any, erro
 	return statement, bindings, nil
 }
 
-// doAttach is the shared work-horse for AttachRelation / AttachWithPivotRelation. It does not
-// trigger touchIfTouching — callers (the public methods, and syncCore) own when to touch. Returns
-// the number of newly-inserted pivot rows; zero when every id was already attached.
-//
-// idsWithAttrs is optional: when non-nil, attrs from this map are merged into each new row;
-// when nil, ids alone drive the insert.
-func (r *Query) doAttach(desc *relationDescriptor, parentVal any, ids []any, idsWithAttrs map[any]map[string]any) (int64, error) {
-	if len(ids) == 0 {
-		return 0, nil
-	}
-	existing, err := r.existingPivotIDs(desc, parentVal, ids)
-	if err != nil {
-		return 0, err
-	}
-	rows := make([]map[string]any, 0, len(ids))
-	for _, id := range ids {
-		if _, dup := existing[dictKey(id)]; dup {
-			continue
-		}
-		var attrs map[string]any
-		if idsWithAttrs != nil {
-			attrs = idsWithAttrs[id]
-		}
-		rows = append(rows, r.basePivotRow(desc, parentVal, id, attrs))
-	}
-	if len(rows) == 0 {
-		return 0, nil
-	}
-	if err := r.insertPivotRows(desc.pivotTable, rows); err != nil {
-		return 0, err
-	}
-	return int64(len(rows)), nil
+// inverseWriteBackName reports the inverse relation name a relation write links the child back to —
+// the live chaperone state when this builder carries one, the declaration otherwise: the seam's
+// InverseWriteBackName over the descriptor's declared name (the eager loader's write-back reads it
+// here with the descriptor in hand).
+func (r *OrmBuilder) inverseWriteBackName(desc *relationDescriptor) string {
+	return r.InverseWriteBackName(desc.Inverse)
 }
 
-// doAttachWithPivot is doAttach for the with-attrs entry shape (map keyed by id). Equivalent in
-// outcome to doAttach with the same attrs; kept separate to avoid materialising an ids slice
-// just to satisfy the doAttach signature when callers already have a map.
-func (r *Query) doAttachWithPivot(desc *relationDescriptor, parentVal any, idsWithAttrs map[any]map[string]any) (int64, error) {
-	if len(idsWithAttrs) == 0 {
-		return 0, nil
-	}
-	ids := make([]any, 0, len(idsWithAttrs))
-	for id := range idsWithAttrs {
-		ids = append(ids, id)
-	}
-	existing, err := r.existingPivotIDs(desc, parentVal, ids)
-	if err != nil {
-		return 0, err
-	}
-	rows := make([]map[string]any, 0, len(ids))
-	for id, attrs := range idsWithAttrs {
-		if _, dup := existing[dictKey(id)]; dup {
-			continue
-		}
-		rows = append(rows, r.basePivotRow(desc, parentVal, id, attrs))
-	}
-	if len(rows) == 0 {
-		return 0, nil
-	}
-	if err := r.insertPivotRows(desc.pivotTable, rows); err != nil {
-		return 0, err
-	}
-	return int64(len(rows)), nil
-}
-
-// DetachRelation removes pivot rows linking parent to the given ids. With nil/empty ids, removes
-// all pivot rows for parent (and morph type, for polymorphic). Returns the number of rows
-// removed.
-func (r *Query) DetachRelation(parent any, relation string, ids []any) (int64, error) {
-	desc, parentVal, err := r.resolvePivot(parent, relation, "Detach")
-	if err != nil {
-		return 0, err
-	}
-	affected, err := r.doDetach(desc, parentVal, ids)
-	if err != nil {
-		return 0, err
-	}
-	if affected > 0 {
-		if err := r.touchIfTouching(desc, parent, parentVal); err != nil {
-			return affected, err
-		}
-	}
-	return affected, nil
-}
-
-// doDetach is the no-touch worker behind DetachRelation. Returns rows affected by the DELETE.
-func (r *Query) doDetach(desc *relationDescriptor, parentVal any, ids []any) (int64, error) {
-	q := r.pivotTableQuery(desc.pivotTable).
-		pivotWhere(fmt.Sprintf("%s = ?", r.ident(desc.pivotTable, desc.pivotParentRef.foreignColumn)), parentVal)
-	if desc.kind == relKindMorphToMany {
-		q = q.pivotWhere(fmt.Sprintf("%s = ?", r.ident(desc.pivotTable, desc.morphTypeColumn)), desc.morphValue)
-	}
-	if len(ids) > 0 {
-		q = q.pivotWhere(desc.pivotTable+"."+desc.pivotRelatedRef.foreignColumn, ids)
-	}
-	if scoped, ok := applyOnPivotQueryToQuery(r.queryGrammar, q, desc).(*Query); ok {
-		q = scoped
-	}
-	res, err := q.execDelete()
-	if err != nil {
-		return 0, err
-	}
-	return res.RowsAffected, nil
-}
-
-// resolvePivot is the shared front-half for all pivot operations: validates parent, resolves the
-// descriptor, asserts a pivot-friendly kind, and reads the parent's PK that anchors every pivot
-// row. Returns the descriptor + parent's PK value.
-func (r *Query) resolvePivot(parent any, relation, op string) (*relationDescriptor, any, error) {
-	if !isValidParent(parent) {
-		return nil, nil, errors.OrmRelationParentNotPointer.Args(parent)
-	}
-	desc, err := resolveRelation(parent, relation)
-	if err != nil {
-		return nil, nil, err
-	}
-	if desc.kind != relKindMany2Many && desc.kind != relKindMorphToMany {
-		return nil, nil, errors.OrmRelationKindNotSupported.Args(op, relation, kindName(desc.kind))
-	}
-	parentVal, err := readParentColumn(r, parent, desc.pivotParentRef.primaryColumn)
-	if err != nil {
-		return nil, nil, err
-	}
-	return desc, parentVal, nil
-}
-
-// basePivotRow builds the column map for one pivot INSERT row. Always includes the parent FK and
-// the related FK; for MorphToMany also includes the morph_type column. When the descriptor's
-// resolved created_at / updated_at columns are non-empty, stamps those columns with time.Now().
-// Caller-supplied attrs are merged on top — the caller wins on column-name conflicts.
-func (r *Query) basePivotRow(desc *relationDescriptor, parentVal, relatedID any, attrs map[string]any) map[string]any {
-	row := map[string]any{
-		desc.pivotParentRef.foreignColumn:  parentVal,
-		desc.pivotRelatedRef.foreignColumn: relatedID,
-	}
-	if desc.kind == relKindMorphToMany {
-		row[desc.morphTypeColumn] = desc.morphValue
-	}
-	now := time.Now()
-	if desc.pivotCreatedAtColumn != "" {
-		row[desc.pivotCreatedAtColumn] = now
-	}
-	if desc.pivotUpdatedAtColumn != "" {
-		row[desc.pivotUpdatedAtColumn] = now
-	}
-	for k, v := range attrs {
-		row[k] = v
-	}
-	return row
-}
-
-// existingPivotIDs returns the set of already-attached related ids among ids. Used by Attach to
-// skip duplicates.
-func (r *Query) existingPivotIDs(desc *relationDescriptor, parentVal any, ids []any) (map[string]struct{}, error) {
-	q := r.pivotTableQuery(desc.pivotTable)
-	q.builder.SetSelects([]any{desc.pivotRelatedRef.foreignColumn})
-	q = q.pivotWhere(fmt.Sprintf("%s = ?", r.ident(desc.pivotTable, desc.pivotParentRef.foreignColumn)), parentVal)
-	q = q.pivotWhere(desc.pivotTable+"."+desc.pivotRelatedRef.foreignColumn, ids)
-	if desc.kind == relKindMorphToMany {
-		q = q.pivotWhere(fmt.Sprintf("%s = ?", r.ident(desc.pivotTable, desc.morphTypeColumn)), desc.morphValue)
-	}
-	rows, err := r.findMapsCompiled(q, desc)
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[string]struct{}, len(rows))
-	for _, row := range rows {
-		out[dictKey(row[desc.pivotRelatedRef.foreignColumn])] = struct{}{}
-	}
-	return out, nil
-}
-
-// allPivotIDs returns the set of all currently-attached related ids for parent. Used by Sync /
-// Toggle to compute the diff.
-func (r *Query) allPivotIDs(desc *relationDescriptor, parentVal any) ([]any, error) {
-	q := r.pivotTableQuery(desc.pivotTable)
-	q.builder.SetSelects([]any{desc.pivotRelatedRef.foreignColumn})
-	q = q.pivotWhere(fmt.Sprintf("%s = ?", r.ident(desc.pivotTable, desc.pivotParentRef.foreignColumn)), parentVal)
-	if desc.kind == relKindMorphToMany {
-		q = q.pivotWhere(fmt.Sprintf("%s = ?", r.ident(desc.pivotTable, desc.morphTypeColumn)), desc.morphValue)
-	}
-	rows, err := r.findMapsCompiled(q, desc)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]any, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, row[desc.pivotRelatedRef.foreignColumn])
-	}
-	return out, nil
-}
-
-// SyncRelation replaces parent's pivot rows so they exactly match ids: detaches missing entries,
-// attaches new ones, leaves existing untouched. Returns the per-id outcome.
-//
-// Public Query-level helper used by Orm.Sync.
-func (r *Query) SyncRelation(parent any, relation string, ids []any) (*dbcontract.SyncResult, error) {
-	return r.syncCore(parent, relation, ids, true /*detach*/, false /*toggle*/, "Sync")
-}
-
-// SyncWithoutDetachingRelation is SyncRelation minus the detach step.
-func (r *Query) SyncWithoutDetachingRelation(parent any, relation string, ids []any) (*dbcontract.SyncResult, error) {
-	return r.syncCore(parent, relation, ids, false /*detach*/, false /*toggle*/, "SyncWithoutDetaching")
-}
-
-// ToggleRelation attaches missing entries and detaches existing ones.
-func (r *Query) ToggleRelation(parent any, relation string, ids []any) (*dbcontract.SyncResult, error) {
-	return r.syncCore(parent, relation, ids, false, true /*toggle*/, "Toggle")
-}
-
-// syncCore is the shared engine for Sync / SyncWithoutDetaching / Toggle.
-func (r *Query) syncCore(parent any, relation string, ids []any, detachMissing bool, toggle bool, op string) (*dbcontract.SyncResult, error) {
-	desc, parentVal, err := r.resolvePivot(parent, relation, op)
-	if err != nil {
-		return nil, err
-	}
-	current, err := r.allPivotIDs(desc, parentVal)
-	if err != nil {
-		return nil, err
-	}
-	currentSet := make(map[string]any, len(current))
-	for _, id := range current {
-		currentSet[dictKey(id)] = id
-	}
-	wantSet := make(map[string]any, len(ids))
-	for _, id := range ids {
-		wantSet[dictKey(id)] = id
-	}
-
-	out := &dbcontract.SyncResult{}
-	switch {
-	case toggle:
-		// Anything in `ids` that exists -> detach; anything that doesn't -> attach.
-		var attachIDs, detachIDs []any
-		for k, v := range wantSet {
-			if _, exists := currentSet[k]; exists {
-				detachIDs = append(detachIDs, v)
-			} else {
-				attachIDs = append(attachIDs, v)
-			}
-		}
-		if len(attachIDs) > 0 {
-			if _, err := r.doAttach(desc, parentVal, attachIDs, nil); err != nil {
-				return nil, err
-			}
-		}
-		if len(detachIDs) > 0 {
-			if _, err := r.doDetach(desc, parentVal, detachIDs); err != nil {
-				return nil, err
-			}
-		}
-		out.Attached = castKeys(attachIDs, desc.relatedKeyType)
-		out.Detached = castKeys(detachIDs, desc.relatedKeyType)
-	default:
-		// Attach anything in `wantSet` that isn't yet attached.
-		var attachIDs []any
-		for k, v := range wantSet {
-			if _, exists := currentSet[k]; !exists {
-				attachIDs = append(attachIDs, v)
-			}
-		}
-		if len(attachIDs) > 0 {
-			if _, err := r.doAttach(desc, parentVal, attachIDs, nil); err != nil {
-				return nil, err
-			}
-		}
-		out.Attached = castKeys(attachIDs, desc.relatedKeyType)
-
-		if detachMissing {
-			// Detach anything in `currentSet` that isn't in `wantSet`.
-			var detachIDs []any
-			for k, v := range currentSet {
-				if _, keep := wantSet[k]; !keep {
-					detachIDs = append(detachIDs, v)
-				}
-			}
-			if len(detachIDs) > 0 {
-				if _, err := r.doDetach(desc, parentVal, detachIDs); err != nil {
-					return nil, err
-				}
-			}
-			out.Detached = castKeys(detachIDs, desc.relatedKeyType)
-		}
-	}
-
-	if syncResultChanged(out) {
-		if err := r.touchIfTouching(desc, parent, parentVal); err != nil {
-			return nil, err
-		}
-	}
-	return out, nil
-}
-
-// SyncRelationWithPivot is SyncRelation with per-ID pivot column values. The map key is the
-// related id; the map value is the column-name-to-value map applied to that pivot row. For
-// existing pivot rows with non-empty attrs, updates the pivot columns (reported in
-// SyncResult.Updated). Mirrors fedaco's sync(map).
-func (r *Query) SyncRelationWithPivot(parent any, relation string, idsWithAttrs map[any]map[string]any) (*dbcontract.SyncResult, error) {
-	return r.syncCoreWithPivot(parent, relation, idsWithAttrs, true /*detach*/, false /*toggle*/, "SyncWithPivot")
-}
-
-// SyncRelationWithPivotValues applies the same pivot column values to all ids. Mirrors fedaco's
-// syncWithPivotValues.
-func (r *Query) SyncRelationWithPivotValues(parent any, relation string, ids []any, pivotValues map[string]any) (*dbcontract.SyncResult, error) {
-	idsWithAttrs := make(map[any]map[string]any, len(ids))
-	for _, id := range ids {
-		idsWithAttrs[id] = pivotValues
-	}
-	return r.syncCoreWithPivot(parent, relation, idsWithAttrs, true /*detach*/, false /*toggle*/, "SyncWithPivotValues")
-}
-
-// SyncWithoutDetachingRelationWithPivot is SyncRelationWithPivot minus the detach step.
-func (r *Query) SyncWithoutDetachingRelationWithPivot(parent any, relation string, idsWithAttrs map[any]map[string]any) (*dbcontract.SyncResult, error) {
-	return r.syncCoreWithPivot(parent, relation, idsWithAttrs, false /*detach*/, false /*toggle*/, "SyncWithoutDetachingWithPivot")
-}
-
-// ToggleRelationWithPivot is ToggleRelation with per-ID pivot column values for newly attached rows.
-func (r *Query) ToggleRelationWithPivot(parent any, relation string, idsWithAttrs map[any]map[string]any) (*dbcontract.SyncResult, error) {
-	return r.syncCoreWithPivot(parent, relation, idsWithAttrs, false, true /*toggle*/, "ToggleWithPivot")
-}
-
-// syncCoreWithPivot is the shared engine for SyncWithPivot / SyncWithPivotValues /
-// SyncWithoutDetachingWithPivot / ToggleWithPivot. Similar to syncCore but accepts a map of IDs
-// to pivot attributes and updates existing pivot rows when attrs are non-empty.
-func (r *Query) syncCoreWithPivot(parent any, relation string, idsWithAttrs map[any]map[string]any, detachMissing bool, toggle bool, op string) (*dbcontract.SyncResult, error) {
-	desc, parentVal, err := r.resolvePivot(parent, relation, op)
-	if err != nil {
-		return nil, err
-	}
-	current, err := r.allPivotIDs(desc, parentVal)
-	if err != nil {
-		return nil, err
-	}
-	currentSet := make(map[string]any, len(current))
-	for _, id := range current {
-		currentSet[dictKey(id)] = id
-	}
-	wantSet := make(map[string]any, len(idsWithAttrs))
-	for id := range idsWithAttrs {
-		wantSet[dictKey(id)] = id
-	}
-
-	out := &dbcontract.SyncResult{}
-	switch {
-	case toggle:
-		// Anything in `idsWithAttrs` that exists -> detach; anything that doesn't -> attach with attrs.
-		var detachIDs []any
-		attachMap := make(map[any]map[string]any)
-		for k, v := range wantSet {
-			if _, exists := currentSet[k]; exists {
-				detachIDs = append(detachIDs, v)
-			} else {
-				attachMap[v] = idsWithAttrs[v]
-			}
-		}
-		if len(attachMap) > 0 {
-			if _, err := r.doAttachWithPivot(desc, parentVal, attachMap); err != nil {
-				return nil, err
-			}
-			for id := range attachMap {
-				out.Attached = append(out.Attached, id)
-			}
-		}
-		if len(detachIDs) > 0 {
-			if _, err := r.doDetach(desc, parentVal, detachIDs); err != nil {
-				return nil, err
-			}
-		}
-		out.Attached = castKeys(out.Attached, desc.relatedKeyType)
-		out.Detached = castKeys(detachIDs, desc.relatedKeyType)
-	default:
-		// Attach anything in `wantSet` that isn't yet attached; update existing if attrs non-empty.
-		attachMap := make(map[any]map[string]any)
-		var updateIDs []any
-		for k, v := range wantSet {
-			if _, exists := currentSet[k]; !exists {
-				attachMap[v] = idsWithAttrs[v]
-			} else {
-				// Already attached — if attrs non-empty, update the pivot row.
-				attrs := idsWithAttrs[v]
-				if len(attrs) > 0 {
-					if _, err := r.doUpdateExistingPivot(desc, parentVal, v, attrs); err != nil {
-						return nil, err
-					}
-					updateIDs = append(updateIDs, v)
-				}
-			}
-		}
-		if len(attachMap) > 0 {
-			if _, err := r.doAttachWithPivot(desc, parentVal, attachMap); err != nil {
-				return nil, err
-			}
-			for id := range attachMap {
-				out.Attached = append(out.Attached, id)
-			}
-		}
-		out.Attached = castKeys(out.Attached, desc.relatedKeyType)
-		out.Updated = castKeys(updateIDs, desc.relatedKeyType)
-
-		if detachMissing {
-			// Detach anything in `currentSet` that isn't in `wantSet`.
-			var detachIDs []any
-			for k, v := range currentSet {
-				if _, keep := wantSet[k]; !keep {
-					detachIDs = append(detachIDs, v)
-				}
-			}
-			if len(detachIDs) > 0 {
-				if _, err := r.doDetach(desc, parentVal, detachIDs); err != nil {
-					return nil, err
-				}
-			}
-			out.Detached = castKeys(detachIDs, desc.relatedKeyType)
-		}
-	}
-
-	if syncResultChanged(out) {
-		if err := r.touchIfTouching(desc, parent, parentVal); err != nil {
-			return nil, err
-		}
-	}
-	return out, nil
-}
-
-// syncResultChanged reports whether out indicates any actual pivot-table mutation. Used by
-// syncCore / syncCoreWithPivot to decide whether to call touchIfTouching at the end.
-func syncResultChanged(out *dbcontract.SyncResult) bool {
-	return len(out.Attached) > 0 || len(out.Detached) > 0 || len(out.Updated) > 0
-}
-
-// UpdateExistingPivotRelation updates pivot columns for an already-attached id. When
-// pivotTimestamps is enabled and attrs doesn't already set updated_at, injects time.Now() into
-// the update map. No-op (returns 0) if no matching pivot row exists.
-func (r *Query) UpdateExistingPivotRelation(parent any, relation string, id any, attrs map[string]any) (int64, error) {
-	desc, parentVal, err := r.resolvePivot(parent, relation, "UpdateExistingPivot")
-	if err != nil {
-		return 0, err
-	}
-	affected, err := r.doUpdateExistingPivot(desc, parentVal, id, attrs)
-	if err != nil {
-		return 0, err
-	}
-	if affected > 0 {
-		if err := r.touchIfTouching(desc, parent, parentVal); err != nil {
-			return affected, err
-		}
-	}
-	return affected, nil
-}
-
-// doUpdateExistingPivot is the no-touch worker behind UpdateExistingPivotRelation. Returns the
-// number of pivot rows actually updated. When the descriptor has a resolved updated_at column
-// and attrs doesn't already set it, injects time.Now() into the UPDATE map.
-func (r *Query) doUpdateExistingPivot(desc *relationDescriptor, parentVal any, id any, attrs map[string]any) (int64, error) {
-	if len(attrs) == 0 && desc.pivotUpdatedAtColumn == "" {
-		return 0, nil
-	}
-	updateMap := make(map[string]any, len(attrs)+1)
-	for k, v := range attrs {
-		updateMap[k] = v
-	}
-	if desc.pivotUpdatedAtColumn != "" {
-		if _, hasUpdatedAt := updateMap[desc.pivotUpdatedAtColumn]; !hasUpdatedAt {
-			updateMap[desc.pivotUpdatedAtColumn] = time.Now()
-		}
-	}
-	q := r.pivotTableQuery(desc.pivotTable).
-		pivotWhere(fmt.Sprintf("%s = ?", r.ident(desc.pivotTable, desc.pivotParentRef.foreignColumn)), parentVal).
-		pivotWhere(fmt.Sprintf("%s = ?", r.ident(desc.pivotTable, desc.pivotRelatedRef.foreignColumn)), id)
-	if desc.kind == relKindMorphToMany {
-		q = q.pivotWhere(fmt.Sprintf("%s = ?", r.ident(desc.pivotTable, desc.morphTypeColumn)), desc.morphValue)
-	}
-	if scoped, ok := applyOnPivotQueryToQuery(r.queryGrammar, q, desc).(*Query); ok {
-		q = scoped
-	}
-	statement, bindings, err := q.compileUpdate(updateMap)
-	if err != nil {
-		return 0, err
-	}
-	res, err := q.execStatement(statement, bindings)
-	if err != nil {
-		return 0, err
-	}
-	return res.RowsAffected, nil
-}
-
-// setRelationFKOnChild reads parent's local key, then writes that value into child's FK column
-// (and the morph_type column for MorphOne/MorphMany). Mutates child in place; child must be a
-// pointer to a struct.
-func (r *Query) setRelationFKOnChild(parent, child any, desc *relationDescriptor) error {
-	if len(desc.references) == 0 {
-		return errors.OrmRelationUnsupported.Args(desc.name, desc.parentTable, "no references")
-	}
-	ref := desc.references[0]
-	parentVal, err := readParentColumn(r, parent, ref.primaryColumn)
-	if err != nil {
-		return err
-	}
-	childSchema, err := parseSchema(child)
-	if err != nil {
-		return err
-	}
-	fkField, ok := childSchema.FieldsByDBName[ref.foreignColumn]
-	if !ok {
-		return errors.OrmRelationUnsupported.Args(desc.name, childSchema.Name, "no FK field "+ref.foreignColumn)
-	}
-	rv := reflect.ValueOf(child).Elem()
-	if err := fkField.Set(r.ctx, rv, parentVal); err != nil {
-		return err
-	}
-	if desc.kind == relKindMorphOne || desc.kind == relKindMorphMany {
-		typeField, ok := childSchema.FieldsByDBName[desc.morphTypeColumn]
-		if !ok {
-			return errors.OrmRelationUnsupported.Args(desc.name, childSchema.Name, "no morph type field "+desc.morphTypeColumn)
-		}
-		if err := typeField.Set(r.ctx, rv, desc.morphValue); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// applyAttrMap overlays attrs onto dest using GORM's parsed schema to map column names to struct
-// fields. dest must be a pointer to a struct. Skips columns that don't map to a field.
-func (r *Query) applyAttrMap(dest any, attrs map[string]any) error {
-	if len(attrs) == 0 {
-		return nil
-	}
-	schema, err := parseSchema(dest)
-	if err != nil {
-		return err
-	}
-	rv := reflect.ValueOf(dest).Elem()
-	for col, val := range attrs {
-		field, ok := schema.FieldsByDBName[col]
-		if !ok {
-			continue
-		}
-		if err := field.Set(r.ctx, rv, val); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// touchIfTouching bumps parent's updated_at column when desc.touches is true. Silently no-ops
-// when desc.touches is false, when the parent's schema doesn't expose an updated_at field, or
-// when the parent has no primary-key column to anchor the WHERE clause. Mirrors fedaco's
-// touchIfTouching on BelongsToMany.
-//
-// Called at the tail end of public Sync / Attach / Detach / Toggle / UpdateExistingPivot methods,
-// and only when the operation actually affected pivot rows. The internal doAttach / doDetach /
-// doUpdateExistingPivot helpers do NOT touch — sync* paths chain multiple internal calls and
-// touch at most once at the end via this helper.
-func (r *Query) touchIfTouching(desc *relationDescriptor, parent any, parentVal any) error {
-	if !desc.touches {
-		return nil
-	}
-	parentSchema, err := parseSchema(parent)
-	if err != nil {
-		return err
-	}
-	field, ok := parentSchema.FieldsByDBName["updated_at"]
-	if !ok {
-		// Parent doesn't have an updated_at column — silently skip.
-		return nil
-	}
-	if len(parentSchema.PrimaryFields) == 0 {
-		return nil
-	}
-	pkColumn := parentSchema.PrimaryFields[0].DBName
-	now := time.Now()
-	q := r.pivotTableQuery(parentSchema.Table).
-		pivotWhere(fmt.Sprintf("%s = ?", r.ident(pkColumn)), parentVal)
-	statement, bindings, err := q.compileUpdate(map[string]any{field.DBName: now})
-	if err != nil {
-		return err
-	}
-	if _, err := q.execStatement(statement, bindings); err != nil {
-		return err
-	}
-	// Mirror the change into the in-memory parent struct so subsequent reads see the bump.
-	parentRV := reflect.ValueOf(parent).Elem()
-	return field.Set(r.ctx, parentRV, now)
+// touchIfTouching bumps parent's updated_at when desc.touches is true — the descriptor-side entry
+// of relations.TouchIfTouching for the CreateOrFirst pivot arm, which holds the descriptor.
+func (r *OrmBuilder) touchIfTouching(desc *relationDescriptor, parent any, parentVal any) error {
+	return relations.TouchIfTouching(r, r.writeInfo(desc, parent), parent, parentVal)
 }
 
 // kindName returns a human-friendly name for a relationKind, used in error messages.
@@ -1300,81 +904,178 @@ func kindName(k relationKind) string {
 	return fmt.Sprintf("kind=%d", k)
 }
 
-// castKeys returns a copy of ids with each value normalised to keyType (the related model's PK
-// type). Used by Sync* / Toggle* to ensure SyncResult elements carry a stable Go type regardless
-// of what the caller passed in or what GORM scanned out of the pivot table.
-//
-// Mirrors fedaco's _castKeys / _getTypeSwapValue. Returns nil for a nil input slice (preserving
-// the "no rows touched" signal).
-func castKeys(ids []any, keyType reflect.Type) []any {
-	if ids == nil {
-		return nil
-	}
-	out := make([]any, len(ids))
-	for i, id := range ids {
-		out[i] = castKey(id, keyType)
-	}
-	return out
+// castKey forwards to relations.CastKey — the key normalisation the sync cores moved with (S2
+// step 3) and the flat pluck still shares (builder_shortcuts.go pluckValue).
+func castKey(v any, t reflect.Type) any {
+	return relations.CastKey(v, t)
 }
 
-// castKey converts v to the Go type t, handling the common cross-type cases (int/uint/float
-// numeric widening + narrowing, string ↔ numeric). Returns v unchanged when t is nil, when v is
-// already the right type, or when conversion isn't safely representable.
-func castKey(v any, t reflect.Type) any {
-	if v == nil || t == nil {
-		return v
+// CreateOrFirstRelation attempts the insert immediately — with no lookup first, Laravel's
+// createOrFirst contract — and, when the insert trips a unique constraint, reads the row attrs
+// name back (over the write connection for the HasOneOrMany kinds, on the default connection for
+// the through kinds) and returns it. For the BelongsToMany kinds the insert is the related row
+// plus the pivot attach (BelongsToMany::create), the catch reads the related row back plainly and
+// attaches it, and a second violation — or an already-attached pivot row — re-reads through the
+// pivot-joined relation on the write connection, hydrating the Pivot struct.
+// Supported kinds: HasOne, HasMany, MorphOne, MorphMany, HasOneThrough, HasManyThrough,
+// Many2Many, MorphToMany.
+//
+// RelationWriter.CreateOrFirst shell (contracts/database/orm/relation_writer.go:108) — reached through Query.Relation(parent, name); the flat Orm.CreateOrFirst form intentionally does not exist (relation_writer.go:9).
+func (r *OrmBuilder) CreateOrFirstRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any) error {
+	if !isValidParent(parent) {
+		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
-	rv := reflect.ValueOf(v)
-	if rv.Type() == t {
-		return v
+	if !isValidParent(dest) {
+		return errors.OrmRelationParentNotPointer.Args(dest)
 	}
-	switch t.Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		switch rv.Kind() {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-			reflect.Float32, reflect.Float64:
-			return rv.Convert(t).Interface()
-		case reflect.String:
-			if i, err := strconv.ParseInt(rv.String(), 10, 64); err == nil {
-				return reflect.ValueOf(i).Convert(t).Interface()
-			}
+	desc, err := relations.ResolveRelation(parent, relation)
+	if err != nil {
+		return err
+	}
+	switch desc.Kind {
+	case relKindHasOne, relKindHasMany, relKindMorphOne, relKindMorphMany,
+		relKindHasOneThrough, relKindHasManyThrough:
+		_, err := relations.CreateOrFirstEngine(r, r.writeInfo(desc, parent), parent, relation, attrs, values, dest, attrs)
+		return err
+	case relKindMany2Many, relKindMorphToMany:
+		_, err := r.createOrFirstMany2Many(desc, parent, relation, attrs, values, dest)
+
+		return err
+	default:
+		return errors.OrmRelationKindNotSupported.Args("CreateOrFirst", relation, kindName(desc.Kind))
+	}
+}
+
+// MakeRelation returns an unsaved new instance of the related model carrying attrs with the parent
+// key (and morph type) pre-set from parent — Laravel's HasOneOrMany::make, which never saves. The
+// made child is linked back to parent in memory under the relation's inverse name when one is in
+// effect (HasOneOrMany::make applies applyInverseRelationToModel, v12.55.1,
+// HasOneOrMany.php:65; oracle: make.same-instance true). Supported kinds: HasOne, HasMany, MorphOne,
+// MorphMany.
+//
+// RelationWriter.Make shell (contracts/database/orm/relation_writer.go:65) — reached through Query.Relation(parent, name); the flat Orm.Make form intentionally does not exist (relation_writer.go:9).
+func (r *OrmBuilder) MakeRelation(parent any, relation string, attrs map[string]any, dest any) error {
+	if !isValidParent(parent) {
+		return errors.OrmRelationParentNotPointer.Args(parent)
+	}
+	if !isValidParent(dest) {
+		return errors.OrmRelationParentNotPointer.Args(dest)
+	}
+	desc, err := relations.ResolveRelation(parent, relation)
+	if err != nil {
+		return err
+	}
+	switch desc.Kind {
+	case relKindHasOne, relKindHasMany, relKindMorphOne, relKindMorphMany:
+		if err := relations.ApplyAttrMap(r, dest, attrs); err != nil {
+			return err
 		}
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		switch rv.Kind() {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-			reflect.Float32, reflect.Float64:
-			return rv.Convert(t).Interface()
-		case reflect.String:
-			if u, err := strconv.ParseUint(rv.String(), 10, 64); err == nil {
-				return reflect.ValueOf(u).Convert(t).Interface()
-			}
+		return relations.SetRelationFKOnChild(r, r.writeInfo(desc, parent), parent, dest)
+	default:
+		return errors.OrmRelationKindNotSupported.Args("Make", relation, kindName(desc.Kind))
+	}
+}
+
+// MakeManyRelation is the slice form of MakeRelation: one unsaved instance per record, in record
+// order, appended to dests — a pointer to a slice of structs (or pointers to structs).
+func (r *OrmBuilder) MakeManyRelation(parent any, relation string, records []map[string]any, dests any) error {
+	if !isValidParent(parent) {
+		return errors.OrmRelationParentNotPointer.Args(parent)
+	}
+	slice := reflect.ValueOf(dests)
+	if slice.Kind() != reflect.Pointer || slice.IsNil() || slice.Elem().Kind() != reflect.Slice {
+		return errors.OrmRelationUnsupported.Args(relation, fmt.Sprintf("%T", dests), "MakeMany requires a pointer to a slice")
+	}
+	slice = slice.Elem()
+	elementType := slice.Type().Elem()
+	pointerElements := elementType.Kind() == reflect.Pointer
+	for _, record := range records {
+		var element reflect.Value
+		if pointerElements {
+			element = reflect.New(elementType.Elem())
+		} else {
+			element = reflect.New(elementType)
 		}
-	case reflect.Float32, reflect.Float64:
-		switch rv.Kind() {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-			reflect.Float32, reflect.Float64:
-			return rv.Convert(t).Interface()
-		case reflect.String:
-			if f, err := strconv.ParseFloat(rv.String(), 64); err == nil {
-				return reflect.ValueOf(f).Convert(t).Interface()
-			}
+		if err := r.MakeRelation(parent, relation, record, element.Interface()); err != nil {
+			return err
 		}
-	case reflect.String:
-		// Numeric / []byte → string. Avoid reflect.Convert here because int→string interprets the
-		// int as a Unicode code point (e.g. 65 → "A"), not a decimal digit string.
-		switch rv.Kind() {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-			reflect.Float32, reflect.Float64:
-			return fmt.Sprint(v)
-		case reflect.Slice:
-			if rv.Type().Elem().Kind() == reflect.Uint8 {
-				return string(rv.Bytes())
-			}
+		if pointerElements {
+			slice.Set(reflect.Append(slice, element))
+		} else {
+			slice.Set(reflect.Append(slice, element.Elem()))
 		}
 	}
-	return v
+	return nil
+}
+
+// UpsertRelation merges the parent key (and the morph type, for MorphOne/MorphMany) into every row
+// and delegates to the query-level upsert — the rows HasOneOrMany::upsert / MorphOneOrMany::upsert
+// hand the query. Supported kinds: HasOne, HasMany, MorphOne, MorphMany.
+//
+// RelationWriter.Upsert shell (contracts/database/orm/relation_writer.go:114) — reached through Query.Relation(parent, name); the flat Orm.Upsert form intentionally does not exist (relation_writer.go:9).
+func (r *OrmBuilder) UpsertRelation(parent any, relation string, values []map[string]any, uniqueBy []string, update ...any) (*dbcontract.Result, error) {
+	if !isValidParent(parent) {
+		return nil, errors.OrmRelationParentNotPointer.Args(parent)
+	}
+	desc, err := relations.ResolveRelation(parent, relation)
+	if err != nil {
+		return nil, err
+	}
+	switch desc.Kind {
+	case relKindHasOne, relKindHasMany, relKindMorphOne, relKindMorphMany:
+	default:
+		return nil, errors.OrmRelationKindNotSupported.Args("Upsert", relation, kindName(desc.Kind))
+	}
+	if len(values) == 0 {
+		return &dbcontract.Result{}, nil
+	}
+	if len(desc.References) == 0 {
+		return nil, errors.OrmRelationUnsupported.Args(relation, desc.ParentTable, "no references")
+	}
+
+	parentVal, err := readParentColumn(r, parent, desc.References[0].PrimaryColumn)
+	if err != nil {
+		return nil, err
+	}
+	rows := make([]map[string]any, 0, len(values))
+	for _, row := range values {
+		filled := make(map[string]any, len(row)+2)
+		for key, value := range row {
+			filled[key] = value
+		}
+		filled[desc.References[0].ForeignColumn] = parentVal
+		if desc.Kind == relKindMorphOne || desc.Kind == relKindMorphMany {
+			filled[desc.MorphTypeColumn] = desc.MorphValue
+		}
+		rows = append(rows, filled)
+	}
+
+	query, ok := r.relatedQuery(desc.RelatedModel).(*OrmBuilder)
+	if !ok {
+		return nil, errors.OrmRelationUnsupported.Args(relation, fmt.Sprintf("%T", parent), "no related query")
+	}
+
+	return query.Upsert(rows, uniqueBy, update...)
+}
+
+// firstFoundOn runs a query as a single-row read and reports the found flag Query.First discards:
+// an empty result is not an error, and the find-then-write family must branch on the flag, the way
+// Laravel branches on a null first().
+func firstFoundOn(query any, dest any) (bool, error) {
+	built, ok := query.(*OrmBuilder)
+	if !ok {
+		return false, errors.OrmRelationUnsupported.Args("", fmt.Sprintf("%T", query), "no single-row read")
+	}
+	return built.firstRow(dest)
+}
+
+// relationOwnerIsNil reports whether an Associate owner is nil — the untyped nil or a nil pointer
+// of any pointer type; Laravel receives both shapes as null.
+func relationOwnerIsNil(owner any) bool {
+	if owner == nil {
+		return true
+	}
+	reflected := reflect.ValueOf(owner)
+
+	return reflected.Kind() == reflect.Pointer && reflected.IsNil()
 }

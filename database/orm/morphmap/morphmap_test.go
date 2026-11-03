@@ -5,6 +5,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/gradii/framework/database/gorm/relations"
+	"github.com/gradii/framework/errors"
 )
 
 type morphmapPost struct {
@@ -197,7 +201,8 @@ func TestMorphValue_PriorityOrder(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.setup()
-			value, ok := MorphValue(tt.input)
+			value, ok, err := MorphValue(tt.input)
+			assert.NoError(t, err)
 			assert.Equal(t, tt.wantOk, ok)
 			assert.Equal(t, tt.wantValue, value)
 		})
@@ -218,4 +223,133 @@ func TestAll_Snapshot(t *testing.T) {
 	// Mutating the snapshot must not affect the registry.
 	delete(snap, "post")
 	assert.NotNil(t, Find("post"))
+}
+
+// The strict-morph tests below port Relation::requireMorphMap / requiresMorphMap /
+// enforceMorphMap (Relation.php:437/:447/:459) and the getMorphClass strict branch
+// (HasRelationships.php:1006-1022) onto the registry. Oracle v12.55.1, executed
+// (/tmp/strictmorphs-probes/strict_morphs_probe.php): a fresh process reports
+// requiresMorphMap() false; requireMorphMap() plus an unmapped model throws
+// Illuminate\Database\ClassMorphViolationException ("No morph map defined for model [X].");
+// 'strict base Pivot getMorphClass => 'Illuminate\\Database\\Eloquent\\Relations\\Pivot'' while
+// 'strict base MorphPivot threw' the same violation — the exemption is the base Pivot FQCN only.
+
+// morphmapPivotSubclass is the Go stand-in for `class X extends Pivot`: a distinct type embedding
+// relations.Pivot. The carve-out is compared by type identity, never by method set, so embedding
+// does not inherit the exemption.
+type morphmapPivotSubclass struct {
+	relations.Pivot
+}
+
+// morphmapClassName renders the class name the registry reports: package path plus type name.
+// Computed here independently of morphmap.classOf so the assertions pin the format.
+func morphmapClassName(model any) string {
+	typ := reflect.TypeOf(model)
+	if typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	return typ.PkgPath() + "." + typ.Name()
+}
+
+func TestRequireMorphMap_DefaultAndToggle(t *testing.T) {
+	t.Cleanup(func() { RequireMorphMap(false) })
+
+	RequireMorphMap(false)
+	assert.False(t, RequiresMorphMap())
+
+	RequireMorphMap()
+	assert.True(t, RequiresMorphMap())
+
+	RequireMorphMap(false)
+	assert.False(t, RequiresMorphMap())
+}
+
+func TestEnforceMorphMap_SetsFlagAndRegisters(t *testing.T) {
+	Reset()
+	RequireMorphMap(false)
+	t.Cleanup(func() {
+		Reset()
+		RequireMorphMap(false)
+	})
+
+	EnforceMorphMap(map[string]any{"post": &morphmapPost{}})
+	assert.True(t, RequiresMorphMap())
+	assert.NotNil(t, Find("post"))
+
+	EnforceMorphMap(map[string]any{"video": &morphmapVideo{}}, false) // replace, like morphMap($map, false)
+	assert.Nil(t, Find("post"))
+	alias, ok := AliasOf(&morphmapVideo{})
+	assert.True(t, ok)
+	assert.Equal(t, "video", alias)
+}
+
+func TestMorphValue_StrictMode(t *testing.T) {
+	tests := []struct {
+		name          string
+		register      map[string]any
+		input         any
+		wantValue     string
+		wantOk        bool
+		wantViolation bool
+	}{
+		{
+			name:          "unmapped model raises the class violation",
+			input:         &morphmapVideo{},
+			wantViolation: true,
+		},
+		{
+			name:      "mapped model resolves before the strict check",
+			register:  map[string]any{"post": &morphmapPost{}},
+			input:     &morphmapPost{},
+			wantValue: "post",
+			wantOk:    true,
+		},
+		{
+			name:      "MorphClass override replaces the resolution",
+			input:     &morphmapUser{},
+			wantValue: "user",
+			wantOk:    true,
+		},
+		{
+			name:      "base Pivot is exempt and resolves to its class name",
+			input:     &relations.Pivot{},
+			wantValue: morphmapClassName(&relations.Pivot{}),
+			wantOk:    true,
+		},
+		{
+			name:          "MorphPivot subclass raises — the carve-out is Pivot-FQCN-only",
+			input:         &relations.MorphPivot{},
+			wantViolation: true,
+		},
+		{
+			name:          "user struct embedding Pivot raises",
+			input:         &morphmapPivotSubclass{},
+			wantViolation: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			Reset()
+			RequireMorphMap()
+			t.Cleanup(func() {
+				Reset()
+				RequireMorphMap(false)
+			})
+			if tt.register != nil {
+				Register(tt.register)
+			}
+
+			value, ok, err := MorphValue(tt.input)
+			if tt.wantViolation {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, errors.OrmClassMorphViolation)
+				assert.Equal(t, "No morph map defined for model ["+morphmapClassName(tt.input)+"].", err.Error())
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantOk, ok)
+			assert.Equal(t, tt.wantValue, value)
+		})
+	}
 }

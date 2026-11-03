@@ -26,7 +26,7 @@ func TestTransactionDoesNotRequireOptionalVersionDiscovery(t *testing.T) {
 		lookups++
 		return "", errors.OrmDriverNotSupported.Args("custom")
 	}
-	query := NewQuery(context.Background(), nil, contractsdatabase.Config{Driver: "custom"}, pool, nil, nil, nil, nil, nil, nil, components)
+	query := NewOrmBuilder(context.Background(), nil, contractsdatabase.Config{Driver: "custom"}, pool, nil, nil, nil, nil, nil, nil, components)
 	tx, err := query.BeginTransaction()
 	require.NoError(t, err)
 	require.NoError(t, tx.Rollback())
@@ -34,7 +34,7 @@ func TestTransactionDoesNotRequireOptionalVersionDiscovery(t *testing.T) {
 }
 
 func TestSuppliedQueryComponentsMustBeComplete(t *testing.T) {
-	query := NewQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, nil, nil, databasedriver.QueryComponents{})
-	_, _, err := query.Table("users").(*Query).compileSelect()
+	query := NewOrmBuilder(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, nil, nil, databasedriver.QueryComponents{})
+	_, _, err := query.Table("users").(*OrmBuilder).compileSelect()
 	require.ErrorIs(t, err, errors.DatabaseDialectComponentsMissing)
 }

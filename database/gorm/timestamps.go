@@ -74,7 +74,7 @@ func zeroTimestamp(value any) bool {
 
 // Save already obtained ordinary assignments from the model itself. Only its
 // automatic update fields may have acquired a new value while preparing SQL.
-func (r *Query) assignSavedTimestamps(model any, assignments map[string]any) error {
+func (r *OrmBuilder) assignSavedTimestamps(model any, assignments map[string]any) error {
 	value := reflect.ValueOf(model)
 	if !value.IsValid() || value.Kind() != reflect.Pointer || value.IsNil() {
 		return nil

@@ -35,14 +35,14 @@ func TestTablePrefixAppliedOnce(t *testing.T) {
 	assert.NotContains(t, statement, "goravel_goravel_")
 
 	// A column qualified by the same table: ident applies the prefix to the leading segment once.
-	qualified, _, err := q.Where("prefix_contract.id", 1).(*Query).compileSelect()
+	qualified, _, err := q.Where("prefix_contract.id", 1).(*OrmBuilder).compileSelect()
 	require.NoError(t, err)
 	assert.Contains(t, qualified, `"goravel_prefix_contract"."id"`)
 	assert.NotContains(t, qualified, "goravel_goravel_")
 
 	// A caller-named table through Table() must be prefixed once as well.
 	named := newDialectQuery(context.Background(), nil, dbConfig, nil, nil, nil, nil, nil, nil, nil)
-	namedStatement, _, err := named.Table("products").(*Query).compileSelect()
+	namedStatement, _, err := named.Table("products").(*OrmBuilder).compileSelect()
 	require.NoError(t, err)
 	assert.Contains(t, namedStatement, `from "goravel_products"`)
 	assert.NotContains(t, namedStatement, "goravel_goravel_")
@@ -61,21 +61,21 @@ func TestTableAcceptsAnAlreadyQualifiedName(t *testing.T) {
 	dbConfig := contractsdatabase.Config{Driver: "sqlite", Prefix: "goravel_"}
 
 	// A catalog name that does not start with the prefix still renders as it was given.
-	qualified := newDialectQuery(context.Background(), nil, dbConfig, nil, nil, nil, nil, nil, nil, nil).Table(querybuilder.Raw("external_view")).(*Query)
+	qualified := newDialectQuery(context.Background(), nil, dbConfig, nil, nil, nil, nil, nil, nil, nil).Table(querybuilder.Raw("external_view")).(*OrmBuilder)
 	statement, _, err := qualified.compileSelect()
 	require.NoError(t, err)
 	assert.Contains(t, statement, "from external_view")
 	assert.NotContains(t, statement, "goravel_external_view")
 
 	// A catalog name that does carry the prefix is not prefixed a second time.
-	prefixed := newDialectQuery(context.Background(), nil, dbConfig, nil, nil, nil, nil, nil, nil, nil).Table(querybuilder.Raw("goravel_view")).(*Query)
+	prefixed := newDialectQuery(context.Background(), nil, dbConfig, nil, nil, nil, nil, nil, nil, nil).Table(querybuilder.Raw("goravel_view")).(*OrmBuilder)
 	prefixedStatement, _, err := prefixed.compileSelect()
 	require.NoError(t, err)
 	assert.Contains(t, prefixedStatement, "from goravel_view")
 	assert.NotContains(t, prefixedStatement, "goravel_goravel_view")
 
 	// A string is still a bare name: the prefix applies exactly once, as before.
-	bare := newDialectQuery(context.Background(), nil, dbConfig, nil, nil, nil, nil, nil, nil, nil).Table("products").(*Query)
+	bare := newDialectQuery(context.Background(), nil, dbConfig, nil, nil, nil, nil, nil, nil, nil).Table("products").(*OrmBuilder)
 	bareStatement, _, err := bare.compileSelect()
 	require.NoError(t, err)
 	assert.Contains(t, bareStatement, `from "goravel_products"`)

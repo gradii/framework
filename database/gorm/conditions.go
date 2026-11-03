@@ -1,48 +1,118 @@
 package gorm
 
 import (
-	contractsdriver "github.com/gradii/framework/contracts/database/driver"
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
 )
 
 // Conditions holds the state that belongs to the ORM layer rather than to the SQL builder: the model
 // and destination a statement addresses, eager loads, relationship subqueries, scopes, soft-delete
-// switches and a few write-path filters. The SQL clauses themselves — select, where, join, group,
-// having, order, limit, offset, distinct and lock — live on the Query's persistent builder, the way
-// Laravel keeps them on Query\Builder. Conditions deliberately has no second copy of them.
+// switches and a few write-path filters. The SQL clauses themselves — from, select, where, join,
+// group, having, order, limit, offset, distinct and lock — live on the OrmBuilder's persistent
+// builder (OrmBuilder.query, read back through its State()), the way Laravel keeps them on
+// Query\Builder. Conditions deliberately has no second copy of them: the table a query names
+// (Table) and the conditions the ORM records internally (Find's inline conditions, the FirstOr*
+// fold, the pivot chain) are written straight onto that builder when they are called.
+//
+// What remains falls into three groups:
+//   - ORM state: the model and destination, the eager loads, the queued global scopes, the
+//     write-path filters (omit, pendingAttributes) and switches (useWritePdo, withoutEvents,
+//     withoutGlobalScopes, withoutTimestamps, withoutTouch, withTrashed, onlyTrashed), and the
+//     error a rejected condition carries;
+//   - deferred, model-dependent clauses: selectSubs (WithCount and the like) and relations (the
+//     relationship existence conditions), rendered at compile time when the parent model is known;
+//   - relation shaping: oneOfMany, throughRead and pivotRead, which rewrite a relation read.
+//
+// raw is the one SQL-level member kept on purpose: a caller-supplied whole statement (Raw) has no
+// home on the query builder, whose State models clauses the grammar compiles rather than a finished
+// statement — Laravel has no such builder member either (fromQuery runs the statement on the
+// connection). compileSelect and compileChunkSelect return it verbatim, and the mass-update /
+// delete guard counts it as a constraint, so it stays here as a Select.
 type Conditions struct {
 	// err carries a condition that could not be accepted — an unusable operator or value — so the
 	// error surfaces from whichever statement is eventually compiled, rather than from a query object
 	// built only to hold it.
-	err                 error
-	dest                any
-	model               any
-	table               *Table
-	omit                []string
-	scopes              []func(contractsorm.Query) contractsorm.Query
+	err   error
+	dest  any
+	model any
+	omit  []string
+	// scopes carries the scopes addGlobalScopes queued from the model — the Go form of Laravel's
+	// withGlobalScope() registration, applied when the statement compiles (withScopesApplied). The
+	// caller's own Scopes() call applies immediately (Builder::scopes) and never lands here.
+	scopes []func(contractsorm.Query) contractsorm.Query
+	// scopesApplied marks a query whose queued scopes have already been folded in by
+	// withScopesApplied. Eloquent applies a builder's scopes once per terminal call
+	// (applyScopes), and the reads that apply them before the onceWithColumns decision — pluck,
+	// value, valueOrFail and get($columns) — then run their statement from the scoped copy, so a
+	// second addGlobalScopes on that copy must not queue the model's scopes again.
+	scopesApplied       bool
 	raw                 *Select
 	selectSubs          []selectSub
-	where               []contractsdriver.Where
 	eagerLoad           []eagerLoadEntry
 	relations           []relationExistence
 	oneOfMany           *oneOfManyConfig
 	useWritePdo         bool
 	withoutEvents       bool
 	withoutGlobalScopes []string
-	withTrashed         bool
-	onlyTrashed         bool
+	// withoutTimestamps counts the active WithoutTimestamps scopes: automatic created_at / updated_at
+	// stamping is withheld while positive, so nested scopes keep the suspension active and each scope
+	// restores exactly its own — Eloquent's $ignoreTimestampsOn list, kept as a depth because the Go
+	// scope suspends the one query rather than a model class.
+	withoutTimestamps int
+	// withoutTouch marks the update an Increment / Decrement writes: Laravel's Builder::increment
+	// and Model::increment never reach finishSave, so they propagate no touches, while the
+	// model-update branch they share in the ORM does; the model-update touch hook skips
+	// touchOwners while it is set.
+	withoutTouch bool
+	withTrashed  bool
+	onlyTrashed  bool
 	// pendingAttributes are the column values WithAttributes recorded for every model the query
 	// creates, mirroring Builder::$pendingAttributes. Keys are column names as the caller wrote them;
 	// the write path resolves them against the model's schema.
 	pendingAttributes map[string]any
+	// throughRead names the through relation a model-row read is scoped to (Related on a
+	// HasOneThrough / HasManyThrough relation). compileSelect gives the read Laravel's through
+	// select list — the related table's columns plus the through key aliased as
+	// laravel_through_key — the way HasOneOrManyThrough::shouldSelect does for get()/first()/cursor().
+	throughRead *throughReadConfig
+	// pivotRead names the many-to-many relation a model-row read is scoped to (Related on a
+	// Many2Many / MorphToMany / MorphedByMany relation), so the chunked read paths can give their
+	// page statements Laravel's relation read shape: the related table's columns plus the pivot
+	// columns aliased pivot_<column>, the way BelongsToMany::prepareQueryBuilder installs
+	// shouldSelect() before chunk()/each()/lazy(), and the related key qualified by its table as
+	// the keyset column, the way BelongsToMany::orderedChunkById qualifies it.
+	pivotRead *pivotReadConfig
 }
 
-// oneOfManyConfig captures the column + aggregate for OfMany / LatestOfMany / OldestOfMany when
-// they are called inside a With() eager-load callback. It's read by runRelatedQueryCompiled, which
-// rewrites the inner query into an INNER JOIN over a per-parent aggregate subquery.
-type oneOfManyConfig struct {
+// oneOfManyColumn is one declared column/aggregate pair of a one-of-many configuration: the column
+// the aggregate is taken over and the aggregate itself ("MAX" | "MIN" | other SQL aggregate).
+type oneOfManyColumn struct {
 	column    string
-	aggregate string // "MAX" | "MIN" | other SQL aggregate
+	aggregate string
+}
+
+// oneOfManyConfig captures the ordered columns for OfMany / OfManyColumns / LatestOfMany /
+// OldestOfMany and the clause positions the query builder stood at when the configuration was
+// installed. Every path that reads a one-of-many relation consumes it — the relation read path
+// (Related), the eager loader and the existence subqueries behind WhereHas / WithCount / WithExists
+// — each rewriting the read into one nested aggregate subquery per declared column and an inner
+// join over the outermost, the way Laravel's ofMany installs them.
+//
+// keyAggregate is the aggregate the related model's key takes when the declared columns omit it:
+// the string form of OfMany appends the key with its own aggregate, the ordered forms with "MAX",
+// exactly as Laravel's ofMany does.
+//
+// The mark fields delimit the constraints the relation's own of-many chain wrote after the
+// configuration — the Go form of Laravel's ofMany closure, which writes to the aggregate subquery.
+// oneOfManyJoin moves everything after the marks into every subquery and leaves the earlier
+// constraints (the relation's key constraint) on the outer query.
+type oneOfManyConfig struct {
+	columns      []oneOfManyColumn
+	keyAggregate string
+
+	whereMark     int
+	joinMark      int
+	whereBindMark int
+	joinBindMark  int
 }
 
 type Select struct {
@@ -50,19 +120,46 @@ type Select struct {
 	args  []any
 }
 
-type Table struct {
-	// name is a bare table name, which the grammar prefixes at render time, or a
-	// querybuilder.Expression naming a table that is already qualified. An expression is rendered
-	// verbatim, so the connection prefix is not applied to it.
-	name any
-	args []any
+// throughReadConfig names the tables behind a through relation read, so the read's select list can
+// carry Laravel's laravel_through_key alias: `<related>.*` — or the columns the caller already
+// chose — plus `<through>.<firstKey> as laravel_through_key`.
+type throughReadConfig struct {
+	relatedTable string
+	throughTable string
+	firstKey     string
+}
+
+// pivotReadConfig names the tables and keys behind a many-to-many relation read — the related
+// table and its relation key, the pivot table and its two pivot keys, and the morph type column
+// when the relation is polymorphic — so a relation read can render Laravel's relation select list
+// (related.* plus each pivot column aliased pivot_<column>), hydrate the related model's declared
+// Pivot struct from those aliases, and, for a chunked read, resolve its qualified keyset column.
+// plan is the hydration plan of the related model's declared Pivot field (nil when it declares
+// none) and doubles as the source of the withPivot-style extra columns in the select list.
+// pivotField is the declared hydration field name (desc.pivotField, default "Pivot") the
+// ConfigurePivotRead re-resolution falls back to when no call-time accessor overrides it;
+// withPivotColumns carries the object's call-time WithPivot list, appended to the alias list
+// after the plan's declared columns the way BelongsToMany::aliasedPivotColumns merges
+// $pivotColumns (deduplicated with unique() at render).
+type pivotReadConfig struct {
+	relatedTable    string
+	relatedKey      string
+	pivotTable      string
+	foreignPivotKey string
+	relatedPivotKey string
+	morphTypeColumn string
+	plan            *pivotHydrationPlan
+	// pivotField is the declared hydration field name; "" only when the descriptor carried none.
+	pivotField string
+	// withPivotColumns is the call-time WithPivot list (object state); nil until WithPivot runs.
+	withPivotColumns []string
 }
 
 // selectSub describes a deferred sub-select aggregate (WithCount / WithMax / etc.).
 // The relation is resolved when the query is compiled to SQL, where the parent model is known.
 type selectSub struct {
 	relation string
-	column   string
+	column   any
 	function string // count | max | min | sum | avg | exists
 	alias    string
 	callback contractsorm.RelationCallback
@@ -78,9 +175,21 @@ type relationExistence struct {
 	conjunction string // "and" | "or"
 	callback    contractsorm.RelationCallback
 
+	// whereIndex and bindingIndex remember where the condition belongs among the statement's where
+	// clauses: the number of where clauses and "where" bindings the builder held when the method was
+	// called. Laravel appends the exists clause at call time; this port renders it at compile time,
+	// so applyRelations splices each compiled clause back to the position its call recorded.
+	whereIndex   int
+	bindingIndex int
+
 	// morph specifics (zero-valued for non-morph queries)
 	morphTypes    []any
 	morphCallback contractsorm.MorphRelationCallback
+	// morphAuto marks a `types = ['*']` condition — Laravel's has() on a MorphTo delegates to
+	// hasMorph($relation, ['*'], ...). The morph values are read from the parent table's
+	// distinct type-column values when the statement is compiled, instead of coming from
+	// model instances.
+	morphAuto bool
 }
 
 // hasStringColumns returns true if selectItems contains any string (regular column) entries
@@ -112,7 +221,6 @@ func (c Conditions) clone() Conditions {
 	out.omit = append([]string(nil), c.omit...)
 	out.scopes = append([]func(contractsorm.Query) contractsorm.Query(nil), c.scopes...)
 	out.selectSubs = append([]selectSub(nil), c.selectSubs...)
-	out.where = append([]contractsdriver.Where(nil), c.where...)
 	out.eagerLoad = append([]eagerLoadEntry(nil), c.eagerLoad...)
 	out.relations = append([]relationExistence(nil), c.relations...)
 	out.withoutGlobalScopes = append([]string(nil), c.withoutGlobalScopes...)
@@ -123,17 +231,22 @@ func (c Conditions) clone() Conditions {
 		}
 	}
 
-	if c.table != nil {
-		table := *c.table
-		out.table = &table
-	}
 	if c.raw != nil {
 		raw := *c.raw
 		out.raw = &raw
 	}
 	if c.oneOfMany != nil {
 		oneOfMany := *c.oneOfMany
+		oneOfMany.columns = append([]oneOfManyColumn(nil), c.oneOfMany.columns...)
 		out.oneOfMany = &oneOfMany
+	}
+	if c.throughRead != nil {
+		throughRead := *c.throughRead
+		out.throughRead = &throughRead
+	}
+	if c.pivotRead != nil {
+		pivotRead := *c.pivotRead
+		out.pivotRead = &pivotRead
 	}
 
 	return out
