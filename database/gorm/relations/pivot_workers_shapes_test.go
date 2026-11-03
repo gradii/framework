@@ -17,6 +17,7 @@ import (
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
 	databasedriver "github.com/gradii/framework/database/driver"
 	databasegorm "github.com/gradii/framework/database/gorm"
+	"github.com/gradii/framework/database/gorm/relations"
 	querybuilder "github.com/gradii/framework/database/query"
 )
 
@@ -114,6 +115,9 @@ func recordPivotShapes(t *testing.T) string {
 	run("attachWithPivot.kids", func(q *databasegorm.OrmBuilder) (any, error) {
 		return nil, q.AttachWithPivotRelation(parent(), "Kids", withRole)
 	})
+	run("attach.recorded", func(q *databasegorm.OrmBuilder) (any, error) {
+		return nil, q.AttachRelation(parent(), "Kids", one, relations.PivotValue{Column: "role", Value: "x"})
+	})
 	run("detach.nil", func(q *databasegorm.OrmBuilder) (any, error) { return q.DetachRelation(parent(), "Kids", nil) })
 	run("detach.ids", func(q *databasegorm.OrmBuilder) (any, error) { return q.DetachRelation(parent(), "Kids", two) })
 	run("detach.tags.ids", func(q *databasegorm.OrmBuilder) (any, error) { return q.DetachRelation(parent(), "Tags", one) })
@@ -181,6 +185,8 @@ insert into "pw_taggables" ("tag_id", "taggable_id", "taggable_type") values (?,
 insert into "pw_parent_kids" ("kid_id", "parent_id") values (?, ?) | [5 7]
 ## attach.empty result=<nil> err=<nil>
 ## attachWithPivot.kids result=<nil> err=<nil>
+insert into "pw_parent_kids" ("kid_id", "parent_id", "role") values (?, ?, ?) | [5 7 x]
+## attach.recorded result=<nil> err=<nil>
 insert into "pw_parent_kids" ("kid_id", "parent_id", "role") values (?, ?, ?) | [5 7 x]
 ## detach.nil result=0 err=<nil>
 delete from "pw_parent_kids" where "pw_parent_kids"."parent_id" = ? | [7]

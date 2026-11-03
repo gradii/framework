@@ -30,8 +30,8 @@ import (
 //     from the oracle) and then loads the relation, the fetch the conditions govern.
 //   - testWithPivotValueMethodSetsDefaultArgumentsForInsertion pins that a later attach(1)
 //     inserts [['club_id' => 1, 'user_id' => 1, 'is_admin' => 1]] — withPivotValue's recorded
-//     pivot value stamped onto the pivot insert. No Go declaration records relation-level pivot
-//     defaults, so the test skips with the measured divergence below.
+//     pivot value stamped onto the pivot insert. The relation object records the pair at runtime
+//     (WithPivotValue) and the attach shell stamps it onto the pivot row.
 //
 // # Oracle measurements
 //
@@ -60,8 +60,8 @@ import (
 //     this corpus's withPivotValue assertions do not reach.
 //   - Load(&club, "Users") returns only the is_admin = 1 row ('admin'), matching the oracle
 //     execution.
-//   - Relation(&club, "Users").Attach writes the FK columns only: the probe row reads club_id 3,
-//     user_id 1, is_admin NULL where the oracle's attach carries is_admin = 1.
+//   - Related(&club, "Users").WithPivotValue("is_admin", 1).Attach stamps the recorded pair onto
+//     the pivot row — the oracle's attach after withPivotValue carries is_admin = 1.
 
 // --- models ------------------------------------------------------------------
 
@@ -216,5 +216,37 @@ func TestBelongsToManyWithDefaultAttributes_WithPivotValueMethodSetsWhereConditi
 // 'is_admin' => 1]] — the pivot value stamped onto the pivot row. The corpus pins the insert
 // arguments through a mocked query; the port probed the same write against the harness database.
 func TestBelongsToManyWithDefaultAttributes_WithPivotValueMethodSetsDefaultArgumentsForInsertion(t *testing.T) {
-	t.Skip("our ORM diverges: withPivotValue has no write-side counterpart — no relation declaration records pivot column values for INSERTs, so Attach writes the FK columns only — probe: Relation(&club, \"Users\").Attach([]any{uint(1)}) leaves the club_user row reading club_id 3, user_id 1, is_admin NULL where the corpus's attach(1) after withPivotValue(['is_admin' => 1]) inserts is_admin = 1 (the corpus pins [['club_id' => 1, 'user_id' => 1, 'is_admin' => 1]]; the oracle's sqlite execution of the same attach writes insert into \"club_user\" (\"club_id\", \"is_admin\", \"user_id\") values (3, 1, 1)); AttachWithPivot carries caller-supplied attrs but no relation-level defaults")
+	query := newRelationQuery(t)
+	belongsToManyWithDefaultAttributesSchema(t, query)
+
+	// The corpus builds the relation and calls withPivotValue(['is_admin' => 1]) at runtime; the
+	// Go port reaches the same relation object through Related and records the pair the same way.
+	club := belongsToManyWithDefaultAttributesClub{ID: 1}
+	require.NoError(t, cloneRelationQuery(t, query).Create(&club))
+	user := belongsToManyWithDefaultAttributesUser{ID: 1, Name: "admin"}
+	require.NoError(t, cloneRelationQuery(t, query).Create(&user))
+
+	relation, ok := cloneRelationQuery(t, query).Related(&club, "Users").(contractsorm.BelongsToManyRelation)
+	require.True(t, ok, "Related must return a many-to-many relation object")
+	require.NoError(t, relation.WithPivotValue("is_admin", 1).Attach([]any{uint(1)}))
+
+	// Oracle (sqlite): the attach after withPivotValue(['is_admin' => 1]) writes
+	//   insert into "club_user" ("club_id", "is_admin", "user_id") values (1, 1, 1)
+	// (the corpus pins [['club_id' => 1, 'user_id' => 1, 'is_admin' => 1]]).
+	rows := []belongsToManyWithDefaultAttributesPivotRow{}
+	require.NoError(t, cloneRelationQuery(t, query).Model(&belongsToManyWithDefaultAttributesPivotRow{}).Where("club_id", 1).Get(&rows))
+	require.Len(t, rows, 1)
+	assert.Equal(t, uint(1), rows[0].ClubID)
+	assert.Equal(t, uint(1), rows[0].UserID)
+	require.NotNil(t, rows[0].IsAdmin)
+	assert.Equal(t, 1, *rows[0].IsAdmin)
 }
+
+// belongsToManyWithDefaultAttributesPivotRow reads back a club_user row for the insertion port.
+type belongsToManyWithDefaultAttributesPivotRow struct {
+	ClubID  uint `gorm:"column:club_id"`
+	UserID  uint `gorm:"column:user_id"`
+	IsAdmin *int `gorm:"column:is_admin"`
+}
+
+func (belongsToManyWithDefaultAttributesPivotRow) TableName() string { return "club_user" }

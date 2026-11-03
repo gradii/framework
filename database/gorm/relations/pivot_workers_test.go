@@ -173,6 +173,49 @@ func TestPivotWorkers_DoAttachWithPivot_CanonicalRowOrderAndNoRead(t *testing.T)
 	assert.Equal(t, "b", deref(statements[0].args[5]))
 }
 
+// The WithPivotValue-recorded pairs ride the INSERT through baseAttachRecord's values loop: the
+// pairs sit between the timestamps and the caller's attributes (recorded defaults, the caller
+// wins, the last recorded pair for a column winning, a non-string column skipped) — oracle
+// v12.55.1, executed, /tmp/r7pv/attach_pv_probe.php A1/A2/A2b/A3/A7.
+func TestPivotWorkers_DoAttach_StampsRecordedPivotValues(t *testing.T) {
+	builder, recorder := newRelationTestBuilder(t)
+	info := wwInfo(t, builder, &pwParent{ID: 7}, "Kids")
+
+	n, err := relations.DoAttach(builder, info, uint(7), []any{uint(5)}, nil,
+		relations.PivotValue{Column: "role", Value: "gold"})
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, n)
+	statements := recorder.take()
+	require.Len(t, statements, 1)
+	assert.Equal(t, `insert into "pw_parent_kids" ("kid_id", "parent_id", "role") values (?, ?, ?)`, statements[0].query)
+	require.Len(t, statements[0].args, 3)
+	assert.EqualValues(t, 5, deref(statements[0].args[0]))
+	assert.EqualValues(t, 7, deref(statements[0].args[1]))
+	assert.Equal(t, "gold", deref(statements[0].args[2]))
+
+	// The caller's attributes win over the recorded pair (oracle A2).
+	n, err = relations.DoAttach(builder, info, uint(7), []any{uint(6)}, map[any]map[string]any{uint(6): {"role": "caller"}},
+		relations.PivotValue{Column: "role", Value: "gold"})
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, n)
+	statements = recorder.take()
+	require.Len(t, statements, 1)
+	assert.Equal(t, "caller", deref(statements[0].args[2]))
+
+	// The last recorded pair for a column wins (oracle A3); a non-string column cannot key a
+	// row and is skipped.
+	n, err = relations.DoAttach(builder, info, uint(7), []any{uint(6)}, nil,
+		relations.PivotValue{Column: "role", Value: "a"},
+		relations.PivotValue{Column: "role", Value: "b"},
+		relations.PivotValue{Column: 7, Value: "x"})
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, n)
+	statements = recorder.take()
+	require.Len(t, statements, 1)
+	assert.Equal(t, `insert into "pw_parent_kids" ("kid_id", "parent_id", "role") values (?, ?, ?)`, statements[0].query)
+	assert.Equal(t, "b", deref(statements[0].args[2]))
+}
+
 // --- AllPivotIDs -------------------------------------------------------------------------------
 
 // AllPivotIDs is the sync-family current-ids read: `select *` (Laravel getCurrentlyAttachedPivots),

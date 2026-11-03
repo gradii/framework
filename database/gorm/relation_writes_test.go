@@ -928,12 +928,12 @@ var _ interface {
 	SaveManyRelationQuietly(parent any, relation string, children any) error
 	CreateRelationQuietly(parent any, relation string, dest any) error
 	CreateManyRelationQuietly(parent any, relation string, dests any) error
-	AttachRelationOrFail(parent any, relation string, ids []any) error
+	AttachRelationOrFail(parent any, relation string, ids []any, recorded ...relations.PivotValue) error
 	DetachRelationOrFail(parent any, relation string, ids []any) (int64, error)
-	SyncRelationOrFail(parent any, relation string, ids []any) (*dbcontract.SyncResult, error)
-	SyncWithoutDetachingRelationOrFail(parent any, relation string, ids []any) (*dbcontract.SyncResult, error)
-	SyncRelationWithPivotValuesOrFail(parent any, relation string, ids []any, pivotValues map[string]any) (*dbcontract.SyncResult, error)
-	ToggleRelationOrFail(parent any, relation string, ids []any) (*dbcontract.SyncResult, error)
+	SyncRelationOrFail(parent any, relation string, ids []any, recorded ...relations.PivotValue) (*dbcontract.SyncResult, error)
+	SyncWithoutDetachingRelationOrFail(parent any, relation string, ids []any, recorded ...relations.PivotValue) (*dbcontract.SyncResult, error)
+	SyncRelationWithPivotValuesOrFail(parent any, relation string, ids []any, pivotValues map[string]any, recorded ...relations.PivotValue) (*dbcontract.SyncResult, error)
+	ToggleRelationOrFail(parent any, relation string, ids []any, recorded ...relations.PivotValue) (*dbcontract.SyncResult, error)
 	UpdateExistingPivotRelationOrFail(parent any, relation string, id any, attrs map[string]any) (int64, error)
 } = (*OrmBuilder)(nil)
 

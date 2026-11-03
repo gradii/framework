@@ -494,9 +494,12 @@ type BelongsToManyRelation interface {
 	// construction, mirroring BelongsToMany::withPivotValue (BelongsToMany.php:481-498): base
 	// NewPivot merges the recorded values into its attribute bag (InteractsWithPivotTable.php:629,
 	// recorded values as defaults so the caller's attributes win), while the morph override does
-	// not (MorphToMany.php:156-172). A nil value pairs the argument column with the pivot's
-	// parent-side foreign key column — the frozen Go contract's pre-12 argument swap (Laravel 12
-	// throws InvalidArgumentException on a null value).
+	// not (MorphToMany.php:156-172). The attach / attachOrFail / sync / toggle families stamp the
+	// recorded pairs onto every pivot INSERT row through baseAttachRecord's values loop
+	// (InteractsWithPivotTable.php:454-472) — recorded defaults, the caller's attributes win, the
+	// last recorded pair for a column winning. A nil value pairs the argument column with the
+	// pivot's parent-side foreign key column — the frozen Go contract's pre-12 argument swap
+	// (Laravel 12 throws InvalidArgumentException on a null value).
 	WithPivotValue(column any, value any) BelongsToManyRelation
 	// OrderByPivot adds an "order by pivot column" clause. Mirrors BelongsToMany::orderByPivot;
 	// the Go object keeps the relation (PHP returns the builder), so further wherePivot calls

@@ -144,12 +144,12 @@ func RelationTransaction(b Builder, fn func(session Builder) error) error {
 // Illuminate\Database\UniqueConstraintViolationException; B3 attachOrFail -> begin,rollback).
 // Supported kinds: Many2Many, MorphToMany, MorphedByMany. The body of the AttachRelation shell
 // (RelationWriter.Attach, contracts/database/orm/relation_writer.go:134).
-func Attach(b Builder, parent any, relation string, ids []any) error {
+func Attach(b Builder, parent any, relation string, ids []any, recorded ...PivotValue) error {
 	info, parentVal, err := ResolvePivot(b, parent, relation, "Attach")
 	if err != nil {
 		return err
 	}
-	if _, err := DoAttach(b, info, parentVal, ids, nil); err != nil {
+	if _, err := DoAttach(b, info, parentVal, ids, nil, recorded...); err != nil {
 		return err
 	}
 
@@ -159,25 +159,25 @@ func Attach(b Builder, parent any, relation string, ids []any) error {
 // AttachOrFail is Attach inside a transaction — InteractsWithPivotTable::attachOrFail
 // (InteractsWithPivotTable.php:365). The parent guard runs before the transaction opens, the
 // same order every shell validates in.
-func AttachOrFail(b Builder, parent any, relation string, ids []any) error {
+func AttachOrFail(b Builder, parent any, relation string, ids []any, recorded ...PivotValue) error {
 	if !IsValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
 
 	return RelationTransaction(b, func(session Builder) error {
-		return session.AttachRelation(parent, relation, ids)
+		return session.AttachRelation(parent, relation, ids, recorded...)
 	})
 }
 
 // AttachWithPivot is Attach with per-row pivot column values. The rows follow the canonical
 // attrs-key order (a Go map carries no insertion order — sortedAttrsIDs); like Attach it never
 // reads the pivot table first, and the parent is touched after a successful insert (oracle C1/C2).
-func AttachWithPivot(b Builder, parent any, relation string, idsWithAttrs map[any]map[string]any) error {
+func AttachWithPivot(b Builder, parent any, relation string, idsWithAttrs map[any]map[string]any, recorded ...PivotValue) error {
 	info, parentVal, err := ResolvePivot(b, parent, relation, "AttachWithPivot")
 	if err != nil {
 		return err
 	}
-	if _, err := DoAttachWithPivot(b, info, parentVal, idsWithAttrs); err != nil {
+	if _, err := DoAttachWithPivot(b, info, parentVal, idsWithAttrs, recorded...); err != nil {
 		return err
 	}
 
@@ -197,7 +197,7 @@ func AttachWithPivot(b Builder, parent any, relation string, idsWithAttrs map[an
 //
 // idsWithAttrs is optional: when non-nil, attrs from this map are merged into each new row;
 // when nil, ids alone drive the insert.
-func DoAttach(b Builder, info RelationInfo, parentVal any, ids []any, idsWithAttrs map[any]map[string]any) (int64, error) {
+func DoAttach(b Builder, info RelationInfo, parentVal any, ids []any, idsWithAttrs map[any]map[string]any, recorded ...PivotValue) (int64, error) {
 	if len(ids) == 0 {
 		return 0, nil
 	}
@@ -207,7 +207,7 @@ func DoAttach(b Builder, info RelationInfo, parentVal any, ids []any, idsWithAtt
 		if idsWithAttrs != nil {
 			attrs = idsWithAttrs[id]
 		}
-		rows = append(rows, BasePivotRow(info, parentVal, id, attrs))
+		rows = append(rows, BasePivotRow(info, parentVal, id, attrs, recorded...))
 	}
 	if err := b.InsertRows(info.PivotTable, rows); err != nil {
 		return 0, err
@@ -220,13 +220,13 @@ func DoAttach(b Builder, info RelationInfo, parentVal any, ids []any, idsWithAtt
 // outcome to DoAttach with the same attrs; the rows follow sortedAttrsIDs order — Laravel's
 // attach([id => attrs]) keeps the PHP array's insertion order, which a Go map cannot carry, so
 // the walk is canonicalized the way the sync cores' map entries are.
-func DoAttachWithPivot(b Builder, info RelationInfo, parentVal any, idsWithAttrs map[any]map[string]any) (int64, error) {
+func DoAttachWithPivot(b Builder, info RelationInfo, parentVal any, idsWithAttrs map[any]map[string]any, recorded ...PivotValue) (int64, error) {
 	if len(idsWithAttrs) == 0 {
 		return 0, nil
 	}
 	rows := make([]map[string]any, 0, len(idsWithAttrs))
 	for _, id := range sortedAttrsIDs(idsWithAttrs) {
-		rows = append(rows, BasePivotRow(info, parentVal, id, idsWithAttrs[id]))
+		rows = append(rows, BasePivotRow(info, parentVal, id, idsWithAttrs[id], recorded...))
 	}
 	if err := b.InsertRows(info.PivotTable, rows); err != nil {
 		return 0, err
@@ -239,7 +239,7 @@ func DoAttachWithPivot(b Builder, info RelationInfo, parentVal any, idsWithAttrs
 // the related FK; for MorphToMany also includes the morph_type column. When the relation's
 // resolved created_at / updated_at columns are non-empty, stamps those columns with time.Now().
 // Caller-supplied attrs are merged on top — the caller wins on column-name conflicts.
-func BasePivotRow(info RelationInfo, parentVal, relatedID any, attrs map[string]any) map[string]any {
+func BasePivotRow(info RelationInfo, parentVal, relatedID any, attrs map[string]any, recorded ...PivotValue) map[string]any {
 	row := map[string]any{
 		info.PivotParentRef.ForeignColumn:  parentVal,
 		info.PivotRelatedRef.ForeignColumn: relatedID,
@@ -253,6 +253,17 @@ func BasePivotRow(info RelationInfo, parentVal, relatedID any, attrs map[string]
 	}
 	if info.PivotUpdatedAtColumn != "" {
 		row[info.PivotUpdatedAtColumn] = now
+	}
+	// The WithPivotValue-recorded pairs ride the row between the timestamps and the caller's
+	// attributes — baseAttachRecord's values loop runs after addTimestampsToAttachment and
+	// formatAttachRecord merges the caller's $attributes on top (IWPT :454-472 and :423-430, so
+	// the recorded values beat the timestamps but lose to the caller, the last recorded pair for
+	// a column winning). A non-string recorded column cannot be a Go attribute key and is
+	// skipped, the rule mergePivotValues applies.
+	for _, pair := range recorded {
+		if column, ok := pair.Column.(string); ok {
+			row[column] = pair.Value
+		}
 	}
 	for k, v := range attrs {
 		row[k] = v
@@ -398,12 +409,12 @@ func DoDetach(b Builder, info RelationInfo, parentVal any, ids []any) (int64, er
 // Sync replaces parent's pivot rows so they exactly match ids: detaches missing entries, attaches
 // new ones, leaves existing untouched. Returns the per-id outcome. The body of the SyncRelation
 // shell (RelationWriter.Sync, contracts/database/orm/relation_writer.go:150).
-func Sync(b Builder, parent any, relation string, ids []any) (*dbcontract.SyncResult, error) {
-	return SyncCore(b, parent, relation, ids, true /*detach*/, false /*toggle*/, "Sync")
+func Sync(b Builder, parent any, relation string, ids []any, recorded ...PivotValue) (*dbcontract.SyncResult, error) {
+	return SyncCore(b, parent, relation, ids, true /*detach*/, false /*toggle*/, "Sync", recorded...)
 }
 
 // SyncOrFail is Sync inside a transaction — InteractsWithPivotTable::syncOrFail (:157).
-func SyncOrFail(b Builder, parent any, relation string, ids []any) (*dbcontract.SyncResult, error) {
+func SyncOrFail(b Builder, parent any, relation string, ids []any, recorded ...PivotValue) (*dbcontract.SyncResult, error) {
 	if !IsValidParent(parent) {
 		return nil, errors.OrmRelationParentNotPointer.Args(parent)
 	}
@@ -411,7 +422,7 @@ func SyncOrFail(b Builder, parent any, relation string, ids []any) (*dbcontract.
 	var out *dbcontract.SyncResult
 	err := RelationTransaction(b, func(session Builder) error {
 		var inner error
-		out, inner = session.SyncRelation(parent, relation, ids)
+		out, inner = session.SyncRelation(parent, relation, ids, recorded...)
 
 		return inner
 	})
@@ -423,13 +434,13 @@ func SyncOrFail(b Builder, parent any, relation string, ids []any) (*dbcontract.
 }
 
 // SyncWithoutDetaching is Sync minus the detach step.
-func SyncWithoutDetaching(b Builder, parent any, relation string, ids []any) (*dbcontract.SyncResult, error) {
-	return SyncCore(b, parent, relation, ids, false /*detach*/, false /*toggle*/, "SyncWithoutDetaching")
+func SyncWithoutDetaching(b Builder, parent any, relation string, ids []any, recorded ...PivotValue) (*dbcontract.SyncResult, error) {
+	return SyncCore(b, parent, relation, ids, false /*detach*/, false /*toggle*/, "SyncWithoutDetaching", recorded...)
 }
 
 // SyncWithoutDetachingOrFail is SyncWithoutDetaching inside a transaction —
 // InteractsWithPivotTable::syncWithoutDetachingOrFail (:170, `$this->syncOrFail($ids, false)`).
-func SyncWithoutDetachingOrFail(b Builder, parent any, relation string, ids []any) (*dbcontract.SyncResult, error) {
+func SyncWithoutDetachingOrFail(b Builder, parent any, relation string, ids []any, recorded ...PivotValue) (*dbcontract.SyncResult, error) {
 	if !IsValidParent(parent) {
 		return nil, errors.OrmRelationParentNotPointer.Args(parent)
 	}
@@ -437,7 +448,7 @@ func SyncWithoutDetachingOrFail(b Builder, parent any, relation string, ids []an
 	var out *dbcontract.SyncResult
 	err := RelationTransaction(b, func(session Builder) error {
 		var inner error
-		out, inner = session.SyncWithoutDetachingRelation(parent, relation, ids)
+		out, inner = session.SyncWithoutDetachingRelation(parent, relation, ids, recorded...)
 
 		return inner
 	})
@@ -449,12 +460,12 @@ func SyncWithoutDetachingOrFail(b Builder, parent any, relation string, ids []an
 }
 
 // Toggle attaches missing entries and detaches existing ones.
-func Toggle(b Builder, parent any, relation string, ids []any) (*dbcontract.SyncResult, error) {
-	return SyncCore(b, parent, relation, ids, false, true /*toggle*/, "Toggle")
+func Toggle(b Builder, parent any, relation string, ids []any, recorded ...PivotValue) (*dbcontract.SyncResult, error) {
+	return SyncCore(b, parent, relation, ids, false, true /*toggle*/, "Toggle", recorded...)
 }
 
 // ToggleOrFail is Toggle inside a transaction — InteractsWithPivotTable::toggleOrFail (:75).
-func ToggleOrFail(b Builder, parent any, relation string, ids []any) (*dbcontract.SyncResult, error) {
+func ToggleOrFail(b Builder, parent any, relation string, ids []any, recorded ...PivotValue) (*dbcontract.SyncResult, error) {
 	if !IsValidParent(parent) {
 		return nil, errors.OrmRelationParentNotPointer.Args(parent)
 	}
@@ -462,7 +473,7 @@ func ToggleOrFail(b Builder, parent any, relation string, ids []any) (*dbcontrac
 	var out *dbcontract.SyncResult
 	err := RelationTransaction(b, func(session Builder) error {
 		var inner error
-		out, inner = session.ToggleRelation(parent, relation, ids)
+		out, inner = session.ToggleRelation(parent, relation, ids, recorded...)
 
 		return inner
 	})
@@ -540,7 +551,7 @@ func pivotKeyNumber(v any) (float64, bool) {
 // a time, attachNew's attach($id) per record; Toggle hands the whole surviving list to one attach
 // call, which groups its rows in a single INSERT (InteractsWithPivotTable::attachNew :234,
 // ::toggle :50). Oracle v12.55.1, executed, /tmp/lalign_synccore_order_probe.php B3-B7.
-func SyncCore(b Builder, parent any, relation string, ids []any, detachMissing bool, toggle bool, op string) (*dbcontract.SyncResult, error) {
+func SyncCore(b Builder, parent any, relation string, ids []any, detachMissing bool, toggle bool, op string, recorded ...PivotValue) (*dbcontract.SyncResult, error) {
 	info, parentVal, err := ResolvePivot(b, parent, relation, op)
 	if err != nil {
 		return nil, err
@@ -594,7 +605,7 @@ func SyncCore(b Builder, parent any, relation string, ids []any, detachMissing b
 		if len(attachIDs) > 0 {
 			// The surviving records go to one attach call, sharing one INSERT in input order
 			// (oracle B5/B5b).
-			if _, err := DoAttach(b, info, parentVal, attachIDs, nil); err != nil {
+			if _, err := DoAttach(b, info, parentVal, attachIDs, nil, recorded...); err != nil {
 				return nil, err
 			}
 		}
@@ -627,7 +638,7 @@ func SyncCore(b Builder, parent any, relation string, ids []any, detachMissing b
 			if _, attached := currentSet[DictionaryKey(id)]; attached {
 				continue
 			}
-			if _, err := DoAttach(b, info, parentVal, []any{id}, nil); err != nil {
+			if _, err := DoAttach(b, info, parentVal, []any{id}, nil, recorded...); err != nil {
 				return nil, err
 			}
 			out.Attached = append(out.Attached, id)
@@ -649,25 +660,25 @@ func SyncCore(b Builder, parent any, relation string, ids []any, detachMissing b
 // non-empty attrs, updates the pivot columns; the id is reported in SyncResult.Updated only when
 // the update affected a row (attachNew's truthy gate). Mirrors fedaco's
 // sync(map); a Go map carries no order, so the records walk in sortedAttrsIDs order.
-func SyncWithPivot(b Builder, parent any, relation string, idsWithAttrs map[any]map[string]any) (*dbcontract.SyncResult, error) {
-	return SyncCoreWithPivot(b, parent, relation, sortedAttrsIDs(idsWithAttrs), idsWithAttrs, true /*detach*/, false /*toggle*/, "SyncWithPivot")
+func SyncWithPivot(b Builder, parent any, relation string, idsWithAttrs map[any]map[string]any, recorded ...PivotValue) (*dbcontract.SyncResult, error) {
+	return SyncCoreWithPivot(b, parent, relation, sortedAttrsIDs(idsWithAttrs), idsWithAttrs, true /*detach*/, false /*toggle*/, "SyncWithPivot", recorded...)
 }
 
 // SyncWithPivotValues applies the same pivot column values to all ids, preserving the caller's
 // id order — Laravel's syncWithPivotValues maps the parsed ids to the shared values and the
 // record walk follows that list (InteractsWithPivotTable::syncWithPivotValues :183).
-func SyncWithPivotValues(b Builder, parent any, relation string, ids []any, pivotValues map[string]any) (*dbcontract.SyncResult, error) {
+func SyncWithPivotValues(b Builder, parent any, relation string, ids []any, pivotValues map[string]any, recorded ...PivotValue) (*dbcontract.SyncResult, error) {
 	idsWithAttrs := make(map[any]map[string]any, len(ids))
 	for _, id := range ids {
 		idsWithAttrs[id] = pivotValues
 	}
 
-	return SyncCoreWithPivot(b, parent, relation, ids, idsWithAttrs, true /*detach*/, false /*toggle*/, "SyncWithPivotValues")
+	return SyncCoreWithPivot(b, parent, relation, ids, idsWithAttrs, true /*detach*/, false /*toggle*/, "SyncWithPivotValues", recorded...)
 }
 
 // SyncWithPivotValuesOrFail is SyncWithPivotValues inside a transaction —
 // InteractsWithPivotTable::syncWithPivotValuesOrFail (:200).
-func SyncWithPivotValuesOrFail(b Builder, parent any, relation string, ids []any, pivotValues map[string]any) (*dbcontract.SyncResult, error) {
+func SyncWithPivotValuesOrFail(b Builder, parent any, relation string, ids []any, pivotValues map[string]any, recorded ...PivotValue) (*dbcontract.SyncResult, error) {
 	if !IsValidParent(parent) {
 		return nil, errors.OrmRelationParentNotPointer.Args(parent)
 	}
@@ -675,7 +686,7 @@ func SyncWithPivotValuesOrFail(b Builder, parent any, relation string, ids []any
 	var out *dbcontract.SyncResult
 	err := RelationTransaction(b, func(session Builder) error {
 		var inner error
-		out, inner = session.SyncRelationWithPivotValues(parent, relation, ids, pivotValues)
+		out, inner = session.SyncRelationWithPivotValues(parent, relation, ids, pivotValues, recorded...)
 
 		return inner
 	})
@@ -687,13 +698,13 @@ func SyncWithPivotValuesOrFail(b Builder, parent any, relation string, ids []any
 }
 
 // SyncWithoutDetachingWithPivot is SyncWithPivot minus the detach step.
-func SyncWithoutDetachingWithPivot(b Builder, parent any, relation string, idsWithAttrs map[any]map[string]any) (*dbcontract.SyncResult, error) {
-	return SyncCoreWithPivot(b, parent, relation, sortedAttrsIDs(idsWithAttrs), idsWithAttrs, false /*detach*/, false /*toggle*/, "SyncWithoutDetachingWithPivot")
+func SyncWithoutDetachingWithPivot(b Builder, parent any, relation string, idsWithAttrs map[any]map[string]any, recorded ...PivotValue) (*dbcontract.SyncResult, error) {
+	return SyncCoreWithPivot(b, parent, relation, sortedAttrsIDs(idsWithAttrs), idsWithAttrs, false /*detach*/, false /*toggle*/, "SyncWithoutDetachingWithPivot", recorded...)
 }
 
 // ToggleWithPivot is Toggle with per-ID pivot column values for newly attached rows.
-func ToggleWithPivot(b Builder, parent any, relation string, idsWithAttrs map[any]map[string]any) (*dbcontract.SyncResult, error) {
-	return SyncCoreWithPivot(b, parent, relation, sortedAttrsIDs(idsWithAttrs), idsWithAttrs, false, true /*toggle*/, "ToggleWithPivot")
+func ToggleWithPivot(b Builder, parent any, relation string, idsWithAttrs map[any]map[string]any, recorded ...PivotValue) (*dbcontract.SyncResult, error) {
+	return SyncCoreWithPivot(b, parent, relation, sortedAttrsIDs(idsWithAttrs), idsWithAttrs, false, true /*toggle*/, "ToggleWithPivot", recorded...)
 }
 
 // SyncCoreWithPivot is the shared engine for SyncWithPivot / SyncWithPivotValues /
@@ -706,7 +717,7 @@ func ToggleWithPivot(b Builder, parent any, relation string, idsWithAttrs map[an
 // the grouped single INSERT for its surviving records
 // (::toggle :50). Oracle v12.55.1, executed, /tmp/lalign_synccore_order_probe.php B1/B2
 // (update-then-insert for [2,9], insert-then-update for [9,2]) and B4/B5.
-func SyncCoreWithPivot(b Builder, parent any, relation string, ids []any, idsWithAttrs map[any]map[string]any, detachMissing bool, toggle bool, op string) (*dbcontract.SyncResult, error) {
+func SyncCoreWithPivot(b Builder, parent any, relation string, ids []any, idsWithAttrs map[any]map[string]any, detachMissing bool, toggle bool, op string, recorded ...PivotValue) (*dbcontract.SyncResult, error) {
 	info, parentVal, err := ResolvePivot(b, parent, relation, op)
 	if err != nil {
 		return nil, err
@@ -759,7 +770,7 @@ func SyncCoreWithPivot(b Builder, parent any, relation string, ids []any, idsWit
 		}
 		if len(attachIDs) > 0 {
 			// One attach call, one INSERT, rows in input order (oracle B5).
-			if _, err := DoAttach(b, info, parentVal, attachIDs, idsWithAttrs); err != nil {
+			if _, err := DoAttach(b, info, parentVal, attachIDs, idsWithAttrs, recorded...); err != nil {
 				return nil, err
 			}
 		}
@@ -811,7 +822,7 @@ func SyncCoreWithPivot(b Builder, parent any, relation string, ids []any, idsWit
 				}
 				continue
 			}
-			if _, err := DoAttach(b, info, parentVal, []any{id}, idsWithAttrs); err != nil {
+			if _, err := DoAttach(b, info, parentVal, []any{id}, idsWithAttrs, recorded...); err != nil {
 				return nil, err
 			}
 			out.Attached = append(out.Attached, id)

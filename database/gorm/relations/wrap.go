@@ -183,16 +183,16 @@ type Builder interface {
 	MakeRelation(parent any, relation string, attrs map[string]any, dest any) error
 	MakeManyRelation(parent any, relation string, records []map[string]any, dests any) error
 	UpsertRelation(parent any, relation string, values []map[string]any, uniqueBy []string, update ...any) (*dbcontract.Result, error)
-	AttachRelation(parent any, relation string, ids []any) error
-	AttachWithPivotRelation(parent any, relation string, idsWithAttrs map[any]map[string]any) error
+	AttachRelation(parent any, relation string, ids []any, recorded ...PivotValue) error
+	AttachWithPivotRelation(parent any, relation string, idsWithAttrs map[any]map[string]any, recorded ...PivotValue) error
 	DetachRelation(parent any, relation string, ids []any) (int64, error)
-	SyncRelation(parent any, relation string, ids []any) (*dbcontract.SyncResult, error)
-	SyncRelationWithPivot(parent any, relation string, idsWithAttrs map[any]map[string]any) (*dbcontract.SyncResult, error)
-	SyncRelationWithPivotValues(parent any, relation string, ids []any, pivotValues map[string]any) (*dbcontract.SyncResult, error)
-	SyncWithoutDetachingRelation(parent any, relation string, ids []any) (*dbcontract.SyncResult, error)
-	SyncWithoutDetachingRelationWithPivot(parent any, relation string, idsWithAttrs map[any]map[string]any) (*dbcontract.SyncResult, error)
-	ToggleRelation(parent any, relation string, ids []any) (*dbcontract.SyncResult, error)
-	ToggleRelationWithPivot(parent any, relation string, idsWithAttrs map[any]map[string]any) (*dbcontract.SyncResult, error)
+	SyncRelation(parent any, relation string, ids []any, recorded ...PivotValue) (*dbcontract.SyncResult, error)
+	SyncRelationWithPivot(parent any, relation string, idsWithAttrs map[any]map[string]any, recorded ...PivotValue) (*dbcontract.SyncResult, error)
+	SyncRelationWithPivotValues(parent any, relation string, ids []any, pivotValues map[string]any, recorded ...PivotValue) (*dbcontract.SyncResult, error)
+	SyncWithoutDetachingRelation(parent any, relation string, ids []any, recorded ...PivotValue) (*dbcontract.SyncResult, error)
+	SyncWithoutDetachingRelationWithPivot(parent any, relation string, idsWithAttrs map[any]map[string]any, recorded ...PivotValue) (*dbcontract.SyncResult, error)
+	ToggleRelation(parent any, relation string, ids []any, recorded ...PivotValue) (*dbcontract.SyncResult, error)
+	ToggleRelationWithPivot(parent any, relation string, idsWithAttrs map[any]map[string]any, recorded ...PivotValue) (*dbcontract.SyncResult, error)
 	UpdateExistingPivotRelation(parent any, relation string, id any, attrs map[string]any) (int64, error)
 
 	// Quiet and OrFail write families: the shells the relation objects' quiet / forceCreate /
@@ -205,12 +205,12 @@ type Builder interface {
 	SaveManyRelationQuietly(parent any, relation string, children any) error
 	CreateRelationQuietly(parent any, relation string, dest any) error
 	CreateManyRelationQuietly(parent any, relation string, dests any) error
-	AttachRelationOrFail(parent any, relation string, ids []any) error
+	AttachRelationOrFail(parent any, relation string, ids []any, recorded ...PivotValue) error
 	DetachRelationOrFail(parent any, relation string, ids []any) (int64, error)
-	SyncRelationOrFail(parent any, relation string, ids []any) (*dbcontract.SyncResult, error)
-	SyncWithoutDetachingRelationOrFail(parent any, relation string, ids []any) (*dbcontract.SyncResult, error)
-	SyncRelationWithPivotValuesOrFail(parent any, relation string, ids []any, pivotValues map[string]any) (*dbcontract.SyncResult, error)
-	ToggleRelationOrFail(parent any, relation string, ids []any) (*dbcontract.SyncResult, error)
+	SyncRelationOrFail(parent any, relation string, ids []any, recorded ...PivotValue) (*dbcontract.SyncResult, error)
+	SyncWithoutDetachingRelationOrFail(parent any, relation string, ids []any, recorded ...PivotValue) (*dbcontract.SyncResult, error)
+	SyncRelationWithPivotValuesOrFail(parent any, relation string, ids []any, pivotValues map[string]any, recorded ...PivotValue) (*dbcontract.SyncResult, error)
+	ToggleRelationOrFail(parent any, relation string, ids []any, recorded ...PivotValue) (*dbcontract.SyncResult, error)
 	UpdateExistingPivotRelationOrFail(parent any, relation string, id any, attrs map[string]any) (int64, error)
 
 	// Pivot execution surface — the frozen widening relations.Pivot runs on (the complete design

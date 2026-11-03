@@ -706,19 +706,19 @@ func (r *OrmBuilder) UpdateOrCreateRelation(parent any, relation string, attrs m
 // raises. Supported kinds: Many2Many, MorphToMany, MorphedByMany.
 //
 // RelationWriter.Attach shell (contracts/database/orm/relation_writer.go:134) — reached through Query.Relation(parent, name); the flat Orm.Attach form intentionally does not exist (relation_writer.go:9).
-func (r *OrmBuilder) AttachRelation(parent any, relation string, ids []any) error {
-	return relations.Attach(r, parent, relation, ids)
+func (r *OrmBuilder) AttachRelation(parent any, relation string, ids []any, recorded ...relations.PivotValue) error {
+	return relations.Attach(r, parent, relation, ids, recorded...)
 }
 
 // AttachRelationOrFail is AttachRelation inside a transaction — InteractsWithPivotTable::attachOrFail
 // (InteractsWithPivotTable.php:365).
-func (r *OrmBuilder) AttachRelationOrFail(parent any, relation string, ids []any) error {
-	return relations.AttachOrFail(r, parent, relation, ids)
+func (r *OrmBuilder) AttachRelationOrFail(parent any, relation string, ids []any, recorded ...relations.PivotValue) error {
+	return relations.AttachOrFail(r, parent, relation, ids, recorded...)
 }
 
 // AttachWithPivotRelation is Attach with per-row pivot column values.
-func (r *OrmBuilder) AttachWithPivotRelation(parent any, relation string, idsWithAttrs map[any]map[string]any) error {
-	return relations.AttachWithPivot(r, parent, relation, idsWithAttrs)
+func (r *OrmBuilder) AttachWithPivotRelation(parent any, relation string, idsWithAttrs map[any]map[string]any, recorded ...relations.PivotValue) error {
+	return relations.AttachWithPivot(r, parent, relation, idsWithAttrs, recorded...)
 }
 
 // DetachRelation removes pivot rows linking parent to the given ids. With nil ids, removes all
@@ -738,65 +738,65 @@ func (r *OrmBuilder) DetachRelationOrFail(parent any, relation string, ids []any
 // attaches new ones, leaves existing untouched. Returns the per-id outcome.
 //
 // RelationWriter.Sync shell (contracts/database/orm/relation_writer.go:150) — reached through Query.Relation(parent, name); the flat Orm.Sync form intentionally does not exist (relation_writer.go:9).
-func (r *OrmBuilder) SyncRelation(parent any, relation string, ids []any) (*dbcontract.SyncResult, error) {
-	return relations.Sync(r, parent, relation, ids)
+func (r *OrmBuilder) SyncRelation(parent any, relation string, ids []any, recorded ...relations.PivotValue) (*dbcontract.SyncResult, error) {
+	return relations.Sync(r, parent, relation, ids, recorded...)
 }
 
 // SyncRelationOrFail is SyncRelation inside a transaction — InteractsWithPivotTable::syncOrFail (:157).
-func (r *OrmBuilder) SyncRelationOrFail(parent any, relation string, ids []any) (*dbcontract.SyncResult, error) {
-	return relations.SyncOrFail(r, parent, relation, ids)
+func (r *OrmBuilder) SyncRelationOrFail(parent any, relation string, ids []any, recorded ...relations.PivotValue) (*dbcontract.SyncResult, error) {
+	return relations.SyncOrFail(r, parent, relation, ids, recorded...)
 }
 
 // SyncWithoutDetachingRelation is SyncRelation minus the detach step.
-func (r *OrmBuilder) SyncWithoutDetachingRelation(parent any, relation string, ids []any) (*dbcontract.SyncResult, error) {
-	return relations.SyncWithoutDetaching(r, parent, relation, ids)
+func (r *OrmBuilder) SyncWithoutDetachingRelation(parent any, relation string, ids []any, recorded ...relations.PivotValue) (*dbcontract.SyncResult, error) {
+	return relations.SyncWithoutDetaching(r, parent, relation, ids, recorded...)
 }
 
 // SyncWithoutDetachingRelationOrFail is SyncWithoutDetachingRelation inside a transaction —
 // InteractsWithPivotTable::syncWithoutDetachingOrFail (:170, `$this->syncOrFail($ids, false)`).
-func (r *OrmBuilder) SyncWithoutDetachingRelationOrFail(parent any, relation string, ids []any) (*dbcontract.SyncResult, error) {
-	return relations.SyncWithoutDetachingOrFail(r, parent, relation, ids)
+func (r *OrmBuilder) SyncWithoutDetachingRelationOrFail(parent any, relation string, ids []any, recorded ...relations.PivotValue) (*dbcontract.SyncResult, error) {
+	return relations.SyncWithoutDetachingOrFail(r, parent, relation, ids, recorded...)
 }
 
 // ToggleRelation attaches missing entries and detaches existing ones.
-func (r *OrmBuilder) ToggleRelation(parent any, relation string, ids []any) (*dbcontract.SyncResult, error) {
-	return relations.Toggle(r, parent, relation, ids)
+func (r *OrmBuilder) ToggleRelation(parent any, relation string, ids []any, recorded ...relations.PivotValue) (*dbcontract.SyncResult, error) {
+	return relations.Toggle(r, parent, relation, ids, recorded...)
 }
 
 // ToggleRelationOrFail is ToggleRelation inside a transaction — InteractsWithPivotTable::toggleOrFail
 // (:75).
-func (r *OrmBuilder) ToggleRelationOrFail(parent any, relation string, ids []any) (*dbcontract.SyncResult, error) {
-	return relations.ToggleOrFail(r, parent, relation, ids)
+func (r *OrmBuilder) ToggleRelationOrFail(parent any, relation string, ids []any, recorded ...relations.PivotValue) (*dbcontract.SyncResult, error) {
+	return relations.ToggleOrFail(r, parent, relation, ids, recorded...)
 }
 
 // SyncRelationWithPivot is SyncRelation with per-ID pivot column values. The map key is the
 // related id; the map value is the column-name-to-value map applied to that pivot row. For
 // existing pivot rows with non-empty attrs, updates the pivot columns (reported in
 // SyncResult.Updated). Mirrors fedaco's sync(map).
-func (r *OrmBuilder) SyncRelationWithPivot(parent any, relation string, idsWithAttrs map[any]map[string]any) (*dbcontract.SyncResult, error) {
-	return relations.SyncWithPivot(r, parent, relation, idsWithAttrs)
+func (r *OrmBuilder) SyncRelationWithPivot(parent any, relation string, idsWithAttrs map[any]map[string]any, recorded ...relations.PivotValue) (*dbcontract.SyncResult, error) {
+	return relations.SyncWithPivot(r, parent, relation, idsWithAttrs, recorded...)
 }
 
 // SyncRelationWithPivotValues applies the same pivot column values to all ids. Mirrors fedaco's
 // syncWithPivotValues.
-func (r *OrmBuilder) SyncRelationWithPivotValues(parent any, relation string, ids []any, pivotValues map[string]any) (*dbcontract.SyncResult, error) {
-	return relations.SyncWithPivotValues(r, parent, relation, ids, pivotValues)
+func (r *OrmBuilder) SyncRelationWithPivotValues(parent any, relation string, ids []any, pivotValues map[string]any, recorded ...relations.PivotValue) (*dbcontract.SyncResult, error) {
+	return relations.SyncWithPivotValues(r, parent, relation, ids, pivotValues, recorded...)
 }
 
 // SyncRelationWithPivotValuesOrFail is SyncRelationWithPivotValues inside a transaction —
 // InteractsWithPivotTable::syncWithPivotValuesOrFail (:200).
-func (r *OrmBuilder) SyncRelationWithPivotValuesOrFail(parent any, relation string, ids []any, pivotValues map[string]any) (*dbcontract.SyncResult, error) {
-	return relations.SyncWithPivotValuesOrFail(r, parent, relation, ids, pivotValues)
+func (r *OrmBuilder) SyncRelationWithPivotValuesOrFail(parent any, relation string, ids []any, pivotValues map[string]any, recorded ...relations.PivotValue) (*dbcontract.SyncResult, error) {
+	return relations.SyncWithPivotValuesOrFail(r, parent, relation, ids, pivotValues, recorded...)
 }
 
 // SyncWithoutDetachingRelationWithPivot is SyncRelationWithPivot minus the detach step.
-func (r *OrmBuilder) SyncWithoutDetachingRelationWithPivot(parent any, relation string, idsWithAttrs map[any]map[string]any) (*dbcontract.SyncResult, error) {
-	return relations.SyncWithoutDetachingWithPivot(r, parent, relation, idsWithAttrs)
+func (r *OrmBuilder) SyncWithoutDetachingRelationWithPivot(parent any, relation string, idsWithAttrs map[any]map[string]any, recorded ...relations.PivotValue) (*dbcontract.SyncResult, error) {
+	return relations.SyncWithoutDetachingWithPivot(r, parent, relation, idsWithAttrs, recorded...)
 }
 
 // ToggleRelationWithPivot is ToggleRelation with per-ID pivot column values for newly attached rows.
-func (r *OrmBuilder) ToggleRelationWithPivot(parent any, relation string, idsWithAttrs map[any]map[string]any) (*dbcontract.SyncResult, error) {
-	return relations.ToggleWithPivot(r, parent, relation, idsWithAttrs)
+func (r *OrmBuilder) ToggleRelationWithPivot(parent any, relation string, idsWithAttrs map[any]map[string]any, recorded ...relations.PivotValue) (*dbcontract.SyncResult, error) {
+	return relations.ToggleWithPivot(r, parent, relation, idsWithAttrs, recorded...)
 }
 
 // UpdateExistingPivotRelation updates pivot columns for an already-attached id. When

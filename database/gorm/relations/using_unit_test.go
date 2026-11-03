@@ -239,7 +239,7 @@ func TestUsing_MorphConstructionOverride(t *testing.T) {
 // usingUnitRecordedMany2ManyRelation is usingUnitMany2ManyRelation with the WithPivotValue-recorded
 // pairs seeded onto the relation's list directly — the projection-level stand-in for a relation
 // whose WithPivotValue ran (that call needs a builder; the real path is pinned in using_test.go).
-func usingUnitRecordedMany2ManyRelation(parent any, recorded ...pivotValue) *belongsToManyRelationQuery {
+func usingUnitRecordedMany2ManyRelation(parent any, recorded ...PivotValue) *belongsToManyRelationQuery {
 	rel := usingUnitMany2ManyRelation(parent).(*belongsToManyRelationQuery)
 	rel.pivotValues = append(rel.pivotValues, recorded...)
 
@@ -248,7 +248,7 @@ func usingUnitRecordedMany2ManyRelation(parent any, recorded ...pivotValue) *bel
 
 func TestUsing_NewPivotMergesRecordedPivotValues(t *testing.T) {
 	parent := &usingUnitUser{ID: 7}
-	rel := usingUnitRecordedMany2ManyRelation(parent, pivotValue{column: "level", value: "pv"})
+	rel := usingUnitRecordedMany2ManyRelation(parent, PivotValue{Column: "level", Value: "pv"})
 
 	// Oracle C21 (illuminate/database v12.55.1, executed, /tmp/reverify429/pv_probe.php — the
 	// decide-light-using probe extended for this item): the recorded values merge into newPivot's
@@ -280,8 +280,8 @@ func TestUsing_NewPivotMergesRecordedPivotValues(t *testing.T) {
 
 	// `C21 duplicate last wins => ['level' => 'b']` — array_column keeps the last recorded pair.
 	dup, err := usingUnitRecordedMany2ManyRelation(parent,
-		pivotValue{column: "level", value: "a"},
-		pivotValue{column: "level", value: "b"},
+		PivotValue{Column: "level", Value: "a"},
+		PivotValue{Column: "level", Value: "b"},
 	).NewPivot(nil, false)
 	require.NoError(t, err)
 	assert.Equal(t, map[string]any{"level": "b"}, dup.(*Pivot).Attributes())
@@ -309,7 +309,7 @@ func TestUsing_NewPivotMergesRecordedPivotValues(t *testing.T) {
 	// offset of type Illuminate\Database\Query\Expression on array"]`), so the Go merge drops
 	// the entry instead of failing the construction.
 	unmergeable, err := usingUnitRecordedMany2ManyRelation(parent,
-		pivotValue{column: querybuilder.Expression{Value: "CONCAT(foo, '_', bar)"}, value: "pv"},
+		PivotValue{Column: querybuilder.Expression{Value: "CONCAT(foo, '_', bar)"}, Value: "pv"},
 	).NewPivot(nil, false)
 	require.NoError(t, err)
 	assert.Empty(t, unmergeable.(*Pivot).Attributes())
@@ -328,7 +328,7 @@ func TestUsing_MorphNewPivotIgnoresRecordedPivotValues(t *testing.T) {
 	// the shared base object); the morph construction must not consume it.
 	rel := usingUnitMorphRelation(&usingUnitUser{ID: 7})
 	typed := rel.(*morphToManyRelationQuery)
-	typed.pivotValues = append(typed.pivotValues, pivotValue{column: "level", value: "pv"})
+	typed.pivotValues = append(typed.pivotValues, PivotValue{Column: "level", Value: "pv"})
 
 	pivot, err := rel.NewPivot(nil, false)
 	require.NoError(t, err)

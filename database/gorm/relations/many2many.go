@@ -27,8 +27,10 @@ type belongsToManyRelationQuery struct {
 	// Go form of BelongsToMany::$pivotValues (BelongsToMany.php:110; entries are
 	// ['column' => ..., 'value' => ...], call order and duplicates kept). Base NewPivot folds the
 	// list into the attribute bag the way IWPT::newPivot's array_column merge does (:629); the
-	// MorphToMany override does not merge it.
-	pivotValues []pivotValue
+	// MorphToMany override does not merge it there. The attach / attachOrFail / sync / toggle
+	// shells receive the list too and stamp it onto every pivot INSERT row through
+	// baseAttachRecord's values loop (:454-472) — see WithPivotValue.
+	pivotValues []PivotValue
 	// pivotAccessor is the call-time As accessor; "" keeps the declaration's field
 	// (RelationInfo.PivotField).
 	pivotAccessor string
@@ -38,13 +40,13 @@ type belongsToManyRelationQuery struct {
 	pivotFactory contractsorm.PivotFactory
 }
 
-// pivotValue is one recorded "pivot column = value" pair — the Go form of a
-// BelongsToMany::$pivotValues entry (['column' => ..., 'value' => ...]). The column is stored as
+// PivotValue is one recorded "pivot column = value" pair — the Go form of a
+// BelongsToMany:: entry (['column' => ..., 'value' => ...]). The column is stored as
 // the call supplied it (Laravel records the raw argument, Expression included); only string
-// columns can become attribute keys in the NewPivot merge.
-type pivotValue struct {
-	column any
-	value  any
+// columns can become attribute keys in the NewPivot merge or the pivot INSERT.
+type PivotValue struct {
+	Column any
+	Value  any
 }
 
 // FindOrNew returns the attached related row with primary key id, read through the pivot-joined
@@ -162,7 +164,7 @@ func (m *belongsToManyRelationQuery) CreateMany(dests any) error {
 }
 
 func (m *belongsToManyRelationQuery) Attach(ids []any) error {
-	return m.Builder.AttachRelation(m.parent, m.name, ids)
+	return m.Builder.AttachRelation(m.parent, m.name, ids, m.pivotValues...)
 }
 
 // AttachOrFail is Attach inside a transaction on the parent's connection — IWPT::attachOrFail
@@ -170,11 +172,11 @@ func (m *belongsToManyRelationQuery) Attach(ids []any) error {
 // /tmp/lalign_write_or_fail.php) measured begin+commit around the call, a begin+rollback pair
 // when the insert fails, and the void return.
 func (m *belongsToManyRelationQuery) AttachOrFail(ids []any) error {
-	return m.Builder.AttachRelationOrFail(m.parent, m.name, ids)
+	return m.Builder.AttachRelationOrFail(m.parent, m.name, ids, m.pivotValues...)
 }
 
 func (m *belongsToManyRelationQuery) AttachWithPivot(idsWithAttrs map[any]map[string]any) error {
-	return m.Builder.AttachWithPivotRelation(m.parent, m.name, idsWithAttrs)
+	return m.Builder.AttachWithPivotRelation(m.parent, m.name, idsWithAttrs, m.pivotValues...)
 }
 
 func (m *belongsToManyRelationQuery) Detach(ids ...any) (int64, error) {
@@ -189,55 +191,55 @@ func (m *belongsToManyRelationQuery) DetachOrFail(ids ...any) (int64, error) {
 }
 
 func (m *belongsToManyRelationQuery) Sync(ids []any) (*dbcontract.SyncResult, error) {
-	return m.Builder.SyncRelation(m.parent, m.name, ids)
+	return m.Builder.SyncRelation(m.parent, m.name, ids, m.pivotValues...)
 }
 
 // SyncOrFail is Sync inside a parent-connection transaction — IWPT::syncOrFail (:157); the oracle
 // measured begin+commit and the same changes shape Sync reports.
 func (m *belongsToManyRelationQuery) SyncOrFail(ids []any) (*dbcontract.SyncResult, error) {
-	return m.Builder.SyncRelationOrFail(m.parent, m.name, ids)
+	return m.Builder.SyncRelationOrFail(m.parent, m.name, ids, m.pivotValues...)
 }
 
 func (m *belongsToManyRelationQuery) SyncWithPivot(idsWithAttrs map[any]map[string]any) (*dbcontract.SyncResult, error) {
-	return m.Builder.SyncRelationWithPivot(m.parent, m.name, idsWithAttrs)
+	return m.Builder.SyncRelationWithPivot(m.parent, m.name, idsWithAttrs, m.pivotValues...)
 }
 
 func (m *belongsToManyRelationQuery) SyncWithPivotValues(ids []any, pivotValues map[string]any) (*dbcontract.SyncResult, error) {
-	return m.Builder.SyncRelationWithPivotValues(m.parent, m.name, ids, pivotValues)
+	return m.Builder.SyncRelationWithPivotValues(m.parent, m.name, ids, pivotValues, m.pivotValues...)
 }
 
 // SyncWithPivotValuesOrFail is SyncWithPivotValues inside a parent-connection transaction —
 // IWPT::syncWithPivotValuesOrFail (:200).
 func (m *belongsToManyRelationQuery) SyncWithPivotValuesOrFail(ids []any, pivotValues map[string]any) (*dbcontract.SyncResult, error) {
-	return m.Builder.SyncRelationWithPivotValuesOrFail(m.parent, m.name, ids, pivotValues)
+	return m.Builder.SyncRelationWithPivotValuesOrFail(m.parent, m.name, ids, pivotValues, m.pivotValues...)
 }
 
 func (m *belongsToManyRelationQuery) SyncWithoutDetaching(ids []any) (*dbcontract.SyncResult, error) {
-	return m.Builder.SyncWithoutDetachingRelation(m.parent, m.name, ids)
+	return m.Builder.SyncWithoutDetachingRelation(m.parent, m.name, ids, m.pivotValues...)
 }
 
 // SyncWithoutDetachingOrFail is SyncWithoutDetaching inside a parent-connection transaction —
 // IWPT::syncWithoutDetachingOrFail (:170), Laravel's syncOrFail($ids, false).
 func (m *belongsToManyRelationQuery) SyncWithoutDetachingOrFail(ids []any) (*dbcontract.SyncResult, error) {
-	return m.Builder.SyncWithoutDetachingRelationOrFail(m.parent, m.name, ids)
+	return m.Builder.SyncWithoutDetachingRelationOrFail(m.parent, m.name, ids, m.pivotValues...)
 }
 
 func (m *belongsToManyRelationQuery) SyncWithoutDetachingWithPivot(idsWithAttrs map[any]map[string]any) (*dbcontract.SyncResult, error) {
-	return m.Builder.SyncWithoutDetachingRelationWithPivot(m.parent, m.name, idsWithAttrs)
+	return m.Builder.SyncWithoutDetachingRelationWithPivot(m.parent, m.name, idsWithAttrs, m.pivotValues...)
 }
 
 func (m *belongsToManyRelationQuery) Toggle(ids []any) (*dbcontract.SyncResult, error) {
-	return m.Builder.ToggleRelation(m.parent, m.name, ids)
+	return m.Builder.ToggleRelation(m.parent, m.name, ids, m.pivotValues...)
 }
 
 // ToggleOrFail is Toggle inside a parent-connection transaction — IWPT::toggleOrFail (:75); the
 // oracle measured begin+commit and the attached/detached change lists.
 func (m *belongsToManyRelationQuery) ToggleOrFail(ids []any) (*dbcontract.SyncResult, error) {
-	return m.Builder.ToggleRelationOrFail(m.parent, m.name, ids)
+	return m.Builder.ToggleRelationOrFail(m.parent, m.name, ids, m.pivotValues...)
 }
 
 func (m *belongsToManyRelationQuery) ToggleWithPivot(idsWithAttrs map[any]map[string]any) (*dbcontract.SyncResult, error) {
-	return m.Builder.ToggleRelationWithPivot(m.parent, m.name, idsWithAttrs)
+	return m.Builder.ToggleRelationWithPivot(m.parent, m.name, idsWithAttrs, m.pivotValues...)
 }
 
 func (m *belongsToManyRelationQuery) UpdateExistingPivot(id any, attrs map[string]any) (int64, error) {
@@ -307,9 +309,8 @@ func (m *belongsToManyRelationQuery) AllRelatedIds(dest any) error {
 // declares no OrWhereNotNull, where Laravel renders the paren-less form (the Expression path is
 // byte-equal). Laravel's pivotWheres/pivotWhereIns/pivotWhereNulls replay (newPivotQuery) also
 // reaches the pivot statements of detach / updateExistingPivot / sync's currently-attached read;
-// those write shells resolve their own pivot statements per call (the frozen zero-worker-edit
-// design) and cannot see these call-time clauses — only the relation read and AllRelatedIds,
-// which ride this builder, observe them.
+// those write shells resolve their own pivot statements per call and cannot see these call-time
+// clauses — only the relation read and AllRelatedIds, which ride this builder, observe them.
 
 // pivotColumn resolves a pivot-family column argument the way Laravel's qualifyPivotColumn does: a
 // database/query Expression passes through untouched, while a plain string is qualified with the
@@ -530,18 +531,21 @@ func (m *belongsToManyRelationQuery) OrWherePivotNotBetween(column any, x, y any
 // (oracle-probed: "The provided value may not be null."), while the frozen Go contract keeps the
 // pre-12 argument swap for that shape — a nil value pairs the argument column with the pivot's
 // parent-side foreign key column — so `WithPivotValue(7, nil)` clauses the parent pivot key
-// against 7 and records that pair. The morph leaf's promoted call records here too, but its
-// NewPivot override never merges the list (MorphToMany.php:156-172). The write shells still
-// resolve their own pivot rows per call (the frozen zero-worker-edit design), so an attach does
-// not receive the recorded values where Laravel's baseAttachRecord (:454) does — the residual
-// (oracle v12.55.1, executed, /tmp/reverify429/pv_probe.php: attach after withPivotValue ->
-// `insert into "lu_role_user" ("level", "lu_user_id", "role_id") values (?, ?, ?)`).
+// against 7 and records that pair. The morph leaf's promoted call records here too; its NewPivot
+// override never merges the list (MorphToMany.php:156-172), but every attach path does — the
+// recorded pairs ride the pivot INSERT through baseAttachRecord's values loop (:467), which the
+// attach / attachOrFail / sync / toggle shells now consume: the pairs stamp the row between the
+// timestamps and the caller's attributes (recorded defaults, the caller wins, the last recorded
+// pair for a column winning). Oracle v12.55.1, executed, /tmp/r7pv/attach_pv_probe.php A1-A7:
+// base attach after withPivotValue -> `insert into "club_user" ("club_id", "is_admin", "user_id")
+// values (?, ?, ?)` binding 'gold'; morph attach -> `insert into "taggables" ("tag_id",
+// "taggable_id", "taggable_type", "tier") values (?, ?, ?, ?)` binding 'gold'.
 func (m *belongsToManyRelationQuery) WithPivotValue(column any, value any) contractsorm.BelongsToManyRelation {
 	if value == nil {
 		column, value = m.info.PivotParentRef.ForeignColumn, column
 	}
 
-	m.pivotValues = append(m.pivotValues, pivotValue{column: column, value: value})
+	m.pivotValues = append(m.pivotValues, PivotValue{Column: column, Value: value})
 
 	return m.WherePivot(column, "=", value)
 }
@@ -765,8 +769,8 @@ func (m *belongsToManyRelationQuery) mergePivotValues(attributes map[string]any)
 
 	merged := make(map[string]any, len(m.pivotValues)+len(attributes))
 	for _, entry := range m.pivotValues {
-		if column, ok := entry.column.(string); ok {
-			merged[column] = entry.value
+		if column, ok := entry.Column.(string); ok {
+			merged[column] = entry.Value
 		}
 	}
 

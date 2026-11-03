@@ -358,6 +358,26 @@ func TestMany2Many_WithPivotValueNilPairsTheParentPivotKey(t *testing.T) {
 	assert.Equal(t, map[string]any{"user_id": "77"}, pivot.Attributes())
 }
 
+// TestMany2Many_WithPivotValueStampsThePivotInsert pins that the recorded WithPivotValue pairs
+// ride the attach INSERT through the relation object's write shell (baseAttachRecord's values
+// loop, IWPT :454-472) — oracle v12.55.1, executed, /tmp/r7pv/attach_pv_probe.php A1: attach
+// after withPivotValue('is_admin','gold') inserts ("club_id", "is_admin", "user_id") binding
+// 'gold'.
+func TestMany2Many_WithPivotValueStampsThePivotInsert(t *testing.T) {
+	builder, recorder := newRelationTestBuilder(t)
+
+	relation := mmRolesRelation(t, builder, &mmUser{ID: 7}).WithPivotValue("role", "gold")
+	require.NoError(t, relation.Attach([]any{uint(9)}))
+
+	statements := recorder.take()
+	require.Len(t, statements, 1)
+	assert.Equal(t, `insert into "mm_user_roles" ("role", "role_id", "user_id") values (?, ?, ?)`, statements[0].query)
+	require.Len(t, statements[0].args, 3)
+	assert.Equal(t, "gold", deref(statements[0].args[0]))
+	assert.EqualValues(t, 9, deref(statements[0].args[1]))
+	assert.EqualValues(t, 7, deref(statements[0].args[2]))
+}
+
 // TestMany2Many_OrderByPivotExpressionInvalidDirectionRecordsTheOrderError: the expression path
 // delegates direction validation to OrderBy, so an invalid direction records the same error the
 // structured path records (Laravel throws InvalidArgumentException).
