@@ -75,7 +75,7 @@ func stop(p *os.Process, done <-chan struct{}, timeout time.Duration, sig ...os.
 	}
 
 	if err := signal(p, signalToSend); err != nil {
-		if errors.Is(err, os.ErrProcessDone) {
+		if isProcessGone(err) {
 			return nil
 		}
 
@@ -87,7 +87,7 @@ func stop(p *os.Process, done <-chan struct{}, timeout time.Duration, sig ...os.
 		return nil
 	case <-time.After(timeout):
 		if err := signal(p, unix.SIGKILL); err != nil {
-			if errors.Is(err, os.ErrProcessDone) {
+			if isProcessGone(err) {
 				return nil
 			}
 
@@ -95,4 +95,16 @@ func stop(p *os.Process, done <-chan struct{}, timeout time.Duration, sig ...os.
 		}
 		return nil
 	}
+}
+
+// isProcessGone reports whether err means the target process (or its process
+// group) has already exited, so a stop attempt is a successful no-op rather than
+// a failure. The process can vanish between the running() probe above and the
+// signal below: RunningPool.Stop cancels the pool context first, and the
+// exec.CommandContext watcher then SIGKILLs the child concurrently with this
+// signal, so signal() may observe a process that is already gone. os.ErrProcessDone
+// is the sentinel os.Process.Kill/Signal return; ESRCH is the raw syscall error
+// unix.Kill returns when neither the process nor its group exists.
+func isProcessGone(err error) bool {
+	return errors.Is(err, os.ErrProcessDone) || errors.Is(err, unix.ESRCH)
 }

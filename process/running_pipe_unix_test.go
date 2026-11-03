@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
 
 	contractsprocess "github.com/gradii/framework/contracts/process"
@@ -22,7 +23,14 @@ func TestRunningPipe_PIDs_Running_Done_Wait_Unix(t *testing.T) {
 	}).Start()
 	assert.NoError(t, err)
 
-	pids := rp.PIDs()
+	// Poll until both stages have registered their PIDs. Pipeline.start spawns every
+	// stage synchronously today, so a bare read is normally fine; the poll keeps the
+	// assertion honest if registration ever becomes asynchronous (candidate 28).
+	var pids map[string]int
+	require.Eventually(t, func() bool {
+		pids = rp.PIDs()
+		return pids["first"] != 0 && pids["second"] != 0
+	}, 2*time.Second, 10*time.Millisecond, "pipe stages should have non-zero PIDs")
 	assert.Len(t, pids, 2)
 	assert.NotEqual(t, 0, pids["first"])
 	assert.NotEqual(t, 0, pids["second"])

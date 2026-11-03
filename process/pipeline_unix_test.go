@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	contractsprocess "github.com/gradii/framework/contracts/process"
 	"github.com/gradii/framework/errors"
@@ -121,7 +122,13 @@ func TestPipe_DefaultStepKeys_Unix(t *testing.T) {
 		b.Command("cat")
 	}).Start()
 	assert.NoError(t, err)
-	pids := rp.PIDs()
+	// Poll until both steps have registered their PIDs (see candidate 28): the stages
+	// spawn synchronously today, but a time-budgeted read stays honest if that changes.
+	var pids map[string]int
+	require.Eventually(t, func() bool {
+		pids = rp.PIDs()
+		return pids["0"] > 0 && pids["1"] > 0
+	}, 2*time.Second, 10*time.Millisecond, "pipeline steps should have non-zero PIDs")
 	assert.Greater(t, pids["0"], 0)
 	assert.Greater(t, pids["1"], 0)
 	_ = rp.Stop(1 * time.Second)

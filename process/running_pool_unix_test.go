@@ -178,7 +178,9 @@ func TestRunningPool_Stop_Unix(t *testing.T) {
 				p.Command("sh", "-c", "sleep 5").As("two")
 			},
 			action: func(t *testing.T, rp contractsprocess.RunningPool) {
-				time.Sleep(100 * time.Millisecond)
+				// Wait for both processes to be registered before stopping: spawning runs on
+				// the pool's worker goroutines, so a fixed sleep is racy under load.
+				waitForPoolPIDs(t, rp, "one", "two")
 				assert.NoError(t, rp.Stop(200*time.Millisecond))
 			},
 			validate: func(t *testing.T, results map[string]contractsprocess.Result) {
@@ -191,7 +193,9 @@ func TestRunningPool_Stop_Unix(t *testing.T) {
 				p.Command("sh", "-c", "trap 'echo ignoring SIGTERM' TERM; sleep 10").As("unstoppable")
 			},
 			action: func(t *testing.T, rp contractsprocess.RunningPool) {
-				time.Sleep(100 * time.Millisecond)
+				// Wait for the process to be registered before stopping: spawning runs on
+				// the pool's worker goroutines, so a fixed sleep is racy under load.
+				waitForPoolPIDs(t, rp, "unstoppable")
 				// Use longer timeout to ensure SIGKILL has time to work
 				err := rp.Stop(50 * time.Millisecond)
 				assert.NoError(t, err, "Stopping with SIGKILL should not return an error on Unix")
@@ -403,4 +407,20 @@ func TestRunningPool_Spinner_Unix(t *testing.T) {
 		assert.Error(t, err)
 		assert.Equal(t, expectedErr, err)
 	})
+}
+
+// waitForPoolPIDs polls until every named command has a registered, non-zero PID.
+// Spawning runs on the pool's worker goroutines, so reading PIDs straight after
+// Start (or after a fixed sleep) is racy under load (see candidate 22/28).
+func waitForPoolPIDs(t *testing.T, rp contractsprocess.RunningPool, keys ...string) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		pids := rp.PIDs()
+		for _, k := range keys {
+			if pids[k] == 0 {
+				return false
+			}
+		}
+		return true
+	}, 10*time.Second, 50*time.Millisecond, "processes should be registered before Stop")
 }
