@@ -694,9 +694,11 @@ func (r *OrmBuilder) runMany2ManyQueryCompiled(child *OrmBuilder, desc *relation
 	// appends `and "roles"."deleted_at" is null`). The pivot table's own soft-delete field is never
 	// consulted here; that is the relation's OnPivotQuery scope's job. The binding runs after the
 	// callback (so its scopes are visible) and is skipped when WithoutGlobalScopes() removed every
-	// scope ("*"): the predicate IS that scope.
+	// scope ("*"): the predicate IS that scope. The related model's user-defined global scopes are
+	// queued on top of it too (addGlobalScopes; see runRelatedQueryCompiled for the full note).
 	if desc.RelatedModel != nil && !slices.Contains(child.conditions.withoutGlobalScopes, "*") {
 		child = child.Model(desc.RelatedModel).(*OrmBuilder)
+		child = child.addGlobalScopes()
 	}
 
 	// The related key survives column pruning, so the model still hydrates its own identity.
@@ -913,9 +915,9 @@ func (r *OrmBuilder) eagerCallbackTarget(child *OrmBuilder, desc *relationDescri
 // model — the same binding the non-eager read installs through relatedQuery — so the model's
 // soft-delete scope reaches the eager load the way Laravel's SoftDeletingScope reaches
 // Relation::noConstraints' new query (unless WithoutGlobalScopes() removed every scope; see the
-// attach in the body). The related model's OTHER global
-// scopes are still not queued here (this function never calls addGlobalScopes), so a user scope
-// registered with withGlobalScope does not yet reach an eager load — a separate, documented gap.
+// attach in the body). The related model's OTHER (user-defined) global scopes are queued here too,
+// through addGlobalScopes below — the same path the non-eager relation read and every other
+// compiled read share; the query's own removals (WithoutGlobalScopes) gate them.
 //
 // protoParent is a fresh instance of the parent model — Laravel's newInstance() — that the relation
 // object handed to entry.Callback is built on, so the callback's relation-level limit / take sees a
@@ -990,9 +992,16 @@ func (r *OrmBuilder) runRelatedQueryCompiled(child *OrmBuilder, desc *relationDe
 	// names (recorded as "*") removes every scope, the soft-delete one included, so the binding is
 	// skipped - the predicate IS that scope, so with all scopes removed there is nothing to compile it
 	// against. (The non-eager ToSql path keeps the predicate by design - tests/to_sql_test.go pins it -
-	// which is a separate, pre-existing divergence.)
+	// which is a separate, pre-existing divergence.) The related model's user-defined global scopes
+	// are queued below (addGlobalScopes): Laravel builds the eager child from the related model's
+	// newQuery(), whose registered scopes applyScopes() folds in when the read runs, so a scope
+	// registered with withGlobalScope reaches the eager statement exactly as it reaches the
+	// non-eager relation read (Related(...).Get) and every other compiled read. addGlobalScopes
+	// drops the scopes WithoutGlobalScopes() names; the outer check already handled the all-removed
+	// ("*") case. The built-in soft-delete predicate stays separate (applySoftDelete).
 	if desc.RelatedModel != nil && !slices.Contains(child.conditions.withoutGlobalScopes, "*") {
 		child = child.Model(desc.RelatedModel).(*OrmBuilder)
+		child = child.addGlobalScopes()
 	}
 
 	if len(entry.Columns) > 0 {
