@@ -471,13 +471,21 @@ func (belongsToManyCreateOrFirstSource) Relations() map[string]contractsorm.Rela
 func belongsToManyCreateOrFirstSchema(t *testing.T, query contractsorm.Query) {
 	t.Helper()
 
-	runRelationSchema(t, query,
+	runRelationSchema(t, query, belongsToManyCreateOrFirstSchemaStatements()...)
+}
+
+// belongsToManyCreateOrFirstSchemaStatements returns the corpus DDL, one statement per string, so a
+// single-connection handle and the read/write-split fixture's reader file can be built from one
+// list. belongsToManyCreateOrFirstSchema runs it against the ORM handle (which routes DDL to the
+// writer); the split fixture replays the same list against its raw reader pool.
+func belongsToManyCreateOrFirstSchemaStatements() []string {
+	return []string{
 		`create table source_table (id integer primary key autoincrement)`,
 		`create table related_table (id integer primary key autoincrement, attr text, val text, created_at datetime null, updated_at datetime null)`,
 		`create unique index related_table_attr_unique on related_table (attr)`,
 		`create table pivot_table (source_id integer not null, related_id integer not null)`,
 		`create unique index pivot_table_source_related_unique on pivot_table (source_id, related_id)`,
-	)
+	}
 }
 
 // freezeBelongsToManyCreateOrFirstClock pins the clock the way the corpus's setUp does

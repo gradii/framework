@@ -21,6 +21,7 @@ package belongs_to_many_create_or_first
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"testing"
 
@@ -28,11 +29,13 @@ import (
 	contractsdriver "github.com/gradii/framework/contracts/database/driver"
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
 	frameworkdb "github.com/gradii/framework/database/db"
+	databasedriver "github.com/gradii/framework/database/driver"
 	databasegorm "github.com/gradii/framework/database/gorm"
 	"github.com/gradii/framework/support/str"
 	"github.com/gradii/framework/testing/utils"
 
 	"github.com/gradii/sqlite"
+	sqlitecontracts "github.com/gradii/sqlite/contracts"
 	"github.com/stretchr/testify/require"
 )
 
@@ -119,4 +122,85 @@ func TestRelationHarnessSmoke(t *testing.T) {
 	require.NoError(t, cloneRelationQuery(t, query).Where("id", user.ID).First(&reloaded))
 	require.Equal(t, user.ID, reloaded.ID)
 	require.Equal(t, "Taylor", reloaded.Name)
+}
+
+// splitRelationHandle is the read/write-split fixture: one ORM query whose reads resolve to a
+// reader pool pointed at a second sqlite file while its writes land in the writer pool — Laravel's
+// $readPdo/$pdo split — plus the raw writer and reader pools a test seeds and asserts through.
+type splitRelationHandle struct {
+	query  contractsorm.Query
+	writer *sql.DB
+	reader *sql.DB
+}
+
+// newSplitRelationQuery opens a sqlite connection whose reader pool is a *different* file from its
+// writer pool: writes land in writeDsn, reads resolve to readDsn. The read replica is a plain file,
+// so a test can leave it stale and drive the paths only a genuine read/write divergence reaches —
+// Laravel's useWritePdo re-reads, which a single-connection harness can never exercise because a
+// single file's read always sees its own write.
+//
+// No ORM plumbing is added: the seam already exists. A driver's Pool() already carries Readers and
+// Writers, executor.readPool() already routes compiled reads to connection.Reader(), and the sqlite
+// driver already reads database.connections.<c>.read / .write to fill them (the same split
+// TestOrmReadWriteSeparate builds). It was simply unreachable from the corpus harness, which opens
+// one file and lets the reader fall back to the writer.
+//
+// The fixture asserts the split is real (writer and reader are distinct pools) and returns the raw
+// pools; reads through the returned query go to reader, writes to writer.
+func newSplitRelationQuery(t *testing.T, writeDsn, readDsn string) splitRelationHandle {
+	t.Helper()
+
+	connection := "orm_relation_split_" + str.Random(6)
+
+	config := frameworkconfig.NewApplication("")
+	config.Add("database.default", connection)
+	config.Add("database.pool", map[string]any{"max_open_conns": 1, "max_idle_conns": 1})
+	config.Add("database.connections."+connection, map[string]any{
+		"driver": sqlite.Name,
+		"dsn":    writeDsn,
+		"via": func() (contractsdriver.Driver, error) {
+			return sqlite.NewSqlite(config, nil, connection), nil
+		},
+	})
+	// The replica: database.connections.<c>.read is the sqlite driver's reader pool, so the ORM's
+	// read routing (executor.readPool -> connection.Reader()) resolves here, and only useWritePdo
+	// sends a read back to the writer.
+	config.Add("database.connections."+connection+".read", []sqlitecontracts.Config{{Dsn: readDsn}})
+
+	ctx := context.Background()
+	log := utils.NewTestLog()
+
+	// The DB handle owns the connection: BuildQuery below shares the same pool, so the purge at
+	// cleanup closes both.
+	db, err := frameworkdb.BuildDB(ctx, config, log, connection, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Purge()) })
+
+	driver := sqlite.NewSqlite(config, nil, connection)
+	pool := driver.Pool()
+	require.NotEmpty(t, pool.Readers, "the driver must expose a reader pool from the read config")
+
+	dialect, err := databasedriver.ResolveDialect(driver)
+	require.NoError(t, err)
+	// Open (not BuildQuery) so the fixture holds the connection's raw pools; BuildQuery resolves the
+	// same cached handle by identity, so one Open serves both the query and the raw handles.
+	conn, err := databasedriver.Open(config, frameworkdb.NewLogger(config, log), pool, connection, nil, dialect)
+	require.NoError(t, err)
+	require.NotSame(t, conn.Writer(), conn.Reader(), "the reader pool must be a distinct handle from the writer")
+
+	query, _, err := databasegorm.BuildQuery(ctx, config, connection, log, nil, nil)
+	require.NoError(t, err)
+
+	return splitRelationHandle{query: query, writer: conn.Writer(), reader: conn.Reader()}
+}
+
+// countRows returns how many rows a table holds in the given raw pool — the split fixture's
+// instrument for "nothing was written here".
+func countRows(t *testing.T, db *sql.DB, table string) int64 {
+	t.Helper()
+
+	var n int64
+	require.NoError(t, db.QueryRowContext(context.Background(), "select count(*) from "+table).Scan(&n))
+
+	return n
 }
