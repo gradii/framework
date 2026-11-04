@@ -977,9 +977,14 @@ func (r *OrmBuilder) runRelatedQueryCompiled(child *OrmBuilder, desc *relationDe
 	// through relatedQuery(desc.RelatedModel) - so the model's soft-delete scope reaches the eager
 	// read exactly as Laravel's SoftDeletingScope reaches Relation::noConstraints' new query:
 	// applySoftDelete appends `deleted_at is null` (or `is not null` under onlyTrashed; WithTrashed
-	// drops it). Only the RELATED model is attached - never the through or pivot table, whose own
-	// soft-delete field Laravel leaves out of the read (oracle, /tmp/eager-softdelete/probe.php: an
-	// eager HasManyThrough filters the related table alone).
+	// drops it). Only the RELATED model is attached, never the pivot table.
+	//
+	// A soft-deletable THROUGH model is a known gap, not part of this binding: Laravel's eager
+	// HasManyThrough ALSO appends `and "through"."deleted_at" is null` when the through model uses
+	// SoftDeletes (oracle, illuminate/database v12.55.1, /tmp/verify-r9/oracle/probe_mine.php M1:
+	// `... where "m_users"."country_id" in (1) and "m_posts"."deleted_at" is null and "m_users"."deleted_at"
+	// is null`), whereas the Go through read binds no model (loadThrough -> pivotChild) and so filters
+	// the related table only - a pre-existing divergence this change does not touch and does not regress.
 	//
 	// It runs after the callback so the callback's scopes are visible: WithoutGlobalScopes() with no
 	// names (recorded as "*") removes every scope, the soft-delete one included, so the binding is
