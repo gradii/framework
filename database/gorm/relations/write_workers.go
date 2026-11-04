@@ -169,10 +169,12 @@ func MutateDissociate(b Builder, info RelationInfo, parent any, isMorph bool) er
 
 // --- HasOneOrMany: the foreign-key stamp and the inverse write-back ---------------------------
 
-// SetRelationFKOnChild reads parent's local key, then writes that value into child's FK column
-// (and the morph_type column for MorphOne/MorphMany) — HasOneOrMany::setForeignAttributesForCreate
-// (vendor v12.55.1, HasOneOrMany.php:506). Mutates child in place; child must be a pointer to a
-// struct. The trailing inverse call links the child back to the parent in memory.
+// SetRelationFKOnChild reads parent's local key, writes that value into child's FK column (and
+// the morph_type column for MorphOne/MorphMany), overlays the relation's WithAttributes pending
+// attributes, and links the child back to the parent in memory — the port's twin of
+// HasOneOrMany::setForeignAttributesForCreate (vendor v12.55.1, HasOneOrMany.php:494-507): the FK
+// stamp (:496), the pending loop (:498-504) and the trailing inverse call (:506). Mutates child in
+// place; child must be a pointer to a struct.
 func SetRelationFKOnChild(b Builder, info RelationInfo, parent, child any) error {
 	if len(info.References) == 0 {
 		return errors.OrmRelationUnsupported.Args(info.Name, info.ParentTable, "no references")
@@ -203,6 +205,19 @@ func SetRelationFKOnChild(b Builder, info RelationInfo, parent, child any) error
 		if _, err := b.SetColumn(child, info.MorphTypeColumn, info.MorphValue); err != nil {
 			return err
 		}
+	}
+
+	// setForeignAttributesForCreate's pending loop (HasOneOrMany.php:498-504): every pair the
+	// relation's WithAttributes recorded lands on the instance unless it already carries that
+	// column — the just-stamped foreign key (and morph type) win, as does the caller's own value.
+	// create(), save(), findOrNew(), firstOrNew() and createOrFirst() all route their FK stamp
+	// through this function, so they share the loop. The forceCreate family also reaches here
+	// through CreateRelation, yet Laravel's forceCreate deliberately skips the loop — it sets the
+	// key into the attribute array (HasOneOrMany.php:414-419) — a standing divergence. Oracle
+	// v12.55.1, executed (/tmp/r12/save_pending_probe2.php): S1/S3/S4 save, F1 firstOrCreate miss
+	// and C1 createOrFirst miss each insert the pending column beside the foreign key.
+	if err := b.ApplyPendingAttributes(child); err != nil {
+		return err
 	}
 
 	// The trailing inverse call of Laravel's setForeignAttributesForCreate: the created / made

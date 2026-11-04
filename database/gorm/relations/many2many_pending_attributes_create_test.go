@@ -167,3 +167,131 @@ func TestHasMany_PendingAttributesLandOnCreate(t *testing.T) {
 	assert.EqualValues(t, true, deref(insert[0].args[0]))
 	assert.EqualValues(t, 7, deref(insert[0].args[1]))
 }
+
+// --- round 12: the HasOneOrMany save / find-then-create pending merge --------------------------
+//
+// Laravel merges Builder::$pendingAttributes on every HasOneOrMany path that stamps the foreign
+// key — setForeignAttributesForCreate's pending loop (HasOneOrMany.php:498) is shared by create()
+// AND save() AND the find-then-create engine (findOrNew / firstOrNew / firstOrCreate /
+// createOrFirst, which funnels through create). Oracle v12.55.1, executed
+// (/tmp/r12/save_pending_probe2.php): S1/S3/S4 save, F1 firstOrCreate miss and C1 createOrFirst
+// miss each insert the pending column beside the foreign key. These pins drive the relation object
+// with the Children declaration above (OnQuery WithAttributes("flag", true)) and assert the pending
+// column reaches the INSERT the recorder captured. Before the fix the FK stamp dropped the pending
+// map, so only create() (round 10) carried it.
+
+// S1/S3: hasMany save — the pending flag lands beside the foreign key on a caller-built child.
+func TestHasMany_PendingAttributesLandOnSave(t *testing.T) {
+	builder, recorder := newKeyedRelationTestBuilder(t)
+
+	relation, ok := builder.Related(&mmStampedPost{ID: 7}, "Children").(contractsorm.HasOneOrManyRelation)
+	require.True(t, ok, "Related must return a has-one-or-many relation object")
+	require.NoError(t, relation.Save(&mmStampedChild{}))
+
+	insert := mmInsertsFor(recorder.take(), "mm_stamped_children")
+	require.Len(t, insert, 1)
+	assert.Equal(t, `insert into "mm_stamped_children" ("flag", "post_id") values (?, ?)`, insert[0].query)
+	require.Len(t, insert[0].args, 2)
+	assert.EqualValues(t, true, deref(insert[0].args[0]))
+	assert.EqualValues(t, 7, deref(insert[0].args[1]))
+}
+
+// F1: hasMany firstOrCreate on a miss (the recorder answers every read with no rows) — the insert
+// the createOrFirst fallback writes carries the pending flag.
+func TestHasMany_PendingAttributesLandOnFirstOrCreate(t *testing.T) {
+	builder, recorder := newKeyedRelationTestBuilder(t)
+
+	relation, ok := builder.Related(&mmStampedPost{ID: 7}, "Children").(contractsorm.HasOneOrManyRelation)
+	require.True(t, ok, "Related must return a has-one-or-many relation object")
+
+	var child mmStampedChild
+	require.NoError(t, relation.FirstOrCreate(&child))
+
+	insert := mmInsertsFor(recorder.take(), "mm_stamped_children")
+	require.Len(t, insert, 1)
+	assert.Equal(t, `insert into "mm_stamped_children" ("flag", "post_id") values (?, ?)`, insert[0].query)
+	require.Len(t, insert[0].args, 2)
+	assert.EqualValues(t, true, deref(insert[0].args[0]))
+	assert.EqualValues(t, 7, deref(insert[0].args[1]))
+}
+
+// C1: hasMany createOrFirst — the insert-first flow carries the pending flag through its fresh
+// create session.
+func TestHasMany_PendingAttributesLandOnCreateOrFirst(t *testing.T) {
+	builder, recorder := newKeyedRelationTestBuilder(t)
+
+	relation, ok := builder.Related(&mmStampedPost{ID: 7}, "Children").(contractsorm.HasOneOrManyRelation)
+	require.True(t, ok, "Related must return a has-one-or-many relation object")
+
+	var child mmStampedChild
+	require.NoError(t, relation.CreateOrFirst(&child))
+
+	insert := mmInsertsFor(recorder.take(), "mm_stamped_children")
+	require.Len(t, insert, 1)
+	assert.Equal(t, `insert into "mm_stamped_children" ("flag", "post_id") values (?, ?)`, insert[0].query)
+	require.Len(t, insert[0].args, 2)
+	assert.EqualValues(t, true, deref(insert[0].args[0]))
+	assert.EqualValues(t, 7, deref(insert[0].args[1]))
+}
+
+// The caller's own value wins over a pending pair (oracle M2/S2: array_merge($pending, $attributes)
+// / the pending loop's array_key_exists check). A string column is used because the port reads a
+// struct's zero value as "unset": the caller's non-zero title survives the pending overlay.
+type mmPendPost struct {
+	ID uint `gorm:"column:id;primaryKey"`
+}
+
+func (mmPendPost) TableName() string { return "mm_pend_posts" }
+
+func (mmPendPost) Relations() map[string]contractsorm.Relation {
+	return map[string]contractsorm.Relation{
+		"Children": contractsorm.HasMany{
+			Related:    &mmPendChild{},
+			ForeignKey: "post_id",
+			OnQuery: func(query contractsorm.Query) contractsorm.Query {
+				return query.WithAttributes("title", "from pending")
+			},
+		},
+	}
+}
+
+type mmPendChild struct {
+	ID     uint   `gorm:"column:id;primaryKey"`
+	PostID uint   `gorm:"column:post_id"`
+	Title  string `gorm:"column:title"`
+}
+
+func (mmPendChild) TableName() string { return "mm_pend_children" }
+
+func TestHasMany_PendingAttributesCallerValueWinsOnSave(t *testing.T) {
+	builder, recorder := newKeyedRelationTestBuilder(t)
+
+	relation, ok := builder.Related(&mmPendPost{ID: 42}, "Children").(contractsorm.HasOneOrManyRelation)
+	require.True(t, ok, "Related must return a has-one-or-many relation object")
+
+	require.NoError(t, relation.Save(&mmPendChild{Title: "from caller"}))
+
+	insert := mmInsertsFor(recorder.take(), "mm_pend_children")
+	require.Len(t, insert, 1)
+	assert.Equal(t, `insert into "mm_pend_children" ("post_id", "title") values (?, ?)`, insert[0].query)
+	require.Len(t, insert[0].args, 2)
+	assert.EqualValues(t, 42, deref(insert[0].args[0]))
+	assert.EqualValues(t, "from caller", deref(insert[0].args[1]))
+}
+
+// Without a caller value the pending pair lands (S3 save(new Post()) analogue).
+func TestHasMany_PendingAttributesFillOnSaveWhenCallerOmits(t *testing.T) {
+	builder, recorder := newKeyedRelationTestBuilder(t)
+
+	relation, ok := builder.Related(&mmPendPost{ID: 42}, "Children").(contractsorm.HasOneOrManyRelation)
+	require.True(t, ok, "Related must return a has-one-or-many relation object")
+
+	require.NoError(t, relation.Save(&mmPendChild{}))
+
+	insert := mmInsertsFor(recorder.take(), "mm_pend_children")
+	require.Len(t, insert, 1)
+	assert.Equal(t, `insert into "mm_pend_children" ("post_id", "title") values (?, ?)`, insert[0].query)
+	require.Len(t, insert[0].args, 2)
+	assert.EqualValues(t, 42, deref(insert[0].args[0]))
+	assert.EqualValues(t, "from pending", deref(insert[0].args[1]))
+}

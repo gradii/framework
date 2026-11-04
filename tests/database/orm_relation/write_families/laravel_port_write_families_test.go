@@ -312,8 +312,11 @@ func TestWriteFamilies_CreateManyQuietlySuppressesEvents(t *testing.T) {
 // --- forceCreate family -------------------------------------------------------
 
 // Oracle: forceCreate fires the same four events, stamps the foreign key and — unlike create —
-// does not merge a pending WithAttributes pair; the Go write shells persist through a fresh
-// session, so they drop pending the same way.
+// does not merge a pending WithAttributes pair: HasOneOrMany::forceCreate (:414-419) folds only the
+// key into the attribute array and never runs setForeignAttributesForCreate's pending loop.
+// Divergence: the Go ForceCreate family aliases CreateRelation, whose persist session
+// (relationCreateSession, and now SetRelationFKOnChild) does carry the pending pair, so the port
+// merges it here — unlike the oracle.
 func TestWriteFamilies_ForceCreateFiresEventsAndStampsForeignKey(t *testing.T) {
 	query := newRelationQuery(t)
 	wfSchema(t, query)

@@ -21,8 +21,10 @@ func (r *OrmBuilder) writeInfo(desc *relationDescriptor, parent any) relations.R
 }
 
 // SaveRelation inserts or updates child as a member of parent's relation. Sets child's foreign
-// key (and morph_type for MorphOne/MorphMany) from parent's local key, then persists child via
-// Query.Save. The FK stamp also links child back to parent in memory under the relation's inverse
+// key (and morph_type for MorphOne/MorphMany) from parent's local key, overlays the relation's
+// WithAttributes pending attributes (setForeignAttributesForCreate's loop, HasOneOrMany.php:498 —
+// the loop create and save share; oracle save.pending-*), then persists child via Query.Save. The
+// FK stamp also links child back to parent in memory under the relation's inverse
 // name when one is in effect — the write-back SupportsInverseRelations::applyInverseRelationToModel
 // applies (oracle: save.same-instance true). For BelongsToMany kinds (Many2Many, MorphToMany,
 // MorphedByMany) persists child first, then writes a pivot row linking parent and child.
@@ -239,10 +241,12 @@ func (r *OrmBuilder) relationWriteSession() *OrmBuilder {
 // into every related row its create path writes: BelongsToMany::create explicitly
 // (`array_merge($this->getQuery()->pendingAttributes, $attributes)`, BelongsToMany.php:1395) and the
 // HasOneOrMany family through setForeignAttributesForCreate's pending loop (HasOneOrMany.php:498,
-// which both create and its foreign-key stamp funnel through). The step is create-only — the
-// BelongsToMany save path inserts no related row and does not merge — so it lives on this session
-// rather than on relationWriteSession itself. Oracle v12.55.1, executed (the probe also fixes the
-// merge order: the caller's attributes win, array_merge($pending, $attributes)).
+// which both create and its foreign-key stamp funnel through). The session is needed only by the
+// BelongsToMany create branch: the HasOneOrMany family's create / save / find-and-create paths all
+// reach the loop through SetRelationFKOnChild (setForeignAttributesForCreate), and the
+// BelongsToMany save path inserts no related row and does not merge — so the copy lives on this
+// session rather than on relationWriteSession itself. Oracle v12.55.1, executed (the probe also
+// fixes the merge order: the caller's attributes win, array_merge($pending, $attributes)).
 func (r *OrmBuilder) relationCreateSession() *OrmBuilder {
 	session := r.relationWriteSession()
 	if len(r.conditions.pendingAttributes) == 0 {

@@ -97,6 +97,13 @@ func (r *OrmBuilder) WriteSession() contractsorm.Query {
 	return r.relationWriteSession()
 }
 
+// ApplyPendingAttributes writes the query's WithAttributes-recorded pending attributes onto dest,
+// the caller's own non-zero values winning — applyPendingAttributes, the twin SetRelationFKOnChild
+// calls to run setForeignAttributesForCreate's pending loop (HasOneOrMany.php:498-504).
+func (r *OrmBuilder) ApplyPendingAttributes(dest any) error {
+	return r.applyPendingAttributes(dest)
+}
+
 // WithSavepoint runs scope directly outside a transaction and inside a savepoint within one — W8,
 // withSavepointIfNeeded.
 func (r *OrmBuilder) WithSavepoint(scope func() error) error {

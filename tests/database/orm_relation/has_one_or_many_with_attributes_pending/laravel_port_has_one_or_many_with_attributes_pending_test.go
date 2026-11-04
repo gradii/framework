@@ -362,3 +362,51 @@ func TestHasOneOrManyWithAttributesPending_HasManyAddsCastedAttributes(t *testin
 	assert.Equal(t, uint64(123), relatedModel.ParentID)
 	assert.True(t, relatedModel.IsAdmin)
 }
+
+// --- round 12: the pending merge on the write paths (save / firstOrCreate) ---------------------
+//
+// Laravel's setForeignAttributesForCreate pending loop (HasOneOrMany.php:498) is shared by create()
+// AND save() AND firstOrCreate()'s createOrFirst fallback. Oracle v12.55.1, executed against sqlite
+// (/tmp/r12/save_pending_probe2.php): S1 `posts()->withAttributes(['flag'=>true],
+// asConditions:false)->save(new Post(['title'=>'s1']))` inserts `("title","rp_posts_fk","flag")
+// ('s1',1,true)`; S3 `save(new Post())` inserts `("fk","flag") (1,true)`; F1
+// `firstOrCreate(['title'=>'f1'])` on a miss inserts the pending flag. The corpus's tables are
+// created here (its other tests never persist) so the write and its read-back run for real.
+
+func TestHasOneOrManyWithAttributesPending_SaveCarriesPendingAttributes(t *testing.T) {
+	query := newRelationQuery(t)
+	runRelationSchema(t, query,
+		`create table related_pending_attributes_models (id integer primary key autoincrement, parent_id integer, relatable integer, relatable_id integer, relatable_type text, "a key" text, a text, b text, c text, attr text, is_admin integer)`)
+
+	parent := relatedPendingAttributesModel{ID: 123}
+
+	relationship := relatedAs[contractsorm.HasManyRelation](t, query, &parent, "Children")
+	relationship.WithAttributes(map[string]any{"a key": "the value"}, false)
+
+	var relatedModel relatedPendingAttributesModel
+	require.NoError(t, relationship.Save(&relatedModel))
+
+	var reloaded relatedPendingAttributesModel
+	require.NoError(t, cloneRelationQuery(t, query).Where("parent_id", uint64(123)).First(&reloaded))
+	assert.Equal(t, uint64(123), reloaded.ParentID)
+	assert.Equal(t, "the value", reloaded.AKey, "save carries the pending attribute, as HasOneOrMany.php:498 does for create and save alike")
+}
+
+func TestHasOneOrManyWithAttributesPending_FirstOrCreateCarriesPendingAttributes(t *testing.T) {
+	query := newRelationQuery(t)
+	runRelationSchema(t, query,
+		`create table related_pending_attributes_models (id integer primary key autoincrement, parent_id integer, relatable integer, relatable_id integer, relatable_type text, "a key" text, a text, b text, c text, attr text, is_admin integer)`)
+
+	parent := relatedPendingAttributesModel{ID: 123}
+
+	relationship := relatedAs[contractsorm.HasManyRelation](t, query, &parent, "Children")
+	relationship.WithAttributes(map[string]any{"a key": "the value"}, false)
+
+	var relatedModel relatedPendingAttributesModel
+	require.NoError(t, relationship.FirstOrCreate(&relatedModel))
+
+	var reloaded relatedPendingAttributesModel
+	require.NoError(t, cloneRelationQuery(t, query).Where("parent_id", uint64(123)).First(&reloaded))
+	assert.Equal(t, uint64(123), reloaded.ParentID)
+	assert.Equal(t, "the value", reloaded.AKey, "firstOrCreate's createOrFirst fallback merges the pending attribute (HasOneOrMany.php:498 via create)")
+}
