@@ -96,8 +96,8 @@ func TestSaveManyRelation_NonSlice(t *testing.T) {
 // Sanity: *Query satisfies the helper signatures the Orm wrapper relies on, and the
 // contractsorm.Query interface is still satisfied (the new methods don't break that contract).
 var _ interface {
-	SaveRelation(parent any, relation string, child any) error
-	SaveManyRelation(parent any, relation string, children any) error
+	SaveRelation(parent any, relation string, child any, recorded ...relations.PivotValue) error
+	SaveManyRelation(parent any, relation string, children any, recorded ...relations.PivotValue) error
 	AssociateRelation(parent any, relation string, owner any) error
 	DissociateRelation(parent any, relation string) error
 } = (*OrmBuilder)(nil)
@@ -924,8 +924,8 @@ func TestUpdateExistingPivotRelationOrFail_NotPointerParent(t *testing.T) {
 // Compile assertion: *OrmBuilder carries the quiet / OrFail shells the object layer forwards to
 // (the relations.Builder widening for the write families).
 var _ interface {
-	SaveRelationQuietly(parent any, relation string, child any) error
-	SaveManyRelationQuietly(parent any, relation string, children any) error
+	SaveRelationQuietly(parent any, relation string, child any, recorded ...relations.PivotValue) error
+	SaveManyRelationQuietly(parent any, relation string, children any, recorded ...relations.PivotValue) error
 	CreateRelationQuietly(parent any, relation string, dest any) error
 	CreateManyRelationQuietly(parent any, relation string, dests any) error
 	AttachRelationOrFail(parent any, relation string, ids []any, recorded ...relations.PivotValue) error

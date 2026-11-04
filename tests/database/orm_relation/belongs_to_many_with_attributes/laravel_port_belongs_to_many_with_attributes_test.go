@@ -66,13 +66,15 @@ import (
 // The read half maps onto declaration-time scopes: withAttributes' condition is the relation's
 // OnQuery scope — Query.WithAttributes is the Go mirror of Builder::withAttributes and adds the
 // same qualified equality — and withPivotValue's wherePivot condition is the OnPivotQuery scope,
-// which the framework applies to the relation's reads. The write half has no counterpart: the
-// relation create path runs the related insert on a fresh builder (CreateRelation calls
-// r.fresh().Create(dest), whose fresh conditions carry no pending attributes) and Attach inserts
-// the pivot key columns only, so withAttributes' pending value and withPivotValue's stamp cannot
-// ride a Relation(...).Create(); pivot column values are caller-supplied there (SaveWithPivot /
-// AttachWithPivot). The three create-based tests are skipped with those measured facts; the
-// queries test asserts the oracle fragments and executes the relation against seeded rows.
+// which the framework applies to the relation's reads. On the write side the withPivotValue stamp
+// now rides create() through the call-time WithPivotValue shell (candidate 30:
+// Related(post, "MetaTags").WithPivotValue("type", "meta").Create(tag) attaches with the recorded
+// type column), but this harness models the corpus's withPivotValue as the declaration's
+// OnPivotQuery read scope, which the create does not consume; and the withAttributes pending value
+// still has no create-time home — the create runs on a write session carrying no pending attributes,
+// and Attach inserts the pivot key columns only (candidate 34). The three create-based tests are
+// skipped with those measured facts; the queries test asserts the oracle fragments and executes the
+// relation against seeded rows.
 //
 // # Our side, measured by the probes this file ran before their removal
 //
@@ -90,14 +92,18 @@ import (
 //     Illuminate\Tests\Database\ManyToManyWithAttributesPost; morphedPosts() has the same shape
 //     with 'with_attributes_posts' bound and "with_attributes_posts"."title" in place of the
 //     visible equality.
-//   - Relation(...).Create() on metaTags() inserts the tag {name: 'long article', visible: false}
-//     and then fails the attach: `insert into "with_attributes_pivot" ("post_id", "tag_id") values
-//     (1, 2)` — type omitted — with `sqlite3: constraint failed: NOT NULL constraint failed:
-//     with_attributes_pivot.type`; against a nullable type variant the row lands NULL. The morph
-//     creates fail the same way after inserting their child (tag {name: 'new tag', visible: false}
-//     / post {title: ""}): `insert into "with_attributes_taggables" ("tag_id", "taggable_id",
-//     "taggable_type") values (1, 2, 'with_attributes_posts')` and `(4, 1,
-//     'with_attributes_posts')`.
+//   - Relation(...).Create() on metaTags() with the harness's declaration-scoped withPivotValue
+//     inserts the tag {name: 'long article', visible: false} and then fails the attach: `insert
+//     into "with_attributes_pivot" ("post_id", "tag_id") values (1, 2)` — type omitted — with
+//     `sqlite3: constraint failed: NOT NULL constraint failed: with_attributes_pivot.type`; against
+//     a nullable type variant the row lands NULL. The morph creates fail the same way after
+//     inserting their child (tag {name: 'new tag', visible: false} / post {title: ""}): `insert
+//     into "with_attributes_taggables" ("tag_id", "taggable_id", "taggable_type") values (1, 2,
+//     'with_attributes_posts')` and `(4, 1, 'with_attributes_posts')`. The call-time form now
+//     carries the recorded type — Related(post, "MetaTags").WithPivotValue("type", "meta").Create(
+//     tag) attaches with `("post_id", "tag_id", "type") values (?, ?, 'meta')` (candidate 30, probe
+//     /tmp/r9pv/zz_probe_test.go) — but the tag still reads visible false: the withAttributes
+//     pending value has no create-time home (candidate 34).
 //   - SaveWithPivot(&tag, {"type": "meta"}) does write the pivot row's type — the write API takes
 //     pivot values per call — but the tag still reads visible false: the pending attribute only
 //     ever lived on the relation's read scope.
@@ -238,7 +244,7 @@ func whereClause(t *testing.T, statement string) string {
 // and `insert into "with_attributes_pivot" ("post_id", "tag_id", "type") values (1, 1, 'meta')`;
 // the returned tag reads {name: 'long article', visible: true}.
 func TestBelongsToManyWithAttributes_CreatesWithAttributesAndPivotValues(t *testing.T) {
-	t.Skip("our ORM diverges: the relation write path carries neither modifier — withPivotValue's recorded pair does not ride the create() path (attach / sync / toggle carry it; the create shell ignores it), so Relation(...).Create() attaches with insert into \"with_attributes_pivot\" (\"post_id\", \"tag_id\") values (1, 2), omitting type, which the corpus's type varchar not null rejects (probe: sqlite3: constraint failed: NOT NULL constraint failed: with_attributes_pivot.type; against a nullable type variant the row lands NULL), and the pending visible attribute cannot ride the create either — CreateRelation runs r.fresh().Create(dest), whose fresh builder carries no conditions, so the created tag row reads {name: \"long article\", visible: false} where the corpus reads visible true. Oracle: Laravel's create() merges Builder::pendingAttributes into the related insert (with_attributes_tags' visible written true) and attaches with insert into \"with_attributes_pivot\" (\"post_id\", \"tag_id\", \"type\") values (1, 1, 'meta')")
+	t.Skip("our ORM still diverges on the withAttributes pending-attribute half: the pending visible => true must land on the related row the corpus create() inserts (Laravel merges Builder::pendingAttributes into the create insert), but CreateRelation persists through a session carrying no pendingAttributes, so the created tag reads {name: \"long article\", visible: false} where the corpus reads visible true (candidate 34). The withPivotValue half is now fixed on the call-time shell — Related(post, \"MetaTags\").WithPivotValue(\"type\", \"meta\").Create(tag) attaches with insert into \"with_attributes_pivot\" (\"post_id\", \"tag_id\", \"type\") values (?, ?, 'meta') (candidate 30; probe /tmp/r9pv/zz_probe_test.go) — but this harness models the corpus withPivotValue as the declaration OnPivotQuery read scope, which the create does not consume, so the declaration form still attaches with insert into \"with_attributes_pivot\" (\"post_id\", \"tag_id\") values (1, 1) and the corpus type varchar not null rejects it (probe: sqlite3: constraint failed: NOT NULL constraint failed: with_attributes_pivot.type).")
 }
 
 // TestBelongsToManyWithAttributes_QueriesWithAttributesAndPivotValues ports
@@ -306,7 +312,7 @@ func TestBelongsToManyWithAttributes_QueriesWithAttributesAndPivotValues(t *test
 // oracle fragment compiles; our order puts the pivot type before the related visible); the create
 // half is what cannot run. See the skip.
 func TestBelongsToManyWithAttributes_MorphToManyWithAttributes(t *testing.T) {
-	t.Skip("our ORM diverges: withPivotValue's recorded pair does not ride the create() path (attach / sync / toggle carry it; the create shell ignores it) — morphedTags()->create() attaches with insert into \"with_attributes_taggables\" (\"tag_id\", \"taggable_id\", \"taggable_type\") values (1, 2, 'with_attributes_posts'), omitting type, so the corpus's type varchar not null rejects it (probe: sqlite3: constraint failed: NOT NULL constraint failed: with_attributes_taggables.type; a nullable type variant lands the row type NULL), and the pending visible cannot ride the create either — CreateRelation runs r.fresh().Create(dest), whose fresh builder carries no conditions (probe: the created tag row reads visible false) — so the pivot row cannot carry type = 'meta' and the corpus's first()-through-the-relation cannot find the tag back. Oracle: Laravel's create() merges the pending attribute into the related insert (insert into \"with_attributes_tags\" (\"visible\", \"name\", \"updated_at\", \"created_at\") values (true, 'new tag', ...)) and attaches with insert into \"with_attributes_taggables\" (\"tag_id\", \"taggable_id\", \"taggable_type\", \"type\") values (2, 2, 'Illuminate\\Tests\\Database\\ManyToManyWithAttributesPost', 'meta'); the wheres half alone is expressible through the declaration's scopes and was measured (each oracle fragment compiles; our order puts the pivot type before the related visible)")
+	t.Skip("our ORM still diverges on the withAttributes pending-attribute half: the pending visible => true must land on the tag morphedTags()->create(['name' => 'new tag']) inserts, but the tag create runs on a session carrying no pendingAttributes (visible stays false; candidate 34). The withPivotValue half is now fixed on the call-time shell (candidate 30), but this harness models the corpus withPivotValue as the declaration OnPivotQuery read scope, which the create does not consume — so the declaration form still attaches with insert into \"with_attributes_taggables\" (\"tag_id\", \"taggable_id\", \"taggable_type\") values (1, 2, 'with_attributes_posts'), omitting type, and the corpus type varchar not null rejects it (probe: NOT NULL constraint failed: with_attributes_taggables.type); the read half is expressible through the declaration scopes and was measured.")
 }
 
 // TestBelongsToManyWithAttributes_MorphedByManyWithAttributes ports testMorphedByManyWithAttributes:
@@ -318,5 +324,5 @@ func TestBelongsToManyWithAttributes_MorphToManyWithAttributes(t *testing.T) {
 // half is expressible through the declaration's scopes; the create half is what cannot run. See
 // the skip.
 func TestBelongsToManyWithAttributes_MorphedByManyWithAttributes(t *testing.T) {
-	t.Skip("our ORM diverges: withPivotValue's recorded pair does not ride the create() path (attach / sync / toggle carry it; the create shell ignores it) — morphedPosts()->create() attaches with insert into \"with_attributes_taggables\" (\"tag_id\", \"taggable_id\", \"taggable_type\") values (4, 1, 'with_attributes_posts'), omitting type, so the corpus's type varchar not null rejects it (probe: sqlite3: constraint failed: NOT NULL constraint failed: with_attributes_taggables.type; a nullable type variant lands the row type NULL), and the pending title cannot ride the create either — CreateRelation runs r.fresh().Create(dest), whose fresh builder carries no conditions (probe: the created post row reads title \"\" where the corpus reads 'Title!') — so first() cannot find the post back. Oracle: Laravel's create() merges the pending attribute into the related insert (insert into \"with_attributes_posts\" (\"title\", \"updated_at\", \"created_at\") values ('Title!', ...)) and attaches with insert into \"with_attributes_taggables\" (\"tag_id\", \"taggable_id\", \"taggable_type\", \"type\") values (4, 2, 'Illuminate\\Tests\\Database\\ManyToManyWithAttributesPost', 'meta'); the wheres half alone is expressible through the declaration's scopes and was measured (each oracle fragment compiles; our order puts the pivot type before the related title)")
+	t.Skip("our ORM still diverges on the withAttributes pending-attribute half: the pending title 'Title!' must land on the post morphedPosts()->create() inserts, but the create runs on a session carrying no pendingAttributes (title stays \"\"; candidate 34). The withPivotValue half is now fixed on the call-time shell (candidate 30), but this harness models the corpus withPivotValue as the declaration OnPivotQuery read scope, which the create does not consume — so the declaration form still attaches with insert into \"with_attributes_taggables\" (\"tag_id\", \"taggable_id\", \"taggable_type\") values (4, 1, 'with_attributes_posts'), omitting type, and the corpus type varchar not null rejects it (probe: NOT NULL constraint failed: with_attributes_taggables.type); the read half is expressible through the declaration scopes and was measured.")
 }

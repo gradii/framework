@@ -34,7 +34,7 @@ func (r *OrmBuilder) writeInfo(desc *relationDescriptor, parent any) relations.R
 //
 // Supported kinds: HasOne, HasMany, MorphOne, MorphMany, Many2Many, MorphToMany, MorphedByMany.
 // Other kinds error with OrmRelationKindNotSupported.
-func (r *OrmBuilder) SaveRelation(parent any, relation string, child any) error {
+func (r *OrmBuilder) SaveRelation(parent any, relation string, child any, recorded ...relations.PivotValue) error {
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
@@ -60,7 +60,7 @@ func (r *OrmBuilder) SaveRelation(parent any, relation string, child any) error 
 		if err != nil {
 			return err
 		}
-		return r.AttachRelation(parent, relation, []any{childPK})
+		return r.AttachRelation(parent, relation, []any{childPK}, recorded...)
 	default:
 		return errors.OrmRelationKindNotSupported.Args("Save", relation, kindName(desc.Kind))
 	}
@@ -68,7 +68,7 @@ func (r *OrmBuilder) SaveRelation(parent any, relation string, child any) error 
 
 // SaveManyRelation is the slice form of SaveRelation. children must be a slice or pointer-to-
 // slice of either pointer-to-struct or struct elements. Iterates and bails on first error.
-func (r *OrmBuilder) SaveManyRelation(parent any, relation string, children any) error {
+func (r *OrmBuilder) SaveManyRelation(parent any, relation string, children any, recorded ...relations.PivotValue) error {
 	rv := reflect.ValueOf(children)
 	if rv.Kind() == reflect.Pointer {
 		rv = rv.Elem()
@@ -93,7 +93,7 @@ func (r *OrmBuilder) SaveManyRelation(parent any, relation string, children any)
 		default:
 			return errors.OrmRelationKindNotSupported.Args("SaveMany", relation, fmt.Sprintf("children element=%s", item.Kind()))
 		}
-		if err := r.SaveRelation(parent, relation, elem); err != nil {
+		if err := r.SaveRelation(parent, relation, elem, recorded...); err != nil {
 			return err
 		}
 	}
@@ -107,20 +107,20 @@ func (r *OrmBuilder) SaveManyRelation(parent any, relation string, children any)
 // session — the child's insert or update, the pivot attach and the owner touches are all quiet,
 // the reach Eloquent's dispatcher swap has (Model::withoutEvents swaps the dispatcher for a
 // NullDispatcher around the callback, HasEvents.php:445-460). Everything else is SaveRelation's.
-func (r *OrmBuilder) SaveRelationQuietly(parent any, relation string, child any) error {
-	return r.quietSession().SaveRelation(parent, relation, child)
+func (r *OrmBuilder) SaveRelationQuietly(parent any, relation string, child any, recorded ...relations.PivotValue) error {
+	return r.quietSession().SaveRelation(parent, relation, child, recorded...)
 }
 
 // SaveManyRelationQuietly is the slice form of SaveRelationQuietly — HasOneOrMany::saveManyQuietly
 // (HasOneOrMany.php:373) and BelongsToMany::saveManyQuietly (BelongsToMany.php:1402): the whole
 // slice saves inside one event-suppressed scope.
-func (r *OrmBuilder) SaveManyRelationQuietly(parent any, relation string, children any) error {
-	return r.quietSession().SaveManyRelation(parent, relation, children)
+func (r *OrmBuilder) SaveManyRelationQuietly(parent any, relation string, children any, recorded ...relations.PivotValue) error {
+	return r.quietSession().SaveManyRelation(parent, relation, children, recorded...)
 }
 
 // SaveRelationWithPivot is SaveRelation with caller-supplied pivot column values for the
 // BelongsToMany family. On HasOneOrMany kinds attrs is ignored (no pivot row).
-func (r *OrmBuilder) SaveRelationWithPivot(parent any, relation string, child any, attrs map[string]any) error {
+func (r *OrmBuilder) SaveRelationWithPivot(parent any, relation string, child any, attrs map[string]any, recorded ...relations.PivotValue) error {
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
@@ -134,7 +134,7 @@ func (r *OrmBuilder) SaveRelationWithPivot(parent any, relation string, child an
 	switch desc.Kind {
 	case relKindHasOne, relKindHasMany, relKindMorphOne, relKindMorphMany:
 		// No pivot — just delegate to SaveRelation.
-		return r.SaveRelation(parent, relation, child)
+		return r.SaveRelation(parent, relation, child, recorded...)
 	case relKindMany2Many, relKindMorphToMany:
 		// Persist child first, then attach via pivot with attrs.
 		if err := r.relationWriteSession().Save(child); err != nil {
@@ -144,7 +144,7 @@ func (r *OrmBuilder) SaveRelationWithPivot(parent any, relation string, child an
 		if err != nil {
 			return err
 		}
-		return r.AttachWithPivotRelation(parent, relation, map[any]map[string]any{childPK: attrs})
+		return r.AttachWithPivotRelation(parent, relation, map[any]map[string]any{childPK: attrs}, recorded...)
 	default:
 		return errors.OrmRelationKindNotSupported.Args("SaveWithPivot", relation, kindName(desc.Kind))
 	}
@@ -152,7 +152,7 @@ func (r *OrmBuilder) SaveRelationWithPivot(parent any, relation string, child an
 
 // SaveManyRelationWithPivot is the slice form of SaveRelationWithPivot. attrsPerChild is keyed by
 // the related PK of each child; an entry may be nil to attach without extra columns.
-func (r *OrmBuilder) SaveManyRelationWithPivot(parent any, relation string, children any, attrsPerChild map[any]map[string]any) error {
+func (r *OrmBuilder) SaveManyRelationWithPivot(parent any, relation string, children any, attrsPerChild map[any]map[string]any, recorded ...relations.PivotValue) error {
 	rv := reflect.ValueOf(children)
 	if rv.Kind() == reflect.Pointer {
 		rv = rv.Elem()
@@ -187,7 +187,7 @@ func (r *OrmBuilder) SaveManyRelationWithPivot(parent any, relation string, chil
 			return err
 		}
 		attrs := attrsPerChild[childPK]
-		if err := r.SaveRelationWithPivot(parent, relation, elem, attrs); err != nil {
+		if err := r.SaveRelationWithPivot(parent, relation, elem, attrs, recorded...); err != nil {
 			return err
 		}
 	}
@@ -300,7 +300,7 @@ func (r *OrmBuilder) DissociateRelation(parent any, relation string) error {
 // pointer to a struct of the related type.
 //
 // RelationWriter.Create shell (contracts/database/orm/relation_writer.go:53) — reached through Query.Relation(parent, name); the flat Orm.Create form intentionally does not exist (relation_writer.go:9).
-func (r *OrmBuilder) CreateRelation(parent any, relation string, dest any) error {
+func (r *OrmBuilder) CreateRelation(parent any, relation string, dest any, recorded ...relations.PivotValue) error {
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
@@ -326,7 +326,7 @@ func (r *OrmBuilder) CreateRelation(parent any, relation string, dest any) error
 		if err != nil {
 			return err
 		}
-		return r.AttachRelation(parent, relation, []any{childPK})
+		return r.AttachRelation(parent, relation, []any{childPK}, recorded...)
 	default:
 		return errors.OrmRelationKindNotSupported.Args("Create", relation, kindName(desc.Kind))
 	}
@@ -334,7 +334,7 @@ func (r *OrmBuilder) CreateRelation(parent any, relation string, dest any) error
 
 // CreateManyRelation is the slice form of CreateRelation. dests must be a slice or a pointer to a
 // slice; iterates and calls CreateRelation per element, bailing on the first error.
-func (r *OrmBuilder) CreateManyRelation(parent any, relation string, dests any) error {
+func (r *OrmBuilder) CreateManyRelation(parent any, relation string, dests any, recorded ...relations.PivotValue) error {
 	rv := reflect.ValueOf(dests)
 	if rv.Kind() == reflect.Pointer {
 		rv = rv.Elem()
@@ -347,7 +347,7 @@ func (r *OrmBuilder) CreateManyRelation(parent any, relation string, dests any) 
 		if elem.Kind() != reflect.Pointer {
 			elem = elem.Addr()
 		}
-		if err := r.CreateRelation(parent, relation, elem.Interface()); err != nil {
+		if err := r.CreateRelation(parent, relation, elem.Interface(), recorded...); err != nil {
 			return err
 		}
 	}
@@ -462,7 +462,7 @@ func (r *OrmBuilder) FirstOrNewRelation(parent any, relation string, attrs map[s
 // wasRecentlyCreated(), read off createOrFirst's insert: true only when that insert went
 // through, false for every read / attach / read-back path. It is the flag
 // BelongsToMany::updateOrCreate branches on (:707-712).
-func (r *OrmBuilder) firstOrCreateMany2Many(desc *relationDescriptor, parent any, relation string, attrs, values map[string]any, dest any) (bool, error) {
+func (r *OrmBuilder) firstOrCreateMany2Many(desc *relationDescriptor, parent any, relation string, attrs, values map[string]any, dest any, recorded ...relations.PivotValue) (bool, error) {
 	// Level 1: the pivot-joined relation read — (clone $this)->where($attributes)->first()
 	// (:657), which hydrates the Pivot struct; an attached hit comes back untouched.
 	found, err := relations.RelationFirst(r, parent, relation, attrs, dest, false)
@@ -490,7 +490,7 @@ func (r *OrmBuilder) firstOrCreateMany2Many(desc *relationDescriptor, parent any
 			return false, err
 		}
 		attachErr := r.withSavepointIfNeeded(func() error {
-			return r.AttachRelation(parent, relation, []any{childPK})
+			return r.AttachRelation(parent, relation, []any{childPK}, recorded...)
 		})
 		if attachErr != nil && !isUniqueConstraintViolation(attachErr) {
 			return false, attachErr
@@ -501,7 +501,7 @@ func (r *OrmBuilder) firstOrCreateMany2Many(desc *relationDescriptor, parent any
 	// Level 3: both reads missed — Laravel funnels into createOrFirst($attributes, $values,
 	// $joining, $touch) (:664), which inserts related + pivot or resolves the unique-violation
 	// race.
-	return r.createOrFirstMany2Many(desc, parent, relation, attrs, values, dest)
+	return r.createOrFirstMany2Many(desc, parent, relation, attrs, values, dest, recorded...)
 }
 
 // createOrFirstMany2Many is the BelongsToMany arm of CreateOrFirstRelation — Laravel
@@ -511,7 +511,7 @@ func (r *OrmBuilder) firstOrCreateMany2Many(desc *relationDescriptor, parent any
 // wasRecentlyCreated(): true (oracle v12.55.1, executed: `insert into "related_table" ...` then
 // `insert into "pivot_table" ("related_id", "source_id") values (?, ?)`, wasRecentlyCreated =
 // true, pivot=(no pivot loaded)), false on every catch.
-func (r *OrmBuilder) createOrFirstMany2Many(desc *relationDescriptor, parent any, relation string, attrs, values map[string]any, dest any) (bool, error) {
+func (r *OrmBuilder) createOrFirstMany2Many(desc *relationDescriptor, parent any, relation string, attrs, values map[string]any, dest any, recorded ...relations.PivotValue) (bool, error) {
 	if err := relations.ApplyAttrMap(r, dest, attrs); err != nil {
 		return false, err
 	}
@@ -527,7 +527,7 @@ func (r *OrmBuilder) createOrFirstMany2Many(desc *relationDescriptor, parent any
 			return err
 		}
 
-		return r.AttachRelation(parent, relation, []any{childPK})
+		return r.AttachRelation(parent, relation, []any{childPK}, recorded...)
 	})
 	if err == nil {
 		return true, nil
@@ -581,7 +581,7 @@ func (r *OrmBuilder) createOrFirstMany2Many(desc *relationDescriptor, parent any
 		return false, err
 	}
 	attachErr := r.withSavepointIfNeeded(func() error {
-		_, inner := relations.DoAttach(r, r.writeInfo(desc, parent), parentVal, []any{childPK}, nil)
+		_, inner := relations.DoAttach(r, r.writeInfo(desc, parent), parentVal, []any{childPK}, nil, recorded...)
 
 		return inner
 	})
@@ -608,7 +608,7 @@ func (r *OrmBuilder) createOrFirstMany2Many(desc *relationDescriptor, parent any
 // BelongsToMany kinds the lookup is Laravel's two-level search — the pivot-joined relation read,
 // then the plain related read whose hit is attached — before the createOrFirst fallback
 // (firstOrCreateMany2Many, shared with UpdateOrCreateRelation).
-func (r *OrmBuilder) FirstOrCreateRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any) error {
+func (r *OrmBuilder) FirstOrCreateRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any, recorded ...relations.PivotValue) error {
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
@@ -624,7 +624,7 @@ func (r *OrmBuilder) FirstOrCreateRelation(parent any, relation string, attrs ma
 		relKindHasOneThrough, relKindHasManyThrough:
 		return relations.FirstOrCreate(r, r.writeInfo(desc, parent), parent, relation, attrs, values, dest)
 	case relKindMany2Many, relKindMorphToMany:
-		_, err := r.firstOrCreateMany2Many(desc, parent, relation, attrs, values, dest)
+		_, err := r.firstOrCreateMany2Many(desc, parent, relation, attrs, values, dest, recorded...)
 
 		return err
 	default:
@@ -640,7 +640,7 @@ func (r *OrmBuilder) FirstOrCreateRelation(parent any, relation string, attrs ma
 // attached hit comes back with its Pivot, an unattached hit is attached first, a miss is created
 // and attached — and only that fresh insert skips the fill+save (BelongsToMany::updateOrCreate,
 // BelongsToMany.php:707).
-func (r *OrmBuilder) UpdateOrCreateRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any) error {
+func (r *OrmBuilder) UpdateOrCreateRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any, recorded ...relations.PivotValue) error {
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
@@ -666,7 +666,7 @@ func (r *OrmBuilder) UpdateOrCreateRelation(parent any, relation string, attrs m
 		//   hit-attached   -> pivot-joined select, then update (pivot stays hydrated)
 		//   hit-unattached -> pivot-joined select, plain select, pivot insert, then update
 		//   miss           -> pivot-joined select, plain select, related insert, pivot insert, no update
-		created, err := r.firstOrCreateMany2Many(desc, parent, relation, attrs, values, dest)
+		created, err := r.firstOrCreateMany2Many(desc, parent, relation, attrs, values, dest, recorded...)
 		if err != nil {
 			return err
 		}
@@ -922,7 +922,7 @@ func castKey(v any, t reflect.Type) any {
 // Many2Many, MorphToMany.
 //
 // RelationWriter.CreateOrFirst shell (contracts/database/orm/relation_writer.go:108) — reached through Query.Relation(parent, name); the flat Orm.CreateOrFirst form intentionally does not exist (relation_writer.go:9).
-func (r *OrmBuilder) CreateOrFirstRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any) error {
+func (r *OrmBuilder) CreateOrFirstRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any, recorded ...relations.PivotValue) error {
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
@@ -939,7 +939,7 @@ func (r *OrmBuilder) CreateOrFirstRelation(parent any, relation string, attrs ma
 		_, err := relations.CreateOrFirstEngine(r, r.writeInfo(desc, parent), parent, relation, attrs, values, dest, attrs)
 		return err
 	case relKindMany2Many, relKindMorphToMany:
-		_, err := r.createOrFirstMany2Many(desc, parent, relation, attrs, values, dest)
+		_, err := r.createOrFirstMany2Many(desc, parent, relation, attrs, values, dest, recorded...)
 
 		return err
 	default:

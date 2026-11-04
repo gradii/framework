@@ -99,7 +99,7 @@ func (m *belongsToManyRelationQuery) FirstOrNew(dest any, attributes any, values
 // swallowed, :661-664), and finally createOrFirst (:659). Shell: FirstOrCreateRelation's Many2Many
 // branch (database/gorm/relation_writes.go, firstOrCreateMany2Many).
 func (m *belongsToManyRelationQuery) FirstOrCreate(dest any, conds ...any) error {
-	return m.Builder.FirstOrCreateRelation(m.parent, m.name, attributeMapFrom(conds...), attributeMapAt(conds, 1), dest)
+	return m.Builder.FirstOrCreateRelation(m.parent, m.name, attributeMapFrom(conds...), attributeMapAt(conds, 1), dest, m.pivotValues...)
 }
 
 // UpdateOrCreate is FirstOrCreate followed by a conditional fill+save — Laravel
@@ -110,7 +110,7 @@ func (m *belongsToManyRelationQuery) FirstOrCreate(dest any, conds ...any) error
 // Shell: UpdateOrCreateRelation's Many2Many branch (database/gorm/relation_writes.go, over
 // firstOrCreateMany2Many).
 func (m *belongsToManyRelationQuery) UpdateOrCreate(dest any, attributes any, values any) error {
-	return m.Builder.UpdateOrCreateRelation(m.parent, m.name, attributeMap(attributes), attributeMap(values), dest)
+	return m.Builder.UpdateOrCreateRelation(m.parent, m.name, attributeMap(attributes), attributeMap(values), dest, m.pivotValues...)
 }
 
 // CreateOrFirst attempts the related insert immediately — Laravel BelongsToMany::createOrFirst
@@ -122,11 +122,11 @@ func (m *belongsToManyRelationQuery) UpdateOrCreate(dest any, attributes any, va
 // the Pivot field. Shell: CreateOrFirstRelation's
 // Many2Many branch (database/gorm/relation_writes.go, createOrFirstMany2Many).
 func (m *belongsToManyRelationQuery) CreateOrFirst(dest any, conds ...any) error {
-	return m.Builder.CreateOrFirstRelation(m.parent, m.name, attributeMapFrom(conds...), attributeMapAt(conds, 1), dest)
+	return m.Builder.CreateOrFirstRelation(m.parent, m.name, attributeMapFrom(conds...), attributeMapAt(conds, 1), dest, m.pivotValues...)
 }
 
 func (m *belongsToManyRelationQuery) Save(child any) error {
-	return m.Builder.SaveRelation(m.parent, m.name, child)
+	return m.Builder.SaveRelation(m.parent, m.name, child, m.pivotValues...)
 }
 
 // SaveQuietly is Save with every model event suppressed — Laravel's BelongsToMany::saveQuietly
@@ -135,32 +135,32 @@ func (m *belongsToManyRelationQuery) Save(child any) error {
 // zero events on the quiet call while the related row and the pivot row still land and the model
 // is returned; the pivot attach and the parent touch raise no model events on either path.
 func (m *belongsToManyRelationQuery) SaveQuietly(child any) error {
-	return m.Builder.SaveRelationQuietly(m.parent, m.name, child)
+	return m.Builder.SaveRelationQuietly(m.parent, m.name, child, m.pivotValues...)
 }
 
 func (m *belongsToManyRelationQuery) SaveMany(children any) error {
-	return m.Builder.SaveManyRelation(m.parent, m.name, children)
+	return m.Builder.SaveManyRelation(m.parent, m.name, children, m.pivotValues...)
 }
 
 // SaveManyQuietly is the slice form of SaveQuietly — BelongsToMany::saveManyQuietly (:1402).
 func (m *belongsToManyRelationQuery) SaveManyQuietly(children any) error {
-	return m.Builder.SaveManyRelationQuietly(m.parent, m.name, children)
+	return m.Builder.SaveManyRelationQuietly(m.parent, m.name, children, m.pivotValues...)
 }
 
 func (m *belongsToManyRelationQuery) SaveWithPivot(child any, attrs map[string]any) error {
-	return m.Builder.SaveRelationWithPivot(m.parent, m.name, child, attrs)
+	return m.Builder.SaveRelationWithPivot(m.parent, m.name, child, attrs, m.pivotValues...)
 }
 
 func (m *belongsToManyRelationQuery) SaveManyWithPivot(children any, attrsPerChild map[any]map[string]any) error {
-	return m.Builder.SaveManyRelationWithPivot(m.parent, m.name, children, attrsPerChild)
+	return m.Builder.SaveManyRelationWithPivot(m.parent, m.name, children, attrsPerChild, m.pivotValues...)
 }
 
 func (m *belongsToManyRelationQuery) Create(dest any) error {
-	return m.Builder.CreateRelation(m.parent, m.name, dest)
+	return m.Builder.CreateRelation(m.parent, m.name, dest, m.pivotValues...)
 }
 
 func (m *belongsToManyRelationQuery) CreateMany(dests any) error {
-	return m.Builder.CreateManyRelation(m.parent, m.name, dests)
+	return m.Builder.CreateManyRelation(m.parent, m.name, dests, m.pivotValues...)
 }
 
 func (m *belongsToManyRelationQuery) Attach(ids []any) error {

@@ -168,19 +168,19 @@ type Builder interface {
 	// consult before choosing the partition column.
 	UseLegacyGroupLimit() bool
 
-	SaveRelation(parent any, relation string, child any) error
-	SaveManyRelation(parent any, relation string, children any) error
-	SaveRelationWithPivot(parent any, relation string, child any, attrs map[string]any) error
-	SaveManyRelationWithPivot(parent any, relation string, children any, attrsPerChild map[any]map[string]any) error
+	SaveRelation(parent any, relation string, child any, recorded ...PivotValue) error
+	SaveManyRelation(parent any, relation string, children any, recorded ...PivotValue) error
+	SaveRelationWithPivot(parent any, relation string, child any, attrs map[string]any, recorded ...PivotValue) error
+	SaveManyRelationWithPivot(parent any, relation string, children any, attrsPerChild map[any]map[string]any, recorded ...PivotValue) error
 	AssociateRelation(parent any, relation string, owner any) error
 	DissociateRelation(parent any, relation string) error
-	CreateRelation(parent any, relation string, dest any) error
-	CreateManyRelation(parent any, relation string, dests any) error
+	CreateRelation(parent any, relation string, dest any, recorded ...PivotValue) error
+	CreateManyRelation(parent any, relation string, dests any, recorded ...PivotValue) error
 	FindOrNewRelation(parent any, relation string, id any, dest any) error
 	FirstOrNewRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any) error
-	FirstOrCreateRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any) error
-	UpdateOrCreateRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any) error
-	CreateOrFirstRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any) error
+	FirstOrCreateRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any, recorded ...PivotValue) error
+	UpdateOrCreateRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any, recorded ...PivotValue) error
+	CreateOrFirstRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any, recorded ...PivotValue) error
 	MakeRelation(parent any, relation string, attrs map[string]any, dest any) error
 	MakeManyRelation(parent any, relation string, records []map[string]any, dests any) error
 	UpsertRelation(parent any, relation string, values []map[string]any, uniqueBy []string, update ...any) (*dbcontract.Result, error)
@@ -202,8 +202,8 @@ type Builder interface {
 	// OrFail family (InteractsWithPivotTable.php:75/157/170/200/299/365/562). The quiet shells
 	// run the same write with the without-events flag set on the fresh persistence session; the
 	// OrFail shells wrap the base shell in a transaction on this builder's connection.
-	SaveRelationQuietly(parent any, relation string, child any) error
-	SaveManyRelationQuietly(parent any, relation string, children any) error
+	SaveRelationQuietly(parent any, relation string, child any, recorded ...PivotValue) error
+	SaveManyRelationQuietly(parent any, relation string, children any, recorded ...PivotValue) error
 	CreateRelationQuietly(parent any, relation string, dest any) error
 	CreateManyRelationQuietly(parent any, relation string, dests any) error
 	AttachRelationOrFail(parent any, relation string, ids []any, recorded ...PivotValue) error
