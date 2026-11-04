@@ -95,3 +95,21 @@ func TestHydrationCapture_CursorPaginate(t *testing.T) {
 	require.Equal(t, 7, models[0].Foo)
 	captureSaveAndAssert(t, query, &models[0])
 }
+
+// TestHydrationCapture_CreateRebaselinesTheOriginalBag pins create()'s own capture: the
+// syncOriginal at the end of OrmBuilder.create (database/gorm/orm_builder.go:3602, finishSave's
+// last step) rebaselines the original bag from the written struct, so a later Save of the model
+// Create returned updates only what changes from there on. Round 11's verification found this
+// capture covered only by an overlay probe - removing it left every root and tests-module package
+// green - so it gets a permanent pin here. Unlike the captures above, no read hydrates the model:
+// the model Create returns is the one that is later saved.
+func TestHydrationCapture_CreateRebaselinesTheOriginalBag(t *testing.T) {
+	query := newRelationQuery(t)
+	modelSchema(t, query)
+
+	seeded := modelDirtyProcessUser{Name: "old", Foo: 7}
+	require.NoError(t, cloneRelationQuery(t, query).Create(&seeded))
+	require.NotZero(t, seeded.ID, "Create must read the generated key back")
+
+	captureSaveAndAssert(t, query, &seeded)
+}
