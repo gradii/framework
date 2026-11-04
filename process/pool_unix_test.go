@@ -227,9 +227,17 @@ func TestPool_Concurrency_Unix(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var buf bytes.Buffer
+			// OnOutput may be called concurrently, one goroutine per running
+			// process (see the PoolBuilder contract), so the shared buffer needs
+			// a mutex or the callback races.
+			var (
+				mu  sync.Mutex
+				buf bytes.Buffer
+			)
 			builder := NewPool().Concurrency(tt.concurrency).OnOutput(func(typ contractsprocess.OutputType, line []byte, key string) {
+				mu.Lock()
 				buf.WriteString(key + ":" + time.Now().Format(time.RFC3339Nano) + "\n")
+				mu.Unlock()
 			})
 
 			start := time.Now()
