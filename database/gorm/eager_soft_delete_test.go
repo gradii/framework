@@ -181,6 +181,23 @@ func TestEagerRelatedSoftDeleteTrashedFamily(t *testing.T) {
 			callback: func(query contractsorm.Query) contractsorm.Query { return query.WithoutGlobalScopes() },
 			sql:      `select * from "esd_posts" where "esd_posts"."user_id" in (?)`,
 		},
+		{
+			// A named removal that is not the soft-delete scope leaves the predicate: the eager
+			// child keeps Laravel's SoftDeletingScope.
+			name:     "withoutGlobalScope(named user scope)",
+			callback: func(query contractsorm.Query) contractsorm.Query { return query.WithoutGlobalScopes("esd_scope") },
+			sql:      `select * from "esd_posts" where "esd_posts"."user_id" in (?) and "esd_posts"."deleted_at" is null`,
+		},
+		{
+			// Removing the SoftDeletingScope by name drops the predicate - Laravel's
+			// withoutGlobalScope(SoftDeletingScope::class); the binding stays so user scopes still
+			// queue (oracle, illuminate/database v12.55.1, /tmp/r12/scope_removal_probe2.php §F9).
+			name: "withoutGlobalScope(SoftDeletingScope)",
+			callback: func(query contractsorm.Query) contractsorm.Query {
+				return query.WithoutGlobalScopes(contractsorm.SoftDeletingScope)
+			},
+			sql: `select * from "esd_posts" where "esd_posts"."user_id" in (?)`,
+		},
 	}
 
 	for _, c := range cases {

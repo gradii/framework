@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	contractsdriver "github.com/gradii/framework/contracts/database/driver"
+	contractsorm "github.com/gradii/framework/contracts/database/orm"
 	"github.com/gradii/framework/database/gorm/relations"
 	querybuilder "github.com/gradii/framework/database/query"
 	"github.com/gradii/framework/database/query/core"
@@ -322,17 +323,52 @@ func (r *OrmBuilder) newBuilder() (*querybuilder.Builder, error) {
 // "is null" by default, "is not null" when OnlyTrashed asked for the trashed rows alone. The
 // predicate is written as a structured where so the grammar compiles it through compileWhereNull -
 // the same lowercase path Laravel's SoftDeletingScope::apply uses - instead of as a raw fragment.
-// WithTrashed drops the predicate entirely, so it is only ignored here when OnlyTrashed has not
-// overridden it. The predicate is kept outside the named-scope registry, so WithoutGlobalScopes()
-// does not lift it on this path (a deliberate divergence tests/to_sql_test.go pins); the eager
-// runner handles the scope removal by not binding the related model at all (see
-// runRelatedQueryCompiled).
+//
+// The predicate is the port's twin of the named SoftDeletingScope Laravel registers
+// (contractsorm.SoftDeletingScope): removing that scope by name (WithoutGlobalScopes(
+// contractsorm.SoftDeletingScope)) drops it exactly as Laravel's
+// withoutGlobalScope(SoftDeletingScope::class) does, and removing every scope (WithoutGlobalScopes()
+// with no names, the port's "*") drops it too, as Laravel's withoutGlobalScopes() drops every
+// registered scope. WithTrashed drops it as well - Laravel's withTrashed macro is
+// withoutGlobalScope(SoftDeletingScope), the same removal. OnlyTrashed keeps its "is not null":
+// Laravel's onlyTrashed macro removes the scope and THEN adds whereNotNull, so that explicit
+// predicate survives a named removal and overrides WithTrashed when both are set.
+//
+// Oracle (illuminate/database v12.55.1, real sqlite, /tmp/r12/scope_removal_probe.php §B/§C): the
+// default read compiles `... where "sr_users"."deleted_at" is null and "email" = ?`;
+// withoutGlobalScope(SoftDeletingScope::class) compiles `... where "email" = ?`;
+// withoutGlobalScopes() compiles `select * from "sr_users"`; onlyTrashed() compiles `... where
+// "sr_users"."deleted_at" is not null and "email" = ?`; and withoutGlobalScope(SoftDeletingScope)
+// combined with onlyTrashed() keeps the `is not null`.
 func (r *OrmBuilder) applySoftDelete(builder *querybuilder.Builder) error {
-	if (r.conditions.withTrashed && !r.conditions.onlyTrashed) || !r.usesFrameworkSoftDelete() {
+	if r.conditions.withTrashed && !r.conditions.onlyTrashed {
+		return nil
+	}
+
+	if !r.usesFrameworkSoftDelete() {
+		return nil
+	}
+
+	// The default predicate is the named scope's: a removal of that name (or of every scope) drops
+	// it. OnlyTrashed's "is not null" is the whereNotNull onlyTrashed adds after removing the scope,
+	// so it is kept even when the name is removed.
+	if !r.conditions.onlyTrashed && r.globalScopeRemoved(contractsorm.SoftDeletingScope) {
 		return nil
 	}
 
 	return r.appendSoftDeletePredicate(builder, r.conditions.onlyTrashed)
+}
+
+// globalScopeRemoved reports whether the query removed the named global scope - Laravel's
+// withoutGlobalScope($name), which unsets $builder->scopes[$name] - or every scope at once: the
+// port's "*" wildcard records WithoutGlobalScopes() with no names, the shape Laravel's
+// withoutGlobalScopes(null) has when it removes array_keys($this->scopes). It is the single gate the
+// two built-in soft-delete predicates consult, so both answer to the names Laravel registers them
+// under (contractsorm.SoftDeletingScope, contractsorm.SoftDeletableHasManyThrough) in addition to
+// the all-scope "*".
+func (r *OrmBuilder) globalScopeRemoved(name string) bool {
+	return slices.Contains(r.conditions.withoutGlobalScopes, "*") ||
+		slices.Contains(r.conditions.withoutGlobalScopes, name)
 }
 
 // appendSoftDeletePredicate writes the model's soft-delete predicate onto a compiled builder through
@@ -366,20 +402,29 @@ func (r *OrmBuilder) appendSoftDeletePredicate(builder *querybuilder.Builder, no
 // global scope - a whereNull on the through table's deleted-at column - whenever the through model
 // uses SoftDeletes, so the through table is filtered exactly like the related table. It runs after
 // applySoftDelete so the related predicate precedes the through one, the order Laravel compiles
-// (the related SoftDeletingScope registers before the named through scope). The predicate is
-// dropped when the relation removed every scope (WithoutGlobalScopes(), recorded as "*") - the
-// gate the eager related binding uses; it is NOT lifted by WithTrashed / OnlyTrashed, which target
-// the related SoftDeletingScope alone (Laravel's through-side switch, withTrashedParents, is not
-// ported). It keys off the query's through soft-delete fields, NOT the throughRead config, so a
-// read that suppresses the relation's select-list alias (pluck / value / exists) still carries the
-// predicate - Laravel registers it as a global scope on the relation's builder, independent of the
-// select list. Only a HasOneThrough / HasManyThrough read with a soft-deletable through model is
-// affected.
+// (the related SoftDeletingScope registers before the named through scope).
+//
+// The predicate is the port's twin of that named scope (contractsorm.SoftDeletableHasManyThrough):
+// removing the name - directly through WithoutGlobalScopes(contractsorm.SoftDeletableHasManyThrough)
+// or through the relation's WithTrashedParents, the through-side switch Laravel exposes - or
+// removing every scope (WithoutGlobalScopes(), the port's "*") drops it. It is NOT lifted by
+// WithTrashed / OnlyTrashed, which target the related SoftDeletingScope alone. It keys off the
+// query's through soft-delete fields, NOT the throughRead config, so a read that suppresses the
+// relation's select-list alias (pluck / value / exists) still carries the predicate - Laravel
+// registers it as a global scope on the relation's builder, independent of the select list. Only a
+// HasOneThrough / HasManyThrough read with a soft-deletable through model is affected.
+//
+// Oracle (illuminate/database v12.55.1, real sqlite, /tmp/r12/scope_removal_probe3.php §E/§F2): the
+// through read compiles `... where "sr_users"."country_id" = ? and "sr_posts"."deleted_at" is null
+// and "sr_users"."deleted_at" is null`; withTrashedParents() (== withoutGlobalScope(
+// 'SoftDeletableHasManyThrough')) drops only the through predicate; withTrashed()/onlyTrashed keep
+// it; and withoutGlobalScopes() drops both.
 func (r *OrmBuilder) applyThroughSoftDelete(builder *querybuilder.Builder) {
 	if r.conditions.throughSoftDeleteColumn == "" {
 		return
 	}
-	if slices.Contains(r.conditions.withoutGlobalScopes, "*") {
+
+	if r.globalScopeRemoved(contractsorm.SoftDeletableHasManyThrough) {
 		return
 	}
 

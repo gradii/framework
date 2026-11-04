@@ -38,6 +38,27 @@ func (t *hasOneOrManyThroughRelation) WithDefault(value any) contractsorm.HasOne
 	return t
 }
 
+// WithTrashedParents includes soft-deleted THROUGH rows in the relation — Eloquent's
+// HasOneOrManyThrough::withTrashedParents (vendor v12.55.1, HasOneOrManyThrough.php:157,
+// `$this->query->withoutGlobalScope('SoftDeletableHasManyThrough'); return $this;`). It appends the
+// through-side scope's name to the relation builder's removals, so applyThroughSoftDelete drops
+// only the through predicate and the related model's SoftDeletingScope stays in place. The relation
+// object is returned, as Laravel's `return $this`; the leaves re-declare it so the concrete
+// relation survives, the way Take / Limit do.
+//
+// Oracle (illuminate/database v12.55.1, real sqlite, /tmp/r12/scope_removal_probe3.php §E/§F2):
+// `$country->posts()` compiles `... where "sr_users"."country_id" = ? and "sr_posts"."deleted_at"
+// is null and "sr_users"."deleted_at" is null`; `->withTrashedParents()` compiles the same without
+// the through predicate (`... and "sr_posts"."deleted_at" is null`), identical to
+// `->withoutGlobalScope('SoftDeletableHasManyThrough')`; an eager
+// `with(['posts' => fn ($q) => $q->withTrashedParents()])` drops it too; and a through model with
+// no soft-delete field has no such scope, so the call is a no-op (§F7/plainPosts).
+func (t *hasOneOrManyThroughRelation) WithTrashedParents() contractsorm.HasOneThroughRelation {
+	t.rebuild(t.Builder.WithoutGlobalScopes(contractsorm.SoftDeletableHasManyThrough))
+
+	return t
+}
+
 // --- take / limit ---------------------------------------------------------------------------
 //
 // HasOneOrManyThrough::take (vendor v12.55.1, HasOneOrManyThrough.php:761) and
@@ -128,12 +149,28 @@ func (t *hasOneThroughRelationQuery) Limit(value int) contractsorm.Query {
 	return t
 }
 
+// WithTrashedParents — HasOneOrManyThrough::withTrashedParents on the HasOneThrough leaf; the leaf
+// is returned so the object stays the concrete relation (Laravel's `return $this`).
+func (t *hasOneThroughRelationQuery) WithTrashedParents() contractsorm.HasOneThroughRelation {
+	t.hasOneOrManyThroughRelation.WithTrashedParents()
+
+	return t
+}
+
 // Take — HasOneOrManyThrough::take on the HasManyThrough leaf.
 func (t *hasManyThroughRelationQuery) Take(value int) contractsorm.Query { return t.Limit(value) }
 
 // Limit — HasOneOrManyThrough::limit on the HasManyThrough leaf.
 func (t *hasManyThroughRelationQuery) Limit(value int) contractsorm.Query {
 	t.hasOneOrManyThroughRelation.Limit(value)
+
+	return t
+}
+
+// WithTrashedParents — HasOneOrManyThrough::withTrashedParents on the HasManyThrough leaf; the leaf
+// is returned so the object stays the concrete relation (Laravel's `return $this`).
+func (t *hasManyThroughRelationQuery) WithTrashedParents() contractsorm.HasOneThroughRelation {
+	t.hasOneOrManyThroughRelation.WithTrashedParents()
 
 	return t
 }

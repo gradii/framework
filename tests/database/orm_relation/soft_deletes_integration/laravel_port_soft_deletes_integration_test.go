@@ -1270,11 +1270,24 @@ func TestSoftDeletesIntegration_MorphToWithTrashed(t *testing.T) {
 	_, err := cloneRelationQuery(t, query).Delete(&abigail)
 	require.NoError(t, err)
 
-	// with(['owner' => fn($q) => $q->withoutGlobalScope(SoftDeletingScope::class)]): the Go
-	// equivalent scope removal is WithoutGlobalScopes(). Reads use Get because a single-row First
-	// leaves its cursor open while the eager query runs, which deadlocks on the harness's
-	// one-connection pool.
+	// with(['owner' => fn($q) => $q->withoutGlobalScope(SoftDeletingScope::class)]): the Go 1:1 form
+	// is now the named removal WithoutGlobalScopes(orm.SoftDeletingScope), which drops exactly the
+	// Owner's soft-delete scope (oracle, illuminate/database v12.55.1, real sqlite,
+	// /tmp/r12/scope_removal_probe.php §B; the eager shape is §F9 of probe2). Reads use Get because
+	// a single-row First leaves its cursor open while the eager query runs, which deadlocks on the
+	// harness's one-connection pool.
 	comments := []softDeletesTestComment{}
+	require.NoError(t, cloneRelationQuery(t, query).Model(&softDeletesTestComment{}).
+		With("Owner", func(q contractsorm.Query) contractsorm.Query {
+			return q.WithoutGlobalScopes(contractsorm.SoftDeletingScope)
+		}).Get(&comments))
+	require.Len(t, comments, 1)
+	require.NotNil(t, comments[0].Owner)
+	assert.Equal(t, abigail.Email, comments[0].Owner.Email)
+
+	// withoutGlobalScopes() removes every scope, the soft-delete one included, and reaches the same
+	// row (oracle §B: withoutGlobalScopes() compiles with no predicate).
+	comments = nil
 	require.NoError(t, cloneRelationQuery(t, query).Model(&softDeletesTestComment{}).
 		With("Owner", func(q contractsorm.Query) contractsorm.Query { return q.WithoutGlobalScopes() }).Get(&comments))
 	require.Len(t, comments, 1)

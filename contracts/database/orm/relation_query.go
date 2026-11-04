@@ -304,6 +304,25 @@ type HasOneThroughRelation interface {
 	// /tmp/lalign-defaults-inverse/runtime_withdefault.php): hasOneThrough.missing-row.class
 	// "RtCar" with attributes [], and hasOneThrough.null-key.queries 0.
 	WithDefault(value any) HasOneThroughRelation
+
+	// WithTrashedParents includes soft-deleted THROUGH rows in the relation — HasOneOrManyThrough's
+	// withTrashedParents (vendor v12.55.1, HasOneOrManyThrough.php:157), the through-side switch
+	// `$this->query->withoutGlobalScope('SoftDeletableHasManyThrough'); return $this;`. It drops
+	// exactly the named through-side predicate performJoin registered and leaves the related
+	// model's own SoftDeletingScope in place — the mirror of the trashed family, which targets the
+	// related scope alone and keeps the through predicate. The relation object is returned, so the
+	// caller chains the way Laravel's `return $this` allows (on the HasManyThrough leaf the object
+	// is narrowed back for One(); see the Take/Limit note).
+	//
+	// Oracle (illuminate/database v12.55.1, real sqlite, /tmp/r12/scope_removal_probe3.php §E/§F2):
+	// `$country->posts()` compiles `select "sr_posts".*, "sr_users"."country_id" as
+	// "laravel_through_key" from "sr_posts" inner join "sr_users" on "sr_users"."id" =
+	// "sr_posts"."sr_user_id" where "sr_users"."country_id" = ? and "sr_posts"."deleted_at" is null
+	// and "sr_users"."deleted_at" is null`; `->withTrashedParents()` compiles the same with the
+	// through predicate dropped (`... and "sr_posts"."deleted_at" is null`), identical to
+	// `->withoutGlobalScope('SoftDeletableHasManyThrough')`; and the eager form
+	// `with(['posts' => fn ($q) => $q->withTrashedParents()])` drops it too.
+	WithTrashedParents() HasOneThroughRelation
 }
 
 // HasManyThroughRelation extends HasOneThroughRelation with Eloquent's HasManyThrough::one().

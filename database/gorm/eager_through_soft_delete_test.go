@@ -32,7 +32,9 @@ import (
 //	N12 whereHas / N13 withCount -> the existence body carries both predicates
 //	N9/N10 the of-many subquery AND the outer query each carry both predicates
 //	N14 withTrashed / N15 onlyTrashed keep the through predicate (they target the related scope only)
-//	/probe2: E1 eager withoutGlobalScopes drops both; E2 withTrashedParents (not ported) drops the through one
+//	/probe2: E1 eager withoutGlobalScopes drops both; E2 withTrashedParents drops the through one
+//	(now ported - see TestThroughSoftDelete_WithTrashedParentsDropsTheThroughPredicate); round-12
+//	oracle /tmp/r12/scope_removal_probe3.php §E/§F2 re-measured the same shapes.
 //
 // The through model's other (user-defined) global scopes do NOT reach the read — performJoin adds
 // only the soft-delete named scope (oracle, /tmp/r10/through_userscope_probe.php U1). The pins below
@@ -156,8 +158,8 @@ func TestThroughSoftDelete_RemovalGate(t *testing.T) {
 
 // TestThroughSoftDelete_TrashedFamilyKeepTheThroughPredicate pins that the trashed switches target the
 // related SoftDeletingScope alone: the through predicate survives withTrashed and onlyTrashed, the
-// order the oracle compiles (N14 / N15). Laravel's through-side switch, withTrashedParents, is not
-// ported.
+// order the oracle compiles (N14 / N15). Laravel's through-side switch, withTrashedParents, is the
+// separate named removal ported below (TestThroughSoftDelete_WithTrashedParentsDropsTheThroughPredicate).
 func TestThroughSoftDelete_TrashedFamilyKeepTheThroughPredicate(t *testing.T) {
 	q := newRelQueryWith(t, &tsdCountry{})
 	desc, err := relations.ResolveRelation(&tsdCountry{}, "Posts")
@@ -249,4 +251,63 @@ func TestThroughSoftDelete_ExistsKeepsTheThroughPredicate(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, `select * from "tsd_posts" inner join "tsd_users" on "tsd_users"."id" = "tsd_posts"."user_id" where "tsd_users"."country_id" = ? and "tsd_posts"."deleted_at" is null and "tsd_users"."deleted_at" is null limit 1`, recorder.last(t).sql)
+}
+
+// TestThroughSoftDelete_WithTrashedParentsDropsTheThroughPredicate pins the eager through-side
+// switch: the callback's relation object drops exactly the named "SoftDeletableHasManyThrough"
+// scope, so the through predicate is gone and the related model's own predicate survives. Oracle
+// (illuminate/database v12.55.1, real sqlite, /tmp/r12/scope_removal_probe3.php §F2): the eager read
+// compiles `... "sr_users"."country_id" in (1) and "sr_posts"."deleted_at" is null`.
+func TestThroughSoftDelete_WithTrashedParentsDropsTheThroughPredicate(t *testing.T) {
+	q, recorder := newRecordingRelQuery(t, &tsdCountry{})
+	desc, err := relations.ResolveRelation(&tsdCountry{}, "Posts")
+	require.NoError(t, err)
+
+	recorder.returnRows(`from "`+desc.ThroughTable+`"`,
+		[]string{desc.FirstKey, desc.SecondLocalKey},
+		[]driver.Value{int64(1), int64(1)})
+
+	parents := []reflect.Value{reflect.ValueOf(&tsdCountry{ID: 1}).Elem()}
+	callback := func(query contractsorm.Query) contractsorm.Query {
+		return query.(contractsorm.HasOneThroughRelation).WithTrashedParents()
+	}
+	require.NoError(t, q.loadThrough(parents, &tsdCountry{}, desc, eagerLoadEntry{Relation: "Posts", Callback: callback}, nil, true))
+
+	related := recorder.at(t, 1)
+	assert.Equal(t, `select "tsd_posts".*, "tsd_users"."country_id" as "laravel_through_key" from "tsd_posts" inner join "tsd_users" on "tsd_users"."id" = "tsd_posts"."user_id" where "tsd_users"."country_id" in (?) and "tsd_posts"."deleted_at" is null`, related.sql)
+}
+
+// TestThroughSoftDelete_NamedRelatedRemovalKeepsTheThroughPredicate pins the other side: removing
+// the related model's SoftDeletingScope by name leaves the through predicate in place (oracle,
+// /tmp/r12/scope_removal_probe2.php §F4: `... and "sr_users"."deleted_at" is null`).
+func TestThroughSoftDelete_NamedRelatedRemovalKeepsTheThroughPredicate(t *testing.T) {
+	q, recorder := newRecordingRelQuery(t, &tsdCountry{})
+	desc, err := relations.ResolveRelation(&tsdCountry{}, "Posts")
+	require.NoError(t, err)
+
+	recorder.returnRows(`from "`+desc.ThroughTable+`"`,
+		[]string{desc.FirstKey, desc.SecondLocalKey},
+		[]driver.Value{int64(1), int64(1)})
+
+	parents := []reflect.Value{reflect.ValueOf(&tsdCountry{ID: 1}).Elem()}
+	callback := func(query contractsorm.Query) contractsorm.Query {
+		return query.WithoutGlobalScopes(contractsorm.SoftDeletingScope)
+	}
+	require.NoError(t, q.loadThrough(parents, &tsdCountry{}, desc, eagerLoadEntry{Relation: "Posts", Callback: callback}, nil, true))
+
+	related := recorder.at(t, 1)
+	assert.Equal(t, `select "tsd_posts".*, "tsd_users"."country_id" as "laravel_through_key" from "tsd_posts" inner join "tsd_users" on "tsd_users"."id" = "tsd_posts"."user_id" where "tsd_users"."country_id" in (?) and "tsd_users"."deleted_at" is null`, related.sql)
+}
+
+// TestThroughSoftDelete_NonEagerWithTrashedParents pins the object path: the relation object's
+// withTrashedParents drops the through predicate and keeps the related one (oracle,
+// /tmp/r12/scope_removal_probe3.php §E: `... where "sr_users"."country_id" = ? and
+// "sr_posts"."deleted_at" is null`).
+func TestThroughSoftDelete_NonEagerWithTrashedParents(t *testing.T) {
+	q := newRelQueryWith(t, &tsdCountry{})
+	rel := q.Related(&tsdCountry{ID: 1}, "Posts").(contractsorm.HasManyThroughRelation)
+
+	sql := newRelationSQL(t, rel.WithTrashedParents(), &[]tsdPost{})
+
+	assert.Equal(t, `select "tsd_posts".*, "tsd_users"."country_id" as "laravel_through_key" from "tsd_posts" inner join "tsd_users" on "tsd_users"."id" = "tsd_posts"."user_id" where "tsd_users"."country_id" = ? and "tsd_posts"."deleted_at" is null`, sql)
 }

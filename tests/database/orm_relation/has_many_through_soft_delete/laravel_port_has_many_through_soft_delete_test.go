@@ -180,3 +180,32 @@ func TestHasManyThroughThroughSoftDeletes_ExistsSeesTheFilter(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, exists, "exists() must see a post whose through row is live")
 }
+
+// TestHasManyThroughThroughSoftDeletes_WithTrashedParentsIncludesTheThroughRows pins the through-side
+// switch Laravel exposes: withTrashedParents() drops exactly the named "SoftDeletableHasManyThrough"
+// scope, so a soft-deleted through row's post is read again - the lazy and eager forms alike. The
+// related model (tchPost) is not soft-deletable, so the dropped predicate is the only one that
+// matters. Oracle (illuminate/database v12.55.1, real sqlite, /tmp/r12/scope_removal_probe3.php
+// §E/§F2): `->withTrashedParents()` and `->withoutGlobalScope('SoftDeletableHasManyThrough')`
+// compile the same statement as the default read minus the through predicate.
+func TestHasManyThroughThroughSoftDeletes_WithTrashedParentsIncludesTheThroughRows(t *testing.T) {
+	query := newRelationQuery(t)
+	tchSchema(t, query)
+	tchSeed(t, query)
+
+	// Lazy: the relation object's switch.
+	rel := cloneRelationQuery(t, query).Related(&tchCountry{ID: 1}, "Posts").(contractsorm.HasManyThroughRelation)
+	posts := []tchPost{}
+	require.NoError(t, rel.WithTrashedParents().Get(&posts))
+	require.Len(t, posts, 2, "withTrashedParents must include the soft-deleted through row's post")
+	assert.ElementsMatch(t, []string{"A title", "B title"}, []string{posts[0].Title, posts[1].Title})
+
+	// Eager: the callback receives the relation object and its withTrashedParents reaches the child.
+	found := []tchCountry{}
+	require.NoError(t, cloneRelationQuery(t, query).Model(&tchCountry{}).
+		With("Posts", func(q contractsorm.Query) contractsorm.Query {
+			return q.(contractsorm.HasManyThroughRelation).WithTrashedParents()
+		}).Get(&found))
+	require.Len(t, found, 1)
+	require.Len(t, found[0].Posts, 2, "the eager withTrashedParents must include the soft-deleted through row's post")
+}
