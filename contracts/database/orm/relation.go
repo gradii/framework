@@ -321,6 +321,22 @@ type BelongsTo struct {
 
 func (BelongsTo) Kind() RelationKind { return KindBelongsTo }
 
+// PivotValue is one recorded "pivot column = value" pair — the contract form of one entry of
+// Eloquent's BelongsToMany::$pivotValues (BelongsToMany.php:110, `['column' => ..., 'value' =>
+// ...]`): the pair BelongsToMany::withPivotValue records at relation-declaration time
+// (BelongsToMany.php:481-498, `$this->pivotValues[] = compact('column', 'value'); return
+// $this->wherePivot($column, '=', $value);`). A relation DECLARATION carries the recorded list
+// (Many2Many.PivotValues / MorphToMany.PivotValues / MorphedByMany.PivotValues) so the write
+// shells stamp the pairs onto every pivot INSERT row — baseAttachRecord's values loop,
+// InteractsWithPivotTable.php:454-472 — and newPivot merges them as defaults (:629). The column
+// is stored as the caller supplied it (Laravel records the raw argument, an Expression included);
+// only string columns can become Go attribute keys. The relations object layer aliases it as
+// relations.PivotValue.
+type PivotValue struct {
+	Column any
+	Value  any
+}
+
 // Many2Many declares a many-to-many relation through a pivot table.
 //
 // Defaults:
@@ -374,7 +390,15 @@ type Many2Many struct {
 	// argument still resolves the parent's column); the Go flag's false covers the
 	// withTimestamps(false, false) shape — the pivot struct can name the updated column instead.
 	PivotTimestamps bool
-	OnQuery         RelationCallback
+	// PivotValues is the declaration's recorded "pivot column = value" list — Laravel's
+	// BelongsToMany::$pivotValues as declared through withPivotValue (BelongsToMany.php:110/481).
+	// The relation object seeds its call-time list from it, so the create / attach writes stamp
+	// the pairs onto every pivot INSERT row (baseAttachRecord's values loop) and newPivot merges
+	// them as defaults. The read-side wherePivot condition withPivotValue also writes is the
+	// OnPivotQuery scope; the declaration splits Laravel's single call into its write side
+	// (PivotValues) and read side (OnPivotQuery).
+	PivotValues []PivotValue
+	OnQuery     RelationCallback
 	// OnPivotQuery scopes pivot-table SELECT / UPDATE / DELETE for Sync / Detach /
 	// UpdateExistingPivot operations on this relation. Equality conditions added here are NOT
 	// auto-injected into Attach INSERT rows — pass them via Attach attrs if needed.
@@ -530,7 +554,11 @@ type MorphToMany struct {
 	PivotField string
 	// PivotTimestamps — see Many2Many.PivotTimestamps.
 	PivotTimestamps bool
-	OnQuery         RelationCallback
+	// PivotValues — see Many2Many.PivotValues. The morph declaration records the same list;
+	// unlike the base kind, the MorphToMany object never merges it into newPivot (MorphToMany.php
+	// :156-172), but every attach path still stamps it (baseAttachRecord).
+	PivotValues []PivotValue
+	OnQuery     RelationCallback
 	// OnPivotQuery — see Many2Many.OnPivotQuery.
 	OnPivotQuery PivotCallback
 	// Touches — see Many2Many.Touches.
@@ -554,7 +582,10 @@ type MorphedByMany struct {
 	PivotField string
 	// PivotTimestamps — see Many2Many.PivotTimestamps.
 	PivotTimestamps bool
-	OnQuery         RelationCallback
+	// PivotValues — see Many2Many.PivotValues / MorphToMany.PivotValues; the inverse declaration
+	// records the same list and stamps it on every attach.
+	PivotValues []PivotValue
+	OnQuery     RelationCallback
 	// OnPivotQuery — see Many2Many.OnPivotQuery.
 	OnPivotQuery PivotCallback
 	// Touches — see Many2Many.Touches.

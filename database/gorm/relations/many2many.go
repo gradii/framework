@@ -40,14 +40,16 @@ type belongsToManyRelationQuery struct {
 	pivotFactory contractsorm.PivotFactory
 }
 
-// PivotValue is one recorded "pivot column = value" pair — the Go form of a
-// BelongsToMany:: entry (['column' => ..., 'value' => ...]). The column is stored as
-// the call supplied it (Laravel records the raw argument, Expression included); only string
-// columns can become attribute keys in the NewPivot merge or the pivot INSERT.
-type PivotValue struct {
-	Column any
-	Value  any
-}
+// PivotValue is one recorded "pivot column = value" pair — the Go form of a BelongsToMany::
+// entry (['column' => ..., 'value' => ...]). The column is stored as the call supplied it
+// (Laravel records the raw argument, Expression included); only string columns can become
+// attribute keys in the NewPivot merge or the pivot INSERT. It aliases the contract-level pair
+// (contractsorm.PivotValue) so a relation DECLARATION can carry the same list WithPivotValue
+// records at call time — Many2Many.PivotValues / MorphToMany.PivotValues /
+// MorphedByMany.PivotValues is Laravel's BelongsToMany::$pivotValues (BelongsToMany.php:110),
+// which the create / attach writes stamp onto every pivot row and newPivot merges into its
+// attribute bag.
+type PivotValue = contractsorm.PivotValue
 
 // FindOrNew returns the attached related row with primary key id, read through the pivot-joined
 // relation read and hydrating the related model's Pivot field — Laravel BelongsToMany::findOrNew

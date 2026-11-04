@@ -148,6 +148,12 @@ type RelationInfo struct {
 	// primitives replay before compiling (applyOnPivotQueryToQueryBare for the pivot-row
 	// primitives, applyOnPivotQueryToQuery for the relation read). nil when none is declared.
 	OnPivotQuery contractsorm.PivotCallback
+	// PivotValues is the declaration's recorded "pivot column = value" list — desc.pivotValues
+	// (Many2Many.PivotValues / MorphToMany.PivotValues / MorphedByMany.PivotValues), the pairs
+	// WithPivotValue records at declaration time. Wrap seeds the m2m leaf's call-time pivotValues
+	// list from it, so the create / attach writes stamp them and newPivot merges them exactly as a
+	// call-time WithPivotValue would.
+	PivotValues []contractsorm.PivotValue
 }
 
 // Builder is the structural interface the object layer forwards to: the full query builder —
@@ -1319,9 +1325,9 @@ func Wrap(builder Builder, parent any, name string, info RelationInfo, hooks Hoo
 	case KindMorphTo:
 		return &morphToRelationQuery{belongsToRelationQuery{core}}
 	case KindMany2Many:
-		return &belongsToManyRelationQuery{relationQuery: core}
+		return &belongsToManyRelationQuery{relationQuery: core, pivotValues: clonePivotValues(info.PivotValues)}
 	case KindMorphToMany:
-		return &morphToManyRelationQuery{belongsToManyRelationQuery{relationQuery: core}}
+		return &morphToManyRelationQuery{belongsToManyRelationQuery{relationQuery: core, pivotValues: clonePivotValues(info.PivotValues)}}
 	case KindHasOneThrough:
 		return &hasOneThroughRelationQuery{hasOneOrManyThroughRelation{core}}
 	case KindHasManyThrough:
@@ -1329,6 +1335,18 @@ func Wrap(builder Builder, parent any, name string, info RelationInfo, hooks Hoo
 	default:
 		return core
 	}
+}
+
+// clonePivotValues copies a declaration's recorded pivot-value list for a relation object. The
+// object's WithPivotValue appends to the list, so a copy keeps the descriptor's slice — which the
+// RelationInfo projection shares — untouched. An empty list stays nil, so the common no-declaration
+// case allocates nothing.
+func clonePivotValues(values []contractsorm.PivotValue) []contractsorm.PivotValue {
+	if len(values) == 0 {
+		return nil
+	}
+
+	return append([]contractsorm.PivotValue(nil), values...)
 }
 
 // WrapBase wraps a builder in the bare relation object — the shape the gorm error paths use: a

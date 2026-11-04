@@ -233,6 +233,28 @@ func (r *OrmBuilder) relationWriteSession() *OrmBuilder {
 	return session.setConditions(conditions)
 }
 
+// relationCreateSession returns the session a relation CREATE persists the related row through —
+// relationWriteSession plus the receiver's WithAttributes-recorded pending attributes, so create()'s
+// newModelInstance merge reaches the inserted row. Eloquent merges a relation's $pendingAttributes
+// into every related row its create path writes: BelongsToMany::create explicitly
+// (`array_merge($this->getQuery()->pendingAttributes, $attributes)`, BelongsToMany.php:1395) and the
+// HasOneOrMany family through setForeignAttributesForCreate's pending loop (HasOneOrMany.php:498,
+// which both create and its foreign-key stamp funnel through). The step is create-only — the
+// BelongsToMany save path inserts no related row and does not merge — so it lives on this session
+// rather than on relationWriteSession itself. Oracle v12.55.1, executed (the probe also fixes the
+// merge order: the caller's attributes win, array_merge($pending, $attributes)).
+func (r *OrmBuilder) relationCreateSession() *OrmBuilder {
+	session := r.relationWriteSession()
+	if len(r.conditions.pendingAttributes) == 0 {
+		return session
+	}
+
+	conditions := session.conditions
+	conditions.pendingAttributes = r.conditions.pendingAttributes
+
+	return session.setConditions(conditions)
+}
+
 // AssociateRelation sets parent's foreign key (and morph_type for MorphTo) to point at owner,
 // then persists parent. Supported kinds: BelongsTo, MorphTo. A nil owner clears the foreign key
 // (and the morph type) instead of erroring — Laravel's associate(null); a non-nil owner must be a
@@ -316,10 +338,10 @@ func (r *OrmBuilder) CreateRelation(parent any, relation string, dest any, recor
 		if err := relations.SetRelationFKOnChild(r, r.writeInfo(desc, parent), parent, dest); err != nil {
 			return err
 		}
-		return r.relationWriteSession().Create(dest)
+		return r.relationCreateSession().Create(dest)
 	case relKindMany2Many, relKindMorphToMany:
 		// Create dest first, then attach via pivot.
-		if err := r.relationWriteSession().Create(dest); err != nil {
+		if err := r.relationCreateSession().Create(dest); err != nil {
 			return err
 		}
 		childPK, err := readParentColumn(r, dest, desc.PivotRelatedRef.PrimaryColumn)
@@ -519,7 +541,7 @@ func (r *OrmBuilder) createOrFirstMany2Many(desc *relationDescriptor, parent any
 		return false, err
 	}
 	err := r.withSavepointIfNeeded(func() error {
-		if err := r.fresh().Create(dest); err != nil {
+		if err := r.relationCreateSession().Create(dest); err != nil {
 			return err
 		}
 		childPK, err := readParentColumn(r, dest, desc.PivotRelatedRef.PrimaryColumn)

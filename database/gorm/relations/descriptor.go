@@ -133,6 +133,14 @@ type Descriptor struct {
 	// the parent model's updated-at column.
 	PivotUpdatedAtColumn string
 
+	// PivotValues is the declaration's recorded "pivot column = value" list — Laravel's
+	// BelongsToMany::$pivotValues (BelongsToMany.php:110), the pairs withPivotValue records at
+	// relation-declaration time (Many2Many.PivotValues / MorphToMany.PivotValues /
+	// MorphedByMany.PivotValues). The relation object seeds its call-time list from it, so the
+	// create / attach writes stamp the pairs onto every pivot INSERT row (baseAttachRecord's
+	// values loop) and newPivot merges them as defaults.
+	PivotValues []contractsorm.PivotValue
+
 	// RelatedKeyType is the Go type of the related model's PK field — used by castKey to normalise
 	// SyncResult ids back to the related model's native key type, irrespective of what the caller
 	// passed (string, int, uint, etc.) and what GORM scanned from the pivot table (often int64).
@@ -474,6 +482,7 @@ func descriptorFromMany2Many(parent any, parentTable, name string, rel contracts
 		PivotCreatedAtColumn: createdAtCol,
 		PivotUpdatedAtColumn: updatedAtCol,
 		RelatedKeyType:       relatedKeyType,
+		PivotValues:          rel.PivotValues,
 	}, nil
 }
 
@@ -543,21 +552,35 @@ func descriptorFromMorphTo(parent any, parentTable, name string, rel contractsor
 // morph-value derivation source can differ (parent vs. related) without re-reading the kind via
 // reflection.
 func descriptorFromMorphToMany(parent any, parentTable, name string, rel contractsorm.MorphToMany, inverse bool) (*Descriptor, error) {
-	return BuildMorphPivotDescriptor(parent, parentTable, name,
+	desc, err := BuildMorphPivotDescriptor(parent, parentTable, name,
 		rel.Related, rel.Name, rel.Table, rel.TypeColumn,
 		rel.ForeignPivotKey, rel.RelatedPivotKey, rel.ParentKey, rel.RelatedKey,
 		rel.PivotField, rel.PivotTimestamps,
 		inverse,
 	)
+	if err != nil {
+		return nil, err
+	}
+	// The declaration's recorded pivot values (withPivotValue) ride the seed list the object
+	// copies into its own pivotValues, exactly as the base kind's descriptorFromMany2Many does.
+	desc.PivotValues = rel.PivotValues
+
+	return desc, nil
 }
 
 func descriptorFromMorphedByMany(parent any, parentTable, name string, rel contractsorm.MorphedByMany) (*Descriptor, error) {
-	return BuildMorphPivotDescriptor(parent, parentTable, name,
+	desc, err := BuildMorphPivotDescriptor(parent, parentTable, name,
 		rel.Related, rel.Name, rel.Table, rel.TypeColumn,
 		rel.ForeignPivotKey, rel.RelatedPivotKey, rel.ParentKey, rel.RelatedKey,
 		rel.PivotField, rel.PivotTimestamps,
 		true,
 	)
+	if err != nil {
+		return nil, err
+	}
+	desc.PivotValues = rel.PivotValues
+
+	return desc, nil
 }
 
 func BuildMorphPivotDescriptor(parent any, parentTable, name string, related any, morphName, table, typeCol, foreignPivot, relatedPivot, parentKey, relatedKey string, pivotField string, pivotTimestamps bool, inverse bool) (*Descriptor, error) {
@@ -906,6 +929,7 @@ func (d *Descriptor) Info() RelationInfo {
 		PivotUpdatedAtColumn: d.PivotUpdatedAtColumn,
 		RelatedKeyType:       d.RelatedKeyType,
 		OnPivotQuery:         d.OnPivotQuery,
+		PivotValues:          d.PivotValues,
 	}
 	for _, ref := range d.References {
 		info.References = append(info.References, RefKey{PrimaryColumn: ref.PrimaryColumn, ForeignColumn: ref.ForeignColumn})

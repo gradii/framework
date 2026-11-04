@@ -23,56 +23,23 @@ import (
 //     pivot row the relation writes and (b) added to the relation's where list as a qualified
 //     condition (wherePivot).
 //
-// In the Go ORM only the read half of that pair has a counterpart, so one test ports for real and
-// three skip with measured divergences:
+// Round 10 ports BOTH halves. The pending attribute is declared through OnQuery's
+// Query.WithAttributes("visible", true, false) — the asConditions: false form records the pending
+// pair while adding no where, exactly as Laravel's withAttributes does (Builder.php:1929) — and
+// the create path merges it into the related INSERT (relationCreateSession, mirroring
+// BelongsToMany::create's array_merge($pendingAttributes, $attributes)). withPivotValue's recorded
+// pair is declared through PivotValues (Laravel's BelongsToMany::$pivotValues), which the create /
+// attach writes stamp onto the pivot row; its wherePivot condition is the OnPivotQuery scope. The
+// three create-based tests now run and assert both effects.
 //
-//   - withPivotValue's wherePivot condition maps onto a declaration-time OnPivotQuery scope, which
-//     the framework applies to the relation's own reads (Query.Related) exactly as Laravel applies
-//     the pivot where. The "MetaTags" / "MorphedTags" / "MorphedPosts" declarations below carry
-//     it, and the queries test asserts the compiled where clause.
-//   - Nothing records pivot column values for INSERTs — the pivot writers write the FK columns
-//     (plus the morph type) only — and a relation create runs on r.fresh().Create(), whose fresh
-//     builder carries no conditions, so the withAttributes pending map cannot ride it either. The
-//     three create-based tests skip with those measured facts, not with weakened assertions.
+// # Oracle measurements (illuminate/database v12.55.1, sqlite; /tmp/r10/pending_create_probe.php)
 //
-// # Measurements
+//   - pendingTags()->create(['name' => 'pending']) writes the tag visible true (the pending pair
+//     survives asConditions: false) and the pivot row type 'meta'; the relation read carries no
+//     visible condition (only tag_id and type, the corpus's assertCount(2)).
+//   - morphedTags()->create(['name' => 'new tag']) writes the tag visible true and the taggables
+//     row (..., 'meta'); morphedPosts()->create() writes the post title 'Title!' and (..., 'meta').
 //
-// Oracle runs (.claude/laravel-oracle/oracle.php against illuminate/database v12.55.1, plus
-// oracle_checkout.php against the corpus checkout 12.43.1 — byte-identical output — and a
-// Capsule-backed sqlite execution for the create flows):
-//
-//   - metaTags() on an unsaved post id 2 compiles
-//     select * from "pending_attributes_tags" inner join "pending_attributes_pivot" on
-//     "pending_attributes_tags"."id" = "pending_attributes_pivot"."post_id"
-//     where "pending_attributes_pivot"."tag_id" = ? and "pending_attributes_pivot"."type" = ?
-//     with wheres [tag_id = 2, type = 'meta'] — the two conditions the corpus asserts, and no
-//     visible condition (the corpus's asConditions: false).
-//   - morphedTags() and morphedPosts() compile three wheres each (the parent / morph id,
-//     taggable_type and type); Laravel binds the post class name for taggable_type where the Go
-//     port binds the framework's morph value, the related model's table name
-//     ('pending_attributes_posts').
-//   - the corpus's create flows write the tag {name: 'long article', visible: 1} (or post
-//     {title: 'Title!'}) plus a pivot row carrying type: 'meta'.
-//
-// Probes of the Go ORM against the harness database (this package's scratch test, since removed)
-// measured the write-side divergence and the read-side equivalence:
-//
-//   - Related(&post, "MetaTags") compiles the oracle's where clause byte for byte; the join only
-//     differs in operand order (ours "pending_attributes_pivot"."post_id" =
-//     "pending_attributes_tags"."id") and the ON keyword's case, outside this corpus's assertions.
-//   - Relation(&post, "Tags").Create(&tag) inserts the tag, then attaches with
-//     insert into "pending_attributes_pivot" ("post_id", "tag_id") values (?, ?) — no type column
-//     — and the corpus's type varchar not null rejects it (NOT NULL constraint failed:
-//     pending_attributes_pivot.type); against a nullable-type variant the row lands type NULL.
-//     WithAttributes("visible", true, false) on the writer changes nothing either — the relation
-//     create runs on a write session, whose builder carries no pending attributes — so the created
-//     tag keeps visible false (candidate 34, the withAttributes pending-attribute feature). The
-//     call-time WithPivotValue -> create() path itself is now fixed (candidate 30: the recorded pair
-//     rides the pivot INSERT), but the corpus's withPivotValue lives in the declaration's
-//     OnPivotQuery read scope, which the create does not consume.
-//   - The morph creates attach with ("tag_id", "taggable_id", "taggable_type") and fail the same
-//     way on pending_attributes_taggables.type.
-
 // --- models ------------------------------------------------------------------
 
 // belongsToManyWithAttributesPendingPost ports ManyToManyPendingAttributesPost: an id and a
@@ -112,9 +79,13 @@ func (belongsToManyWithAttributesPendingPost) Relations() map[string]contractsor
 			Table:           "pending_attributes_pivot",
 			ForeignPivotKey: "tag_id",
 			RelatedPivotKey: "post_id",
+			OnQuery: func(query contractsorm.Query) contractsorm.Query {
+				return query.WithAttributes("visible", true, false)
+			},
 			OnPivotQuery: func(query contractsorm.PivotQuery) contractsorm.PivotQuery {
 				return query.Where("type", "meta")
 			},
+			PivotValues: []contractsorm.PivotValue{{Column: "type", Value: "meta"}},
 		},
 		// morphedTags(): morphToMany(Tag, 'taggable', 'pending_attributes_taggables',
 		// relatedPivotKey: 'tag_id')->withAttributes('visible', true, asConditions: false)
@@ -124,9 +95,13 @@ func (belongsToManyWithAttributesPendingPost) Relations() map[string]contractsor
 			Name:            "taggable",
 			Table:           "pending_attributes_taggables",
 			RelatedPivotKey: "tag_id",
+			OnQuery: func(query contractsorm.Query) contractsorm.Query {
+				return query.WithAttributes("visible", true, false)
+			},
 			OnPivotQuery: func(query contractsorm.PivotQuery) contractsorm.PivotQuery {
 				return query.Where("type", "meta")
 			},
+			PivotValues: []contractsorm.PivotValue{{Column: "type", Value: "meta"}},
 		},
 	}
 }
@@ -158,9 +133,13 @@ func (belongsToManyWithAttributesPendingTag) Relations() map[string]contractsorm
 			Table:           "pending_attributes_taggables",
 			ForeignPivotKey: "tag_id",
 			RelatedPivotKey: "taggable_id",
+			OnQuery: func(query contractsorm.Query) contractsorm.Query {
+				return query.WithAttributes("title", "Title!", false)
+			},
 			OnPivotQuery: func(query contractsorm.PivotQuery) contractsorm.PivotQuery {
 				return query.Where("type", "meta")
 			},
+			PivotValues: []contractsorm.PivotValue{{Column: "type", Value: "meta"}},
 		},
 	}
 }
@@ -202,7 +181,23 @@ func whereClause(t *testing.T, statement string) string {
 // visible: 1} and the pivot row {post_id: $post->id, tag_id: $tag->id, type: 'meta'} (both ids are
 // 1, so the swapped key columns cannot be told apart by this test).
 func TestBelongsToManyWithAttributesPending_CreatesPendingAttributesAndPivotValues(t *testing.T) {
-	t.Skip("our ORM still diverges on the withAttributes pending-attribute half: the pending visible => true must land on the tag the corpus metaTags()->create(['name' => 'long article']) inserts, but the create runs on a session carrying no pendingAttributes (visible stays false; candidate 34). The withPivotValue half is now fixed on the call-time shell (candidate 30), but this harness models the corpus withPivotValue as the declaration OnPivotQuery read scope, which the create does not consume — so the declaration form still attaches with insert into \"pending_attributes_pivot\" (\"post_id\", \"tag_id\") values (?, ?), omitting type, and the corpus type varchar not null rejects it (NOT NULL constraint failed: pending_attributes_pivot.type).")
+	query := newRelationQuery(t)
+	belongsToManyWithAttributesPendingSchema(t, query)
+
+	post := belongsToManyWithAttributesPendingPost{}
+	require.NoError(t, cloneRelationQuery(t, query).Create(&post))
+
+	tag := belongsToManyWithAttributesPendingTag{Name: "long article"}
+	require.NoError(t, relatedBelongsToMany(t, query, &post, "MetaTags").Create(&tag))
+
+	assert.Equal(t, "long article", tag.Name)
+	assert.True(t, tag.Visible, "the pending visible => true lands on the related row even with asConditions: false")
+
+	pivot := withAttributesPendingPivotRow{}
+	require.NoError(t, cloneRelationQuery(t, query).Where("post_id", post.ID).Where("tag_id", tag.ID).First(&pivot))
+	assert.Equal(t, "meta", pivot.Type, "the declared withPivotValue pair stamps the pivot row")
+	assert.Equal(t, post.ID, pivot.PostID)
+	assert.Equal(t, tag.ID, pivot.TagID)
 }
 
 // TestBelongsToManyWithAttributesPending_QueriesPendingAttributesAndPivotValues ports
@@ -255,7 +250,22 @@ func TestBelongsToManyWithAttributesPending_QueriesPendingAttributesAndPivotValu
 // with our morph value ('pending_attributes_posts', the parent's table name) in place of Laravel's
 // ManyToManyPendingAttributesPost::class. The create half is what cannot run.
 func TestBelongsToManyWithAttributesPending_MorphToManyPendingAttributes(t *testing.T) {
-	t.Skip("our ORM still diverges on the withAttributes pending-attribute half: the pending visible => true must land on the tag morphedTags()->create(['name' => 'new tag']) inserts (visible stays false; candidate 34). The withPivotValue half is now fixed on the call-time shell (candidate 30), but this harness models the corpus withPivotValue as the declaration OnPivotQuery read scope, which the create does not consume — so the declaration form still attaches with insert into \"pending_attributes_taggables\" (\"tag_id\", \"taggable_id\", \"taggable_type\") values (3, 2, 'pending_attributes_posts'), omitting type (NOT NULL constraint failed: pending_attributes_taggables.type).")
+	query := newRelationQuery(t)
+	belongsToManyWithAttributesPendingSchema(t, query)
+
+	post := belongsToManyWithAttributesPendingPost{}
+	require.NoError(t, cloneRelationQuery(t, query).Create(&post))
+
+	tag := belongsToManyWithAttributesPendingTag{Name: "new tag"}
+	require.NoError(t, relatedBelongsToMany(t, query, &post, "MorphedTags").Create(&tag))
+
+	assert.True(t, tag.Visible, "the pending visible => true lands on the morphed tag insert")
+	assert.Equal(t, "new tag", tag.Name)
+
+	found := []belongsToManyWithAttributesPendingTag{}
+	require.NoError(t, relatedBelongsToMany(t, query, &post, "MorphedTags").Get(&found))
+	require.Len(t, found, 1)
+	assert.Equal(t, tag.ID, found[0].ID, "first() finds the created tag back through the relation")
 }
 
 // TestBelongsToManyWithAttributesPending_MorphedByManyPendingAttributes ports
@@ -274,5 +284,41 @@ func TestBelongsToManyWithAttributesPending_MorphToManyPendingAttributes(t *test
 // with our morph value ('pending_attributes_posts', the related model's table name) in place of
 // Laravel's ManyToManyPendingAttributesPost::class. The create half is what cannot run.
 func TestBelongsToManyWithAttributesPending_MorphedByManyPendingAttributes(t *testing.T) {
-	t.Skip("our ORM still diverges on the withAttributes pending-attribute half: the pending title 'Title!' must land on the post morphedPosts()->create() inserts (title stays \"\"; candidate 34). The withPivotValue half is now fixed on the call-time shell (candidate 30), but this harness models the corpus withPivotValue as the declaration OnPivotQuery read scope, which the create does not consume — so the declaration form still attaches with insert into \"pending_attributes_taggables\" (\"tag_id\", \"taggable_id\", \"taggable_type\") values (4, 1, 'pending_attributes_posts'), omitting type (NOT NULL constraint failed: pending_attributes_taggables.type).")
+	query := newRelationQuery(t)
+	belongsToManyWithAttributesPendingSchema(t, query)
+
+	tag := belongsToManyWithAttributesPendingTag{ID: 4}
+
+	post := belongsToManyWithAttributesPendingPost{}
+	require.NoError(t, relatedBelongsToMany(t, query, &tag, "MorphedPosts").Create(&post))
+
+	assert.Equal(t, "Title!", post.Title, "the pending title => 'Title!' lands on the morphed post insert")
+
+	found := []belongsToManyWithAttributesPendingPost{}
+	require.NoError(t, relatedBelongsToMany(t, query, &tag, "MorphedPosts").Get(&found))
+	require.Len(t, found, 1)
+	assert.Equal(t, post.ID, found[0].ID, "first() finds the created post back through the relation")
 }
+
+// --- round 10: relation create-path helpers ----------------------------------------------------
+
+// relatedBelongsToMany resolves query.Related(parent, name) and narrows it to the many-to-many
+// relation object the corpus's $post->metaTags() / morphedTags() / morphedPosts() calls return.
+func relatedBelongsToMany(t *testing.T, query contractsorm.Query, parent any, name string) contractsorm.BelongsToManyRelation {
+	t.Helper()
+
+	relation, ok := query.Related(parent, name).(contractsorm.BelongsToManyRelation)
+	require.True(t, ok, "Related(%q) must return a many-to-many relation object", name)
+
+	return relation
+}
+
+// withAttributesPendingPivotRow reads a pending_attributes_pivot row back for the create
+// assertions.
+type withAttributesPendingPivotRow struct {
+	PostID uint   `gorm:"column:post_id"`
+	TagID  uint   `gorm:"column:tag_id"`
+	Type   string `gorm:"column:type"`
+}
+
+func (withAttributesPendingPivotRow) TableName() string { return "pending_attributes_pivot" }
