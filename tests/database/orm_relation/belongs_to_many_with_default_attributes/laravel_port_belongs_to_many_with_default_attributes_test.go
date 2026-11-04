@@ -250,3 +250,44 @@ type belongsToManyWithDefaultAttributesPivotRow struct {
 }
 
 func (belongsToManyWithDefaultAttributesPivotRow) TableName() string { return "club_user" }
+
+// TestBelongsToManyWithDefaultAttributes_WithPivotValueStampsSyncAndToggle pins that the
+// WithPivotValue-recorded pair threads into the pivot INSERT of the non-OrFail Sync and Toggle
+// verbs, not only Attach: the round-7 verify found the sync/toggle threading unpinned (mutants
+// dropping m.pivotValues... from the leaf Sync/Toggle left the suite green). Oracle v12.55.1,
+// executed: /tmp/r7pv/attach_pv_probe.php A5 (sync) and A6 (toggle) both insert with the recorded
+// value.
+func TestBelongsToManyWithDefaultAttributes_WithPivotValueStampsSyncAndToggle(t *testing.T) {
+	query := newRelationQuery(t)
+	belongsToManyWithDefaultAttributesSchema(t, query)
+
+	for _, id := range []uint{1, 2} {
+		club := belongsToManyWithDefaultAttributesClub{ID: id}
+		require.NoError(t, cloneRelationQuery(t, query).Create(&club))
+		user := belongsToManyWithDefaultAttributesUser{ID: id, Name: "u"}
+		require.NoError(t, cloneRelationQuery(t, query).Create(&user))
+	}
+
+	mustRelation := func(clubID uint) contractsorm.BelongsToManyRelation {
+		t.Helper()
+
+		club := belongsToManyWithDefaultAttributesClub{ID: clubID}
+		relation, ok := cloneRelationQuery(t, query).Related(&club, "Users").(contractsorm.BelongsToManyRelation)
+		require.True(t, ok, "Related must return a many-to-many relation object")
+
+		return relation.WithPivotValue("is_admin", 1)
+	}
+
+	_, err := mustRelation(1).Sync([]any{uint(1)})
+	require.NoError(t, err)
+	_, err = mustRelation(2).Toggle([]any{uint(2)})
+	require.NoError(t, err)
+
+	rows := []belongsToManyWithDefaultAttributesPivotRow{}
+	require.NoError(t, cloneRelationQuery(t, query).Model(&belongsToManyWithDefaultAttributesPivotRow{}).Get(&rows))
+	require.Len(t, rows, 2)
+	for _, row := range rows {
+		require.NotNil(t, row.IsAdmin, "club %d user %d lost the recorded pivot value", row.ClubID, row.UserID)
+		assert.Equal(t, 1, *row.IsAdmin)
+	}
+}

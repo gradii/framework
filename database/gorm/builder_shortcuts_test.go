@@ -670,3 +670,23 @@ func TestValueScopeProvidedLimitMatchesTheOracle(t *testing.T) {
 		assert.Equal(t, "unchanged", email)
 	})
 }
+
+// The decrement mirror of TestIncrementExtraNamingTheIncrementedColumnKeepsTheCallerValue: an extra
+// naming the decremented column replaces the raw expression, since decrement shares stepValues. The
+// round-6 verify flagged the decrement branch of the collision as having no dedicated Go test.
+// Oracle v12.55.1, executed: /tmp/inc_extra_probe.php, "dec extra names count" compiles
+// `update "users" set "count" = ?, "updated_at" = ? where "id" = ?`.
+func TestDecrementExtraNamingTheDecrementedColumnKeepsTheCallerValue(t *testing.T) {
+	query := compiledQuery(t, &shortcutUser{}, Conditions{}).Where("id", 1).(*OrmBuilder)
+
+	values := query.stepValues("score", "-", []any{5, map[string]any{"score": 99}})
+	assignments, err := query.updateAssignments(values)
+	require.NoError(t, err)
+
+	statement, bindings, err := query.compileUpdate(assignments)
+	require.NoError(t, err)
+	assert.Equal(t, `update "shortcut_users" set "score" = ?, "updated_at" = ? where "id" = ?`, statement)
+	assert.Equal(t, 99, bindings[0], "the extra value replaces the raw expression")
+	assert.NotNil(t, bindings[1], "updated_at is stamped")
+	assert.Equal(t, 1, bindings[2])
+}

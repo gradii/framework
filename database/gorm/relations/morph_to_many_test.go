@@ -114,3 +114,23 @@ func TestMorphToMany_DeclaredInterfaceRejectsTheSharedLeaf(t *testing.T) {
 	_, belongsToMany := plain.(contractsorm.BelongsToManyRelation)
 	require.True(t, belongsToMany, "the shared leaf still narrows through the non-morph alias")
 }
+
+// TestMorphToMany_LimitAndTakeKeepTheMorphLeaf pins the leaf's Take/Limit overrides: PHP's
+// `return $this` keeps the MorphToMany instance in the chain, where the promoted base methods would
+// return the embedded BelongsToMany object. Only *morphToManyRelationQuery satisfies the declared
+// MorphToManyRelation contract, so a chain the override did not keep fails the assertion. The
+// round-8 verify flagged the pair as unpinned (an overlay deleting both methods left the suite
+// green).
+func TestMorphToMany_LimitAndTakeKeepTheMorphLeaf(t *testing.T) {
+	builder, _ := newRelationTestBuilder(t)
+
+	relation := builder.Related(&morphToManyParent{ID: 3}, "Tags")
+	_, ok := relation.(contractsorm.MorphToManyRelation)
+	require.True(t, ok, "Related must return a MorphToMany relation object")
+
+	_, ok = relation.Limit(2).(contractsorm.MorphToManyRelation)
+	require.True(t, ok, "Limit must keep the MorphToMany leaf in the chain")
+
+	_, ok = relation.Take(2).(contractsorm.MorphToManyRelation)
+	require.True(t, ok, "Take must keep the MorphToMany leaf in the chain")
+}

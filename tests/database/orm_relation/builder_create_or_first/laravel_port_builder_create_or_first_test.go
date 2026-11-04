@@ -1,12 +1,14 @@
 package builder_create_or_first
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	databasedb "github.com/gradii/framework/database/db"
 	"github.com/gradii/framework/support/carbon"
 )
 
@@ -561,4 +563,38 @@ func TestBuilderCreateOrFirst_IncrementOrCreateMethodRetrievesRecordCreatedJustN
 	stored := builderCreateOrFirstReload(t, query, found.ID)
 	assert.Equal(t, 2, stored.Count)
 	assert.Equal(t, int64(1), builderCreateOrFirstCount(t, query), "only the racing writer's row may exist")
+}
+
+// TestBuilderCreateOrFirst_IncrementOrCreateRebaselinesTheColumnSoALaterSaveIsExtrasOnly pins the
+// syncOriginalAttribute call inside incrementModel (create_or_first.go): the incremented column
+// re-baselines in the original bag, so a follow-up Save writes only the force-filled extra and the
+// updated-at stamp, not the stepped column. The round-6 verify found this unpinned (a whole-package
+// no-op mutant passed 56/56). Oracle v12.55.1, executed: /tmp/cof_inc_mem_probe.php - "a later save
+// writing the extras alone".
+func TestBuilderCreateOrFirst_IncrementOrCreateRebaselinesTheColumnSoALaterSaveIsExtrasOnly(t *testing.T) {
+	freezeBuilderCreateOrFirstClock(t)
+	query := newRelationQuery(t)
+	builderCreateOrFirstSchema(t, query)
+
+	existing := builderCreateOrFirstSeedIncrementRow(t, query, "", 1)
+
+	stepped := builderCreateOrFirstTable{}
+	require.NoError(t, cloneRelationQuery(t, query).Model(&stepped).IncrementOrCreate(&stepped, map[string]any{"attr": "foo"}, 1, 2, map[string]any{"val": "baz"}))
+	require.Equal(t, existing.ID, stepped.ID)
+	require.Equal(t, 3, stepped.Count)
+
+	ctx := databasedb.EnableQueryLog(context.Background())
+	withContext, ok := cloneRelationQuery(t, query).(contractsorm.QueryWithContext)
+	require.True(t, ok)
+	require.NoError(t, withContext.WithContext(ctx).Model(&stepped).Save(&stepped))
+
+	logs := databasedb.GetQueryLog(ctx)
+	require.Len(t, logs, 1, "exactly one follow-up update")
+	assert.Contains(t, logs[0].Query, `"val"`)
+	assert.Contains(t, logs[0].Query, `"updated_at"`)
+	assert.NotContains(t, logs[0].Query, `"count"`, "the re-baselined count column stays out of the SET list")
+
+	stored := builderCreateOrFirstReload(t, query, existing.ID)
+	assert.Equal(t, 3, stored.Count, "the follow-up save must not rewrite count")
+	assert.Equal(t, "baz", stored.Val)
 }

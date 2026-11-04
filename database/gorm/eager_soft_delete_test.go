@@ -6,10 +6,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
 	"github.com/gradii/framework/database/gorm/relations"
 	databaseorm "github.com/gradii/framework/database/orm"
+	"github.com/gradii/framework/database/orm/morphmap"
 )
 
 // A related model that declares the framework's soft-delete field must carry that model's
@@ -215,4 +217,43 @@ func TestEagerRelatedNonSoftDeleteModelKeepsNoPredicate(t *testing.T) {
 	assert.NoError(t, q.loadHasOneOrMany(parents, &relUser{}, desc, eagerLoadEntry{Relation: "Books"}, nil, true))
 
 	assert.Equal(t, `select * from "rel_books" where "rel_books"."user_id" in (?, ?)`, recorder.last(t).sql)
+}
+
+// esdComment declares a MorphTo whose resolved type can be a soft-deletable model.
+type esdComment struct {
+	ID              uint
+	CommentableID   uint
+	CommentableType string
+	Commentable     any `gorm:"-"`
+}
+
+func (esdComment) TableName() string { return "esd_comments" }
+
+func (esdComment) Relations() map[string]contractsorm.Relation {
+	return map[string]contractsorm.Relation{
+		"Commentable": contractsorm.MorphTo{Name: "commentable"},
+	}
+}
+
+// TestEagerMorphToSoftDeletePredicate pins oracle E11: the MorphTo per-type eager read appends the
+// resolved type's soft-delete predicate, through the same runRelatedQueryCompiled binding the
+// hasMany/belongsTo/m2m cases exercise. The round-9 verify flagged the MorphTo case as covered only
+// by the corpus MorphToWithoutConstraints flip, with no root pin.
+func TestEagerMorphToSoftDeletePredicate(t *testing.T) {
+	morphmap.Reset()
+	t.Cleanup(morphmap.Reset)
+	morphmap.Register(map[string]any{"esd_post": &esdPost{}})
+
+	q, recorder := newRecordingRelQuery(t, &esdComment{})
+	desc, err := relations.ResolveRelation(&esdComment{}, "Commentable")
+	require.NoError(t, err)
+
+	recorder.returnRows(`from "esd_posts"`, []string{"id"}, []driver.Value{int64(5)})
+
+	parents := []reflect.Value{
+		reflect.ValueOf(&esdComment{CommentableType: "esd_post", CommentableID: 5}).Elem(),
+	}
+	require.NoError(t, q.loadMorphTo(parents, &esdComment{}, desc, eagerLoadEntry{Relation: "Commentable"}, nil))
+
+	assert.Equal(t, `select * from "esd_posts" where "esd_posts"."id" in (?) and "esd_posts"."deleted_at" is null`, recorder.last(t).sql)
 }

@@ -179,3 +179,39 @@ func TestTouchIdentityOf_ReadsClassAndKey(t *testing.T) {
 	// A model without a key can never be loaded back, so it carries no walk identity.
 	assert.Nil(t, touchIdentityOf(&touchingUnitPost{}))
 }
+
+// touchSuppressPost is the increment owner-touch pin's fixture: a post whose User relation is
+// touched, carrying a counter column the increment moves.
+type touchSuppressPost struct {
+	ID     uint              `gorm:"column:id;primaryKey"`
+	UserID uint              `gorm:"column:user_id"`
+	Score  int               `gorm:"column:score"`
+	User   *touchingUnitUser `gorm:"-"`
+}
+
+func (touchSuppressPost) TableName() string { return "touching_posts" }
+
+func (touchSuppressPost) Relations() map[string]contractsorm.Relation {
+	return map[string]contractsorm.Relation{
+		"User": contractsorm.BelongsTo{Related: &touchingUnitUser{}, ForeignKey: "user_id", Touches: true},
+	}
+}
+
+// TestIncrementSuppressesTheOwnerTouch pins conditions.withoutTouch on the Builder::increment path
+// (builder_shortcuts.go step): the step runs on a copy carrying withoutTouch, so the model-update
+// branch it shares with Update does not run finishSave's touchOwners walk. Without the flag an
+// increment of a post whose User relation touches would stamp the owner row - a second UPDATE. The
+// round-6 verify found the suppression untested (an overlay dropping withoutTouch left
+// ./database/gorm/ green); this pins it. Oracle v12.55.1, executed: Builder::increment and
+// Model::increment never propagate touches.
+func TestIncrementSuppressesTheOwnerTouch(t *testing.T) {
+	post := &touchSuppressPost{ID: 1, UserID: 7}
+	q, recorder := newRecordingRelQuery(t, post)
+
+	_, err := q.Increment("score", 1)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, recorder.count(), "an increment emits only its own UPDATE, never an owner touch")
+	assert.Contains(t, recorder.at(t, 0).sql, `"score"`)
+	assert.NotContains(t, recorder.at(t, 0).sql, `"touching_users"`, "the owner row must not be touched")
+}

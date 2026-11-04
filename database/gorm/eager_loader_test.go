@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
 	contractsdatabase "github.com/gradii/framework/contracts/database"
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
@@ -2006,4 +2007,31 @@ func TestAssignToParents(t *testing.T) {
 			assert.Equal(t, uint(11), user.Books[1].ID)
 		}
 	})
+}
+
+// TestLoadMany2Many_PrunedSelectKeepsThePivotAliasesAndRelatedKey pins the column-pruning branch of
+// runMany2ManyQueryCompiled (entry.Columns non-empty): a With("Roles:name") eager read keeps the
+// caller's columns, re-appends the related key so the model still hydrates its identity, and still
+// gains the pivot_-aliased join columns. The round-8 verify flagged the branch as having no
+// committed dedicated test (only a throwaway recorder probe).
+func TestLoadMany2Many_PrunedSelectKeepsThePivotAliasesAndRelatedKey(t *testing.T) {
+	q, recorder := newRecordingRelQuery(t, &relUser{})
+	desc, err := relations.ResolveRelation(&relUser{}, "Roles")
+	require.NoError(t, err)
+
+	recorder.returnRows(`from "rel_roles"`, []string{"name", "id", "pivot_rel_user_id"},
+		[]driver.Value{"admin", int64(9), int64(1)})
+
+	parents := []reflect.Value{
+		reflect.ValueOf(&relUser{ID: 1}).Elem(),
+	}
+
+	require.NoError(t, q.loadMany2Many(parents, &relUser{}, desc, eagerLoadEntry{Relation: "Roles", Columns: []string{"name"}}, nil))
+
+	assert.Equal(t,
+		`select "name", "id", "rel_user_roles"."rel_user_id" as "pivot_rel_user_id", "rel_user_roles"."rel_role_id" as "pivot_rel_role_id" from "rel_roles" inner join "rel_user_roles" ON "rel_user_roles"."rel_role_id" = "rel_roles"."id" where "rel_user_roles"."rel_user_id" in (?)`,
+		recorder.last(t).sql)
+
+	user := parents[0].Addr().Interface().(*relUser)
+	require.Len(t, user.Roles, 1)
 }

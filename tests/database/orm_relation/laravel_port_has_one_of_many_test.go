@@ -2,6 +2,7 @@ package orm_relation
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -798,4 +799,43 @@ func TestHasOneOfMany_ItGetsCorrectResultUsingAtLeastTwoAggregatesDistinctFromId
 	require.NoError(t, cloneRelationQuery(t, query).Load(&user, "LatestUpdatedLatestCreatedState"))
 	require.NotNil(t, user.LatestUpdatedLatestCreatedState)
 	assert.Equal(t, expectedState.ID, user.LatestUpdatedLatestCreatedState.ID)
+}
+
+// TestHasOneOfMany_WithSoftDeletesEagerExcludesTheDeletedLatestLogin pins oracle E12: the eager
+// ofMany read carries the related model's soft-delete predicate on BOTH the aggregate subquery and
+// the outer query, so a soft-deleted newest login is neither picked by the aggregate nor returned.
+// The round-9 verify flagged this as having no dedicated eager Go pin (only the load-path
+// TestHasOneOfMany_WithSoftDeletes existed).
+func TestHasOneOfMany_WithSoftDeletesEagerExcludesTheDeletedLatestLogin(t *testing.T) {
+	query := newRelationQuery(t)
+	hasOneOfManySchema(t, query)
+
+	user := hasOneOfManySeedUser(t, query, 1)
+
+	live := hasOneOfManySoftLogin{UserID: user.ID}
+	require.NoError(t, cloneRelationQuery(t, query).Create(&live))
+	dead := hasOneOfManySoftLogin{UserID: user.ID}
+	require.NoError(t, cloneRelationQuery(t, query).Create(&dead))
+	_, err := cloneRelationQuery(t, query).Delete(&dead)
+	require.NoError(t, err)
+
+	ctx := databasedb.EnableQueryLog(context.Background())
+	withContext, ok := cloneRelationQuery(t, query).(contractsorm.QueryWithContext)
+	require.True(t, ok)
+
+	found := []hasOneOfManyUser{}
+	require.NoError(t, withContext.WithContext(ctx).Model(&hasOneOfManyUser{}).With("LatestLoginWithSoftDeletes").Get(&found))
+	require.Len(t, found, 1)
+	require.NotNil(t, found[0].LatestLoginWithSoftDeletes)
+	assert.Equal(t, live.ID, found[0].LatestLoginWithSoftDeletes.ID, "the soft-deleted newest login must be excluded")
+
+	ofManySQL := ""
+	for _, l := range databasedb.GetQueryLog(ctx) {
+		if strings.Contains(l.Query, "id_aggregate") {
+			ofManySQL = l.Query
+		}
+	}
+	require.NotEmpty(t, ofManySQL, "the eager ofMany read")
+	assert.Equal(t, 2, strings.Count(ofManySQL, `"logins"."deleted_at" is null`),
+		"the predicate must sit on both the aggregate subquery and the outer query")
 }
