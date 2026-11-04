@@ -166,7 +166,14 @@ type Descriptor struct {
 	MorphOnlyTrashed    bool
 
 	// through specifics
-	ThroughTable   string
+	ThroughTable string
+	// ThroughModel is the through relation's intermediate model instance (HasManyThrough /
+	// HasOneThrough's $through model). A compiled through read inspects it for the through table's
+	// soft-delete field: Laravel's performJoin registers a named "SoftDeletableHasManyThrough"
+	// global scope (a whereNull on the through table's deleted-at column) when the through model
+	// uses SoftDeletes, so every through read filters soft-deleted through rows too. Nil for every
+	// non-through kind.
+	ThroughModel   any
 	FirstKey       string // FK on through pointing at parent
 	SecondKey      string // FK on related pointing at through
 	LocalKey       string // PK on parent
@@ -685,6 +692,7 @@ func descriptorFromThrough(parent any, parentTable, name string, related, throug
 		RelatedTable:   relatedTable,
 		RelatedModel:   related,
 		ThroughTable:   throughTable,
+		ThroughModel:   through,
 		FirstKey:       cmp.Or(firstKey, str.Of(parentTable).Singular().String()+"_id"),
 		SecondKey:      cmp.Or(secondKey, str.Of(throughTable).Singular().String()+"_id"),
 		LocalKey:       cmp.Or(localKey, "id"),

@@ -74,6 +74,15 @@ type Conditions struct {
 	// select list — the related table's columns plus the through key aliased as
 	// laravel_through_key — the way HasOneOrManyThrough::shouldSelect does for get()/first()/cursor().
 	throughRead *throughReadConfig
+	// throughSoftDeleteTable / throughSoftDeleteColumn name the through relation's intermediate
+	// table and its soft-delete column when the through model declares the framework's soft-delete
+	// type. Laravel's HasOneOrManyThrough::performJoin registers the named
+	// "SoftDeletableHasManyThrough" global scope on the relation's builder, so the whereNull reaches
+	// every through statement - including the reads that drop the relation's select-list alias
+	// (pluck / value / exists, through withoutThroughReadSelect). Kept separate from throughRead,
+	// which that suppression clears, so suppressing the alias never drops the predicate.
+	throughSoftDeleteTable  string
+	throughSoftDeleteColumn string
 	// pivotRead names the many-to-many relation a model-row read is scoped to (Related on a
 	// Many2Many / MorphToMany / MorphedByMany relation), so the chunked read paths can give their
 	// page statements Laravel's relation read shape: the related table's columns plus the pivot

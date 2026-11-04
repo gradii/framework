@@ -431,6 +431,8 @@ func (r *OrmBuilder) newThroughQuery(parent any, desc *relationDescriptor) contr
 			throughTable: desc.ThroughTable,
 			firstKey:     desc.FirstKey,
 		}
+		query.conditions.throughSoftDeleteTable = desc.ThroughTable
+		query.conditions.throughSoftDeleteColumn = throughSoftDeleteColumn(desc)
 	}
 	return built
 }

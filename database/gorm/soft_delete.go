@@ -34,3 +34,17 @@ func usesFrameworkSoftDeleteModel(model any) bool {
 
 	return ok && fieldType == reflect.TypeOf(databaseorm.DeletedAt{})
 }
+
+// throughSoftDeleteColumn returns the through model's soft-delete column when the relation's
+// through model declares the framework's soft-delete type, so a through read can filter the through
+// table the way Laravel's HasOneOrManyThrough::performJoin does. It returns "" for a relation with
+// no through model (every non-through kind) or a through model carrying no soft-delete field.
+func throughSoftDeleteColumn(desc *relationDescriptor) string {
+	if desc == nil || desc.ThroughModel == nil || !usesFrameworkSoftDeleteModel(desc.ThroughModel) {
+		return ""
+	}
+
+	column, _ := softDeleteColumn(desc.ThroughModel)
+
+	return column
+}

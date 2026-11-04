@@ -3,6 +3,7 @@ package gorm
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 
 	contractsdriver "github.com/gradii/framework/contracts/database/driver"
@@ -310,6 +311,10 @@ func (r *OrmBuilder) newBuilder() (*querybuilder.Builder, error) {
 		return nil, err
 	}
 
+	// A through read filters a soft-deletable through model too, its predicate after the related
+	// model's - Laravel applies the related SoftDeletingScope first, then the named through scope.
+	r.applyThroughSoftDelete(builder)
+
 	return builder, nil
 }
 
@@ -354,6 +359,33 @@ func (r *OrmBuilder) appendSoftDeletePredicate(builder *querybuilder.Builder, no
 	builder.WhereNull(table+"."+column, core.BooleanAnd, not)
 
 	return nil
+}
+
+// applyThroughSoftDelete appends the through model's soft-delete predicate to a through relation
+// read: Laravel's HasOneOrManyThrough::performJoin registers a named "SoftDeletableHasManyThrough"
+// global scope - a whereNull on the through table's deleted-at column - whenever the through model
+// uses SoftDeletes, so the through table is filtered exactly like the related table. It runs after
+// applySoftDelete so the related predicate precedes the through one, the order Laravel compiles
+// (the related SoftDeletingScope registers before the named through scope). The predicate is
+// dropped when the relation removed every scope (WithoutGlobalScopes(), recorded as "*") - the
+// gate the eager related binding uses; it is NOT lifted by WithTrashed / OnlyTrashed, which target
+// the related SoftDeletingScope alone (Laravel's through-side switch, withTrashedParents, is not
+// ported). It keys off the query's through soft-delete fields, NOT the throughRead config, so a
+// read that suppresses the relation's select-list alias (pluck / value / exists) still carries the
+// predicate - Laravel registers it as a global scope on the relation's builder, independent of the
+// select list. Only a HasOneThrough / HasManyThrough read with a soft-deletable through model is
+// affected.
+func (r *OrmBuilder) applyThroughSoftDelete(builder *querybuilder.Builder) {
+	if r.conditions.throughSoftDeleteColumn == "" {
+		return
+	}
+	if slices.Contains(r.conditions.withoutGlobalScopes, "*") {
+		return
+	}
+
+	// A structured where, so the grammar compiles Laravel's lowercase "is null" through
+	// compileWhereNull instead of a raw fragment's own casing.
+	builder.WhereNull(r.conditions.throughSoftDeleteTable+"."+r.conditions.throughSoftDeleteColumn, core.BooleanAnd, false)
 }
 
 // applyTable points the builder at the query's table when it was not named directly: a table named

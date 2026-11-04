@@ -25,9 +25,11 @@ import (
 // (E2 the single-parent shape, `in (1)`); E3 the withTrashed callback drops the predicate; E4
 // onlyTrashed renders `is not null`; E6 hasOne and E7 belongsTo carry the predicate; E10 the eager
 // many-to-many read appends `and "es_roles"."deleted_at" is null`; E11 the MorphTo per-type read
-// appends `and "es_users"."deleted_at" is null`; E9 an eager HasManyThrough filters the RELATED
-// table alone, never the through table. These pins drive the loaders directly, so the assertion is
-// on the statement the loader built and ran rather than on a child the test rebuilt by hand.
+// appends `and "es_users"."deleted_at" is null`. (E9's "through table is never filtered" note is
+// superseded by round 10: a soft-deletable THROUGH model is filtered too — see
+// eager_through_soft_delete_test.go; the fixture here uses a non-soft-deletable through model, so
+// nothing changes for these pins.) These pins drive the loaders directly, so the assertion is on the
+// statement the loader built and ran rather than on a child the test rebuilt by hand.
 
 type esdPost struct {
 	databaseorm.SoftDeletes

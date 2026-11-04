@@ -827,6 +827,11 @@ func (r *OrmBuilder) loadThrough(parents []reflect.Value, parentModel any, desc 
 			throughTable: desc.ThroughTable,
 			firstKey:     desc.FirstKey,
 		}
+		// The through soft-delete predicate is a global scope on the relation's builder, not part of
+		// the through select-list rewrite, so it is recorded on the query separately: a read that
+		// suppresses the alias (pluck / value / exists) still filters a soft-deleted through row.
+		child.conditions.throughSoftDeleteTable = desc.ThroughTable
+		child.conditions.throughSoftDeleteColumn = throughSoftDeleteColumn(desc)
 
 		return child
 	}
@@ -979,14 +984,22 @@ func (r *OrmBuilder) runRelatedQueryCompiled(child *OrmBuilder, desc *relationDe
 	// through relatedQuery(desc.RelatedModel) - so the model's soft-delete scope reaches the eager
 	// read exactly as Laravel's SoftDeletingScope reaches Relation::noConstraints' new query:
 	// applySoftDelete appends `deleted_at is null` (or `is not null` under onlyTrashed; WithTrashed
-	// drops it). Only the RELATED model is attached, never the pivot table.
+	// drops it). Only the RELATED model is attached here, never the pivot table.
 	//
-	// A soft-deletable THROUGH model is a known gap, not part of this binding: Laravel's eager
-	// HasManyThrough ALSO appends `and "through"."deleted_at" is null` when the through model uses
-	// SoftDeletes (oracle, illuminate/database v12.55.1, /tmp/verify-r9/oracle/probe_mine.php M1:
-	// `... where "m_users"."country_id" in (1) and "m_posts"."deleted_at" is null and "m_users"."deleted_at"
-	// is null`), whereas the Go through read binds no model (loadThrough -> pivotChild) and so filters
-	// the related table only - a pre-existing divergence this change does not touch and does not regress.
+	// A soft-deletable THROUGH model is filtered too: Laravel's HasOneOrManyThrough::performJoin
+	// registers a named "SoftDeletableHasManyThrough" global scope - a whereNull on the through
+	// table's deleted-at column - whenever the through model uses SoftDeletes, so the eager read
+	// carries `and "through"."deleted_at" is null` after the related predicate (oracle,
+	// illuminate/database v12.55.1, /tmp/r10/through_softdelete_probe.php N3:
+	// `... where "tusers"."country_id" in (1) and "tposts"."deleted_at" is null and "tusers"."deleted_at"
+	// is null`). loadThrough records the through model's deleted-at column on the child as a soft-delete field
+	// (throughSoftDeleteColumn), kept apart from the through select-list config so the reads that
+	// suppress the alias (pluck / value / exists) keep it, and applyThroughSoftDelete lands the predicate
+	// at compile time; the
+	// mapping read (pivotChild) stays unfiltered, which is inert because the joined related read's
+	// through predicate already excludes a soft-deleted through row's related rows. The through
+	// model's OTHER (user-defined) global scopes do NOT reach the read - performJoin adds only the
+	// soft-delete named scope (oracle, /tmp/r10/through_userscope_probe.php U1).
 	//
 	// It runs after the callback so the callback's scopes are visible: WithoutGlobalScopes() with no
 	// names (recorded as "*") removes every scope, the soft-delete one included, so the binding is
@@ -1263,6 +1276,13 @@ func (r *OrmBuilder) oneOfManyJoin(builder *OrmBuilder, desc *relationDescriptor
 		// The related model's soft-delete scope reaches every aggregate level the way Laravel's
 		// global scopes do.
 		r.applySubquerySoftDelete(sub, desc.RelatedTable, desc.RelatedModel)
+
+		// A soft-deletable through model's predicate reaches every aggregate level too, after the
+		// related model's: each level performs the through join, so the through table is filtered
+		// there the way performJoin's named scope filters the relation read (oracle,
+		// /tmp/r10/through_softdelete_probe.php N9/N10 - the through predicate sits in the
+		// aggregate subquery and on the outer query).
+		r.applySubquerySoftDelete(sub, desc.ThroughTable, desc.ThroughModel)
 
 		sub.GroupByRaw(strings.Join(groupCols, ", "), nil)
 		levelSQL, levelArgs = sub.ToSelectSQL()

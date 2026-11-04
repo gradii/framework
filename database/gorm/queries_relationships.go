@@ -610,6 +610,11 @@ func (r *OrmBuilder) compileExistenceSubqueryIn(desc *relationDescriptor, callba
 
 	r.applySubquerySoftDelete(builder, relatedQualifier, desc.RelatedModel)
 
+	// A soft-deletable through model filters the through table inside the existence body too, after
+	// the related predicate - performJoin adds its named scope to the existence subquery (oracle,
+	// /tmp/r10/through_softdelete_probe.php N12/N13). A no-op for every non-through kind.
+	r.applySubquerySoftDelete(builder, desc.ThroughTable, desc.ThroughModel)
+
 	// addHasWhere merges the relation query's own constraints - the wherePivot scopes - into the
 	// existence query after the caller's closure ran, so the pivot filter binds last, after a
 	// nested level's exists. Only pivot-scoped relations carry the callback.
