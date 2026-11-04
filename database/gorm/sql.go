@@ -318,7 +318,10 @@ func (r *OrmBuilder) newBuilder() (*querybuilder.Builder, error) {
 // predicate is written as a structured where so the grammar compiles it through compileWhereNull -
 // the same lowercase path Laravel's SoftDeletingScope::apply uses - instead of as a raw fragment.
 // WithTrashed drops the predicate entirely, so it is only ignored here when OnlyTrashed has not
-// overridden it.
+// overridden it. The predicate is kept outside the named-scope registry, so WithoutGlobalScopes()
+// does not lift it on this path (a deliberate divergence tests/to_sql_test.go pins); the eager
+// runner handles the scope removal by not binding the related model at all (see
+// runRelatedQueryCompiled).
 func (r *OrmBuilder) applySoftDelete(builder *querybuilder.Builder) error {
 	if (r.conditions.withTrashed && !r.conditions.onlyTrashed) || !r.usesFrameworkSoftDelete() {
 		return nil

@@ -488,12 +488,11 @@ type MorphTo struct {
 	// /tmp/morphport-probes/trashed.php): Laravel's per-type read carries `"mpt_posts"."deleted_at"
 	// is null` by default, WithTrashed drops the predicate (include — `select * from "mpt_posts"
 	// where "mpt_posts"."id" in (2, 1)`), OnlyTrashed renders `"mpt_posts"."deleted_at" is not
-	// null`, WithoutTrashed keeps the default exclusion. The Go per-type eager read applies no
-	// related-model predicate when no flag is declared (the pre-existing divergence the
-	// soft-deletes corpus pins at laravel_port_soft_deletes_integration_test.go:1098): a declared
-	// WithTrashed therefore matches that Go default outcome, while WithoutTrashed forces Laravel's
-	// exclude-trashed default on the eager path; the object-path read, which carries the related
-	// model, honors all three flags directly.
+	// null`, WithoutTrashed keeps the default exclusion. The Go per-type eager read binds the resolved
+	// type to its child, so it carries Laravel's default `is null` predicate when no flag is declared;
+	// a declared WithTrashed drops it (matching Laravel's include), OnlyTrashed renders `is not null`,
+	// and WithoutTrashed keeps the default exclusion — as the object-path read, which carries the
+	// related model, honors all three flags directly.
 	WithTrashed    bool
 	WithoutTrashed bool
 	OnlyTrashed    bool

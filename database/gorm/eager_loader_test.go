@@ -965,10 +965,11 @@ func TestLoadHasOneOrMany_ChildQueryIsCompiled(t *testing.T) {
 		assert.Equal(t, []any{uint(3)}, bindings)
 	})
 
-	// The child addresses the related table alone, with no model of its own, so it inherits none of
-	// the parent query's state — the same shape the fresh GORM session had. A related model's
-	// soft-delete scope and global scopes therefore stay off the eager load, which is also why the
-	// compiled child carries no extra predicate.
+	// relatedChild itself binds no model — it starts from the table alone, inheriting none of the
+	// parent query's state, the same shape the fresh GORM session had. The compiled runner
+	// (runRelatedQueryCompiled) then attaches the related model so its soft-delete scope applies to the
+	// eager read (see eager_soft_delete_test.go); this hand-built child pins the relatedChild shape
+	// before that attach, which is also why it carries no extra predicate.
 	t.Run("child carries no inherited conditions", func(t *testing.T) {
 		q := newRelQueryWith(t, &relUser{})
 		desc, err := relations.ResolveRelation(&relUser{}, "Books")
@@ -1087,9 +1088,9 @@ func TestLoadMorph_ChildQueryIsCompiled(t *testing.T) {
 		assert.Equal(t, []any{uint(9), desc.MorphValue}, bindings)
 	})
 
-	// The child addresses the related table alone, with no model of its own, so it inherits none of
-	// the parent query's state — the same shape the fresh GORM session had. A related model's
-	// soft-delete scope and global scopes therefore stay off the eager load.
+	// relatedChild itself binds no model — it starts from the table alone, inheriting none of the
+	// parent query's state, the same shape the fresh GORM session had. The compiled runner attaches the
+	// related model afterwards so its soft-delete scope applies to the eager read.
 	t.Run("child carries no inherited conditions", func(t *testing.T) {
 		q := newRelQueryWith(t, &relUser{})
 		desc, err := relations.ResolveRelation(&relUser{}, "Houses")
@@ -1314,9 +1315,10 @@ func TestLoadMorphTo_BucketChildQueryIsCompiled(t *testing.T) {
 		assert.Equal(t, []any{uint(5)}, bindings)
 	})
 
-	// Each bucket's child addresses the resolved table alone, with no model of its own — the same
-	// shape the fresh GORM session had — so it inherits none of the parent query's state and a
-	// related model's soft-delete scope and global scopes stay off the eager load.
+	// relatedChild addresses the resolved table alone, with no model of its own — the same shape the
+	// fresh GORM session had. The loader then binds the resolved bucket model (bucketDesc.RelatedModel)
+	// through runRelatedQueryCompiled, so the type's soft-delete scope reaches the eager read
+	// (eager_soft_delete_test.go); this hand-built child pins the relatedChild shape before that bind.
 	t.Run("bucket child carries no inherited conditions", func(t *testing.T) {
 		q := newRelQueryWith(t, &morphImage{})
 		child := q.relatedChild("morph_parent_like_posts", "morph_parent_like_posts.id", []any{uint(5)})

@@ -381,20 +381,16 @@ func (r *OrmBuilder) loadMorphTo(parents []reflect.Value, parentModel any, desc 
 		//
 		// The bucket consumes the class's declared config too: the constrain callback layers over
 		// the caller's entry callback (the order MorphTo::getResultsByType applies them — the
-		// relation's merged constraints first, constrain after), and the trashed family and
-		// per-type counts need the resolved model on the child, because the soft-delete predicate
-		// and the count sub-selects compile against it.
+		// relation's merged constraints first, constrain after). The soft-delete predicate and the
+		// count sub-selects compile against the resolved model, which runRelatedQueryCompiled attaches
+		// from bucketDesc.RelatedModel, so the per-type read carries the type's SoftDeletingScope.
 		bucketEntry := entry
 		if constrain := desc.MorphConstrain[morphType]; constrain != nil {
 			bucketEntry.Callback = chainRelationCallbacks(entry.Callback, constrain)
 		}
 		counts := desc.MorphWithCount[morphType]
-		needsModel := len(counts) > 0 || desc.MorphOnlyTrashed || desc.MorphWithoutTrashed
 		rows, qerr := r.runChunkedRelatedQueryCompiled(b.keys, bucketDesc, bucketEntry, []string{ownerKey}, parentModel, func(chunk []any) *OrmBuilder {
 			child := r.relatedChild(relatedTable, relatedTable+"."+ownerKey, chunk)
-			if needsModel {
-				child = child.Model(sample).(*OrmBuilder)
-			}
 			switch {
 			case desc.MorphOnlyTrashed:
 				child = child.OnlyTrashed().(*OrmBuilder)
@@ -692,6 +688,17 @@ func (r *OrmBuilder) runMany2ManyQueryCompiled(child *OrmBuilder, desc *relation
 		}
 	}
 
+	// The joined read is a query on the related model - the child the relation read newMany2ManyQuery
+	// builds is bound to desc.RelatedModel - so the related model's soft-delete scope reaches the
+	// eager read the way Laravel's does (oracle, /tmp/eager-softdelete/probe.php E10: the eager read
+	// appends `and "roles"."deleted_at" is null`). The pivot table's own soft-delete field is never
+	// consulted here; that is the relation's OnPivotQuery scope's job. The binding runs after the
+	// callback (so its scopes are visible) and is skipped when WithoutGlobalScopes() removed every
+	// scope ("*"): the predicate IS that scope.
+	if desc.RelatedModel != nil && !slices.Contains(child.conditions.withoutGlobalScopes, "*") {
+		child = child.Model(desc.RelatedModel).(*OrmBuilder)
+	}
+
 	// The related key survives column pruning, so the model still hydrates its own identity.
 	if len(entry.Columns) > 0 {
 		cols := append([]string(nil), entry.Columns...)
@@ -902,9 +909,13 @@ func (r *OrmBuilder) eagerCallbackTarget(child *OrmBuilder, desc *relationDescri
 // runRelatedQueryCompiled runs one related query that this package compiles itself.
 //
 // The loader used to hand GORM a statement per chunk; the statement is compiled and run here instead,
-// through the same path the rest of the ORM reads with. The child addresses a table without a model of
-// its own, which is what the statement it replaced did, so a related model's global scopes do not apply
-// to an eager load — that is a question of its own, not part of this migration.
+// through the same path the rest of the ORM reads with. The child is bound to the relation's related
+// model — the same binding the non-eager read installs through relatedQuery — so the model's
+// soft-delete scope reaches the eager load the way Laravel's SoftDeletingScope reaches
+// Relation::noConstraints' new query (unless WithoutGlobalScopes() removed every scope; see the
+// attach in the body). The related model's OTHER global
+// scopes are still not queued here (this function never calls addGlobalScopes), so a user scope
+// registered with withGlobalScope does not yet reach an eager load — a separate, documented gap.
 //
 // protoParent is a fresh instance of the parent model — Laravel's newInstance() — that the relation
 // object handed to entry.Callback is built on, so the callback's relation-level limit / take sees a
@@ -960,6 +971,23 @@ func (r *OrmBuilder) runRelatedQueryCompiled(child *OrmBuilder, desc *relationDe
 	}
 	if joined && len(child.query.Selects()) == 0 {
 		child.query.SelectRaw(r.ident(desc.RelatedTable, "*"), nil)
+	}
+
+	// The child reads the related model - the same binding the non-eager relation read installs
+	// through relatedQuery(desc.RelatedModel) - so the model's soft-delete scope reaches the eager
+	// read exactly as Laravel's SoftDeletingScope reaches Relation::noConstraints' new query:
+	// applySoftDelete appends `deleted_at is null` (or `is not null` under onlyTrashed; WithTrashed
+	// drops it). Only the RELATED model is attached - never the through or pivot table, whose own
+	// soft-delete field Laravel leaves out of the read (oracle, /tmp/eager-softdelete/probe.php: an
+	// eager HasManyThrough filters the related table alone).
+	//
+	// It runs after the callback so the callback's scopes are visible: WithoutGlobalScopes() with no
+	// names (recorded as "*") removes every scope, the soft-delete one included, so the binding is
+	// skipped - the predicate IS that scope, so with all scopes removed there is nothing to compile it
+	// against. (The non-eager ToSql path keeps the predicate by design - tests/to_sql_test.go pins it -
+	// which is a separate, pre-existing divergence.)
+	if desc.RelatedModel != nil && !slices.Contains(child.conditions.withoutGlobalScopes, "*") {
+		child = child.Model(desc.RelatedModel).(*OrmBuilder)
 	}
 
 	if len(entry.Columns) > 0 {

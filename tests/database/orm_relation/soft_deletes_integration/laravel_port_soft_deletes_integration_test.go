@@ -34,11 +34,10 @@ import (
 // Where the ORM cannot reproduce Laravel's SQL or behaviour the test is skipped with the concrete
 // divergence and its probe, rather than weakened. The recurring gaps this corpus hits:
 //
-//   - the relation load path (Load / With / LoadMissing) never applies the related model's
-//     soft-delete predicate: the loader builds a table-only child query, so soft-deleted related
-//     rows are hydrated, where Laravel's lazy load filters them (probe: after soft-deleting one of
-//     two posts, Load returns len 2 with the trashed row's deleted_at set; Related().First and
-//     Related().Count filter the same read correctly);
+//   - (fixed) the relation load path (Load / With / LoadMissing) now applies the related model's
+//     soft-delete predicate: the compiled eager runner binds the related model to its child, so
+//     soft-deleted related rows are filtered where before they were hydrated (oracle:
+//     /tmp/eager-softdelete/probe.php; the five relation-lazy-load ports are un-skipped below);
 //   - onlyTrashed() / withTrashed() callbacks and relation default scopes do not reach existence or
 //     aggregate subqueries — applyRelationScope carries only where clauses, and the subquery always
 //     carries the default "deleted_at is null" (probes under the whereHas / withCount ports);
@@ -54,10 +53,6 @@ func init() {
 		"test_user_without_soft_delete": &testUserWithoutSoftDelete{},
 	})
 }
-
-// softDeletesSkipLoadGap is the recurrence the four relation-lazy-load ports share; each appends
-// its own probe.
-const softDeletesSkipLoadGap = "our ORM diverges: the relation load path (Load / With) never applies the related model's soft-delete predicate — the loader builds a table-only child query, so soft-deleted rows are hydrated where Laravel's lazy load filters them; "
 
 const softDeletesSkipPHPOnly = "PHP-only assertion (no Go equivalent): "
 
@@ -828,23 +823,154 @@ func TestSoftDeletesIntegration_UpdateOrCreate(t *testing.T) {
 }
 
 func TestSoftDeletesIntegration_HasOneRelationshipCanBeSoftDeleted(t *testing.T) {
+	query := newRelationQuery(t)
+	softDeletesTestSchema(t, query)
+	_, abigail := softDeletesCreateUsers(t, query)
 	// Laravel: create the address, delete it on the builder (address()->delete()), and assert
 	// $abigail->address is null; withTrashed()->restore() makes it visible again; deleting on the
 	// model hides it; forceDelete() removes it for good.
-	t.Skip(softDeletesSkipLoadGap + "probe: after `Related(&abigail, \"Address\").Delete()` (1 row) a re-read plus `Load(&abigail, \"Address\")` still hydrates the address, so the `$abigail->address` null assertions have no Go counterpart (the builder delete, withTrashed first, restore, model delete and force delete steps themselves behave as the corpus asserts)")
+
+	address := softDeletesTestAddress{Address: "Laravel avenue 43"}
+	require.NoError(t, cloneRelationQuery(t, query).Relation(&abigail, "Address").Create(&address))
+
+	// delete on builder
+	res, err := cloneRelationQuery(t, query).Related(&abigail, "Address").Delete()
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), res.RowsAffected)
+
+	// $abigail->fresh(); $abigail->address is null - the lazy load filters the trashed row.
+	abigail.Address = nil
+	require.NoError(t, cloneRelationQuery(t, query).Load(&abigail, "Address"))
+	assert.Nil(t, abigail.Address)
+
+	trashed := softDeletesTestAddress{}
+	require.NoError(t, cloneRelationQuery(t, query).Related(&abigail, "Address").WithTrashed().First(&trashed))
+	assert.Equal(t, "Laravel avenue 43", trashed.Address)
+
+	// restore
+	_, err = cloneRelationQuery(t, query).Related(&abigail, "Address").WithTrashed().Restore()
+	require.NoError(t, err)
+
+	abigail.Address = nil
+	require.NoError(t, cloneRelationQuery(t, query).Load(&abigail, "Address"))
+	require.NotNil(t, abigail.Address)
+	assert.Equal(t, "Laravel avenue 43", abigail.Address.Address)
+
+	// delete on model
+	_, err = cloneRelationQuery(t, query).Delete(abigail.Address)
+	require.NoError(t, err)
+
+	abigail.Address = nil
+	require.NoError(t, cloneRelationQuery(t, query).Load(&abigail, "Address"))
+	assert.Nil(t, abigail.Address)
+
+	trashed = softDeletesTestAddress{}
+	require.NoError(t, cloneRelationQuery(t, query).Related(&abigail, "Address").WithTrashed().First(&trashed))
+	assert.Equal(t, "Laravel avenue 43", trashed.Address)
+
+	// force delete
+	_, err = cloneRelationQuery(t, query).Related(&abigail, "Address").WithTrashed().ForceDelete()
+	require.NoError(t, err)
+
+	abigail.Address = nil
+	require.NoError(t, cloneRelationQuery(t, query).Load(&abigail, "Address"))
+	assert.Nil(t, abigail.Address)
 }
 
 func TestSoftDeletesIntegration_BelongsToRelationshipCanBeSoftDeleted(t *testing.T) {
+	query := newRelationQuery(t)
+	softDeletesTestSchema(t, query)
+	_, abigail := softDeletesCreateUsers(t, query)
 	// Laravel: associate the group, delete it on the builder, assert $abigail->group is null;
 	// restore; delete on the model; force delete — the group relation must follow the soft-delete
 	// scope at every step.
-	t.Skip(softDeletesSkipLoadGap + "probe: after `Related(&abigail, \"Group\").Delete()` (1 row) `Load(&abigail, \"Group\")` still hydrates the group (name admin), so the `$abigail->group` null assertions have no Go counterpart (associate/save, withTrashed first, restore and force delete behave as the corpus asserts)")
+
+	group := softDeletesTestGroup{Name: "admin"}
+	require.NoError(t, cloneRelationQuery(t, query).Create(&group))
+	require.NoError(t, cloneRelationQuery(t, query).Relation(&abigail, "Group").Associate(&group))
+
+	// delete on builder
+	res, err := cloneRelationQuery(t, query).Related(&abigail, "Group").Delete()
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), res.RowsAffected)
+
+	abigail.Group = nil
+	require.NoError(t, cloneRelationQuery(t, query).Load(&abigail, "Group"))
+	assert.Nil(t, abigail.Group)
+
+	trashed := softDeletesTestGroup{}
+	require.NoError(t, cloneRelationQuery(t, query).Related(&abigail, "Group").WithTrashed().First(&trashed))
+	assert.Equal(t, "admin", trashed.Name)
+
+	// restore
+	_, err = cloneRelationQuery(t, query).Related(&abigail, "Group").WithTrashed().Restore()
+	require.NoError(t, err)
+
+	abigail.Group = nil
+	require.NoError(t, cloneRelationQuery(t, query).Load(&abigail, "Group"))
+	require.NotNil(t, abigail.Group)
+	assert.Equal(t, "admin", abigail.Group.Name)
+
+	// delete on model
+	_, err = cloneRelationQuery(t, query).Delete(abigail.Group)
+	require.NoError(t, err)
+
+	abigail.Group = nil
+	require.NoError(t, cloneRelationQuery(t, query).Load(&abigail, "Group"))
+	assert.Nil(t, abigail.Group)
+
+	// force delete
+	_, err = cloneRelationQuery(t, query).Related(&abigail, "Group").WithTrashed().ForceDelete()
+	require.NoError(t, err)
+
+	trashed = softDeletesTestGroup{}
+	require.NoError(t, cloneRelationQuery(t, query).Related(&abigail, "Group").WithTrashed().First(&trashed))
+	assert.Zero(t, trashed.ID)
 }
 
 func TestSoftDeletesIntegration_HasManyRelationshipCanBeSoftDeleted(t *testing.T) {
+	query := newRelationQuery(t)
+	softDeletesTestSchema(t, query)
+	_, abigail := softDeletesCreateUsers(t, query)
 	// Laravel: create two posts, delete 'Second Title' on the builder, assert the fresh load has one
 	// post; restore; force delete 'Second Title' and assert one post remains.
-	t.Skip(softDeletesSkipLoadGap + "probe: after deleting 'Second Title', `Load(&abigail, \"Posts\")` returns len 2 — the trashed row included — where Laravel's `$abigail->posts` is len 1; the builder delete, withTrashed read (len 2), restore and force delete steps behave as asserted (Related().Count reads 1 / 2 / 1)")
+
+	first := softDeletesCreatePost(t, query, &abigail, "First Title")
+	_ = softDeletesCreatePost(t, query, &abigail, "Second Title")
+
+	// delete on builder
+	res, err := cloneRelationQuery(t, query).Related(&abigail, "Posts").Where("title", "Second Title").Delete()
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), res.RowsAffected)
+
+	abigail.Posts = nil
+	require.NoError(t, cloneRelationQuery(t, query).Load(&abigail, "Posts"))
+	require.Len(t, abigail.Posts, 1)
+	assert.Equal(t, first.ID, abigail.Posts[0].ID)
+
+	all := []softDeletesTestPost{}
+	require.NoError(t, cloneRelationQuery(t, query).Related(&abigail, "Posts").WithTrashed().Get(&all))
+	assert.Len(t, all, 2)
+
+	// restore
+	_, err = cloneRelationQuery(t, query).Related(&abigail, "Posts").WithTrashed().Restore()
+	require.NoError(t, err)
+
+	abigail.Posts = nil
+	require.NoError(t, cloneRelationQuery(t, query).Load(&abigail, "Posts"))
+	assert.Len(t, abigail.Posts, 2)
+
+	// force delete
+	_, err = cloneRelationQuery(t, query).Related(&abigail, "Posts").Where("title", "Second Title").ForceDelete()
+	require.NoError(t, err)
+
+	abigail.Posts = nil
+	require.NoError(t, cloneRelationQuery(t, query).Load(&abigail, "Posts"))
+	assert.Len(t, abigail.Posts, 1)
+
+	all = nil
+	require.NoError(t, cloneRelationQuery(t, query).Related(&abigail, "Posts").WithTrashed().Get(&all))
+	assert.Len(t, all, 1)
 }
 
 func TestSoftDeletesIntegration_RelationToSqlAppliesSoftDelete(t *testing.T) {
@@ -1011,9 +1137,27 @@ func TestSoftDeletesIntegration_SoftDeleteIsAppliedToNewQuery(t *testing.T) {
 }
 
 func TestSoftDeletesIntegration_SecondLevelRelationshipCanBeSoftDeleted(t *testing.T) {
+	query := newRelationQuery(t)
+	softDeletesTestSchema(t, query)
+	_, abigail := softDeletesCreateUsers(t, query)
 	// Laravel: post->comments()->create(...), delete the comments on the post's builder, then assert
 	// the post's loaded comments are empty and withTrashed()->get() has one.
-	t.Skip(softDeletesSkipLoadGap + "probe: after `Related(&post, \"Comments\").Delete()` (1 row) `Load(&post, \"Comments\")` returns len 1 where Laravel's `->comments` is empty; the withTrashed read behaves as asserted (len 1)")
+
+	post := softDeletesCreatePost(t, query, &abigail, "First Title")
+	comment := softDeletesTestComment{Body: "Comment Body"}
+	require.NoError(t, cloneRelationQuery(t, query).Relation(&post, "Comments").Create(&comment))
+
+	res, err := cloneRelationQuery(t, query).Related(&post, "Comments").Delete()
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), res.RowsAffected)
+
+	post.Comments = nil
+	require.NoError(t, cloneRelationQuery(t, query).Load(&post, "Comments"))
+	assert.Len(t, post.Comments, 0)
+
+	all := []softDeletesTestComment{}
+	require.NoError(t, cloneRelationQuery(t, query).Related(&post, "Comments").WithTrashed().Get(&all))
+	assert.Len(t, all, 1)
 }
 
 func TestSoftDeletesIntegration_WhereHasWithDeletedRelationship(t *testing.T) {
@@ -1179,9 +1323,33 @@ func TestSoftDeletesIntegration_MorphToWithConstraints(t *testing.T) {
 }
 
 func TestSoftDeletesIntegration_MorphToWithoutConstraints(t *testing.T) {
+	query := newRelationQuery(t)
+	softDeletesTestSchema(t, query)
+	softDeletesCreateUsers(t, query)
 	// Laravel: with('owner') loads abigail before she is deleted, and yields null after — the morphTo
 	// eager load must apply the owner model's soft-delete scope.
-	t.Skip("our ORM diverges: the MorphTo eager load ignores the owner model's soft-delete scope (the per-type bucket query is built table-only, so no predicate is added); probe: with abigail soft-deleted, With(\"Owner\") still hydrates her — owner email 'abigailotwell@gmail.com' where Laravel's owner is null (the pre-delete half is reproduced: the owner loads)")
+
+	abigail := softDeletesFindUser(t, query, "abigailotwell@gmail.com")
+	post := softDeletesCreatePost(t, query, &abigail, "First Title")
+
+	comment := softDeletesTestComment{Body: "Comment Body", OwnerID: abigail.ID, OwnerType: "soft_deletes_test_user"}
+	require.NoError(t, cloneRelationQuery(t, query).Relation(&post, "Comments").Create(&comment))
+
+	// with('owner') loads abigail before she is deleted...
+	comments := []softDeletesTestComment{}
+	require.NoError(t, cloneRelationQuery(t, query).Model(&softDeletesTestComment{}).With("Owner").Get(&comments))
+	require.Len(t, comments, 1)
+	require.NotNil(t, comments[0].Owner)
+	assert.Equal(t, abigail.Email, comments[0].Owner.Email)
+
+	// ...and the morphTo eager load applies the owner model's soft-delete scope, so it yields null after.
+	_, err := cloneRelationQuery(t, query).Delete(&abigail)
+	require.NoError(t, err)
+
+	comments = nil
+	require.NoError(t, cloneRelationQuery(t, query).Model(&softDeletesTestComment{}).With("Owner").Get(&comments))
+	require.Len(t, comments, 1)
+	assert.Nil(t, comments[0].Owner)
 }
 
 func TestSoftDeletesIntegration_MorphToNonSoftDeletingModel(t *testing.T) {
@@ -1217,4 +1385,28 @@ func TestSoftDeletesIntegration_SelfReferencingRelationshipWithSoftDeletes(t *te
 	// Laravel: abigail's self_referencing (hasMany(self, user_id)->onlyTrashed()) holds taylor; then
 	// whereHas('self_referencing') must count one.
 	t.Skip("our ORM diverges: a relation's onlyTrashed() default scope is lost in the existence subquery — probe: WhereHas(\"SelfReferencing\") counts 0 where Laravel counts 1, although the Related read path (which carries the scope) returns taylor, and taylor's own list is empty")
+}
+
+func TestSoftDeletesIntegration_RelationEagerLoadAppliesSoftDelete(t *testing.T) {
+	query := newRelationQuery(t)
+	softDeletesTestSchema(t, query)
+	_, abigail := softDeletesCreateUsers(t, query)
+	softDeletesCreatePost(t, query, &abigail, "First Title")
+
+	// Laravel's lazy load compiles the related read with the related model's SoftDeletingScope:
+	//   select * from "posts" where "posts"."user_id" in (?) and "posts"."deleted_at" is null
+	// (oracle, illuminate/database v12.55.1, /tmp/eager-softdelete/probe.php E2). The query log shows
+	// the statement the eager loader actually ran, so the predicate is pinned on the eager path too.
+	ctx := databasedb.EnableQueryLog(context.Background())
+	withContext, ok := cloneRelationQuery(t, query).(contractsorm.QueryWithContext)
+	require.True(t, ok, "the ORM query must support WithContext")
+
+	scoped, ok := withContext.WithContext(ctx).(contractsorm.Query)
+	require.True(t, ok)
+
+	require.NoError(t, scoped.Load(&abigail, "Posts"))
+
+	logs := databasedb.GetQueryLog(ctx)
+	require.Len(t, logs, 1, "Load runs one related read")
+	assert.Contains(t, logs[0].Query, `and "posts"."deleted_at" is null`)
 }

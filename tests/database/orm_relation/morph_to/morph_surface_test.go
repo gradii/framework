@@ -367,9 +367,9 @@ func TestMorphTo_ConstrainAppliesTheClassConstraintToItsTypeQuery(t *testing.T) 
 // Oracle (/tmp/morphport-probes/trashed.php): the default read excludes the ghost — the
 // object-path read (Related) carries the related model's SoftDeletingScope and compiles
 // `select * from "mpt_posts" where "mpt_posts"."id" = ? and "mpt_posts"."deleted_at" is null
-// limit 1`. (The Go loader's eager / Load default applies no related-model predicate — the
-// documented divergence pinned at soft_deletes_integration/
-// laravel_port_soft_deletes_integration_test.go:1098.)
+// limit 1`. The eager / Load default carries the same predicate now that the compiled eager runner
+// binds the related model to its child (eager_soft_delete_test.go); the trashed-family tests below
+// pin the eager side.
 func TestMorphTo_DefaultReadExcludesSoftDeletedTargets(t *testing.T) {
 	query := newRelationQuery(t)
 	morphSurfaceSchema(t, query)
@@ -422,8 +422,9 @@ func TestMorphTo_OnlyTrashedResolvesOnlySoftDeletedTargets(t *testing.T) {
 }
 
 // Oracle (/tmp/morphport-probes/trashed.php): Laravel's per-type eager read carries
-// `"mpt_posts"."deleted_at" is null` — withoutTrashed keeps that exclusion. (The Go eager default
-// applies no related-model predicate, so the declaration is what restores the exclusion.)
+// `"mpt_posts"."deleted_at" is null` — withoutTrashed keeps that exclusion. The Go eager default now
+// carries the same predicate (the runner binds the resolved type to the child), so the declaration is
+// redundant with it rather than the thing that restores it.
 func TestMorphTo_WithoutTrashedExcludesSoftDeletedTargetsOnTheEagerPath(t *testing.T) {
 	query := newRelationQuery(t)
 	morphSurfaceSchema(t, query)
