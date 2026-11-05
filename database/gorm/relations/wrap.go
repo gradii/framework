@@ -182,6 +182,14 @@ type Builder interface {
 	DissociateRelation(parent any, relation string) error
 	CreateRelation(parent any, relation string, dest any, recorded ...PivotValue) error
 	CreateManyRelation(parent any, relation string, dests any, recorded ...PivotValue) error
+	// ForceCreateRelation / ForceCreateManyRelation are the no-pending forced-insert shells of the
+	// ForceCreate family: Laravel's HasOneOrMany::forceCreate (HasOneOrMany.php:414-419) and
+	// MorphOneOrMany::forceCreate (MorphOneOrMany.php:78-84) fold only the foreign key (and morph
+	// type) into the attribute array and never run setForeignAttributesForCreate's pending loop.
+	// They share CreateRelation's insert but stamp the key through SetRelationFKOnChildForced and
+	// persist on relationWriteSession (no WithAttributes pending copy).
+	ForceCreateRelation(parent any, relation string, dest any) error
+	ForceCreateManyRelation(parent any, relation string, dests any) error
 	FindOrNewRelation(parent any, relation string, id any, dest any) error
 	FirstOrNewRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any) error
 	FirstOrCreateRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any, recorded ...PivotValue) error
@@ -212,6 +220,8 @@ type Builder interface {
 	SaveManyRelationQuietly(parent any, relation string, children any, recorded ...PivotValue) error
 	CreateRelationQuietly(parent any, relation string, dest any) error
 	CreateManyRelationQuietly(parent any, relation string, dests any) error
+	ForceCreateRelationQuietly(parent any, relation string, dest any) error
+	ForceCreateManyRelationQuietly(parent any, relation string, dests any) error
 	AttachRelationOrFail(parent any, relation string, ids []any, recorded ...PivotValue) error
 	DetachRelationOrFail(parent any, relation string, ids []any) (int64, error)
 	SyncRelationOrFail(parent any, relation string, ids []any, recorded ...PivotValue) (*dbcontract.SyncResult, error)

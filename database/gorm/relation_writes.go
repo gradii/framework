@@ -394,6 +394,76 @@ func (r *OrmBuilder) CreateManyRelationQuietly(parent any, relation string, dest
 	return r.quietSession().CreateManyRelation(parent, relation, dests)
 }
 
+// ForceCreateRelation persists a new related row for the ForceCreate family. Laravel's
+// HasOneOrMany::forceCreate (vendor v12.55.1, HasOneOrMany.php:414-419) and MorphOneOrMany::
+// forceCreate (MorphOneOrMany.php:78-84) fold ONLY the foreign key (and the morph type) into the
+// attribute array — they never call setForeignAttributesForCreate, so a relation's WithAttributes
+// pending pair is deliberately NOT merged — then persist through the related model's forceCreate
+// and apply the inverse write-back. The port therefore runs the whole forced path on
+// relationWriteSession (no pendingAttributes copy, unlike relationCreateSession), stamps the FK /
+// morph type through relations.SetRelationFKOnChildForced and inserts. Only HasOneOrMany /
+// MorphOneOrMany carry forceCreate in Laravel — BelongsToMany and the through kinds expose none —
+// so an m2m kind is unsupported. Oracle v12.55.1, executed (/tmp/r13/forcecreate_probe.php):
+// forceCreate / forceCreateQuietly / forceCreateMany / forceCreateManyQuietly each insert without
+// the pending column, while create inserts it.
+func (r *OrmBuilder) ForceCreateRelation(parent any, relation string, dest any) error {
+	if !isValidParent(parent) {
+		return errors.OrmRelationParentNotPointer.Args(parent)
+	}
+	if !isValidParent(dest) {
+		return errors.OrmRelationParentNotPointer.Args(dest)
+	}
+	desc, err := relations.ResolveRelation(parent, relation)
+	if err != nil {
+		return err
+	}
+	switch desc.Kind {
+	case relKindHasOne, relKindHasMany, relKindMorphOne, relKindMorphMany:
+		if err := relations.SetRelationFKOnChildForced(r, r.writeInfo(desc, parent), parent, dest); err != nil {
+			return err
+		}
+		return r.relationWriteSession().Create(dest)
+	default:
+		return errors.OrmRelationKindNotSupported.Args("ForceCreate", relation, kindName(desc.Kind))
+	}
+}
+
+// ForceCreateManyRelation is the slice form of ForceCreateRelation —
+// HasOneOrMany::forceCreateMany (vendor v12.55.1, HasOneOrMany.php:466): one forced create per
+// record, each folding only the key (and morph type) into its attribute array.
+func (r *OrmBuilder) ForceCreateManyRelation(parent any, relation string, dests any) error {
+	rv := reflect.ValueOf(dests)
+	if rv.Kind() == reflect.Pointer {
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Slice {
+		return errors.OrmRelationUnsupported.Args(relation, fmt.Sprintf("%T", parent), "ForceCreateMany requires a slice")
+	}
+	for i := 0; i < rv.Len(); i++ {
+		elem := rv.Index(i)
+		if elem.Kind() != reflect.Pointer {
+			elem = elem.Addr()
+		}
+		if err := r.ForceCreateRelation(parent, relation, elem.Interface()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ForceCreateRelationQuietly is ForceCreateRelation with the model events suppressed —
+// HasOneOrMany::forceCreateQuietly (vendor v12.55.1, HasOneOrMany.php:427): the whole forced write
+// runs inside Model::withoutEvents, so it is otherwise ForceCreateRelation's.
+func (r *OrmBuilder) ForceCreateRelationQuietly(parent any, relation string, dest any) error {
+	return r.quietSession().ForceCreateRelation(parent, relation, dest)
+}
+
+// ForceCreateManyRelationQuietly is the slice form of ForceCreateRelationQuietly —
+// HasOneOrMany::forceCreateManyQuietly (vendor v12.55.1, HasOneOrMany.php:483).
+func (r *OrmBuilder) ForceCreateManyRelationQuietly(parent any, relation string, dests any) error {
+	return r.quietSession().ForceCreateManyRelation(parent, relation, dests)
+}
+
 // FindOrNewRelation finds the related row with primary key id. If absent, fills dest with a new
 // instance of the related model and pre-sets the FK (and morph type) — but does NOT persist.
 // For the BelongsToMany kinds the lookup is the pivot-joined relation read, a hit hydrates the

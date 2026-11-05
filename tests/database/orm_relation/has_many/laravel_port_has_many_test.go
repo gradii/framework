@@ -37,8 +37,9 @@ import (
 //     insert-first CreateOrFirst retry is staged with a real unique index whose violation the
 //     seeded winner row trips, after which the write-PDO re-read returns it.
 //   - The relation writer now has Make / MakeMany / CreateOrFirst / Upsert, and the relation
-//     object has ForceCreate (HasOneOrMany::forceCreate — the 1:1 alias of Create, since no
-//     mass-assignment guard exists to bypass), so the forceCreate test runs for real below.
+//     object has ForceCreate (HasOneOrMany::forceCreate — the same insert as Create except it
+//     drops a relation's withAttributes pending pair, since no mass-assignment guard exists to
+//     bypass), so the forceCreate test runs for real below.
 //   - The eager-constraint tests assert the internal whereIntegerInRaw/whereIn call on the relation
 //     query (oracle: inline `in (1, 2)` for the raw form versus bound `in (?, ?)` for whereIn); the
 //     Go eager loader is internal and exposes no constraint-level observable — skipped as PHP-only
@@ -185,9 +186,10 @@ func TestHasMany_ForceCreateMethodProperlyCreatesNewModel(t *testing.T) {
 	hasManySchema(t, query)
 	user := hasManySeedUser(t, query, 1)
 
-	// The Go ORM applies no guard, so the relation object's ForceCreate is the 1:1 alias of
-	// Create; the oracle (v12.55.1, executed; /tmp/lalign_write_quiet_force.php) measured the
-	// same events with the foreign key set.
+	// The Go ORM applies no guard, so the relation object's ForceCreate differs from Create only
+	// in dropping a relation's withAttributes pending pair (HasOneOrMany.php:414-419; none is
+	// recorded here); the oracle (v12.55.1, executed; /tmp/lalign_write_quiet_force.php)
+	// measured the same events with the foreign key set.
 	relation, ok := cloneRelationQuery(t, query).Related(&user, "Items").(contractsorm.HasManyRelation)
 	require.True(t, ok)
 

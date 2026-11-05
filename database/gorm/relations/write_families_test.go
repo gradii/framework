@@ -14,6 +14,9 @@ import (
 // statements as its loud counterpart — only the model events are suppressed. The oracle
 // (illuminate/database v12.55.1, executed; /tmp/lalign_write_quiet_force.php) measured
 // `insert into "qf_posts" ("title", "user_id") values (?, ?)` for both save and saveQuietly.
+// ForceCreate and Create compile the same INSERT only when no withAttributes pending pair is
+// recorded; with one, ForceCreate's forced-insert path drops it (HasOneOrMany.php:414-419) while
+// Create merges it — see relations/forcecreate_no_pending_test.go.
 // Event suppression itself is observer-driven and the recording transport registers no
 // observers, so it is asserted against a real database by the orm_relation write_families suite.
 
@@ -111,7 +114,7 @@ func TestWriteFamiliesQuiet_ForceCreateMatchesCreateSQL(t *testing.T) {
 	forceErr := wfBooksRelation(t, builder, &sqlUser{ID: 7}).ForceCreate(&sqlBook{UserID: 1})
 	force := wfQueries(recorder.take())
 
-	assert.Equal(t, loud, force, "forceCreate is the 1:1 alias of create")
+	assert.Equal(t, loud, force, "forceCreate runs the same INSERT as create when no pending attributes are recorded")
 	assert.Equal(t, loudErr == nil, forceErr == nil)
 }
 

@@ -220,9 +220,10 @@ func TestMorphOneOfMany_ForceCreateMorphType(t *testing.T) {
 	product := morphOneOfManySeedProduct(t, query)
 
 	// Laravel: $state = $product->states()->forceCreate(['state' => 'active']); the Go ORM has no
-	// mass-assignment guard, so the relation object's ForceCreate is the 1:1 alias of Create —
-	// with the morph override (MorphOneOrMany.php:78 / MorphMany.php:63) stamping the type, the
-	// oracle measured imageable_id 1 plus the parent's morph class.
+	// mass-assignment guard, so the relation object's ForceCreate differs from Create only in
+	// dropping a relation's withAttributes pending pair (MorphOneOrMany.php:78-84; none recorded
+	// here) — with the morph override (MorphOneOrMany.php:78 / MorphMany.php:63) stamping the
+	// type, the oracle measured imageable_id 1 plus the parent's morph class.
 	relation, ok := cloneRelationQuery(t, query).Related(&product, "States").(contractsorm.MorphManyRelation)
 	require.True(t, ok)
 

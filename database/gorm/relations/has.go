@@ -83,20 +83,21 @@ func (h *hasOneOrManyRelation) CreateQuietly(dest any) error {
 	return h.Builder.CreateRelationQuietly(h.parent, h.name, dest)
 }
 
-// ForceCreate persists dest with the foreign key (and morph type) stamped from the parent,
-// mirroring HasOneOrMany::forceCreate (HasOneOrMany.php:414) and its morph override
-// (MorphOneOrMany.php:78, which additionally stamps the morph type — a stamp the Go Create
-// path already applies for the morph kinds). Go has no mass-assignment guard, so Create is
-// already the unguarded write Laravel's forceCreate performs and this is a 1:1 alias of
-// Create. Shell: CreateRelation.
+// ForceCreate persists dest with the foreign key (and morph type) stamped from the parent and
+// WITHOUT merging the relation's withAttributes pending pair — HasOneOrMany::forceCreate
+// (HasOneOrMany.php:414-419) and its morph override (MorphOneOrMany.php:78-84, which additionally
+// stamps the morph type) fold only the key (and the morph type) into the attribute array and never
+// call setForeignAttributesForCreate's pending loop; the created child is still linked back to the
+// parent in memory. Go has no mass-assignment guard, so Create and ForceCreate differ only in that
+// pending merge, which ForceCreate deliberately drops. Shell: ForceCreateRelation.
 func (h *hasOneOrManyRelation) ForceCreate(dest any) error {
-	return h.Builder.CreateRelation(h.parent, h.name, dest)
+	return h.Builder.ForceCreateRelation(h.parent, h.name, dest)
 }
 
 // ForceCreateQuietly is ForceCreate with the model events suppressed —
-// HasOneOrMany::forceCreateQuietly (HasOneOrMany.php:427).
+// HasOneOrMany::forceCreateQuietly (HasOneOrMany.php:427). Shell: ForceCreateRelationQuietly.
 func (h *hasOneOrManyRelation) ForceCreateQuietly(dest any) error {
-	return h.Builder.CreateRelationQuietly(h.parent, h.name, dest)
+	return h.Builder.ForceCreateRelationQuietly(h.parent, h.name, dest)
 }
 
 func (h *hasOneOrManyRelation) CreateMany(dests any) error {
@@ -112,13 +113,13 @@ func (h *hasOneOrManyRelation) CreateManyQuietly(dests any) error {
 // ForceCreateMany is the slice form of ForceCreate — HasOneOrMany::forceCreateMany
 // (HasOneOrMany.php:466).
 func (h *hasOneOrManyRelation) ForceCreateMany(dests any) error {
-	return h.Builder.CreateManyRelation(h.parent, h.name, dests)
+	return h.Builder.ForceCreateManyRelation(h.parent, h.name, dests)
 }
 
 // ForceCreateManyQuietly is the slice form of ForceCreateQuietly —
 // HasOneOrMany::forceCreateManyQuietly (HasOneOrMany.php:483).
 func (h *hasOneOrManyRelation) ForceCreateManyQuietly(dests any) error {
-	return h.Builder.CreateManyRelationQuietly(h.parent, h.name, dests)
+	return h.Builder.ForceCreateManyRelationQuietly(h.parent, h.name, dests)
 }
 
 func (h *hasOneOrManyRelation) FindOrNew(id any, dest any) error {

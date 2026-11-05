@@ -39,8 +39,9 @@ import (
 //
 //   - The RelationWriter now has Make — HasOneOrMany::make's unsaved instance carrying the
 //     attributes with the parent key pre-set — so the make test runs for real below; the relation
-//     object's ForceCreate (HasOneOrMany::forceCreate, the 1:1 alias of Create — no guard exists
-//     to bypass) now covers the forceCreate test, so it runs for real below as well.
+//     object's ForceCreate (HasOneOrMany::forceCreate, the same insert as Create except it drops
+//     a relation's withAttributes pending pair — no guard exists to bypass) now covers the
+//     forceCreate test, so it runs for real below as well.
 //   - The relation is()/isNot() comparison now runs on the relation object Query.Related returns
 //     (ComparesRelatedModels' key + table + connection rules), so the is tests run for real below.
 
@@ -327,9 +328,10 @@ func TestHasOne_ForceCreateMethodProperlyCreatesNewModel(t *testing.T) {
 
 	// Laravel: $relation->forceCreate(['name' => 'taylor']) — the related model is force-created
 	// with the attributes plus foreign_key = parent key (1), bypassing the mass-assignment guard.
-	// The Go ORM keeps no guard, so the relation object's ForceCreate is the 1:1 alias of Create;
-	// the oracle (v12.55.1, executed; /tmp/lalign_write_quiet_force.php) measured the same
-	// saving/creating/created/saved events with the foreign key set.
+	// The Go ORM keeps no guard, so the relation object's ForceCreate differs from Create only in
+	// dropping a relation's withAttributes pending pair (HasOneOrMany.php:414-419; none is
+	// recorded here); the oracle (v12.55.1, executed; /tmp/lalign_write_quiet_force.php)
+	// measured the same saving/creating/created/saved events with the foreign key set.
 	relation, ok := cloneRelationQuery(t, query).Related(&user, "Phone").(contractsorm.HasOneRelation)
 	require.True(t, ok)
 

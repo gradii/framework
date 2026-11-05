@@ -1,12 +1,15 @@
 package write_families
 
 import (
+	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	frameworkdb "github.com/gradii/framework/database/db"
 )
 
 // This file ports the quiet and forceCreate write families of Laravel's HasOneOrMany and
@@ -118,6 +121,12 @@ func wfSchema(t *testing.T, query contractsorm.Query) {
 		`create table wf_post_strict (post_id integer, tag_id integer, note text not null)`,
 		`create table wf_post_guard (post_id integer, tag_id integer)`,
 		`create trigger wf_post_guard_no_delete before delete on wf_post_guard begin select raise(abort, 'detach refused'); end`,
+		// Candidate 41 (round 13): the pending-pair fixtures carry a nullable flag column the
+		// relation declarations seed through WithAttributes("flag", true).
+		`create table wf_pend_users (id integer primary key autoincrement, name text)`,
+		`create table wf_pend_posts (id integer primary key autoincrement, user_id integer, title text, flag integer)`,
+		`create table wf_pend_phones (id integer primary key autoincrement, user_id integer, name text, flag integer)`,
+		`create table wf_pend_images (id integer primary key autoincrement, imageable_id integer, imageable_type text, url text, flag integer)`,
 	)
 }
 
@@ -313,10 +322,10 @@ func TestWriteFamilies_CreateManyQuietlySuppressesEvents(t *testing.T) {
 
 // Oracle: forceCreate fires the same four events, stamps the foreign key and — unlike create —
 // does not merge a pending WithAttributes pair: HasOneOrMany::forceCreate (:414-419) folds only the
-// key into the attribute array and never runs setForeignAttributesForCreate's pending loop.
-// Divergence: the Go ForceCreate family aliases CreateRelation, whose persist session
-// (relationCreateSession, and now SetRelationFKOnChild) does carry the pending pair, so the port
-// merges it here — unlike the oracle.
+// key into the attribute array and never runs setForeignAttributesForCreate's pending loop; the
+// morph override MorphOneOrMany.php:78-84 does the same for the morph type. The Go ForceCreate
+// family now routes through ForceCreateRelation -> SetRelationFKOnChildForced on relationWriteSession,
+// so it drops the pending pair the same way (see TestWriteFamilies_ForceCreateDropsPendingPair).
 func TestWriteFamilies_ForceCreateFiresEventsAndStampsForeignKey(t *testing.T) {
 	query := newRelationQuery(t)
 	wfSchema(t, query)
@@ -462,4 +471,132 @@ func TestWriteFamilies_BelongsToManySaveManyQuietlySuppressesEvents(t *testing.T
 
 	assert.Zero(t, events.quietTotal())
 	assert.Len(t, wfAttachedTagIDs(t, query, &post, "Tags"), 2)
+}
+
+// --- candidate 41 (round 13): the ForceCreate family drops the pending pair ---------------------
+
+// The pending-pair fixture: these three write relations declare WithAttributes("flag", true) on the
+// relation query, the way the corpus models a withAttributes() call (the attribute rides OnQuery).
+type wfPendingUser struct {
+	ID uint64 `gorm:"column:id;primaryKey;autoIncrement"`
+}
+
+func (wfPendingUser) TableName() string { return "wf_pend_users" }
+
+func (wfPendingUser) Relations() map[string]contractsorm.Relation {
+	pending := func(query contractsorm.Query) contractsorm.Query {
+		return query.WithAttributes("flag", true)
+	}
+
+	return map[string]contractsorm.Relation{
+		"Posts": contractsorm.HasMany{Related: &wfPendingPost{}, ForeignKey: "user_id", OnQuery: pending},
+		"Phone": contractsorm.HasOne{Related: &wfPendingPhone{}, ForeignKey: "user_id", OnQuery: pending},
+		"Image": contractsorm.MorphOne{Related: &wfPendingImage{}, Name: "imageable", OnQuery: pending},
+	}
+}
+
+type wfPendingPost struct {
+	ID     uint64 `gorm:"column:id;primaryKey;autoIncrement"`
+	UserID uint64 `gorm:"column:user_id"`
+	Title  string `gorm:"column:title"`
+	Flag   bool   `gorm:"column:flag"`
+}
+
+func (wfPendingPost) TableName() string { return "wf_pend_posts" }
+
+type wfPendingPhone struct {
+	ID     uint64 `gorm:"column:id;primaryKey;autoIncrement"`
+	UserID uint64 `gorm:"column:user_id"`
+	Name   string `gorm:"column:name"`
+	Flag   bool   `gorm:"column:flag"`
+}
+
+func (wfPendingPhone) TableName() string { return "wf_pend_phones" }
+
+type wfPendingImage struct {
+	ID            uint64 `gorm:"column:id;primaryKey;autoIncrement"`
+	ImageableID   uint64 `gorm:"column:imageable_id"`
+	ImageableType string `gorm:"column:imageable_type"`
+	URL           string `gorm:"column:url"`
+	Flag          bool   `gorm:"column:flag"`
+}
+
+func (wfPendingImage) TableName() string { return "wf_pend_images" }
+
+// wfSeedPendingUser inserts the fixture user.
+func wfSeedPendingUser(t *testing.T, query contractsorm.Query, id uint64) wfPendingUser {
+	t.Helper()
+
+	user := wfPendingUser{ID: id}
+	require.NoError(t, cloneRelationQuery(t, query).Model(&wfPendingUser{}).Create(&user))
+
+	return user
+}
+
+// wfLastInsertSQL returns the compiled SQL of the most recent INSERT in the context's query log.
+func wfLastInsertSQL(t *testing.T, ctx context.Context) string {
+	t.Helper()
+
+	logs := frameworkdb.GetQueryLog(ctx)
+	for index := len(logs) - 1; index >= 0; index-- {
+		if strings.HasPrefix(logs[index].Query, "insert ") {
+			return logs[index].Query
+		}
+	}
+	t.Fatalf("no INSERT in the query log")
+
+	return ""
+}
+
+// Oracle (v12.55.1, executed; /tmp/r13/forcecreate_probe.php): create merges the relation's pending
+// WithAttributes pair into the related INSERT, but every member of the ForceCreate family drops it
+// — HasOneOrMany::forceCreate folds only the key into the attribute array (:414-419) and the morph
+// override only the key and the morph type (MorphOneOrMany.php:78-84), never running
+// setForeignAttributesForCreate's pending loop. This pins the has-many (loud + quiet, single + many),
+// has-one and morph arms at the SQL level.
+func TestWriteFamilies_ForceCreateDropsPendingPair(t *testing.T) {
+	query := newRelationQuery(t)
+	wfSchema(t, query)
+	user := wfSeedPendingUser(t, query, 1)
+
+	ctx := frameworkdb.EnableQueryLog(context.Background())
+	wc, ok := cloneRelationQuery(t, query).(contractsorm.QueryWithContext)
+	require.True(t, ok, "the ORM query must support WithContext")
+
+	posts, ok := wc.WithContext(ctx).Related(&user, "Posts").(contractsorm.HasManyRelation)
+	require.True(t, ok)
+
+	created := wfPendingPost{Title: "c"}
+	require.NoError(t, posts.Create(&created))
+	assert.Contains(t, wfLastInsertSQL(t, ctx), `"flag"`, "create merges the pending pair")
+
+	forced := wfPendingPost{Title: "f"}
+	require.NoError(t, posts.ForceCreate(&forced))
+	assert.NotContains(t, wfLastInsertSQL(t, ctx), `"flag"`, "forceCreate drops the pending pair")
+
+	quiet := wfPendingPost{Title: "q"}
+	require.NoError(t, posts.ForceCreateQuietly(&quiet))
+	assert.NotContains(t, wfLastInsertSQL(t, ctx), `"flag"`, "forceCreateQuietly drops the pending pair")
+
+	require.NoError(t, posts.ForceCreateMany([]*wfPendingPost{{Title: "m"}}))
+	assert.NotContains(t, wfLastInsertSQL(t, ctx), `"flag"`, "forceCreateMany drops the pending pair")
+
+	require.NoError(t, posts.ForceCreateManyQuietly([]*wfPendingPost{{Title: "mq"}}))
+	assert.NotContains(t, wfLastInsertSQL(t, ctx), `"flag"`, "forceCreateManyQuietly drops the pending pair")
+
+	images, ok := wc.WithContext(ctx).Related(&user, "Image").(contractsorm.MorphOneRelation)
+	require.True(t, ok)
+
+	image := wfPendingImage{URL: "u"}
+	require.NoError(t, images.ForceCreate(&image))
+	imageSQL := wfLastInsertSQL(t, ctx)
+	assert.Contains(t, imageSQL, `"imageable_type"`, "the forced morph INSERT still stamps the morph type")
+	assert.NotContains(t, imageSQL, `"flag"`, "the forced morph INSERT drops the pending pair")
+
+	phone, ok := wc.WithContext(ctx).Related(&user, "Phone").(contractsorm.HasOneRelation)
+	require.True(t, ok)
+
+	handset := wfPendingPhone{Name: "n"}
+	require.NoError(t, phone.ForceCreate(&handset))
+	assert.NotContains(t, wfLastInsertSQL(t, ctx), `"flag"`, "the forced has-one INSERT drops the pending pair")
 }

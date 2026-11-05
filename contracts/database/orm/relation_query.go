@@ -155,13 +155,15 @@ type HasOneOrManyRelation interface {
 	CreateManyQuietly(dests any) error
 	// ForceCreate persists a new related row without the mass-assignment guard —
 	// HasOneOrMany::forceCreate (:414), overridden by MorphOneOrMany::forceCreate (:78) and
-	// MorphMany::forceCreate (:63) to stamp the morph type. The Go create path applies no guard
-	// and already stamps the morph type, so this is the 1:1 alias of Create; the oracle measured
-	// forceCreate firing the same saving/creating/created/saved events with the foreign key set,
-	// a guarded attribute written where create silently discards it, and a pending
-	// WithAttributes pair NOT merged (Laravel's forceCreate skips setForeignAttributesForCreate's
-	// pending loop, :414-419; the Go write shells persist through a fresh session, so they drop
-	// pending the same way).
+	// MorphMany::forceCreate (:63) to stamp the morph type. Go applies no guard, so the only
+	// behavioural difference from Create is that ForceCreate deliberately does NOT merge the
+	// relation's withAttributes pending pair: Laravel's forced-insert paths fold only the foreign
+	// key (and the morph type) into the attribute array and never run setForeignAttributesForCreate's
+	// pending loop (:414-419). The created child is still linked back to the parent in memory. The
+	// oracle measured forceCreate firing the same saving/creating/created/saved events with the
+	// foreign key set, a guarded attribute written where create silently discards it, and the pending
+	// WithAttributes pair NOT merged (v12.55.1, executed; /tmp/r13/forcecreate_probe.php: forceCreate
+	// omits the pending column while create carries it).
 	ForceCreate(dest any) error
 	// ForceCreateQuietly is ForceCreate with every model event suppressed —
 	// HasOneOrMany::forceCreateQuietly (:427).
