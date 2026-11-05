@@ -1279,16 +1279,26 @@ func (r *OrmBuilder) oneOfManyJoin(builder *OrmBuilder, desc *relationDescriptor
 			}
 		}
 
-		// The related model's soft-delete scope reaches every aggregate level the way Laravel's
-		// global scopes do.
-		r.applySubquerySoftDelete(sub, desc.RelatedTable, desc.RelatedModel)
+		// The related model's soft-delete predicate and its remaining global scopes reach every
+		// aggregate level the way Laravel's scopes do: the SoftDeletingScope first (the trait boots
+		// before the model's own scopes), then each user scope in declaration order; the relation's
+		// own removals - its OnQuery's withTrashed()/onlyTrashed()/withoutGlobalScope() - govern
+		// both, the way mergeConstraintsFrom folds the relation's removedScopes into the ofMany
+		// subquery. The caller's existence/count closure does NOT reach this subquery (oracle,
+		// /tmp/r13v/ofmany_probe.php + ofmany2_probe.php + ofmany3_probe.php: the aggregate carries
+		// `and "om_posts"."deleted_at" is null and "published" = ?`, dropping either under the
+		// relation's removals; a caller's withoutGlobalScopes() removes them only from the outer
+		// query).
+		removals := scopeRemovalsOf(builder)
+		r.applySubquerySoftDelete(sub, desc.RelatedTable, desc.RelatedModel, removals)
+		r.applyRelatedGlobalScopes(sub, desc.RelatedModel, removals)
 
 		// A soft-deletable through model's predicate reaches every aggregate level too, after the
 		// related model's: each level performs the through join, so the through table is filtered
 		// there the way performJoin's named scope filters the relation read (oracle,
 		// /tmp/r10/through_softdelete_probe.php N9/N10 - the through predicate sits in the
 		// aggregate subquery and on the outer query).
-		r.applySubquerySoftDelete(sub, desc.ThroughTable, desc.ThroughModel)
+		r.applySubquerySoftDelete(sub, desc.ThroughTable, desc.ThroughModel, subqueryScopeRemovals{})
 
 		sub.GroupByRaw(strings.Join(groupCols, ", "), nil)
 		levelSQL, levelArgs = sub.ToSelectSQL()

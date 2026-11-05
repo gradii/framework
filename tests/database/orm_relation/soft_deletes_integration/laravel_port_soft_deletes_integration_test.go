@@ -113,6 +113,26 @@ func (softDeletesTestUserWithTrashedPosts) Relations() map[string]contractsorm.R
 	}
 }
 
+// softDeletesTestUserCount is the withCount read DTO: the users columns plus the posts_count
+// aggregate alias the corpus reads back as $user->posts_count. It re-declares the Posts relation so
+// WithCount can resolve it; the alias column is not a real users column, so the plain reads use
+// softDeletesTestUser.
+type softDeletesTestUserCount struct {
+	databaseorm.SoftDeletes
+
+	ID         uint   `gorm:"column:id"`
+	Email      string `gorm:"column:email"`
+	PostsCount int64  `gorm:"column:posts_count"`
+}
+
+func (softDeletesTestUserCount) TableName() string { return "users" }
+
+func (softDeletesTestUserCount) Relations() map[string]contractsorm.Relation {
+	return map[string]contractsorm.Relation{
+		"Posts": contractsorm.HasMany{Related: &softDeletesTestPost{}, ForeignKey: "user_id"},
+	}
+}
+
 // testUserWithoutSoftDelete ports TestUserWithoutSoftDelete: the same users table without the
 // soft-delete field, so its deletes are hard deletes.
 type testUserWithoutSoftDelete struct {
@@ -1203,8 +1223,34 @@ func TestSoftDeletesIntegration_WhereHasWithDeletedRelationship(t *testing.T) {
 
 func TestSoftDeletesIntegration_WhereHasWithNestedDeletedRelationshipAndOnlyTrashedCondition(t *testing.T) {
 	// Laravel: the post is soft-deleted, then whereHas('posts', onlyTrashed()) and
-	// whereHas('posts', withTrashed()) each match abigail.
-	t.Skip("our ORM diverges: an onlyTrashed()/withTrashed() callback inside WhereHas does not reach the existence subquery — applyRelationScope carries only where clauses and the subquery always adds the default `is null` predicate; probe: whereHas('posts', onlyTrashed) and whereHas('posts', withTrashed) each count 0 where Laravel counts 1 and 1 (oracle: the subquery predicate becomes `is not null` under onlyTrashed and is dropped under withTrashed)")
+	// whereHas('posts', withTrashed()) each match abigail - the closure's removals reach the
+	// existence subquery. Oracle: illuminate/database v12.55.1, /tmp/r13/scope_removal_probe5.php
+	// G3 - whereHas('posts', onlyTrashed()) compiles `... and "sr_posts"."deleted_at" is not null
+	// and "published" = ?`; withTrashed() drops the predicate entirely.
+	query := newRelationQuery(t)
+	softDeletesTestSchema(t, query)
+	softDeletesCreateUsers(t, query)
+
+	abigail := softDeletesFindUser(t, query, "abigailotwell@gmail.com")
+	post := softDeletesCreatePost(t, query, &abigail, "First Title")
+	_, err := cloneRelationQuery(t, query).Delete(&post)
+	require.NoError(t, err)
+
+	users := []softDeletesTestUser{}
+	require.NoError(t, cloneRelationQuery(t, query).Model(&softDeletesTestUser{}).Has("Posts").Get(&users))
+	assert.Len(t, users, 0)
+
+	users = nil
+	require.NoError(t, cloneRelationQuery(t, query).Model(&softDeletesTestUser{}).WhereHas("Posts", func(q contractsorm.Query) contractsorm.Query {
+		return q.OnlyTrashed()
+	}).Get(&users))
+	assert.Len(t, users, 1)
+
+	users = nil
+	require.NoError(t, cloneRelationQuery(t, query).Model(&softDeletesTestUser{}).WhereHas("Posts", func(q contractsorm.Query) contractsorm.Query {
+		return q.WithTrashed()
+	}).Get(&users))
+	assert.Len(t, users, 1)
 }
 
 func TestSoftDeletesIntegration_WhereHasWithNestedDeletedRelationship(t *testing.T) {
@@ -1240,14 +1286,58 @@ func TestSoftDeletesIntegration_WhereDoesntHaveWithNestedDeletedRelationship(t *
 
 func TestSoftDeletesIntegration_WhereHasWithNestedDeletedRelationshipAndWithTrashedCondition(t *testing.T) {
 	// Laravel: SoftDeletesTestUserWithTrashedPosts' posts() carries withTrashed(), so a soft-deleted
-	// post still satisfies has('posts').
-	t.Skip("our ORM diverges: a relation's default scope (OnQuery) is lost inside the existence subquery — the withTrashed() flag the callback sets is not carried and the subquery keeps the default `is null`; probe: Has(\"Posts\") counts 0 where Laravel counts 1")
+	// post still satisfies has('posts') - the relation's default query reaches the subquery. Oracle:
+	// /tmp/r13/scope_removal_probe6.php (SrDefaultTrashed::whereHas(posts) keeps only "published").
+	query := newRelationQuery(t)
+	softDeletesTestSchema(t, query)
+	softDeletesCreateUsers(t, query)
+
+	abigail := softDeletesTestUserWithTrashedPosts{}
+	require.NoError(t, cloneRelationQuery(t, query).Model(&softDeletesTestUserWithTrashedPosts{}).Where("email", "abigailotwell@gmail.com").First(&abigail))
+
+	post := softDeletesTestPost{Title: "First Title"}
+	require.NoError(t, cloneRelationQuery(t, query).Relation(&abigail, "Posts").Create(&post))
+	_, err := cloneRelationQuery(t, query).Delete(&post)
+	require.NoError(t, err)
+
+	users := []softDeletesTestUserWithTrashedPosts{}
+	require.NoError(t, cloneRelationQuery(t, query).Model(&softDeletesTestUserWithTrashedPosts{}).Has("Posts").Get(&users))
+	assert.Len(t, users, 1)
 }
 
 func TestSoftDeletesIntegration_WithCountWithNestedDeletedRelationshipAndOnlyTrashedCondition(t *testing.T) {
-	// Laravel: three posts (one trashed) and withCount variants — plain 2, onlyTrashed 1, withTrashed
-	// 3, withTrashed+where 1, where 0 — each ordered by the postsCount alias.
-	t.Skip("our ORM diverges: WithCount scoping callbacks lose onlyTrashed()/withTrashed() (only where clauses reach the count subquery, which always adds the default `is null`), so the counts are 2/2/0 where Laravel's are 1/3/1 (probe; the plain count 2 and the un-trashed where count 0 do match) — and OrderBy(\"postsCount\") renders `order by \"postsCount\"`, which this sqlite driver rejects with `no such column: \"postsCount\"` where Laravel's sqlite resolves the double-quoted name as a constant")
+	// Laravel: three posts (one trashed) and withCount variants - plain 2, onlyTrashed 1,
+	// withTrashed 3, withTrashed+where 1, where 0. The count subquery shares the existence builder, so
+	// a closure's removals reach it too (oracle: /tmp/r13/scope_removal_probe5.php withCount G1). The
+	// corpus's orderBy('postsCount') is omitted: it is a separate sqlite ENGINE divergence, not an ORM
+	// one. The port compiles the same Laravel-identical `order by "postsCount" desc` the oracle emits,
+	// but the framework's sqlite driver (github.com/ncruces/go-sqlite3, DQS off) rejects the unknown
+	// double-quoted identifier with `sqlite3: SQL logic error: no such column: "postsCount" - should
+	// this be a string literal in single-quotes?`, where pdo_sqlite resolves it to a constant. The
+	// removals assertions below are unaffected either way (verified: /tmp/r13v/probe.php alias rows).
+	query := newRelationQuery(t)
+	softDeletesTestSchema(t, query)
+	softDeletesCreateUsers(t, query)
+
+	abigail := softDeletesFindUser(t, query, "abigailotwell@gmail.com")
+	post1 := softDeletesCreatePost(t, query, &abigail, "First Title")
+	_, err := cloneRelationQuery(t, query).Delete(&post1)
+	require.NoError(t, err)
+	softDeletesCreatePost(t, query, &abigail, "Second Title")
+	softDeletesCreatePost(t, query, &abigail, "Third Title")
+
+	countPosts := func(rels ...any) int64 {
+		user := softDeletesTestUserCount{}
+		require.NoError(t, cloneRelationQuery(t, query).Model(&softDeletesTestUserCount{}).WithCount(rels...).First(&user))
+
+		return user.PostsCount
+	}
+
+	assert.Equal(t, int64(2), countPosts("Posts"))
+	assert.Equal(t, int64(1), countPosts(contractsorm.RelationCount{Name: "Posts", Callback: func(q contractsorm.Query) contractsorm.Query { return q.OnlyTrashed() }}))
+	assert.Equal(t, int64(3), countPosts(contractsorm.RelationCount{Name: "Posts", Callback: func(q contractsorm.Query) contractsorm.Query { return q.WithTrashed() }}))
+	assert.Equal(t, int64(1), countPosts(contractsorm.RelationCount{Name: "Posts", Callback: func(q contractsorm.Query) contractsorm.Query { return q.WithTrashed().Where("title", "First Title") }}))
+	assert.Equal(t, int64(0), countPosts(contractsorm.RelationCount{Name: "Posts", Callback: func(q contractsorm.Query) contractsorm.Query { return q.Where("title", "First Title") }}))
 }
 
 func TestSoftDeletesIntegration_OrWhereWithSoftDeleteConstraint(t *testing.T) {
@@ -1396,8 +1486,25 @@ func TestSoftDeletesIntegration_MorphToNonSoftDeletingModel(t *testing.T) {
 
 func TestSoftDeletesIntegration_SelfReferencingRelationshipWithSoftDeletes(t *testing.T) {
 	// Laravel: abigail's self_referencing (hasMany(self, user_id)->onlyTrashed()) holds taylor; then
-	// whereHas('self_referencing') must count one.
-	t.Skip("our ORM diverges: a relation's onlyTrashed() default scope is lost in the existence subquery — probe: WhereHas(\"SelfReferencing\") counts 0 where Laravel counts 1, although the Related read path (which carries the scope) returns taylor, and taylor's own list is empty")
+	// whereHas('self_referencing') must count one - the relation's onlyTrashed() default reaches the
+	// existence subquery (oracle: /tmp/r13/scope_removal_probe6.php G4, the onlyTrashed self relation
+	// compiles `... "laravel_reserved_0"."deleted_at" is not null`).
+	query := newRelationQuery(t)
+	softDeletesTestSchema(t, query)
+	taylor, abigail := softDeletesCreateUsers(t, query)
+
+	self := []softDeletesTestUser{}
+	require.NoError(t, cloneRelationQuery(t, query).Related(&abigail, "SelfReferencing").Get(&self))
+	require.Len(t, self, 1)
+	assert.Equal(t, taylor.ID, self[0].ID)
+
+	taylorSelf := []softDeletesTestUser{}
+	require.NoError(t, cloneRelationQuery(t, query).Related(&taylor, "SelfReferencing").Get(&taylorSelf))
+	assert.Len(t, taylorSelf, 0)
+
+	count, err := cloneRelationQuery(t, query).Model(&softDeletesTestUser{}).WhereHas("SelfReferencing").Count()
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), count)
 }
 
 func TestSoftDeletesIntegration_RelationEagerLoadAppliesSoftDelete(t *testing.T) {

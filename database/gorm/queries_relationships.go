@@ -11,6 +11,7 @@ package gorm
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -584,8 +585,9 @@ func (r *OrmBuilder) compileExistenceSubqueryIn(desc *relationDescriptor, callba
 	// model's own wheres, its global scopes and its soft-delete predicate. Like the closure, the
 	// caller's operator/count ride down to the final segment: hasNested builds every earlier
 	// segment as a plain whereHas, so only the leaf clause carries the count comparison.
+	var callbackScoped *OrmBuilder
 	if desc.Nested == nil {
-		r.applyRelationScope(builder, callback)
+		callbackScoped = r.applyRelationScope(builder, callback)
 	} else {
 		nested, _, err := r.compileExistenceSubqueryIn(desc.Nested, callback, fromString, relatedQualifier, leafOperator, leafCount)
 		if err != nil {
@@ -603,17 +605,22 @@ func (r *OrmBuilder) compileExistenceSubqueryIn(desc *relationDescriptor, callba
 		appendWhereClauses(builder, relationScoped.query)
 	}
 
-	// Laravel builds the subquery from the related model's fresh query, so the related model's
-	// global scopes filter inside the exists body, after the relation's constraints and before the
-	// soft-delete predicate - the order the oracle pins.
-	r.applyRelatedGlobalScopes(builder, desc.RelatedModel)
+	// The removals the relation's default query and the caller's closure recorded land on one
+	// subquery builder, the way Laravel merges the relation's removedScopes into the closure's
+	// builder, so both govern the related model's scopes inside the exists body.
+	removals := scopeRemovalsOf(relationScoped).merge(scopeRemovalsOf(callbackScoped))
 
-	r.applySubquerySoftDelete(builder, relatedQualifier, desc.RelatedModel)
+	// Laravel applies the related model's deferred global scopes in registration order: the
+	// SoftDeletingScope first (the SoftDeletes trait boots before the model's own scopes), then each
+	// user scope - the order the oracle pins (/tmp/r13/scope_removal_probe5.php G1:
+	// `... and "sr_posts"."deleted_at" is null and "published" = ?`).
+	r.applySubquerySoftDelete(builder, relatedQualifier, desc.RelatedModel, removals)
+	r.applyRelatedGlobalScopes(builder, desc.RelatedModel, removals)
 
 	// A soft-deletable through model filters the through table inside the existence body too, after
 	// the related predicate - performJoin adds its named scope to the existence subquery (oracle,
 	// /tmp/r10/through_softdelete_probe.php N12/N13). A no-op for every non-through kind.
-	r.applySubquerySoftDelete(builder, desc.ThroughTable, desc.ThroughModel)
+	r.applySubquerySoftDelete(builder, desc.ThroughTable, desc.ThroughModel, subqueryScopeRemovals{})
 
 	// addHasWhere merges the relation query's own constraints - the wherePivot scopes - into the
 	// existence query after the caller's closure ran, so the pivot filter binds last, after a
@@ -656,12 +663,13 @@ func (r *OrmBuilder) compileMorphExistenceSubquery(desc *relationDescriptor, mor
 	if joinSQL != "" {
 		builder.JoinRaw(joinSQL, joinArgs, "inner")
 	}
-	r.applyRelationScope(builder, callback)
+	callbackScoped := r.applyRelationScope(builder, callback)
 	if relationScoped != nil {
 		appendWhereClauses(builder, relationScoped.query)
 	}
-	r.applyRelatedGlobalScopes(builder, desc.RelatedModel)
-	r.applySubquerySoftDelete(builder, desc.RelatedTable, desc.RelatedModel)
+	removals := scopeRemovalsOf(relationScoped).merge(scopeRemovalsOf(callbackScoped))
+	r.applySubquerySoftDelete(builder, desc.RelatedTable, desc.RelatedModel, removals)
+	r.applyRelatedGlobalScopes(builder, desc.RelatedModel, removals)
 
 	return builder
 }
@@ -1058,13 +1066,13 @@ func (r *OrmBuilder) compileMorphToExistenceSubquery(desc *relationDescriptor, r
 	if joinSQL != "" {
 		builder.JoinRaw(joinSQL, joinArgs, "inner")
 	}
-	r.applyRelationScope(builder, callback)
+	callbackScoped := r.applyRelationScope(builder, callback)
 	if relationScoped != nil {
 		appendWhereClauses(builder, relationScoped.query)
 	}
-	r.applyRelatedGlobalScopes(builder, relatedModel)
-
-	r.applySubquerySoftDelete(builder, relatedTable, relatedModel)
+	removals := scopeRemovalsOf(relationScoped).merge(scopeRemovalsOf(callbackScoped))
+	r.applySubquerySoftDelete(builder, relatedTable, relatedModel, removals)
+	r.applyRelatedGlobalScopes(builder, relatedModel, removals)
 
 	return builder
 }
@@ -1126,13 +1134,59 @@ func (r *OrmBuilder) relatedChild(table string, column string, values []any) *Or
 	return child
 }
 
+// subqueryScopeRemovals carries the global-scope-removal state a relation's default query (OnQuery)
+// and the caller's existence/count closure leave on the subquery builder, so the related model's
+// soft-delete predicate and its remaining global scopes honour it the way Laravel's subquery builder
+// does. Laravel runs the closure on the subquery (Builder::has -> callScope) and merges the relation's
+// own removals (addHasWhere -> mergeConstraintsFrom -> withoutGlobalScopes($from->removedScopes())),
+// so both sets land on one builder and every deferred scope is applied on top of them: a name (or the
+// port's "*" for withoutGlobalScopes()) drops exactly that scope, withTrashed() drops the
+// SoftDeletingScope, and onlyTrashed() replaces it with "is not null".
+type subqueryScopeRemovals struct {
+	names       []string
+	withTrashed bool
+	onlyTrashed bool
+}
+
+// removes reports whether the named scope was removed - by its own name or, through the port's "*"
+// wildcard, by a withoutGlobalScopes() that dropped every scope.
+func (s subqueryScopeRemovals) removes(name string) bool {
+	return slices.Contains(s.names, "*") || slices.Contains(s.names, name)
+}
+
+// scopeRemovalsOf collects the removal state a relation callback or OnQuery left on its scoped
+// builder. A nil builder (no callback, no default query) removes nothing.
+func scopeRemovalsOf(scoped *OrmBuilder) subqueryScopeRemovals {
+	if scoped == nil {
+		return subqueryScopeRemovals{}
+	}
+
+	return subqueryScopeRemovals{
+		names:       append([]string(nil), scoped.conditions.withoutGlobalScopes...),
+		withTrashed: scoped.conditions.withTrashed,
+		onlyTrashed: scoped.conditions.onlyTrashed,
+	}
+}
+
+// merge folds other's removals into s - the closure's and the relation default's sets both apply to
+// one subquery builder in Laravel, so a name from either removes the scope and a trashed flag from
+// either governs the soft-delete predicate (onlyTrashed winning over withTrashed, as the whereNotNull
+// the onlyTrashed macro adds does).
+func (s subqueryScopeRemovals) merge(other subqueryScopeRemovals) subqueryScopeRemovals {
+	s.names = append(s.names, other.names...)
+	s.withTrashed = s.withTrashed || other.withTrashed
+	s.onlyTrashed = s.onlyTrashed || other.onlyTrashed
+
+	return s
+}
+
 // applySubquerySoftDelete adds the related model's "not soft deleted" predicate inside an existence
 // subquery. Laravel applies the related model's SoftDeletingScope to the subquery, and the compiled
 // relation read (applySoftDelete) already filters deleted rows, so without this an existence check
 // would match a parent whose only related rows are soft-deleted. Only the framework's own soft-delete
 // type is handled: a related model still declaring gorm.DeletedAt is left to GORM, exactly as on every
 // other compiled path.
-func (r *OrmBuilder) applySubquerySoftDelete(builder *querybuilder.Builder, table string, model any) {
+func (r *OrmBuilder) applySubquerySoftDelete(builder *querybuilder.Builder, table string, model any, removals subqueryScopeRemovals) {
 	if !usesFrameworkSoftDeleteModel(model) {
 		return
 	}
@@ -1142,9 +1196,18 @@ func (r *OrmBuilder) applySubquerySoftDelete(builder *querybuilder.Builder, tabl
 		return
 	}
 
-	// A structured where, so the grammar compiles Laravel's lowercase "is null" through
-	// compileWhereNull instead of rendering a raw fragment's own casing.
-	builder.WhereNull(table+"."+column, core.BooleanAnd, false)
+	// The predicate is a global scope on the subquery builder, so a withTrashed()/onlyTrashed() the
+	// relation's default query or the caller's closure left on it - or a withoutGlobalScope of the
+	// SoftDeletingScope name / withoutGlobalScopes() - governs it as applySoftDelete governs the
+	// main-path predicate: withTrashed() and withoutGlobalScope(SoftDeletingScope) drop it,
+	// onlyTrashed() replaces it with "is not null".
+	if !removals.onlyTrashed && (removals.withTrashed || removals.removes(contractsorm.SoftDeletingScope)) {
+		return
+	}
+
+	// A structured where, so the grammar compiles Laravel's lowercase "is null"/"is not null"
+	// through compileWhereNull instead of rendering a raw fragment's own casing.
+	builder.WhereNull(table+"."+column, core.BooleanAnd, removals.onlyTrashed)
 }
 
 // applyRelatedGlobalScopes folds the related model's global scopes into an existence subquery.
@@ -1154,7 +1217,7 @@ func (r *OrmBuilder) applySubquerySoftDelete(builder *querybuilder.Builder, tabl
 // relation's constraints, each in its declaration order - the order addGlobalScopes gives the
 // scopes of a top-level query - and each is regrouped the way the callScope addGlobalScopes runs it,
 // so a scope's or-chain becomes its own nested group before the next scope's clauses land.
-func (r *OrmBuilder) applyRelatedGlobalScopes(builder *querybuilder.Builder, relatedModel any) {
+func (r *OrmBuilder) applyRelatedGlobalScopes(builder *querybuilder.Builder, relatedModel any, removals subqueryScopeRemovals) {
 	scopes := relatedGlobalScopes(relatedModel)
 	if len(scopes) == 0 {
 		return
@@ -1163,10 +1226,17 @@ func (r *OrmBuilder) applyRelatedGlobalScopes(builder *querybuilder.Builder, rel
 	scoped := r.fresh()
 	scopedWhereCount := 0
 	scopedBindingCount := 0
-	for _, scope := range scopes {
+	for _, globalScope := range scopes {
+		// A scope the relation's default query or the caller's closure removed by name - or, for the
+		// "*" wildcard withoutGlobalScopes(), every scope - is skipped, the way withoutGlobalScope
+		// unsets it before the deferred scopes apply.
+		if removals.removes(globalScope.Name) {
+			continue
+		}
+
 		originalWhereCount := len(builder.State().Wheres)
 
-		if returned, ok := scope(scoped).(*OrmBuilder); ok {
+		if returned, ok := globalScope.Scope(scoped).(*OrmBuilder); ok {
 			scoped = returned
 		}
 
@@ -1196,9 +1266,9 @@ func (r *OrmBuilder) applyRelatedGlobalScopes(builder *querybuilder.Builder, rel
 	}
 }
 
-// relatedGlobalScopes resolves the global-scope callbacks a related model declares, in declaration
-// order. Nil when the model declares none or is not a global-scope model.
-func relatedGlobalScopes(relatedModel any) []func(contractsorm.Query) contractsorm.Query {
+// relatedGlobalScopes resolves the global scopes - name and callback - a related model declares, in
+// declaration order. Nil when the model declares none or is not a global-scope model.
+func relatedGlobalScopes(relatedModel any) []contractsorm.GlobalScope {
 	if relatedModel == nil {
 		return nil
 	}
@@ -1220,12 +1290,9 @@ func relatedGlobalScopes(relatedModel any) []func(contractsorm.Query) contractso
 
 	// The scopes keep their declaration order - the order a model lists them in, which is the order
 	// addGlobalScopes applies a top-level query's scopes in.
-	scopes := make([]func(contractsorm.Query) contractsorm.Query, 0, len(modelGlobalScopes))
-	for _, globalScope := range modelGlobalScopes {
-		scopes = append(scopes, globalScope.Scope)
-	}
-
-	return scopes
+	// The names travel with the scopes: a removal names a scope by its key, the way
+	// withoutGlobalScope unsets $builder->scopes[$name] before the deferred scopes apply.
+	return append([]contractsorm.GlobalScope(nil), modelGlobalScopes...)
 }
 
 // subqueryBuilder starts a framework builder for a correlated subquery over table.
@@ -1253,9 +1320,9 @@ func setSubquerySelect(builder *querybuilder.Builder, expression string) {
 // applied here. Non-where clauses the callback sets (an order by, a limit) are deliberately not
 // carried: Laravel emits them inside the subquery, but SQL Server rejects ORDER BY in a subquery,
 // and relation_sql_test.go pins the difference.
-func (r *OrmBuilder) applyRelationScope(builder *querybuilder.Builder, callback contractsorm.RelationCallback) {
+func (r *OrmBuilder) applyRelationScope(builder *querybuilder.Builder, callback contractsorm.RelationCallback) *OrmBuilder {
 	if callback == nil {
-		return
+		return nil
 	}
 
 	originalWhereCount := len(builder.State().Wheres)
@@ -1272,6 +1339,8 @@ func (r *OrmBuilder) applyRelationScope(builder *querybuilder.Builder, callback 
 	if len(builder.State().Wheres) > originalWhereCount {
 		addNewWheresWithinGroupIn(builder, originalWhereCount)
 	}
+
+	return scoped
 }
 
 // applyOneOfManyRelationScope applies a relation's default scope to an existence subquery. A plain

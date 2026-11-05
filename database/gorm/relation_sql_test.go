@@ -453,8 +453,9 @@ func TestCompileExistenceSubquery_RelatedGlobalScopeOrChainsGroupPerScope(t *tes
 
 // relDeepOwner / relDeepMid / relDeepLeaf pin a dotted chain whose intermediate level carries both
 // a global scope and a soft delete: hasNested runs the nested relation inside the closure callScope
-// applies, so the nested exists must lead the intermediate model's own wheres, its global scopes and
-// its soft-delete predicate.
+// applies, so the nested exists must lead the intermediate model's own wheres, its soft-delete
+// predicate and its global scopes (registration order: SoftDeletingScope boots before the model's
+// own scopes).
 type relDeepOwner struct {
 	ID   uint
 	Mids []*relDeepMid `gorm:"-"`
@@ -520,14 +521,14 @@ func (relDeepPet) TableName() string { return "rel_deep_pets" }
 //	select * from "rel_deep_owners" where exists (select * from "rel_deep_mids" where
 //	"rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and exists (select * from "rel_deep_leaves"
 //	where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "a" = ? and "rel_deep_leaves".
-//	"deleted_at" is null) and "active" = ? and "rel_deep_mids"."deleted_at" is null)
+//	"deleted_at" is null) and "rel_deep_mids"."deleted_at" is null and "active" = ?)
 func TestCompileExistenceSubquery_NestedExistsLeadsIntermediateScopeAndSoftDelete(t *testing.T) {
 	callback := func(q contractsorm.Query) contractsorm.Query { return q.Where("a", 1) }
 	q := newRelQueryWith(t, &relDeepOwner{}).WhereHas("Mids.Leaves", callback).(*OrmBuilder)
 
 	sql, bindings, err := q.dest(&[]relDeepOwner{}).addGlobalScopes().compileSelect()
 	require.NoError(t, err)
-	assert.Equal(t, `select * from "rel_deep_owners" where exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and exists (select * from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "a" = ? and "rel_deep_leaves"."deleted_at" is null) and "active" = ? and "rel_deep_mids"."deleted_at" is null)`, sql)
+	assert.Equal(t, `select * from "rel_deep_owners" where exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and exists (select * from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "a" = ? and "rel_deep_leaves"."deleted_at" is null) and "rel_deep_mids"."deleted_at" is null and "active" = ?)`, sql)
 	assert.Equal(t, []any{1, 1}, bindings)
 }
 
@@ -539,7 +540,7 @@ func TestCompileExistenceSubquery_NestedExistsLeadsIntermediateScopeAndSoftDelet
 //	select * from "rel_deep_owners" where exists (select * from "rel_deep_mids" where
 //	"rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and (select count(*) from "rel_deep_leaves"
 //	where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "rel_deep_leaves"."deleted_at" is
-//	null) > 2 and "active" = ? and "rel_deep_mids"."deleted_at" is null)
+//	null) > 2 and "rel_deep_mids"."deleted_at" is null and "active" = ?)
 //
 // A count of 1 with ">" or "=" still renders the count comparison: only ">=" and "<" at count 1
 // take Laravel's exists optimisation (canUseExistsForExistenceCheck), the same boundary
@@ -550,11 +551,11 @@ func TestCompileExistenceSubquery_NestedCountComparisonRidesTheLeaf(t *testing.T
 		count    int
 		want     string
 	}{
-		{">", 2, `select * from "rel_deep_owners" where exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and (select count(*) from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "rel_deep_leaves"."deleted_at" is null) > 2 and "active" = ? and "rel_deep_mids"."deleted_at" is null)`},
-		{"=", 3, `select * from "rel_deep_owners" where exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and (select count(*) from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "rel_deep_leaves"."deleted_at" is null) = 3 and "active" = ? and "rel_deep_mids"."deleted_at" is null)`},
-		{"<", 2, `select * from "rel_deep_owners" where exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and (select count(*) from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "rel_deep_leaves"."deleted_at" is null) < 2 and "active" = ? and "rel_deep_mids"."deleted_at" is null)`},
-		{">", 1, `select * from "rel_deep_owners" where exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and (select count(*) from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "rel_deep_leaves"."deleted_at" is null) > 1 and "active" = ? and "rel_deep_mids"."deleted_at" is null)`},
-		{"=", 1, `select * from "rel_deep_owners" where exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and (select count(*) from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "rel_deep_leaves"."deleted_at" is null) = 1 and "active" = ? and "rel_deep_mids"."deleted_at" is null)`},
+		{">", 2, `select * from "rel_deep_owners" where exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and (select count(*) from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "rel_deep_leaves"."deleted_at" is null) > 2 and "rel_deep_mids"."deleted_at" is null and "active" = ?)`},
+		{"=", 3, `select * from "rel_deep_owners" where exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and (select count(*) from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "rel_deep_leaves"."deleted_at" is null) = 3 and "rel_deep_mids"."deleted_at" is null and "active" = ?)`},
+		{"<", 2, `select * from "rel_deep_owners" where exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and (select count(*) from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "rel_deep_leaves"."deleted_at" is null) < 2 and "rel_deep_mids"."deleted_at" is null and "active" = ?)`},
+		{">", 1, `select * from "rel_deep_owners" where exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and (select count(*) from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "rel_deep_leaves"."deleted_at" is null) > 1 and "rel_deep_mids"."deleted_at" is null and "active" = ?)`},
+		{"=", 1, `select * from "rel_deep_owners" where exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and (select count(*) from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "rel_deep_leaves"."deleted_at" is null) = 1 and "rel_deep_mids"."deleted_at" is null and "active" = ?)`},
 	}
 
 	for _, c := range cases {
@@ -574,20 +575,20 @@ func TestCompileExistenceSubquery_NestedCountComparisonRidesTheLeaf(t *testing.T
 //	select * from "rel_deep_owners" where exists (select * from "rel_deep_mids" where
 //	"rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and (select count(*) from "rel_deep_leaves"
 //	where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "a" = ? and "rel_deep_leaves".
-//	"deleted_at" is null) >= 2 and "active" = ? and "rel_deep_mids"."deleted_at" is null)
+//	"deleted_at" is null) >= 2 and "rel_deep_mids"."deleted_at" is null and "active" = ?)
 func TestCompileExistenceSubquery_NestedCallbackCountRidesTheLeaf(t *testing.T) {
 	callback := func(q contractsorm.Query) contractsorm.Query { return q.Where("a", 1) }
 
 	q := newRelQueryWith(t, &relDeepOwner{}).WhereHas("Mids.Leaves", callback, ">=", 2).(*OrmBuilder)
 	sql, bindings, err := q.dest(&[]relDeepOwner{}).addGlobalScopes().compileSelect()
 	require.NoError(t, err)
-	assert.Equal(t, `select * from "rel_deep_owners" where exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and (select count(*) from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "a" = ? and "rel_deep_leaves"."deleted_at" is null) >= 2 and "active" = ? and "rel_deep_mids"."deleted_at" is null)`, sql)
+	assert.Equal(t, `select * from "rel_deep_owners" where exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and (select count(*) from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "a" = ? and "rel_deep_leaves"."deleted_at" is null) >= 2 and "rel_deep_mids"."deleted_at" is null and "active" = ?)`, sql)
 	assert.Equal(t, []any{1, 1}, bindings)
 
 	q2 := newRelQueryWith(t, &relDeepOwner{}).WhereHas("Mids.Leaves", callback, ">", 1).(*OrmBuilder)
 	sql, bindings, err = q2.dest(&[]relDeepOwner{}).addGlobalScopes().compileSelect()
 	require.NoError(t, err)
-	assert.Equal(t, `select * from "rel_deep_owners" where exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and (select count(*) from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "a" = ? and "rel_deep_leaves"."deleted_at" is null) > 1 and "active" = ? and "rel_deep_mids"."deleted_at" is null)`, sql)
+	assert.Equal(t, `select * from "rel_deep_owners" where exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and (select count(*) from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "a" = ? and "rel_deep_leaves"."deleted_at" is null) > 1 and "rel_deep_mids"."deleted_at" is null and "active" = ?)`, sql)
 	assert.Equal(t, []any{1, 1}, bindings)
 }
 
@@ -598,7 +599,7 @@ func TestCompileExistenceSubquery_NestedCallbackCountRidesTheLeaf(t *testing.T) 
 //	select * from "rel_deep_owners" where not exists (select * from "rel_deep_mids" where
 //	"rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and exists (select * from "rel_deep_leaves"
 //	where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "rel_deep_leaves"."deleted_at" is
-//	null) and "active" = ? and "rel_deep_mids"."deleted_at" is null)
+//	null) and "rel_deep_mids"."deleted_at" is null and "active" = ?)
 func TestCompileExistenceSubquery_NestedDoesntHaveNegatesTheOuterOnly(t *testing.T) {
 	callback := func(q contractsorm.Query) contractsorm.Query { return q.Where("a", 1) }
 
@@ -606,10 +607,10 @@ func TestCompileExistenceSubquery_NestedDoesntHaveNegatesTheOuterOnly(t *testing
 	q := newRelQueryWith(t, &relDeepOwner{}).WhereDoesntHave("Mids.Leaves", callback).(*OrmBuilder)
 	sql, bindings, err := q.dest(&[]relDeepOwner{}).addGlobalScopes().compileSelect()
 	require.NoError(t, err)
-	assert.Equal(t, `select * from "rel_deep_owners" where not exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and exists (select * from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "a" = ? and "rel_deep_leaves"."deleted_at" is null) and "active" = ? and "rel_deep_mids"."deleted_at" is null)`, sql)
+	assert.Equal(t, `select * from "rel_deep_owners" where not exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and exists (select * from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "a" = ? and "rel_deep_leaves"."deleted_at" is null) and "rel_deep_mids"."deleted_at" is null and "active" = ?)`, sql)
 	assert.Equal(t, []any{1, 1}, bindings)
 
-	notExists := `select * from "rel_deep_owners" where not exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and exists (select * from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "rel_deep_leaves"."deleted_at" is null) and "active" = ? and "rel_deep_mids"."deleted_at" is null)`
+	notExists := `select * from "rel_deep_owners" where not exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and exists (select * from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "rel_deep_leaves"."deleted_at" is null) and "rel_deep_mids"."deleted_at" is null and "active" = ?)`
 
 	q2 := newRelQueryWith(t, &relDeepOwner{}).DoesntHave("Mids.Leaves").(*OrmBuilder)
 	sql, bindings, err = q2.dest(&[]relDeepOwner{}).addGlobalScopes().compileSelect()
@@ -631,20 +632,20 @@ func TestCompileExistenceSubquery_NestedDoesntHaveNegatesTheOuterOnly(t *testing
 //	select * from "rel_deep_owners" where "x" = ? or exists (select * from "rel_deep_mids" where
 //	"rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and (select count(*) from "rel_deep_leaves"
 //	where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "a" = ? and "rel_deep_leaves".
-//	"deleted_at" is null) > 2 and "active" = ? and "rel_deep_mids"."deleted_at" is null)
+//	"deleted_at" is null) > 2 and "rel_deep_mids"."deleted_at" is null and "active" = ?)
 func TestCompileExistenceSubquery_NestedOrVariantsKeepTheLeafPlacement(t *testing.T) {
 	callback := func(q contractsorm.Query) contractsorm.Query { return q.Where("a", 1) }
 
 	q := toQuery(newRelQueryWith(t, &relDeepOwner{}).Where("x", 1)).OrWhereHas("Mids.Leaves", callback, ">", 2).(*OrmBuilder)
 	sql, bindings, err := q.dest(&[]relDeepOwner{}).addGlobalScopes().compileSelect()
 	require.NoError(t, err)
-	assert.Equal(t, `select * from "rel_deep_owners" where "x" = ? or exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and (select count(*) from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "a" = ? and "rel_deep_leaves"."deleted_at" is null) > 2 and "active" = ? and "rel_deep_mids"."deleted_at" is null)`, sql)
+	assert.Equal(t, `select * from "rel_deep_owners" where "x" = ? or exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and (select count(*) from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "a" = ? and "rel_deep_leaves"."deleted_at" is null) > 2 and "rel_deep_mids"."deleted_at" is null and "active" = ?)`, sql)
 	assert.Equal(t, []any{1, 1, 1}, bindings)
 
 	q2 := toQuery(newRelQueryWith(t, &relDeepOwner{}).Where("x", 1)).OrDoesntHave("Mids.Leaves").(*OrmBuilder)
 	sql, bindings, err = q2.dest(&[]relDeepOwner{}).addGlobalScopes().compileSelect()
 	require.NoError(t, err)
-	assert.Equal(t, `select * from "rel_deep_owners" where "x" = ? or not exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and exists (select * from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "rel_deep_leaves"."deleted_at" is null) and "active" = ? and "rel_deep_mids"."deleted_at" is null)`, sql)
+	assert.Equal(t, `select * from "rel_deep_owners" where "x" = ? or not exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and exists (select * from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "rel_deep_leaves"."deleted_at" is null) and "rel_deep_mids"."deleted_at" is null and "active" = ?)`, sql)
 	assert.Equal(t, []any{1, 1}, bindings)
 }
 
@@ -657,27 +658,27 @@ func TestCompileExistenceSubquery_NestedOrVariantsKeepTheLeafPlacement(t *testin
 //	"rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and exists (select * from "rel_deep_leaves"
 //	where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and (select count(*) from
 //	"rel_deep_pets" where "rel_deep_leaves"."id" = "rel_deep_pets"."leaf_id") > 2 and
-//	"rel_deep_leaves"."deleted_at" is null) and "active" = ? and "rel_deep_mids"."deleted_at" is
-//	null)
+//	"rel_deep_leaves"."deleted_at" is null) and "rel_deep_mids"."deleted_at" is null and "active" = ?)
+//	(round-13 re-pin: the related SoftDeletingScope precedes the model's own scopes.)
 func TestCompileExistenceSubquery_ThreeSegmentChainKeepsTheMiddlePlainExists(t *testing.T) {
 	callback := func(q contractsorm.Query) contractsorm.Query { return q.Where("b", 1) }
 
 	q := newRelQueryWith(t, &relDeepOwner{}).Has("Mids.Leaves.Pets", ">", 2).(*OrmBuilder)
 	sql, bindings, err := q.dest(&[]relDeepOwner{}).addGlobalScopes().compileSelect()
 	require.NoError(t, err)
-	assert.Equal(t, `select * from "rel_deep_owners" where exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and exists (select * from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and (select count(*) from "rel_deep_pets" where "rel_deep_leaves"."id" = "rel_deep_pets"."leaf_id") > 2 and "rel_deep_leaves"."deleted_at" is null) and "active" = ? and "rel_deep_mids"."deleted_at" is null)`, sql)
+	assert.Equal(t, `select * from "rel_deep_owners" where exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and exists (select * from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and (select count(*) from "rel_deep_pets" where "rel_deep_leaves"."id" = "rel_deep_pets"."leaf_id") > 2 and "rel_deep_leaves"."deleted_at" is null) and "rel_deep_mids"."deleted_at" is null and "active" = ?)`, sql)
 	assert.Equal(t, []any{1}, bindings)
 
 	q2 := newRelQueryWith(t, &relDeepOwner{}).WhereHas("Mids.Leaves.Pets", callback, ">=", 2).(*OrmBuilder)
 	sql, bindings, err = q2.dest(&[]relDeepOwner{}).addGlobalScopes().compileSelect()
 	require.NoError(t, err)
-	assert.Equal(t, `select * from "rel_deep_owners" where exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and exists (select * from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and (select count(*) from "rel_deep_pets" where "rel_deep_leaves"."id" = "rel_deep_pets"."leaf_id" and "b" = ?) >= 2 and "rel_deep_leaves"."deleted_at" is null) and "active" = ? and "rel_deep_mids"."deleted_at" is null)`, sql)
+	assert.Equal(t, `select * from "rel_deep_owners" where exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and exists (select * from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and (select count(*) from "rel_deep_pets" where "rel_deep_leaves"."id" = "rel_deep_pets"."leaf_id" and "b" = ?) >= 2 and "rel_deep_leaves"."deleted_at" is null) and "rel_deep_mids"."deleted_at" is null and "active" = ?)`, sql)
 	assert.Equal(t, []any{1, 1}, bindings)
 
 	q3 := newRelQueryWith(t, &relDeepOwner{}).WhereDoesntHave("Mids.Leaves.Pets", callback).(*OrmBuilder)
 	sql, bindings, err = q3.dest(&[]relDeepOwner{}).addGlobalScopes().compileSelect()
 	require.NoError(t, err)
-	assert.Equal(t, `select * from "rel_deep_owners" where not exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and exists (select * from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and exists (select * from "rel_deep_pets" where "rel_deep_leaves"."id" = "rel_deep_pets"."leaf_id" and "b" = ?) and "rel_deep_leaves"."deleted_at" is null) and "active" = ? and "rel_deep_mids"."deleted_at" is null)`, sql)
+	assert.Equal(t, `select * from "rel_deep_owners" where not exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and exists (select * from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and exists (select * from "rel_deep_pets" where "rel_deep_leaves"."id" = "rel_deep_pets"."leaf_id" and "b" = ?) and "rel_deep_leaves"."deleted_at" is null) and "rel_deep_mids"."deleted_at" is null and "active" = ?)`, sql)
 	assert.Equal(t, []any{1, 1}, bindings)
 }
 
@@ -688,13 +689,13 @@ func TestCompileExistenceSubquery_ThreeSegmentChainKeepsTheMiddlePlainExists(t *
 //	select * from "rel_deep_owners" where "x" = ? and exists (select * from "rel_deep_mids" where
 //	"rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and (select count(*) from "rel_deep_leaves"
 //	where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "rel_deep_leaves"."deleted_at" is
-//	null) > 2 and "active" = ? and "rel_deep_mids"."deleted_at" is null) and "y" = ?
+//	null) > 2 and "rel_deep_mids"."deleted_at" is null and "active" = ?) and "y" = ?
 func TestCompileExistenceSubquery_LeafCountClauseStaysBetweenSurroundingWheres(t *testing.T) {
 	q := toQuery(toQuery(newRelQueryWith(t, &relDeepOwner{}).Where("x", 1)).Has("Mids.Leaves", ">", 2)).Where("y", 2).(*OrmBuilder)
 
 	sql, bindings, err := q.dest(&[]relDeepOwner{}).addGlobalScopes().compileSelect()
 	require.NoError(t, err)
-	assert.Equal(t, `select * from "rel_deep_owners" where "x" = ? and exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and (select count(*) from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "rel_deep_leaves"."deleted_at" is null) > 2 and "active" = ? and "rel_deep_mids"."deleted_at" is null) and "y" = ?`, sql)
+	assert.Equal(t, `select * from "rel_deep_owners" where "x" = ? and exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and (select count(*) from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and "rel_deep_leaves"."deleted_at" is null) > 2 and "rel_deep_mids"."deleted_at" is null and "active" = ?) and "y" = ?`, sql)
 	assert.Equal(t, []any{1, 1, 2}, bindings)
 }
 
@@ -703,14 +704,14 @@ func TestCompileExistenceSubquery_LeafCountClauseStaysBetweenSurroundingWheres(t
 // [5, 1]):
 //
 //	select * from "rel_deep_owners" where (select count(*) from "rel_deep_mids" where
-//	"rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and "owner_id" = ? and "active" = ? and
-//	"rel_deep_mids"."deleted_at" is null) >= 2
+//	"rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and "owner_id" = ? and "rel_deep_mids"."deleted_at" is null and "active" = ?) >= 2
+//	(round-13 re-pin: the related SoftDeletingScope precedes the model's own scopes.)
 func TestCompileExistenceSubquery_SingleSegmentCountStaysOnTheOuterQuery(t *testing.T) {
 	callback := func(q contractsorm.Query) contractsorm.Query { return q.Where("owner_id", 5) }
 	q := newRelQueryWith(t, &relDeepOwner{}).WhereHas("Mids", callback, ">=", 2).(*OrmBuilder)
 
 	sql, bindings, err := q.dest(&[]relDeepOwner{}).addGlobalScopes().compileSelect()
 	require.NoError(t, err)
-	assert.Equal(t, `select * from "rel_deep_owners" where (select count(*) from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and "owner_id" = ? and "active" = ? and "rel_deep_mids"."deleted_at" is null) >= 2`, sql)
+	assert.Equal(t, `select * from "rel_deep_owners" where (select count(*) from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and "owner_id" = ? and "rel_deep_mids"."deleted_at" is null and "active" = ?) >= 2`, sql)
 	assert.Equal(t, []any{5, 1}, bindings)
 }
