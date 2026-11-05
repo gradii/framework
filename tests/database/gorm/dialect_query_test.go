@@ -109,7 +109,7 @@ func TestInsertReportsTheModelsPrimaryKeyColumn(t *testing.T) {
 		query := newDialectQuery(t, postgres.NewDialect(), postgres.Name, nil, &keyColumnEntity{})
 		statement := databasegorm.NewToSql(query, nil, false).Create(&keyColumnEntity{})
 
-		assert.Equal(t, `insert into "insert_key_column_entities" ("name") values ($1) returning "user_id"`, statement)
+		assert.Equal(t, `insert into "insert_key_column_entities" default values returning "user_id"`, statement)
 		assert.NotContains(t, statement, `returning "id"`)
 	})
 
@@ -117,17 +117,17 @@ func TestInsertReportsTheModelsPrimaryKeyColumn(t *testing.T) {
 		query := newDialectQuery(t, sqlserver.NewDialect(), sqlserver.Name, nil, &keyColumnEntity{})
 		statement := databasegorm.NewToSql(query, nil, false).Create(&keyColumnEntity{})
 
-		assert.Equal(t, `insert into [insert_key_column_entities] ([name]) output inserted.[user_id] values (@p1)`, statement)
+		assert.Equal(t, `insert into [insert_key_column_entities] output inserted.[user_id] default values`, statement)
 		assert.NotContains(t, statement, "inserted.[id]")
 	})
 
 	t.Run("a conventional id primary key is unchanged", func(t *testing.T) {
 		postgresQuery := newDialectQuery(t, postgres.NewDialect(), postgres.Name, nil, &defaultKeyEntity{})
-		assert.Equal(t, `insert into "insert_default_key_entities" ("name") values ($1) returning "id"`,
+		assert.Equal(t, `insert into "insert_default_key_entities" default values returning "id"`,
 			databasegorm.NewToSql(postgresQuery, nil, false).Create(&defaultKeyEntity{}))
 
 		sqlserverQuery := newDialectQuery(t, sqlserver.NewDialect(), sqlserver.Name, nil, &defaultKeyEntity{})
-		assert.Equal(t, `insert into [insert_default_key_entities] ([name]) output inserted.[id] values (@p1)`,
+		assert.Equal(t, `insert into [insert_default_key_entities] output inserted.[id] default values`,
 			databasegorm.NewToSql(sqlserverQuery, nil, false).Create(&defaultKeyEntity{}))
 	})
 

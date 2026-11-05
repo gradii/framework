@@ -171,6 +171,20 @@ func (r *OrmBuilder) applyInsertTimestamps(value reflect.Value, schema *modelSch
 // column it maps to before the record — which is keyed by column — can be filtered. Left unresolved,
 // Select("Name") would match no key and drop every column, and Omit("Avatar") would delete nothing.
 //
+// A record built from a struct carries every declared field, but an Eloquent insert carries only the
+// attributes the model holds — HasAttributes::getAttributesForInsert (:2027) returns getAttributes
+// (:2015), the $attributes bag a caller fills by assignment. A Go struct has no attribute bag, so,
+// as everywhere else in this port, a field left at its zero value stands for an attribute the model
+// does not carry and is omitted, while a non-zero field — or a non-nil pointer to a zero, the typed
+// presence marker — is carried. A Select list overrides this: a column named outright, or every
+// column under a wildcard, is written whatever it holds, the port's column-scoped write, and the map
+// form keeps its own presence because its keys are the attributes. Oracle v12.55.1, executed
+// (/tmp/r13/insert_columns_probe.php): a new model with 2 of its 12 columns set inserts
+// `("name", "email", "updated_at", "created_at")`; one with nothing set inserts
+// `("updated_at", "created_at")`; an explicitly assigned null/false/zero joins the bag, a shape a
+// plain Go struct cannot express (its zero is indistinguishable from an unset field) and the map
+// form carries.
+//
 // Eloquent sends the primary key column only when the model's key attribute is set: a fresh
 // incrementing model omits it, and so does a key no one has assigned yet, whatever its Go type.
 // A struct field carries no "set" flag, so the zero value stands in for unset and a zero sole
@@ -180,7 +194,8 @@ func (r *OrmBuilder) filterInsertColumns(record map[string]any) map[string]any {
 	schema := r.insertSchema()
 
 	columns := selectStringColumns(r.query.Selects())
-	if len(columns) > 0 && !hasWildcard(columns) {
+	wildcard := hasWildcard(columns)
+	if len(columns) > 0 && !wildcard {
 		selected := make(map[string]any, len(columns))
 		for _, column := range columns {
 			column = resolveInsertColumn(schema, column)
@@ -189,6 +204,17 @@ func (r *OrmBuilder) filterInsertColumns(record map[string]any) map[string]any {
 			}
 		}
 		record = selected
+	} else if len(columns) == 0 {
+		// No select list: the model's attribute-bag analogue. A field left at its zero value
+		// stands for an attribute the model does not carry, so the insert omits the column the
+		// way Eloquent omits a never-assigned attribute; a non-zero field, or a non-nil pointer
+		// to a zero, is carried. An explicit select list (named columns, or a wildcard) skips
+		// this and writes its columns whatever they hold.
+		for column, value := range record {
+			if insertValueUnset(value) {
+				delete(record, column)
+			}
+		}
 	}
 
 	for _, column := range r.conditions.omit {
@@ -202,6 +228,19 @@ func (r *OrmBuilder) filterInsertColumns(record map[string]any) map[string]any {
 	}
 
 	return record
+}
+
+// insertValueUnset reports whether a bound record value stands for an attribute the model does not
+// carry — the zero-value analogue of Eloquent's absent-attribute case. A JSON column's value binds
+// through a jsonColumnValuer wrapper, whose non-nil interface would read as present whatever it
+// wraps, so the wrapper is unwrapped to the value it carries before the zero test: a zero JSON
+// column is an absent attribute like any other.
+func insertValueUnset(value any) bool {
+	if wrapped, ok := value.(jsonColumnValuer); ok {
+		return isZeroValue(wrapped.Valuer)
+	}
+
+	return isZeroValue(value)
 }
 
 // resolveRecordColumns rewrites a caller-supplied record so its keys name the columns the model

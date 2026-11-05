@@ -2214,8 +2214,15 @@ func TestIntegration_HasOnMorphToRelationship(t *testing.T) {
 	require.NoError(t, cloneRelationQuery(t, query).Relation(&user, "Photos").Create(&userPhoto))
 	dangling := integrationPhoto{Name: "Dangling Post Photo", ImageableType: "post", ImageableID: 99}
 	require.NoError(t, cloneRelationQuery(t, query).Create(&dangling))
-	blank := integrationPhoto{Name: "Blank Photo"}
-	require.NoError(t, cloneRelationQuery(t, query).Create(&blank))
+	// A blank morph row is written through the map form, not a struct: an explicitly empty type is a
+	// zero a struct cannot tell apart from an unset field, so a struct insert omits imageable_type /
+	// imageable_id and the NOT NULL columns reject the row (oracle, illuminate/database v12.55.1:
+	// `(new EloquentTestPhoto)->save()` emits `insert into "photos" ("name", "updated_at",
+	// "created_at")` and sqlite answers `NOT NULL constraint failed: photos.imageable_type`). The map
+	// form carries the empty string and the zero id, the presence Eloquent expresses by assignment.
+	require.NoError(t, cloneRelationQuery(t, query).Model(&integrationPhoto{}).Create(map[string]any{
+		"name": "Blank Photo", "imageable_type": "", "imageable_id": 0,
+	}))
 
 	// Oracle (illuminate/database v12.55.1, executed against sqlite, query log): has('imageable')
 	// reads the distinct morph types first — `select distinct "imageable_type" from "photos"` —
@@ -2647,8 +2654,13 @@ func TestIntegration_EmptyMorphToRelationship(t *testing.T) {
 	assert.Empty(t, databasedb.GetQueryLog(ctx), "a MorphTo load with no type reads nothing")
 
 	// The saved variant — the probe's `id can't be empty` shape — behaves the same: the insert is
-	// the only statement; the load itself stays silent and null (oracle: load.saved-empty).
-	require.NoError(t, cloneRelationQuery(t, query).Create(&photo))
+	// the only statement; the load itself stays silent and null (oracle: load.saved-empty). The row
+	// is written through the map form for the same reason as the blank photo above: an explicitly
+	// empty type is a struct zero the insert omits, and the NOT NULL columns would reject it.
+	require.NoError(t, cloneRelationQuery(t, query).Model(&integrationPhoto{}).Create(map[string]any{
+		"name": "Morph Photo", "imageable_type": "", "imageable_id": 0,
+	}))
+	require.NoError(t, cloneRelationQuery(t, query).Model(&integrationPhoto{}).Where("name", "Morph Photo").First(&photo))
 	require.NotZero(t, photo.ID)
 
 	ctx = databasedb.EnableQueryLog(context.Background())

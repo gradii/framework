@@ -45,9 +45,9 @@ import (
 //     nests it (`and ("attr" = ?)`); the same truth table on an and-only list;
 //   - every first-family compile (the lookup and the promoted first()) carries the framework's
 //     deterministic `order by "<related>"."<key>"` beside `limit 1`, where Laravel's has none;
-//   - the insert emits every non-key column in sorted order (the hit update now matches Eloquent's
-//     dirty-only shape): the through create stamps pivot_id 0 where Laravel's attribute-bag insert
-//     omits the column;
+//   - the insert lists the record's columns in sorted order (the hit update matches Eloquent's
+//     dirty-only shape, and the miss insert now matches Eloquent's attribute bag: the pivot_id the
+//     port's through create leaves at its zero is omitted, where it used to be written as 0);
 //   - the query log records the lost race's failed insert attempt; Laravel's log skips a
 //     statement that threw. The entries stay in execution order.
 
@@ -159,7 +159,7 @@ func TestHasManyThroughObject_FirstOrCreateMissCreatesTheRecord(t *testing.T) {
 	logs := databasedb.GetQueryLog(ctx)
 	require.Len(t, logs, 2, "the miss is the lookup select plus the insert")
 	assert.Equal(t, `select "child".*, "pivot"."parent_id" as "laravel_through_key" from "child" inner join "pivot" on "pivot"."id" = "child"."pivot_id" where "pivot"."parent_id" = 123 and "attr" = 'fresh' order by "child"."id" limit 1`, logs[0].Query)
-	assert.Equal(t, `insert into "child" ("attr", "created_at", "pivot_id", "updated_at", "val") values ('fresh', '2023-01-01 00:00:00', 0, '2023-01-01 00:00:00', 'fv')`, logs[1].Query)
+	assert.Equal(t, `insert into "child" ("attr", "created_at", "updated_at", "val") values ('fresh', '2023-01-01 00:00:00', '2023-01-01 00:00:00', 'fv')`, logs[1].Query)
 
 	rows, err := cloneRelationQuery(t, query).Model(&hasManyThroughCreateOrFirstChild{}).Count()
 	require.NoError(t, err)
@@ -225,7 +225,7 @@ func TestHasManyThroughObject_CreateOrFirstMissInsertsWithoutALookup(t *testing.
 
 	logs := databasedb.GetQueryLog(ctx)
 	require.Len(t, logs, 1, "createOrFirst attempts the insert with no lookup first")
-	assert.Equal(t, `insert into "child" ("attr", "created_at", "pivot_id", "updated_at", "val") values ('direct', '2023-01-01 00:00:00', 0, '2023-01-01 00:00:00', 'dv')`, logs[0].Query)
+	assert.Equal(t, `insert into "child" ("attr", "created_at", "updated_at", "val") values ('direct', '2023-01-01 00:00:00', '2023-01-01 00:00:00', 'dv')`, logs[0].Query)
 }
 
 // Oracle: createOrFirst(['attr'=>'foo'], ['val'=>'ignored']) whose insert loses a unique race
@@ -257,7 +257,7 @@ func TestHasManyThroughObject_CreateOrFirstLostRaceReadsTheWinnerBack(t *testing
 
 	logs := databasedb.GetQueryLog(ctx)
 	require.Len(t, logs, 2, "the failed insert attempt, then the catch's re-read")
-	assert.Equal(t, `insert into "child" ("attr", "created_at", "pivot_id", "updated_at", "val") values ('foo', '2023-01-01 00:00:00', 0, '2023-01-01 00:00:00', 'ignored')`, logs[0].Query)
+	assert.Equal(t, `insert into "child" ("attr", "created_at", "updated_at", "val") values ('foo', '2023-01-01 00:00:00', '2023-01-01 00:00:00', 'ignored')`, logs[0].Query)
 	assert.Equal(t, `select "child".*, "pivot"."parent_id" as "laravel_through_key" from "child" inner join "pivot" on "pivot"."id" = "child"."pivot_id" where "pivot"."parent_id" = 123 and "attr" = 'foo' order by "child"."id" limit 1`, logs[1].Query)
 }
 
@@ -291,7 +291,7 @@ func TestHasManyThroughObject_UpdateOrCreateMissCreatesTheRecord(t *testing.T) {
 	logs := databasedb.GetQueryLog(ctx)
 	require.Len(t, logs, 2, "the miss is the lookup select plus the insert")
 	assert.Equal(t, `select "child".*, "pivot"."parent_id" as "laravel_through_key" from "child" inner join "pivot" on "pivot"."id" = "child"."pivot_id" where "pivot"."parent_id" = 123 and "attr" = 'upd' order by "child"."id" limit 1`, logs[0].Query)
-	assert.Equal(t, `insert into "child" ("attr", "created_at", "pivot_id", "updated_at", "val") values ('upd', '2023-01-01 00:00:00', 0, '2023-01-01 00:00:00', 'uv')`, logs[1].Query)
+	assert.Equal(t, `insert into "child" ("attr", "created_at", "updated_at", "val") values ('upd', '2023-01-01 00:00:00', '2023-01-01 00:00:00', 'uv')`, logs[1].Query)
 }
 
 // Oracle: updateOrCreate(['attr'=>'foo'], ['val'=>'baz']) with child 789 (foo/bar) seeded fills

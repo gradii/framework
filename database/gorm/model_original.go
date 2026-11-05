@@ -34,13 +34,18 @@ import (
 // Divergences from the PHP shape, all deliberate:
 //
 //   - A model with no captured bag reads as one whose original bag is empty: every attribute is
-//     dirty. That is exactly the whole-struct write Save performed before this file existed, so
-//     models built by hand keep their behaviour; Eloquent reaches the same reading for a manually
+//     dirty. The UPDATE keeps that whole-struct reading — the write Save performed before this file
+//     existed, so models built by hand keep their behaviour; Eloquent reaches it for a manually
 //     populated instance with the exists flag forced (`$model->id = 1; $model->name = 'x';
 //     $model->exists = true; $model->save()` — oracle, executed, probe case C: the update carries
 //     `set "id" = ?, "name" = ?, "updated_at" = ? where "id" = ?`). The port's primary key never
 //     joins an update (saveAssignments' documented rule), so the hand-built Go model compiles
-//     `set "name" = ?, "updated_at" = ? where "id" = ?`.
+//     `set "name" = ?, "updated_at" = ? where "id" = ?`. The INSERT takes a narrower reading,
+//     because Eloquent's insert carries only the attributes the model holds and there is no bag to
+//     hold them: a field left at its zero value stands for an attribute the model does not carry,
+//     so filterInsertColumns omits it (the insert column set is pinned in
+//     save_insert_columns_test.go; a non-nil pointer to a zero, or the map form, carries an
+//     explicitly assigned zero the way Eloquent's setAttribute would).
 //
 //   - Between an unreachable model's collection and its cleanup running, a newly allocated model
 //     of the same type at the same address could read the dead model's bag. The window is one GC

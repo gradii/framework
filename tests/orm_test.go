@@ -153,7 +153,7 @@ func (s *OrmSuite) TestQueryLog() {
 
 	queryLogs := databasedb.GetQueryLog(ctx)
 	s.Require().Equal(2, len(queryLogs))
-	s.Contains(queryLogs[0].Query, "insert into \"roles\" (\"avatar\", \"created_at\", \"name\", \"updated_at\") values ('")
+	s.Contains(queryLogs[0].Query, "insert into \"roles\" (\"created_at\", \"name\", \"updated_at\") values ('")
 	s.Contains(queryLogs[0].Query, "'query_log_product', '")
 	s.True(queryLogs[0].Time > 0)
 	s.Equal("select * from \"roles\" where \"name\" = 'query_log_product' order by \"roles\".\"id\" limit 1", queryLogs[1].Query)
