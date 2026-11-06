@@ -10010,6 +10010,67 @@ func (_c *HasManyThroughRelation_WithWhereHas_Call) RunAndReturn(run func(string
 	return _c
 }
 
+// WithZero provides a mock function with given fields: columns
+func (_m *HasManyThroughRelation) WithZero(columns ...string) orm.Query {
+	_va := make([]interface{}, len(columns))
+	for _i := range columns {
+		_va[_i] = columns[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for WithZero")
+	}
+
+	var r0 orm.Query
+	if rf, ok := ret.Get(0).(func(...string) orm.Query); ok {
+		r0 = rf(columns...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(orm.Query)
+		}
+	}
+
+	return r0
+}
+
+// HasManyThroughRelation_WithZero_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'WithZero'
+type HasManyThroughRelation_WithZero_Call struct {
+	*mock.Call
+}
+
+// WithZero is a helper method to define mock.On call
+//   - columns ...string
+func (_e *HasManyThroughRelation_Expecter) WithZero(columns ...interface{}) *HasManyThroughRelation_WithZero_Call {
+	return &HasManyThroughRelation_WithZero_Call{Call: _e.mock.On("WithZero",
+		append([]interface{}{}, columns...)...)}
+}
+
+func (_c *HasManyThroughRelation_WithZero_Call) Run(run func(columns ...string)) *HasManyThroughRelation_WithZero_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]string, len(args)-0)
+		for i, a := range args[0:] {
+			if a != nil {
+				variadicArgs[i] = a.(string)
+			}
+		}
+		run(variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *HasManyThroughRelation_WithZero_Call) Return(_a0 orm.Query) *HasManyThroughRelation_WithZero_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *HasManyThroughRelation_WithZero_Call) RunAndReturn(run func(...string) orm.Query) *HasManyThroughRelation_WithZero_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Without provides a mock function with given fields: relations
 func (_m *HasManyThroughRelation) Without(relations ...string) orm.Query {
 	_va := make([]interface{}, len(relations))

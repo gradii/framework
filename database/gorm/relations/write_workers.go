@@ -124,7 +124,14 @@ func ApplyDissociate(b Builder, info RelationInfo, parent any, isMorph bool) err
 		return err
 	}
 
-	return b.NewQuery().Save(parent)
+	// The foreign key (and morph type) now hold their zero value, which a struct Save leaves out by
+	// default; WithZero names them so the cleared columns are written.
+	columns := []string{info.MorphIDColumn, info.MorphTypeColumn}
+	if !isMorph {
+		columns = []string{info.References[0].ForeignColumn}
+	}
+
+	return b.NewQuery().WithZero(columns...).Save(parent)
 }
 
 // MutateDissociate is the pure-mutation half of ApplyDissociate.

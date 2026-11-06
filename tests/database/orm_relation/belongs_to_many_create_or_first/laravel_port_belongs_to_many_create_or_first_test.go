@@ -613,7 +613,9 @@ func TestBelongsToManyCreateOrFirst_UpdateOrCreateStatementOrder(t *testing.T) {
 	ctx2b, wq2b := ctxFor()
 	var unchanged belongsToManyCreateOrFirstRelated
 	require.NoError(t, wq2b.Relation(source, "Related").UpdateOrCreate(map[string]any{"attr": "foo"}, map[string]any{"val": "baz"}, &unchanged))
-	assert.Equal(t, 0, updates(ctx2b), "an unattached hit whose values change nothing runs no update")
+	// Since 2026-11-06 the port keeps no record of loaded values (user decision: the implicit
+	// original tracking was removed), so Save writes every non-zero field and never skips a clean model.
+	assert.Equal(t, 1, updates(ctx2b), "without loaded-value tracking the fill/save always updates")
 	attachInserts := 0
 	for _, l := range frameworkdb.GetQueryLog(ctx2b) {
 		if strings.HasPrefix(l.Query, `insert into "pivot_table"`) {

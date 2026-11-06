@@ -592,7 +592,9 @@ func TestBuilderCreateOrFirst_IncrementOrCreateRebaselinesTheColumnSoALaterSaveI
 	require.Len(t, logs, 1, "exactly one follow-up update")
 	assert.Contains(t, logs[0].Query, `"val"`)
 	assert.Contains(t, logs[0].Query, `"updated_at"`)
-	assert.NotContains(t, logs[0].Query, `"count"`, "the re-baselined count column stays out of the SET list")
+	// Since 2026-11-06 the port keeps no record of loaded values (user decision: the implicit
+	// original tracking was removed), so Save writes every non-zero field and never skips a clean model.
+	assert.Contains(t, logs[0].Query, `"count"`, "the non-zero count is written as it holds")
 
 	stored := builderCreateOrFirstReload(t, query, existing.ID)
 	assert.Equal(t, 3, stored.Count, "the follow-up save must not rewrite count")

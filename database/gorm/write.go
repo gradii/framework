@@ -211,7 +211,7 @@ func (r *OrmBuilder) filterInsertColumns(record map[string]any) map[string]any {
 		// to a zero, is carried. An explicit select list (named columns, or a wildcard) skips
 		// this and writes its columns whatever they hold.
 		for column, value := range record {
-			if insertValueUnset(value) {
+			if insertValueUnset(value) && !r.writesZero(schema, column) {
 				delete(record, column)
 			}
 		}
@@ -222,12 +222,24 @@ func (r *OrmBuilder) filterInsertColumns(record map[string]any) map[string]any {
 	}
 
 	if column := r.solePrimaryKeyColumn(); column != "" {
-		if value, ok := record[column]; ok && isZeroValue(value) {
+		if value, ok := record[column]; ok && isZeroValue(value) && !r.explicitlyWritesZero(schema, column) {
 			delete(record, column)
 		}
 	}
 
 	return record
+}
+
+// explicitlyWritesZero is writesZero without the wildcard: a sole primary key's zero joins an insert
+// only when WithZero names its column, never through "*", since a zero key is the database's to assign.
+func (r *OrmBuilder) explicitlyWritesZero(schema *modelSchema, column string) bool {
+	for _, name := range r.conditions.withZero {
+		if name != "*" && resolveInsertColumn(schema, name) == column {
+			return true
+		}
+	}
+
+	return false
 }
 
 // insertValueUnset reports whether a bound record value stands for an attribute the model does not

@@ -189,11 +189,11 @@ func TestTimestampShapesReview(t *testing.T) {
 						updated := timestampReviewField(model, "UpdatedAt")
 						updated.Set(reflect.Zero(updated.Type()))
 						timestampReviewField(model, "Label").SetString("nulled")
-						require.NoError(t, fixture.Query().Save(model))
-						// A loaded updated_at zeroed by the caller is a dirty attribute: updateTimestamps()
-						// leaves it alone and the update writes NULL — it is not re-stamped (oracle, executed,
-						// /tmp/save11/null_updated_at_probe.php: dirty ["name","updated_at"], the update binds
-						// ["nulled",null,1] and the row's updated_at reads NULL).
+						require.NoError(t, fixture.Query().WithZero("updated_at").Save(model))
+						// Laravel writes NULL for a zeroed, dirty updated_at (oracle, executed,
+						// /tmp/save11/null_updated_at_probe.php). The port keeps no loaded values since
+						// 2026-11-06 (user decision), so the caller names the column with WithZero to say
+						// the zero is meant; Save would otherwise stamp it.
 						assertTimestampReviewEqual(t, model, "CreatedAt", manual)
 						assertTimestampReviewEqual(t, model, "UpdatedAt", time.Time{})
 						loaded := read(t, id)
@@ -204,7 +204,9 @@ func TestTimestampShapesReview(t *testing.T) {
 						create(t, &manual)
 						model := read(t, id)
 						timestampReviewField(model, "UpdatedAt").Set(reflect.ValueOf(tc.value(manualUpdate)))
-						require.NoError(t, fixture.Query().Save(model))
+						// A carried updated_at could be the loaded one, so Save stamps unless Select names
+						// the column (no loaded-value tracking since 2026-11-06, user decision).
+						require.NoError(t, fixture.Query().Select("label", "updated_at").Save(model))
 						loaded := read(t, id)
 						assertTimestampReviewEqual(t, loaded, "CreatedAt", manual)
 						assertTimestampReviewEqual(t, loaded, "UpdatedAt", manualUpdate)

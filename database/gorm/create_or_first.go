@@ -13,6 +13,7 @@ import (
 // to read the existing row back over the write connection — where(attributes)->first() — before
 // the error is rethrown as a typed violation.
 func (r *OrmBuilder) CreateOrFirst(dest any, conds ...any) error {
+	r = r.withZeroFor(conds...)
 	if err := r.applyPendingAttributes(dest); err != nil {
 		return err
 	}
@@ -209,6 +210,7 @@ func (r *OrmBuilder) firstOrCreateWithCreated(dest any, conds ...any) (bool, err
 // the column (default "count"), the first number is the create default and the second the step
 // (default 1 each), and a map is the extra values.
 func (r *OrmBuilder) IncrementOrCreate(dest any, attributes any, args ...any) error {
+	r = r.withZeroFor(append([]any{attributes}, args...)...)
 	column, defaultAmount, step, extra := incrementOrCreateArgs(args)
 
 	created, err := r.firstOrCreateWithCreated(dest, attributes, map[string]any{column: defaultAmount})
@@ -272,8 +274,6 @@ func (r *OrmBuilder) incrementModel(dest any, column string, step any, extra map
 	if _, err := keyed.updated(dest); err != nil {
 		return err
 	}
-
-	syncOriginalAttribute(dest, column)
 
 	return nil
 }

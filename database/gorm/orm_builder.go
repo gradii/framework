@@ -935,10 +935,6 @@ func (r *OrmBuilder) pageInto(dest any) ([]map[string]any, error) {
 
 	destValue.Elem().Set(page)
 
-	// Every element of the page was hydrated from a row, so each becomes its own original bag — a
-	// chunked read is a find like any other (see model_original.go).
-	syncOriginal(page.Interface())
-
 	return items, nil
 }
 
@@ -1493,6 +1489,7 @@ func (r *OrmBuilder) FirstOr(dest any, callback func() error) error {
 }
 
 func (r *OrmBuilder) FirstOrCreate(dest any, conds ...any) error {
+	r = r.withZeroFor(conds...)
 	_, err := r.firstOrCreateWithCreated(dest, conds...)
 
 	return err
@@ -1959,6 +1956,51 @@ func (r *OrmBuilder) Offset(offset int) contractsorm.Query {
 	return r
 }
 
+// WithZero names columns a struct write carries even when the field holds its Go zero value. A Go
+// struct cannot tell an unset field from one set to its zero value, so Create and Save leave every
+// zero field out by default; WithZero opts named columns back in. It does not narrow the write the
+// way Select does: every non-zero field is still written. "*" names every column, Omit wins over
+// it, and names resolve like Select and Omit (field name or column, optionally table-qualified).
+// Calls accumulate and, like Omit and the other builder methods, stay on the query handle.
+func (r *OrmBuilder) WithZero(columns ...string) contractsorm.Query {
+	conditions := r.conditions
+	conditions.withZero = append(append([]string(nil), conditions.withZero...), columns...)
+
+	return r.setConditions(conditions)
+}
+
+// withZeroFor returns the query with every key of the given column maps added to WithZero. A value a
+// caller passes in an attribute or value map is an explicit assignment, which Eloquent writes even
+// when it is null/false/0 (oracle v12.55.1, /tmp/r14/probe_a.php U4 and I2/I3); filling it into a
+// struct would otherwise make it indistinguishable from an unset field. Non-map arguments add
+// nothing.
+func (r *OrmBuilder) withZeroFor(values ...any) *OrmBuilder {
+	var columns []string
+	for _, value := range values {
+		if mapping, ok := asColumnMap(value); ok {
+			for key := range mapping {
+				columns = append(columns, key)
+			}
+		}
+	}
+	if len(columns) == 0 {
+		return r
+	}
+
+	return r.WithZero(columns...).(*OrmBuilder)
+}
+
+// writesZero reports whether a struct write carries column although its value is zero.
+func (r *OrmBuilder) writesZero(schema *modelSchema, column string) bool {
+	for _, name := range r.conditions.withZero {
+		if name == "*" || resolveInsertColumn(schema, name) == column {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (r *OrmBuilder) Omit(columns ...string) contractsorm.Query {
 	conditions := r.conditions
 	conditions.omit = columns
@@ -2355,10 +2397,6 @@ func assignCursorRows(dest any, items []map[string]any) error {
 
 	target.Elem().Set(slice)
 
-	// Every element of the page was hydrated from a row, so each becomes its own original bag (see
-	// model_original.go).
-	syncOriginal(slice.Interface())
-
 	return nil
 }
 
@@ -2438,21 +2476,12 @@ func (r *OrmBuilder) Rollback() error {
 	return r.tx.Rollback()
 }
 
-// Save persists a model the way Eloquent's Model::save does (Model.php:1215), on top of the
-// original-attribute tracking model_original.go carries: a model that carries no key is inserted; a
-// model that names a row updates exactly the attributes that changed since it was loaded plus the
-// freshly stamped updated_at, stamped at save time; and a model whose attributes all read back
-// unchanged runs no statement at all (`$saved = $this->isDirty() ? $this->performUpdate($query) :
-// true` — the updating and updated events and the owner touch are skipped with it, while the saved
-// event and the original sync still run, exactly as finishSave does). A model whose loaded values
-// were never captured — one built by hand — reads as having an empty original bag, so every field
-// is written, the behaviour Save always had.
-//
-// Oracle v12.55.1, executed (/tmp/save11/semantics_probe.php, /tmp/save11/events_probe.php): a
-// dirty model compiles `update "s11_users" set "name" = ?, "updated_at" = ? where "id" = ?` with
-// the save-time stamp ["new","2026-11-03 01:02:03",1]; a clean model runs nothing and its stored
-// updated_at is untouched; the event flow is [saving, updating, updated, saved] for the dirty save
-// and [saving, saved] for the clean one.
+// Save persists a model: a model that carries no key is inserted, and a model that names a row is
+// updated by its key. A Go struct has no attribute bag and the ORM keeps no record of the values a
+// model was loaded with, so neither path compares against a previous state: the write carries the
+// fields that hold a non-zero value, the automatic updated_at, and any column the query names through
+// WithZero (or a Select list) even when it holds the zero value. Eloquent's equivalent is the set of
+// attributes the model carries (oracle v12.55.1: an explicitly assigned null/false/0 is written).
 func (r *OrmBuilder) Save(dest any) error {
 	if hasStringColumns(r.query.Selects()) && len(r.conditions.omit) > 0 {
 		return errors.OrmQuerySelectAndOmitsConflict
@@ -2474,22 +2503,17 @@ func (r *OrmBuilder) Save(dest any) error {
 	}
 
 	if update {
-		// Model::save: `$saved = $this->isDirty() ? $this->performUpdate($query) : true;` — the
-		// clean branch runs no updating event and no statement, but finishSave below still runs.
-		if isDirty(dest) {
-			if dest, err = query.updating(dest); err != nil {
-				return err
-			}
+		if dest, err = query.updating(dest); err != nil {
+			return err
+		}
 
-			var wrote bool
-			if wrote, err = query.save(dest); err != nil {
+		var wrote bool
+		if wrote, err = query.save(dest); err != nil {
+			return err
+		}
+		if wrote {
+			if _, err := query.updated(dest); err != nil {
 				return err
-			}
-			// performUpdate fires the updated event only when it wrote: `if (count($dirty) > 0)`.
-			if wrote {
-				if _, err := query.updated(dest); err != nil {
-					return err
-				}
 			}
 		}
 	} else {
@@ -2513,15 +2537,12 @@ func (r *OrmBuilder) Save(dest any) error {
 		return err
 	}
 
-	// finishSave: the owners are touched while the model is still dirty — Laravel's
-	// `if ($this->isDirty() && ($options['touch'] ?? true))` re-checked before the original sync —
-	// and the original bag is then synced, so the write becomes the model's new baseline.
-	if !query.conditions.withoutTouch && isDirty(dest) {
+	// finishSave touches the model's owners after a save, unless WithoutTouch asked otherwise.
+	if !query.conditions.withoutTouch {
 		if err := query.touchOwners(dest); err != nil {
 			return err
 		}
 	}
-	syncOriginal(dest)
 
 	return nil
 }
@@ -2732,6 +2753,7 @@ func (r *OrmBuilder) Update(column any, value ...any) (*contractsdb.Result, erro
 // constraint race reads the winning row back (createOrFirst) and that row is filled with the values
 // and saved too — Laravel's wasRecentlyCreated() branch.
 func (r *OrmBuilder) UpdateOrCreate(dest any, attributes any, values any) error {
+	r = r.withZeroFor(attributes, values)
 	found, err := r.firstOrInit(dest, attributes, nil, nil)
 	if err != nil {
 		return err
@@ -3599,10 +3621,6 @@ func (r *OrmBuilder) create(dest any) error {
 	if err := r.touchOwners(dest); err != nil {
 		return err
 	}
-
-	// finishSave's last step: the original bag becomes the written values, so a later Save of this
-	// model updates only what changes from here on (see model_original.go).
-	syncOriginal(dest)
 
 	return nil
 }

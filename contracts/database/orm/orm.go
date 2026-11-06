@@ -302,6 +302,11 @@ type Query interface {
 	Offset(offset int) Query
 	// Omit specifies columns that should be omitted from the query.
 	Omit(columns ...string) Query
+	// WithZero names columns a struct write (Create, Save) carries even when the field holds its Go
+	// zero value. A Go struct cannot tell an unset field from one set to zero, so struct writes leave
+	// zero fields out by default; WithZero opts the named columns in without narrowing the write the
+	// way Select does. "*" names every column; Omit wins over it.
+	WithZero(columns ...string) Query
 	// Order specifies the order in which the results should be returned.
 	// DEPRECATED Use OrderByRaw instead.
 	Order(value any) Query
@@ -376,9 +381,9 @@ type Query interface {
 	Restore(model ...any) (*db.Result, error)
 	// Rollback rolls back the changes in a transaction.
 	Rollback() error
-	// Save persists a model the way Eloquent's save() does: a model that carries no key inserts; an
-	// existing row receives only the attributes that changed since the model was loaded plus a
-	// save-time updated_at; and a model with nothing changed runs no statement at all.
+	// Save persists a model: a model that carries no key inserts, and a model with a key updates that
+	// row. Either way the write carries the non-zero fields and the automatic timestamps; a zero field
+	// is written only when WithZero (or Select) names it. No previously loaded state is consulted.
 	Save(value any) error
 	// SaveQuietly updates value in a database without firing events
 	SaveQuietly(value any) error

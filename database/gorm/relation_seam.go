@@ -88,7 +88,12 @@ func (r *OrmBuilder) RelationInfoOf(parent any, relation string) (relations.Rela
 // NewQuery builds the same query with no state of its own — fresh(). contracts Query.Fresh is
 // the model refresh, hence the name.
 func (r *OrmBuilder) NewQuery() contractsorm.Query {
-	return r.fresh()
+	query := r.fresh()
+	// The columns WithZero named travel with the relation write the new query persists.
+	conditions := query.conditions
+	conditions.withZero = append([]string(nil), r.conditions.withZero...)
+
+	return query.setConditions(conditions)
 }
 
 // WriteSession is the fresh session a relation write persists through, keeping the caller's

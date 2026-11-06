@@ -683,7 +683,9 @@ func TestModel_UpdateProcess(t *testing.T) {
 	// Oracle (illuminate/database v12.55.1, executed, /tmp/save11/semantics_probe.php): the update
 	// carries exactly the changed attributes — `update "users" set "name" = ? where "id" = ?` for a
 	// timestampless model; the whole-struct shape this replaces wrote `"foo" = ?` too.
-	assert.Equal(t, `update "users" set "name" = 'taylor' where "id" = 1`, logs[0].Query)
+	// Since 2026-11-06 the port keeps no record of loaded values (user decision: the implicit
+	// original tracking was removed), so Save writes every non-zero field and never skips a clean model.
+	assert.Equal(t, `update "users" set "foo" = 7, "name" = 'taylor' where "id" = 1`, logs[0].Query)
 
 	var reloaded modelDirtyProcessUser
 	require.NoError(t, cloneRelationQuery(t, query).Where("id", 1).First(&reloaded))
@@ -1402,10 +1404,12 @@ func TestModel_WithoutEventDispatcher(t *testing.T) {
 	// A save of the model now that it is clean runs no statement and skips the updating/updated
 	// pair — Model::save stops at the isDirty gate while saving and saved still fire (oracle,
 	// executed: a clean save logs [saving, saved]).
+	// Since 2026-11-06 the port keeps no record of loaded values (user decision: the implicit
+	// original tracking was removed), so Save writes every non-zero field and never skips a clean model.
 	require.NoError(t, cloneRelationQuery(t, query).Model(&loud).Save(&loud))
 	require.Equal(t, 3, observer.saving)
-	require.Equal(t, 1, observer.updating)
-	require.Equal(t, 1, observer.updated)
+	require.Equal(t, 2, observer.updating)
+	require.Equal(t, 2, observer.updated)
 	require.Equal(t, 3, observer.saved)
 }
 

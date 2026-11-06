@@ -225,11 +225,13 @@ func (r *OrmBuilder) quietSession() *OrmBuilder {
 // site keeps its clean conditions.
 func (r *OrmBuilder) relationWriteSession() *OrmBuilder {
 	session := r.fresh()
+	conditions := session.conditions
+	// The columns WithZero named travel with the write, so a zero the caller assigned is written.
+	conditions.withZero = append([]string(nil), r.conditions.withZero...)
 	if !r.conditions.withoutEvents {
-		return session
+		return session.setConditions(conditions)
 	}
 
-	conditions := session.conditions
 	conditions.withoutEvents = true
 
 	return session.setConditions(conditions)
@@ -705,6 +707,7 @@ func (r *OrmBuilder) createOrFirstMany2Many(desc *relationDescriptor, parent any
 // then the plain related read whose hit is attached — before the createOrFirst fallback
 // (firstOrCreateMany2Many, shared with UpdateOrCreateRelation).
 func (r *OrmBuilder) FirstOrCreateRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any, recorded ...relations.PivotValue) error {
+	r = r.withZeroFor(attrs, values)
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
@@ -737,6 +740,7 @@ func (r *OrmBuilder) FirstOrCreateRelation(parent any, relation string, attrs ma
 // and attached — and only that fresh insert skips the fill+save (BelongsToMany::updateOrCreate,
 // BelongsToMany.php:707).
 func (r *OrmBuilder) UpdateOrCreateRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any, recorded ...relations.PivotValue) error {
+	r = r.withZeroFor(attrs, values)
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
@@ -780,6 +784,7 @@ func (r *OrmBuilder) UpdateOrCreateRelation(parent any, relation string, attrs m
 		saver := r.fresh()
 		conditions := saver.conditions
 		conditions.withoutTouch = true
+		conditions.withZero = append([]string(nil), r.conditions.withZero...)
 		saver.setConditions(conditions)
 
 		return saver.Save(dest)
@@ -1019,6 +1024,7 @@ func castKey(v any, t reflect.Type) any {
 //
 // RelationWriter.CreateOrFirst shell (contracts/database/orm/relation_writer.go:108) — reached through Query.Relation(parent, name); the flat Orm.CreateOrFirst form intentionally does not exist (relation_writer.go:9).
 func (r *OrmBuilder) CreateOrFirstRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any, recorded ...relations.PivotValue) error {
+	r = r.withZeroFor(attrs, values)
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}

@@ -763,7 +763,6 @@ func (r *OrmBuilder) runMany2ManyQueryCompiled(child *OrmBuilder, desc *relation
 		if err := child.hydratePivotRow(row, element); err != nil {
 			return nil, nil, err
 		}
-		syncOriginal(element.Interface())
 
 		out = append(out, element)
 		parents = append(parents, dictKey(row[parentAlias]))

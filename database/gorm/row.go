@@ -46,10 +46,6 @@ func (r *Row) Scan(value any) error {
 		}
 	}
 
-	// The row hydrated the model, so its current values become its original bag — a cursor read is
-	// a find like any other (see model_original.go).
-	syncOriginal(value)
-
 	if r.query == nil || len(r.query.conditions.eagerLoad) == 0 {
 		return nil
 	}

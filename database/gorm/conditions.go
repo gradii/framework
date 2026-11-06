@@ -35,6 +35,9 @@ type Conditions struct {
 	dest  any
 	model any
 	omit  []string
+	// withZero names the columns a struct write carries even when the field holds its zero value;
+	// "*" names every column. See OrmBuilder.WithZero.
+	withZero []string
 	// scopes carries the scopes addGlobalScopes queued from the model — the Go form of Laravel's
 	// withGlobalScope() registration, applied when the statement compiles (withScopesApplied). The
 	// caller's own Scopes() call applies immediately (Builder::scopes) and never lands here.
@@ -238,6 +241,7 @@ func (c Conditions) clone() Conditions {
 	out := c
 
 	out.omit = append([]string(nil), c.omit...)
+	out.withZero = append([]string(nil), c.withZero...)
 	out.scopes = append([]func(contractsorm.Query) contractsorm.Query(nil), c.scopes...)
 	out.selectSubs = append([]selectSub(nil), c.selectSubs...)
 	out.eagerLoad = append([]eagerLoadEntry(nil), c.eagerLoad...)

@@ -330,5 +330,7 @@ func TestHasManyThroughObject_UpdateOrCreateHitUpdatesTheRecord(t *testing.T) {
 	// /tmp/save11/through_update_probe.php: `update "child" set "val" = ?, "updated_at" = ? where
 	// "id" = ?`): only the filled val changed, updated_at is stamped at save time, and the loaded
 	// row's attr / created_at / pivot_id stay out of the statement.
-	assert.Equal(t, `update "child" set "updated_at" = '2023-01-01 00:00:00', "val" = 'baz' where "id" = 789`, logs[1].Query)
+	// Since 2026-11-06 the port keeps no record of loaded values (user decision: the implicit
+	// original tracking was removed), so Save writes every non-zero field and never skips a clean model.
+	assert.Equal(t, `update "child" set "attr" = 'foo', "created_at" = '2023-01-01 00:00:00', "pivot_id" = 456, "updated_at" = '2023-01-01 00:00:00', "val" = 'baz' where "id" = 789`, logs[1].Query)
 }

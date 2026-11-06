@@ -340,10 +340,6 @@ func (r *OrmBuilder) scanRows(rows *sql.Rows, dest any) (int, error) {
 				return 0, err
 			}
 
-			// The row just hydrated the model, so its current values become its original bag — the
-			// Go form of setRawAttributes(..., sync: true) during a find (see model_original.go).
-			syncOriginal(dest)
-
 			return 1, nil
 		}
 
@@ -374,10 +370,6 @@ func (r *OrmBuilder) scanRows(rows *sql.Rows, dest any) (int, error) {
 
 	if intoSlice {
 		destValue.Elem().Set(target)
-
-		// Every element of the returned slice was hydrated from a row, so each becomes its own
-		// original bag (see model_original.go).
-		syncOriginal(target.Interface())
 
 		return count, nil
 	}
