@@ -1290,6 +1290,14 @@ func (r *OrmBuilder) oneOfManyJoin(builder *OrmBuilder, desc *relationDescriptor
 		// relation's removals; a caller's withoutGlobalScopes() removes them only from the outer
 		// query).
 		removals := scopeRemovalsOf(builder)
+		// onlyTrashed is a macro: it removes SoftDeletingScope and writes its whereNotNull onto the
+		// relation query alone. The aggregate subquery (newOneOfManySubQuery) inherits only the
+		// removal, so it carries no soft-delete predicate at all (oracle,
+		// /Users/dog/.claude/jobs/013c27a0/tmp/r14-probes/probe_ofmany.out E3).
+		if removals.onlyTrashed {
+			removals.onlyTrashed = false
+			removals.withTrashed = true
+		}
 		r.applySubquerySoftDelete(sub, desc.RelatedTable, desc.RelatedModel, removals)
 		r.applyRelatedGlobalScopes(sub, desc.RelatedModel, removals)
 

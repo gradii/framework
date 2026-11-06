@@ -44,15 +44,21 @@ type Conditions struct {
 	// (applyScopes), and the reads that apply them before the onceWithColumns decision — pluck,
 	// value, valueOrFail and get($columns) — then run their statement from the scoped copy, so a
 	// second addGlobalScopes on that copy must not queue the model's scopes again.
-	scopesApplied       bool
-	raw                 *Select
-	selectSubs          []selectSub
-	eagerLoad           []eagerLoadEntry
-	relations           []relationExistence
-	oneOfMany           *oneOfManyConfig
-	useWritePdo         bool
-	withoutEvents       bool
-	withoutGlobalScopes []string
+	scopesApplied bool
+	// softDeleteScopeApplied marks a query whose built-in soft-delete scope has already been applied
+	// by withScopesApplied: the relation existence clauses recorded so far are spliced into the
+	// where list and the predicate is composed the way Eloquent's callScope composes the first
+	// registered scope (SoftDeletingScope registers before every user scope). A compile from that
+	// query must not apply it again.
+	softDeleteScopeApplied bool
+	raw                    *Select
+	selectSubs             []selectSub
+	eagerLoad              []eagerLoadEntry
+	relations              []relationExistence
+	oneOfMany              *oneOfManyConfig
+	useWritePdo            bool
+	withoutEvents          bool
+	withoutGlobalScopes    []string
 	// withoutTimestamps counts the active WithoutTimestamps scopes: automatic created_at / updated_at
 	// stamping is withheld while positive, so nested scopes keep the suspension active and each scope
 	// restores exactly its own — Eloquent's $ignoreTimestampsOn list, kept as a depth because the Go
@@ -65,6 +71,10 @@ type Conditions struct {
 	withoutTouch bool
 	withTrashed  bool
 	onlyTrashed  bool
+	// onlyTrashedWhereIndex is the where count when OnlyTrashed was first called: Laravel's
+	// onlyTrashed macro writes its whereNotNull at call time, so the predicate is spliced back to
+	// that position when the statement compiles.
+	onlyTrashedWhereIndex int
 	// pendingAttributes are the column values WithAttributes recorded for every model the query
 	// creates, mirroring Builder::$pendingAttributes. Keys are column names as the caller wrote them;
 	// the write path resolves them against the model's schema.

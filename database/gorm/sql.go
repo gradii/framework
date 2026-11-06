@@ -260,7 +260,7 @@ func (r *OrmBuilder) newBuilder() (*querybuilder.Builder, error) {
 	// (applyScopes), and this is that compile-time application. The caller's own Scopes() call
 	// applied immediately (Builder::scopes) and left nothing queued. The scopes mutate the query,
 	// so they run first.
-	if len(r.conditions.scopes) > 0 {
+	if len(r.conditions.scopes) > 0 || !r.conditions.softDeleteScopeApplied {
 		scoped := r.withScopesApplied()
 		if scoped.conditions.err != nil {
 			return nil, scoped.conditions.err
@@ -299,18 +299,15 @@ func (r *OrmBuilder) newBuilder() (*querybuilder.Builder, error) {
 	// conditions the ORM records internally (Find's, the FirstOr* fold's, the pivot chain's) all
 	// write to the persistent builder when they are called.
 
-	// Relation existence conditions join the where clause before the soft-delete predicate, which is
-	// the order GORM built them in.
+	// Relation existence conditions a user scope queued join the where clause at the positions that
+	// scope recorded; the ones the caller queued were spliced in by withScopesApplied.
 	if err := r.applyRelations(builder); err != nil {
 		return nil, err
 	}
 
-	// The soft-delete predicate belongs to the compiled statement too, not only to the GORM
-	// statement: any read that runs through this path would otherwise see deleted rows. It is
-	// appended last so it applies to the whole query, exactly as the GORM clause did.
-	if err := r.applySoftDelete(builder); err != nil {
-		return nil, err
-	}
+	// The soft-delete predicate was composed by withScopesApplied, as the first applied scope. The
+	// relation existence clauses spliced above are the ones a user scope queued after it ran, at the
+	// positions that scope recorded.
 
 	// A through read filters a soft-deletable through model too, its predicate after the related
 	// model's - Laravel applies the related SoftDeletingScope first, then the named through scope.
@@ -319,8 +316,10 @@ func (r *OrmBuilder) newBuilder() (*querybuilder.Builder, error) {
 	return builder, nil
 }
 
-// applySoftDelete adds the model's soft-delete predicate when the statement is not unscoped:
-// "is null" by default, "is not null" when OnlyTrashed asked for the trashed rows alone. The
+// applySoftDelete adds the model's default soft-delete predicate when the statement is not unscoped,
+// composed as Laravel's first applied scope (withScopesApplied calls it before any user scope, and
+// the wheres before it are regrouped when they carry an or); OnlyTrashed's "is not null" is written
+// by applyOnlyTrashed at its call position instead. The
 // predicate is written as a structured where so the grammar compiles it through compileWhereNull -
 // the same lowercase path Laravel's SoftDeletingScope::apply uses - instead of as a raw fragment.
 //
@@ -356,7 +355,60 @@ func (r *OrmBuilder) applySoftDelete(builder *querybuilder.Builder) error {
 		return nil
 	}
 
-	return r.appendSoftDeletePredicate(builder, r.conditions.onlyTrashed)
+	// onlyTrashed's predicate is not a scope: applyOnlyTrashed wrote it at its call position.
+	if r.conditions.onlyTrashed {
+		return nil
+	}
+
+	// The default predicate is SoftDeletingScope applied through Eloquent's callScope: the wheres
+	// written before it and the predicate are each rebuilt as their own slice
+	// (addNewWheresWithinGroup), so a user or-chain is wrapped in one group before the predicate is
+	// and-ed on.
+	originalWhereCount := len(builder.State().Wheres)
+	if err := r.appendSoftDeletePredicate(builder, false); err != nil {
+		return err
+	}
+	if len(builder.State().Wheres) > originalWhereCount {
+		addNewWheresWithinGroupIn(builder, originalWhereCount)
+	}
+
+	return nil
+}
+
+// applyOnlyTrashed writes OnlyTrashed's "is not null" predicate where Laravel's onlyTrashed macro
+// writes it: the macro removes SoftDeletingScope and calls whereNotNull on the builder at call time,
+// so the predicate sits at the where position the call recorded and nothing is regrouped (no scope
+// is applied for it). The relation existence clauses recorded at or after that position move one
+// place to the right, since they are spliced in afterwards.
+func (r *OrmBuilder) applyOnlyTrashed(builder *querybuilder.Builder) error {
+	if !r.conditions.onlyTrashed || !r.usesFrameworkSoftDelete() {
+		return nil
+	}
+
+	whereCount := len(builder.State().Wheres)
+	if err := r.appendSoftDeletePredicate(builder, true); err != nil {
+		return err
+	}
+	if len(builder.State().Wheres) == whereCount {
+		return nil
+	}
+
+	index := min(r.conditions.onlyTrashedWhereIndex, whereCount)
+	wheres := builder.State().Wheres
+	predicate := wheres[whereCount]
+	copy(wheres[index+1:], wheres[index:whereCount])
+	wheres[index] = predicate
+
+	items := make([]relationExistence, len(r.conditions.relations))
+	for i, item := range r.conditions.relations {
+		if item.whereIndex >= index {
+			item.whereIndex++
+		}
+		items[i] = item
+	}
+	r.conditions.relations = items
+
+	return nil
 }
 
 // globalScopeRemoved reports whether the query removed the named global scope - Laravel's
@@ -430,7 +482,11 @@ func (r *OrmBuilder) applyThroughSoftDelete(builder *querybuilder.Builder) {
 
 	// A structured where, so the grammar compiles Laravel's lowercase "is null" through
 	// compileWhereNull instead of a raw fragment's own casing.
+	// It is a named scope applied through callScope as well, so the wheres before it are regrouped
+	// when they carry an or (addNewWheresWithinGroup).
+	originalWhereCount := len(builder.State().Wheres)
 	builder.WhereNull(r.conditions.throughSoftDeleteTable+"."+r.conditions.throughSoftDeleteColumn, core.BooleanAnd, false)
+	addNewWheresWithinGroupIn(builder, originalWhereCount)
 }
 
 // applyTable points the builder at the query's table when it was not named directly: a table named

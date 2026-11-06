@@ -3413,6 +3413,9 @@ func (r *OrmBuilder) WithTrashed() contractsorm.Query {
 
 func (r *OrmBuilder) OnlyTrashed() contractsorm.Query {
 	conditions := r.conditions
+	if !conditions.onlyTrashed {
+		conditions.onlyTrashedWhereIndex = len(r.query.State().Wheres)
+	}
 	conditions.onlyTrashed = true
 
 	return r.setConditions(conditions)
@@ -3722,6 +3725,29 @@ func (r *OrmBuilder) withScopesApplied() *OrmBuilder {
 	// from what the previous ones produced.
 	query = query.flushWheres()
 
+	// The built-in SoftDeletingScope is the model's first registered global scope (bootSoftDeletes
+	// runs before any booted() registration), so applyScopes applies it before every user scope. The
+	// relation existence clauses recorded so far belong to the where list it splits, so they are
+	// spliced in first - Eloquent appended them at call time.
+	if !query.conditions.softDeleteScopeApplied {
+		query.conditions.softDeleteScopeApplied = true
+
+		if err := query.applyOnlyTrashed(query.query); err != nil {
+			query.conditions.err = err
+		}
+
+		if err := query.applyRelations(query.query); err != nil {
+			query.conditions.err = err
+		}
+		query.conditions.relations = nil
+
+		if !query.scopesRemoveSoftDeletingScope(scopes) {
+			if err := query.applySoftDelete(query.query); err != nil {
+				query.conditions.err = err
+			}
+		}
+	}
+
 	for _, apply := range scopes {
 		query = query.applyScope(apply)
 	}
@@ -3739,6 +3765,29 @@ func (r *OrmBuilder) withScopesApplied() *OrmBuilder {
 	r.conditions.eagerLoad = query.conditions.eagerLoad
 
 	return query
+}
+
+// scopesRemoveSoftDeletingScope reports whether one of the queued scopes lifts the built-in
+// soft-delete predicate (WithTrashed, or a removal of SoftDeletingScope / every scope). Laravel's
+// applyScopes skips a scope a previously applied scope removed, and a model can register such a
+// scope before bootSoftDeletes runs (the corpus's GlobalScopeCanBeRemovedByOtherGlobalScope). The
+// port always applies the predicate first, so the queued scopes are dry-run on a throwaway copy to
+// learn whether any of them removes it; the dry run's clauses are discarded.
+func (r *OrmBuilder) scopesRemoveSoftDeletingScope(scopes []func(contractsorm.Query) contractsorm.Query) bool {
+	if len(scopes) == 0 || !r.usesFrameworkSoftDelete() {
+		return false
+	}
+
+	probe := r.clone()
+	for _, apply := range scopes {
+		probe = probe.applyScope(apply)
+	}
+
+	if probe.conditions.onlyTrashed {
+		return false
+	}
+
+	return probe.conditions.withTrashed || probe.globalScopeRemoved(contractsorm.SoftDeletingScope)
 }
 
 // applyScope runs one scope the way Eloquent's Builder::callScope does: the wheres on the query

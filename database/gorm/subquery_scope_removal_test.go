@@ -1,6 +1,7 @@
 package gorm
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -294,13 +295,15 @@ func TestOneOfManyAggregate_CarriesRelatedUserScopes(t *testing.T) {
 }
 
 // The lazy relation read shares oneOfManyJoin, so the aggregate carries the same scopes (oracle
-// /tmp/r13v/ofmany4_probe.php `->latestMid()` row; the outer query's scope order is the port's
-// documented soft-delete-last convention, so only the aggregate is byte-compared here).
+// /tmp/r13v/ofmany4_probe.php `->latestMid()` row). The outer where clause composes the soft-delete
+// predicate as the first applied scope, before the user scope, the order that row compiles (re-run
+// in round 14; the join alias "latest_mid" vs Laravel's "latestOfMany" is a separate naming gap).
 func TestOneOfManyAggregate_LazyReadCarriesRelatedUserScopes(t *testing.T) {
 	q := newRelQueryWith(t, &relDeepMid{})
 	rel := q.Related(&relLatestOwner{ID: 1}, "LatestMid")
 	sql := newRelationSQL(t, rel, &[]relDeepMid{})
 	assert.Contains(t, sql, `from "rel_deep_mids" where "rel_deep_mids"."owner_id" = ? and "rel_deep_mids"."owner_id" is not null and "rel_deep_mids"."deleted_at" is null and "active" = ? group by "rel_deep_mids"."owner_id"`)
+	assert.True(t, strings.HasSuffix(sql, `where "rel_deep_mids"."owner_id" = ? and "rel_deep_mids"."owner_id" is not null and "rel_deep_mids"."deleted_at" is null and "active" = ?`), sql)
 
 	q2 := newRelQueryWith(t, &relDeepMid{})
 	rel2 := q2.Related(&relLatestOwnerRm{ID: 1}, "LatestMid")

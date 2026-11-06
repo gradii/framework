@@ -38,11 +38,12 @@ import (
 //     soft-delete predicate: the compiled eager runner binds the related model to its child, so
 //     soft-deleted related rows are filtered where before they were hydrated (oracle:
 //     /tmp/eager-softdelete/probe.php; the five relation-lazy-load ports are un-skipped below);
-//   - onlyTrashed() / withTrashed() callbacks and relation default scopes do not reach existence or
-//     aggregate subqueries — applyRelationScope carries only where clauses, and the subquery always
-//     carries the default "deleted_at is null" (probes under the whereHas / withCount ports);
-//   - OrWhere is not grouped against the appended soft-delete predicate, and the delete/restore
-//     paths do not sync the in-memory model (no getOriginal snapshot).
+//   - (fixed) onlyTrashed() / withTrashed() callbacks and relation scope removals reach the
+//     existence and aggregate subqueries (the whereHas / withCount ports run un-skipped);
+//   - (fixed) the soft-delete predicate composes as Laravel's first applied scope, so an OrWhere
+//     chain is grouped before it (OrWhereWithSoftDeleteConstraint);
+//   - open: the delete/restore paths do not sync the in-memory model (no getOriginal snapshot),
+//     there is no WithoutTrashed(), and the PHP-only assertions stay skipped.
 
 // The morph map registers the corpus's two user kinds under stable aliases; the comments table's
 // owner_type column carries them. MorphTo eager loads resolve the per-row type through this
@@ -1343,7 +1344,25 @@ func TestSoftDeletesIntegration_WithCountWithNestedDeletedRelationshipAndOnlyTra
 func TestSoftDeletesIntegration_OrWhereWithSoftDeleteConstraint(t *testing.T) {
 	// Laravel: where('email', taylor) orWhere('email', abigail) then pluck('email') is [abigail] —
 	// the soft-delete scope must not let the trashed row through the OR.
-	t.Skip("our ORM diverges: OrWhere is not grouped against the appended soft-delete predicate — probe: the chain compiles `where \"email\" = ? or \"email\" = ? and \"users\".\"deleted_at\" is null` and Pluck('email') returns [taylorotwell@gmail.com abigailotwell@gmail.com]; the oracle groups Eloquent's own wheres first (`where (\"email\" = ? or \"email\" = ?) and \"users\".\"deleted_at\" is null`), so Laravel returns [abigailotwell@gmail.com]")
+	// The default SoftDeletingScope applies through callScope, which groups the or-chain before the
+	// predicate is and-ed on (oracle, illuminate/database v12.55.1, real sqlite, /tmp/r14si/probe.out
+	// P2: `select * from "sd_users" where ("email" = ? or "email" = ?) and "sd_users"."deleted_at"
+	// is null`; the corpus's own table renders the same shape on "users").
+	query := newRelationQuery(t)
+	softDeletesTestSchema(t, query)
+	softDeletesCreateUsers(t, query)
+
+	chain := func() contractsorm.Query {
+		return cloneRelationQuery(t, query).Model(&softDeletesTestUser{}).
+			Where("email", "taylorotwell@gmail.com").OrWhere("email", "abigailotwell@gmail.com")
+	}
+
+	assert.Equal(t, `select * from "users" where ("email" = ? or "email" = ?) and "users"."deleted_at" is null`,
+		chain().ToSql().Get(&[]softDeletesTestUser{}))
+
+	var emails []string
+	require.NoError(t, chain().Pluck("email", &emails))
+	assert.Equal(t, []string{"abigailotwell@gmail.com"}, emails)
 }
 
 func TestSoftDeletesIntegration_MorphToWithTrashed(t *testing.T) {

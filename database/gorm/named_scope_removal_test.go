@@ -63,7 +63,8 @@ func namedScopeSQL(t *testing.T, q *OrmBuilder) (string, []any) {
 func TestSoftDeleteNamedScope_RemovalByNameAndWildcard(t *testing.T) {
 	t.Run("default keeps both", func(t *testing.T) {
 		statement, _ := namedScopeSQL(t, compiledQuery(t, &namedScopeSoftUser{}, Conditions{}))
-		assert.Equal(t, `select * from "nsu_users" where "name" = ? and "nsu_users"."deleted_at" is null`, statement)
+		// Oracle /tmp/r14si/probe.out N1: SoftDeletingScope registers first, so it applies first.
+		assert.Equal(t, `select * from "nsu_users" where "nsu_users"."deleted_at" is null and "name" = ?`, statement)
 	})
 
 	t.Run("removing the SoftDeletingScope name drops only the predicate", func(t *testing.T) {
@@ -101,7 +102,9 @@ func TestSoftDeleteNamedScope_RemovalByNameAndWildcard(t *testing.T) {
 		q := compiledQuery(t, &namedScopeSoftUser{}, Conditions{}).OnlyTrashed().(*OrmBuilder)
 
 		statement, _ := namedScopeSQL(t, q)
-		assert.Equal(t, `select * from "nsu_users" where "name" = ? and "nsu_users"."deleted_at" is not null`, statement)
+		// Oracle /tmp/r14si/probe.out N2/N3: onlyTrashed writes its predicate at call time, before
+		// the user scope applies.
+		assert.Equal(t, `select * from "nsu_users" where "nsu_users"."deleted_at" is not null and "name" = ?`, statement)
 	})
 
 	t.Run("named removal plus onlyTrashed keeps is not null", func(t *testing.T) {
@@ -109,7 +112,9 @@ func TestSoftDeleteNamedScope_RemovalByNameAndWildcard(t *testing.T) {
 			WithoutGlobalScopes(contractsorm.SoftDeletingScope).(*OrmBuilder).OnlyTrashed().(*OrmBuilder)
 
 		statement, _ := namedScopeSQL(t, q)
-		assert.Equal(t, `select * from "nsu_users" where "name" = ? and "nsu_users"."deleted_at" is not null`, statement)
+		// Oracle /tmp/r14si/probe.out N2/N3: onlyTrashed writes its predicate at call time, before
+		// the user scope applies.
+		assert.Equal(t, `select * from "nsu_users" where "nsu_users"."deleted_at" is not null and "name" = ?`, statement)
 	})
 }
 
