@@ -26,9 +26,9 @@ import (
 //	I8 new model, nothing set        insert into "probe_users" ("updated_at", "created_at") values (...)                     [<stamp>,<stamp>]
 //
 // The port orders a record's columns by name, so the same set renders alphabetically (Laravel keeps
-// the bag's insertion order). The UPDATE path is deliberately untouched: a model with no captured
-// original bag still updates every non-key field (save_semantics_test.go's
-// TestSaveSemanticsWritesEveryColumnWithoutACapturedBag), the round-6 whole-struct reading.
+// the bag's insertion order). A keyed Save applies the same rule to its UPDATE: a zero field stays
+// out unless WithZero (or Select) names it (save_semantics_test.go; the implicit original-value
+// tracking was removed by the user's decision of 2026-11-06).
 
 // insertColumnsUser carries a nullable pointer column, two string columns, a bool and an int left at
 // their zeros, so the set/omitted split is observable in one model.

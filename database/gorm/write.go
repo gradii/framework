@@ -131,6 +131,12 @@ func (r *OrmBuilder) structRecord(value any) (map[string]any, error) {
 	for _, field := range schema.Fields {
 		fieldValue, _ := field.BindingValueOf(r.ctx, reflected)
 		if !timestamps && (field.AutoCreateTime != 0 || field.AutoUpdateTime != 0) && zeroTimestamp(fieldValue) {
+			// A column WithZero names is written all the same, as SQL NULL — Eloquent's null —
+			// never a raw '0000-00-00' time.
+			if r.writesZero(schema, field.DBName) {
+				record[field.DBName] = nil
+			}
+
 			continue
 		}
 		record[field.DBName] = fieldValue
@@ -638,7 +644,7 @@ func (r *OrmBuilder) execInsert(dest any) (bool, error) {
 // attribute array itself — create(['name' => null]) carries an attribute, so the guard lets that
 // insert run — therefore only a map record with no key at all is the empty attribute set. A struct
 // record names every declared field instead, and the Go zero stands in for an unset attribute there,
-// the same stand-in the insert column filter documents.
+// the same stand-in the insert column filter documents, unless WithZero names the column.
 func (r *OrmBuilder) skipsEmptyNonIncrementingInsert(dest any, records []map[string]any) bool {
 	model := r.parentModel()
 	if model == nil {
@@ -664,8 +670,10 @@ func (r *OrmBuilder) skipsEmptyNonIncrementingInsert(dest any, records []map[str
 			continue
 		}
 
-		for _, value := range record {
-			if !isZeroValue(value) {
+		for column, value := range record {
+			// A zero WithZero names is an assigned attribute, not an unset one: Eloquent's
+			// create(['flag' => false]) inserts it (oracle v12.55.1, /tmp/r15v/probe_v.out P3).
+			if !isZeroValue(value) || r.writesZero(schema, column) {
 				return false
 			}
 		}

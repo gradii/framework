@@ -42,7 +42,7 @@ const (
 
 	skipModelAttributeBag = "PHP-only assertion (no Go equivalent): the Go ORM keeps no attribute bag — a model's attributes are plain struct fields — so the test's magic getter/setter and attribute-array behaviour cannot be reproduced"
 
-	skipModelDirty = "our ORM diverges: the original-attribute snapshot is internal Save machinery (hydration captures it; a clean model skips the update, a dirty one writes only its changed columns) with no readable model-level API — Eloquent's isDirty/isClean/getOriginal/syncOriginal on a model value have no Go form"
+	skipModelDirty = "our ORM diverges by user decision (2026-11-06): the implicit original-value tracking was removed and no replacement was added, so a model keeps no original-attribute snapshot — Eloquent's isDirty/isClean/getOriginal/getDirty/syncOriginal on a model value have no Go form; a struct write carries its non-zero fields plus the columns WithZero names"
 
 	skipModelCasts = "our ORM diverges: the Go ORM has no cast layer (no $casts/casts()) — a field's declared Go type is its only representation"
 
@@ -647,8 +647,9 @@ func TestModel_WithMethodCallsQueryBuilderCorrectlyWithArray(t *testing.T) {
 }
 
 // modelDirtyProcessUser is the two-column shape the corpus's testUpdateProcess exercises: id,
-// name, and a second loaded column (foo) that must stay out of the dirty-only update — the
-// corpus's "make sure foo isn't synced so we can test that dirty attributes only are updated".
+// name, and a second loaded column (foo) — the corpus's "make sure foo isn't synced so we can test
+// that dirty attributes only are updated". With no original-value tracking (user decision,
+// 2026-11-06) the port's Save writes foo too whenever it is non-zero.
 type modelDirtyProcessUser struct {
 	ID   uint64 `gorm:"column:id;primaryKey;autoIncrement" db:"id"`
 	Name string `gorm:"column:name" db:"name"`
@@ -666,7 +667,8 @@ func TestModel_UpdateProcess(t *testing.T) {
 
 	// Laravel syncs the model, dirties name alone and asserts the update carries exactly
 	// ['name' => 'taylor'] where id = 1: the loaded, unchanged foo stays out of the statement. The
-	// Go port reads the same set from the original bag hydration captured.
+	// Go port keeps no original bag (user decision, 2026-11-06), so it cannot tell the loaded foo
+	// from an assigned one and writes every non-zero field.
 	var loaded modelDirtyProcessUser
 	require.NoError(t, cloneRelationQuery(t, query).Where("id", 1).First(&loaded))
 	require.Equal(t, 7, loaded.Foo)
@@ -679,12 +681,12 @@ func TestModel_UpdateProcess(t *testing.T) {
 	require.NoError(t, withContext.WithContext(ctx).Model(&loaded).Save(&loaded))
 
 	logs := databasedb.GetQueryLog(ctx)
-	require.Len(t, logs, 1, "the dirty-only update is one statement")
+	require.Len(t, logs, 1, "the update is one statement")
 	// Oracle (illuminate/database v12.55.1, executed, /tmp/save11/semantics_probe.php): the update
 	// carries exactly the changed attributes — `update "users" set "name" = ? where "id" = ?` for a
 	// timestampless model; the whole-struct shape this replaces wrote `"foo" = ?` too.
 	// Since 2026-11-06 the port keeps no record of loaded values (user decision: the implicit
-	// original tracking was removed), so Save writes every non-zero field and never skips a clean model.
+	// original tracking was removed), so Save writes every non-zero field; it cannot tell a clean model from a changed one.
 	assert.Equal(t, `update "users" set "foo" = 7, "name" = 'taylor' where "id" = 1`, logs[0].Query)
 
 	var reloaded modelDirtyProcessUser
@@ -792,7 +794,9 @@ func TestModel_UpdateProcessWithoutTimestamps(t *testing.T) {
 	require.NoError(t, cloneRelationQuery(t, query).Create(&seeded))
 
 	// Laravel sets $model->timestamps = false and asserts update(['name' => 'taylor']) where id = 1:
-	// the dirty column alone, no updated_at — the save never reaches updateTimestamps.
+	// the dirty column alone, no updated_at — the save never reaches updateTimestamps. The port's
+	// keyed Save writes the non-zero fields (no original-value tracking, user decision 2026-11-06);
+	// name is the only one here, and no updated_at is stamped.
 	loaded := modelTimestampsDisabledUser{}
 	require.NoError(t, cloneRelationQuery(t, query).Where("id", 1).First(&loaded))
 	loaded.Disabled = true
@@ -807,7 +811,7 @@ func TestModel_UpdateProcessWithoutTimestamps(t *testing.T) {
 	logs := databasedb.GetQueryLog(ctx)
 	require.Len(t, logs, 1, "the suspended update is one statement without updated_at")
 	// Oracle (illuminate/database v12.55.1, executed, /tmp/save11/semantics_probe.php, case 6):
-	// `update "s11_users" set "name" = ? where "id" = ?` — the dirty column alone.
+	// `update "s11_users" set "name" = ? where "id" = ?` — the same single column.
 	assert.Equal(t, `update "users" set "name" = 'taylor' where "id" = 1`, logs[0].Query)
 
 	var reloaded modelTimestampsDisabledUser
@@ -817,8 +821,8 @@ func TestModel_UpdateProcessWithoutTimestamps(t *testing.T) {
 
 func TestModel_UpdateUsesOldPrimaryKey(t *testing.T) {
 	// Laravel changes the model's key from 1 to 2 and asserts the update still targets id = 1
-	// (where) while setting id = 2. Our ORM diverges: Save reads the key the model holds now, so
-	// it would target the new key, and there is no original-key tracking.
+	// (where) while setting id = 2 — getOriginal on the key. Our ORM diverges: Save reads the key
+	// the model holds now, so it would target the new key; no original key is tracked.
 	t.Skip(skipModelDirty + "; Save addresses the row by the key the model holds now — no original-key tracking")
 }
 
@@ -1387,9 +1391,9 @@ func TestModel_WithoutEventDispatcher(t *testing.T) {
 	require.Equal(t, 1, observer.saved)
 
 	// The corpus's second closure updates an existing model without events, then saves normally;
-	// both saves change a field, because a clean model runs no update at all — Model::save's
-	// isDirty gate — and fires no updating/updated events (oracle, executed: a clean save logs
-	// [saving, saved]).
+	// both saves change a field there, because Laravel's clean model runs no update at all —
+	// Model::save's isDirty gate — and fires no updating/updated events (oracle, executed: a clean
+	// save logs [saving, saved]).
 	loud.Name = "taylor-quiet"
 	require.NoError(t, cloneRelationQuery(t, query).WithoutEvents().Model(&loud).Save(&loud))
 	require.Zero(t, observer.updating, "no events inside WithoutEvents")
@@ -1401,11 +1405,12 @@ func TestModel_WithoutEventDispatcher(t *testing.T) {
 	require.Equal(t, 1, observer.updated)
 	require.Equal(t, 2, observer.saved)
 
-	// A save of the model now that it is clean runs no statement and skips the updating/updated
-	// pair — Model::save stops at the isDirty gate while saving and saved still fire (oracle,
-	// executed: a clean save logs [saving, saved]).
+	// Laravel: a save of the model now that it is clean runs no statement and skips the
+	// updating/updated pair — Model::save stops at the isDirty gate while saving and saved still
+	// fire (oracle, executed: a clean save logs [saving, saved]).
 	// Since 2026-11-06 the port keeps no record of loaded values (user decision: the implicit
-	// original tracking was removed), so Save writes every non-zero field and never skips a clean model.
+	// original tracking was removed), so the model's non-zero fields are written again and the
+	// updating/updated pair fires; only a keyed Save with nothing to write skips them.
 	require.NoError(t, cloneRelationQuery(t, query).Model(&loud).Save(&loud))
 	require.Equal(t, 3, observer.saving)
 	require.Equal(t, 2, observer.updating)
@@ -1870,7 +1875,7 @@ func TestModel_NotTouchingModelWithoutTimestamps(t *testing.T) {
 
 func TestModel_GetOriginalCastsAttributes(t *testing.T) {
 	// getOriginal() returns the cast original values after mutations.
-	t.Skip(skipModelCasts + "; original-attribute snapshot in cast form")
+	t.Skip(skipModelCasts + "; and getOriginal itself has no Go form: " + skipModelDirty)
 }
 
 func TestModel_CastsMethodHasPriorityOverCastsProperty(t *testing.T) {

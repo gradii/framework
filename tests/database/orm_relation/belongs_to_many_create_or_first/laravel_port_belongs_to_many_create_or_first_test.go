@@ -604,8 +604,8 @@ func TestBelongsToManyCreateOrFirst_UpdateOrCreateStatementOrder(t *testing.T) {
 	assert.Less(t, insertAt, updateAt, "the attach precedes the update (probe updateOrCreate.unattached)")
 	assert.Equal(t, 1, updates(ctx2), "the unattached hit issues exactly one update")
 
-	// An unattached hit whose values change nothing: the attach still runs, but the fill/save
-	// stops at Model::save's isDirty gate — no trailing update (oracle, executed,
+	// An unattached hit whose values change nothing: the attach still runs, and Laravel's
+	// fill/save stops at Model::save's isDirty gate — no trailing update (oracle, executed,
 	// /tmp/save11/btm_updateorcreate_probe.php C2: join select miss, plain select hit, pivot
 	// insert, and no update).
 	_, err = cloneRelationQuery(t, query).Exec(`delete from pivot_table`)
@@ -614,7 +614,7 @@ func TestBelongsToManyCreateOrFirst_UpdateOrCreateStatementOrder(t *testing.T) {
 	var unchanged belongsToManyCreateOrFirstRelated
 	require.NoError(t, wq2b.Relation(source, "Related").UpdateOrCreate(map[string]any{"attr": "foo"}, map[string]any{"val": "baz"}, &unchanged))
 	// Since 2026-11-06 the port keeps no record of loaded values (user decision: the implicit
-	// original tracking was removed), so Save writes every non-zero field and never skips a clean model.
+	// original tracking was removed), so Save writes every non-zero field; it cannot tell a clean model from a changed one.
 	assert.Equal(t, 1, updates(ctx2b), "without loaded-value tracking the fill/save always updates")
 	attachInserts := 0
 	for _, l := range frameworkdb.GetQueryLog(ctx2b) {

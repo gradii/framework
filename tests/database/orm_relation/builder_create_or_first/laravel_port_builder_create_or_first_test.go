@@ -42,10 +42,12 @@ import (
 // Our compiled statements differ in shape — the lookup drops the nested group and adds the ORM's
 // tie-breaker order ("select * from "table" where "attr" = ? order by "table"."id" limit 1"), the
 // insert renders sorted columns and carries count explicitly ("insert into "table" ("attr", "count",
-// "created_at", "updated_at", "val") values (?, ?, ?, ?, ?)"), and Save writes the dirty-only update the oracle measured ("update "table" set "val" = ?,
-// "updated_at" = ? where "id" = ?" — the loaded row's unchanged columns stay out of the
-// statement) — so the port asserts the corpus's outcomes (loaded
-// rows, mutated attributes) rather than its SQL text; the resulting row state is identical.
+// "created_at", "updated_at", "val") values (?, ?, ?, ?, ?)"), and Save writes every non-zero field
+// where the oracle measured the dirty-only "update "table" set "val" = ?, "updated_at" = ? where
+// "id" = ?" (the port keeps no original-value tracking, user decision 2026-11-06, so the loaded
+// row's unchanged columns are re-written with the values they already hold) — so the port asserts
+// the corpus's outcomes (loaded rows, mutated attributes) rather than its SQL text; the resulting
+// row state is identical.
 //
 // # createOrFirst and the "record created just now" race, on a real database
 //
@@ -75,8 +77,10 @@ import (
 // $default]) and, unless the row was just created, Model::increment's step: the column moves in
 // memory and the extra values fill before the updating event, the scope-less update keyed on the
 // model compiles the raw `<column> + <step>` expression, the extras and the refreshed updated-at
-// stamp, the updated event runs, and the incremented column re-baselines in the original bag, so a
-// later Save writes the extras and updated_at alone. Laravel's wasRecentlyCreated signal rides
+// stamp, and the updated event runs. Laravel then re-baselines the incremented column in the
+// model's original bag so a later save writes the extras and updated_at alone; the port keeps no
+// original bag (user decision, 2026-11-06), so a later Save writes every non-zero field, the stepped
+// column included, with the value it already holds. Laravel's wasRecentlyCreated signal rides
 // FirstOrCreate internally (firstOrCreateWithCreated); a Go model carries no such flag. Oracle
 // v12.55.1, executed: /tmp/cof_builder_probe.php (found => count+1 + updated_at, count 2; miss =>
 // insert count=1, no update after it; step+extra => count+2 and val in one update),
@@ -396,8 +400,9 @@ func TestBuilderCreateOrFirst_UpdateOrCreateMethodUpdatesExistingRecord(t *testi
 	builderCreateOrFirstAssertFrozen(t, now, updated.UpdatedAt, "updated.updated_at")
 
 	// Laravel's save() compiles 'update "table" set "val" = ?, "updated_at" = ? where "id" = ?'; the
-	// port's Save now runs the same dirty-only update — the loaded model's unchanged columns stay
-	// out of the statement — so the stored row ends up in the same state.
+	// port's Save writes every non-zero field (no original-value tracking, user decision
+	// 2026-11-06), re-writing the loaded columns with the values they hold, so the stored row ends
+	// up in the same state.
 	stored := builderCreateOrFirstReload(t, query, existing.ID)
 	assert.Equal(t, "foo", stored.Attr)
 	assert.Equal(t, "baz", stored.Val)
@@ -565,13 +570,14 @@ func TestBuilderCreateOrFirst_IncrementOrCreateMethodRetrievesRecordCreatedJustN
 	assert.Equal(t, int64(1), builderCreateOrFirstCount(t, query), "only the racing writer's row may exist")
 }
 
-// TestBuilderCreateOrFirst_IncrementOrCreateRebaselinesTheColumnSoALaterSaveIsExtrasOnly pins the
-// syncOriginalAttribute call inside incrementModel (create_or_first.go): the incremented column
-// re-baselines in the original bag, so a follow-up Save writes only the force-filled extra and the
-// updated-at stamp, not the stepped column. The round-6 verify found this unpinned (a whole-package
-// no-op mutant passed 56/56). Oracle v12.55.1, executed: /tmp/cof_inc_mem_probe.php - "a later save
-// writing the extras alone".
-func TestBuilderCreateOrFirst_IncrementOrCreateRebaselinesTheColumnSoALaterSaveIsExtrasOnly(t *testing.T) {
+// TestBuilderCreateOrFirst_IncrementOrCreateThenSaveWritesTheSteppedState pins the follow-up Save of
+// a model IncrementOrCreate stepped. Laravel re-baselines the incremented column in the original
+// bag, so its follow-up save writes only the force-filled extra and the updated-at stamp (oracle
+// v12.55.1, executed: /tmp/cof_inc_mem_probe.php - "a later save writing the extras alone"). The
+// port keeps no original bag (user decision, 2026-11-06): the follow-up Save writes every non-zero
+// field, the stepped count included with the value it already holds, so the stored row ends up the
+// same.
+func TestBuilderCreateOrFirst_IncrementOrCreateThenSaveWritesTheSteppedState(t *testing.T) {
 	freezeBuilderCreateOrFirstClock(t)
 	query := newRelationQuery(t)
 	builderCreateOrFirstSchema(t, query)
@@ -593,10 +599,10 @@ func TestBuilderCreateOrFirst_IncrementOrCreateRebaselinesTheColumnSoALaterSaveI
 	assert.Contains(t, logs[0].Query, `"val"`)
 	assert.Contains(t, logs[0].Query, `"updated_at"`)
 	// Since 2026-11-06 the port keeps no record of loaded values (user decision: the implicit
-	// original tracking was removed), so Save writes every non-zero field and never skips a clean model.
+	// original tracking was removed), so Save writes every non-zero field; it cannot tell a clean model from a changed one.
 	assert.Contains(t, logs[0].Query, `"count"`, "the non-zero count is written as it holds")
 
 	stored := builderCreateOrFirstReload(t, query, existing.ID)
-	assert.Equal(t, 3, stored.Count, "the follow-up save must not rewrite count")
+	assert.Equal(t, 3, stored.Count, "the follow-up save keeps the stepped count")
 	assert.Equal(t, "baz", stored.Val)
 }

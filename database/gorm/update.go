@@ -43,6 +43,7 @@ func (r *OrmBuilder) updateAssignments(values any) (map[string]any, error) {
 
 	assignments := make(map[string]any)
 	reflected := indirectValue(reflect.ValueOf(raw))
+	explicitNull := func(string) bool { return false }
 
 	switch reflected.Kind() {
 	case reflect.Map:
@@ -60,7 +61,18 @@ func (r *OrmBuilder) updateAssignments(values any) (map[string]any, error) {
 			assignments[column] = modelColumnBinding(schema, column, value)
 		}
 	case reflect.Struct:
-		assignFromStruct(r.ctx, assignments, filter, restricted, schema, reflected)
+		assignFromStruct(r.ctx, assignments, filter, restricted, schema, reflected, func(column string) bool {
+			return r.writesZero(schema, column)
+		})
+		// A zero updated_at WithZero names outright is the caller's null, which Eloquent's
+		// addUpdatedAtColumn keeps over the fresh stamp (array_merge puts the caller's value last;
+		// oracle v12.55.1, /tmp/r15vv/probe_ts.out T3 and T5: `set "name" = ?, "updated_at" = ?`
+		// with null), so the stamp below leaves it alone; assignFromStruct bound it as nil.
+		explicitNull = func(column string) bool {
+			_, ok := assignments[column]
+
+			return ok && r.explicitlyWritesZero(schema, column)
+		}
 	default:
 		return nil, errors.DatabaseUnsupportedType.Args(reflected.Type().String(), "map[string]any or struct")
 	}
@@ -69,7 +81,7 @@ func (r *OrmBuilder) updateAssignments(values any) (map[string]any, error) {
 	// (performUpdate's updateTimestamps gate); a WithoutTimestamps scope or the model's own flag
 	// withholds it, leaving a value the caller supplied in place.
 	if r.usesTimestamps(r.parentModel()) {
-		if err := addAutoUpdateTime(assignments, filter, restricted, schema, reflected.Kind() == reflect.Struct); err != nil {
+		if err := addAutoUpdateTime(assignments, filter, restricted, schema, reflected.Kind() == reflect.Struct, explicitNull); err != nil {
 			return nil, err
 		}
 	}
@@ -104,7 +116,7 @@ func (r *OrmBuilder) saveAssignments(value any) (map[string]any, error) {
 		}
 
 		if r.usesTimestamps(value) {
-			if err := addAutoUpdateTime(assignments, filter, restricted, schema, false); err != nil {
+			if err := addAutoUpdateTime(assignments, filter, restricted, schema, false, nil); err != nil {
 				return nil, err
 			}
 		}
@@ -117,6 +129,7 @@ func (r *OrmBuilder) saveAssignments(value any) (map[string]any, error) {
 		return nil, errors.DatabaseUnsupportedType.Args(reflected.Type().String(), "struct or map")
 	}
 
+	timestamps := r.usesTimestamps(value)
 	assignments := make(map[string]any)
 	if schema != nil {
 		for _, field := range schema.Fields {
@@ -126,8 +139,13 @@ func (r *OrmBuilder) saveAssignments(value any) (map[string]any, error) {
 			if !columnIncluded(filter, restricted, field.DBName, false) {
 				continue
 			}
-			if field.AutoUpdateTime != 0 {
-				continue // saveAutoUpdateTime decides the automatic update timestamp.
+			// saveAutoUpdateTime decides the automatic update timestamp while the model uses
+			// timestamps. With the stamping withheld (WithoutTimestamps, or the model's own flag)
+			// it is an ordinary attribute: Eloquent's performUpdate skips updateTimestamps and
+			// writes the updated_at the model carries, an assigned null or value alike (oracle
+			// v12.55.1, /tmp/r15vv/probe_ts.out T1 and T6).
+			if field.AutoUpdateTime != 0 && timestamps {
+				continue
 			}
 
 			current, _ := field.ValueOf(r.ctx, reflected)
@@ -136,14 +154,14 @@ func (r *OrmBuilder) saveAssignments(value any) (map[string]any, error) {
 
 				// A zero automatic timestamp binds SQL NULL, Eloquent's null, never a raw
 				// '0000-00-00' time.
-				if field.AutoCreateTime != 0 && zeroTimestamp(current) {
+				if (field.AutoCreateTime != 0 || field.AutoUpdateTime != 0) && zeroTimestamp(current) {
 					assignments[field.DBName] = nil
 				}
 			}
 		}
 	}
 
-	if r.usesTimestamps(value) {
+	if timestamps {
 		if err := r.saveAutoUpdateTime(assignments, filter, restricted, schema, reflected); err != nil {
 			return nil, err
 		}
@@ -248,9 +266,11 @@ func resolveColumn(schema *modelSchema, name string) string {
 // assignFromStruct reads a model's columns into the assignment set.
 //
 // Only fields holding a non-zero value are written, which is what makes `Update(User{Name: "x"})`
-// change the name alone. The primary key is left out: it identifies the row rather than describing it,
-// and the row it identifies is named by the where clause.
-func assignFromStruct(ctx context.Context, assignments map[string]any, filter map[string]bool, restricted bool, schema *modelSchema, value reflect.Value) {
+// change the name alone — the struct write rule Create and Save share: a Go zero cannot be told apart
+// from an unset field. A column WithZero names (writesZero) is written even when zero, as it is by
+// Create and Save. The primary key is left out: it identifies the row rather than describing it, and
+// the row it identifies is named by the where clause.
+func assignFromStruct(ctx context.Context, assignments map[string]any, filter map[string]bool, restricted bool, schema *modelSchema, value reflect.Value, writesZero func(column string) bool) {
 	if schema == nil {
 		return
 	}
@@ -263,9 +283,11 @@ func assignFromStruct(ctx context.Context, assignments map[string]any, filter ma
 		fieldValue, zero := field.BindingValueOf(ctx, value)
 
 		// A column the caller named outright is written even when it holds the zero value, which is how
-		// Select("name").Update(model) clears a column; every other column is written only when it
-		// carries something. This mirrors the assignment rule GORM applied.
-		if zero && !columnSelected(filter, field.DBName) {
+		// Select("name").Update(model) or WithZero("name").Update(model) clears a column; every other
+		// column is written only when it carries something. A zero automatic update timestamp is then
+		// left to addAutoUpdateTime, which stamps it while the model uses timestamps unless WithZero
+		// names it outright.
+		if zero && !columnSelected(filter, field.DBName) && !writesZero(field.DBName) {
 			continue
 		}
 		if !columnIncluded(filter, restricted, field.DBName, false) {
@@ -273,14 +295,19 @@ func assignFromStruct(ctx context.Context, assignments map[string]any, filter ma
 		}
 
 		assignments[field.DBName] = fieldValue
+		// A zero automatic timestamp binds SQL NULL, Eloquent's null, never a raw '0000-00-00' time.
+		if zero && (field.AutoCreateTime != 0 || field.AutoUpdateTime != 0) && zeroTimestamp(fieldValue) {
+			assignments[field.DBName] = nil
+		}
 	}
 }
 
 // addAutoUpdateTime stamps the model's automatic update timestamp on the assignment set.
 //
 // It is added when the model declares one and the caller supplied no value for it, so a row always
-// records when it was written. A value the caller did supply is kept.
-func addAutoUpdateTime(assignments map[string]any, filter map[string]bool, restricted bool, schema *modelSchema, structValues bool) error {
+// records when it was written. A value the caller did supply is kept, and so is a struct's zero the
+// keep callback reports as an explicit null (WithZero naming the column); a nil keep keeps none.
+func addAutoUpdateTime(assignments map[string]any, filter map[string]bool, restricted bool, schema *modelSchema, structValues bool, keep func(column string) bool) error {
 	if schema == nil {
 		return nil
 	}
@@ -297,6 +324,9 @@ func addAutoUpdateTime(assignments map[string]any, filter map[string]bool, restr
 		// A map explicitly supplies every key, including nil. Structs have no
 		// presence bit: an empty automatic timestamp is an unset field.
 		if value, ok := assignments[field.DBName]; ok && (!structValues || !zeroTimestamp(value)) {
+			continue
+		}
+		if keep != nil && keep(field.DBName) {
 			continue
 		}
 

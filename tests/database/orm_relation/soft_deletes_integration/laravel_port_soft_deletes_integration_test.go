@@ -777,7 +777,7 @@ func TestSoftDeletesIntegration_CreateOrFirst(t *testing.T) {
 func TestSoftDeletesIntegration_UpdateModelAfterSoftDeleting(t *testing.T) {
 	// Laravel pins Carbon::setTestNow($now), soft-deletes model 2, then asserts
 	// $userModel->getOriginal('deleted_at') === $now and that the model equals a freshly loaded row.
-	t.Skip("our ORM diverges: the delete path does not sync the in-memory model — there is no getOriginal() snapshot and DeletedAt is not stamped on the model, so the original-attribute assertion and the attribute-equality assertion against a freshly loaded row cannot be reproduced; probe: after Delete(&user) the model's DeletedAt.Valid stays false while WithTrashed().Find reads deleted_at set on the row")
+	t.Skip("our ORM diverges: the delete path does not sync the in-memory model — there is no getOriginal() snapshot (the implicit original-value tracking was removed by user decision, 2026-11-06) and DeletedAt is not stamped on the model, so the original-attribute assertion and the attribute-equality assertion against a freshly loaded row cannot be reproduced; probe: after Delete(&user) the model's DeletedAt.Valid stays false while WithTrashed().Find reads deleted_at set on the row")
 }
 
 func TestSoftDeletesIntegration_RestoreAfterSoftDelete(t *testing.T) {
@@ -805,7 +805,7 @@ func TestSoftDeletesIntegration_RestoreAfterSoftDelete(t *testing.T) {
 func TestSoftDeletesIntegration_SoftDeleteAfterRestoring(t *testing.T) {
 	// Laravel restores the trashed model 1, then compares the model's deleted_at and
 	// getOriginal('deleted_at') against freshly read rows, deletes again, and compares the stamps.
-	t.Skip("our ORM diverges: the delete and restore paths do not sync the in-memory model (no getOriginal(); a loaded DeletedAt keeps its value), so the comparisons between the model's deleted_at / getOriginal('deleted_at') and freshly read rows cannot be reproduced; probe: after WithTrashed().Restore(&user) the DB row's deleted_at is null while the in-memory DeletedAt.Valid is unchanged")
+	t.Skip("our ORM diverges: the delete and restore paths do not sync the in-memory model (no getOriginal() — the implicit original-value tracking was removed by user decision, 2026-11-06; a loaded DeletedAt keeps its value), so the comparisons between the model's deleted_at / getOriginal('deleted_at') and freshly read rows cannot be reproduced; probe: after WithTrashed().Restore(&user) the DB row's deleted_at is null while the in-memory DeletedAt.Valid is unchanged")
 }
 
 func TestSoftDeletesIntegration_ModifyingBeforeSoftDeletingAndRestoring(t *testing.T) {

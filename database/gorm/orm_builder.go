@@ -1489,7 +1489,7 @@ func (r *OrmBuilder) FirstOr(dest any, callback func() error) error {
 }
 
 func (r *OrmBuilder) FirstOrCreate(dest any, conds ...any) error {
-	r = r.withZeroFor(conds...)
+	defer r.withZeroFor(conds...)()
 	_, err := r.firstOrCreateWithCreated(dest, conds...)
 
 	return err
@@ -1957,8 +1957,8 @@ func (r *OrmBuilder) Offset(offset int) contractsorm.Query {
 }
 
 // WithZero names columns a struct write carries even when the field holds its Go zero value. A Go
-// struct cannot tell an unset field from one set to its zero value, so Create and Save leave every
-// zero field out by default; WithZero opts named columns back in. It does not narrow the write the
+// struct cannot tell an unset field from one set to its zero value, so Create, Save and Update with a
+// struct leave every zero field out by default; WithZero opts named columns back in. It does not narrow the write the
 // way Select does: every non-zero field is still written. "*" names every column, Omit wins over
 // it, and names resolve like Select and Omit (field name or column, optionally table-qualified).
 // Calls accumulate and, like Omit and the other builder methods, stay on the query handle.
@@ -1969,12 +1969,16 @@ func (r *OrmBuilder) WithZero(columns ...string) contractsorm.Query {
 	return r.setConditions(conditions)
 }
 
-// withZeroFor returns the query with every key of the given column maps added to WithZero. A value a
-// caller passes in an attribute or value map is an explicit assignment, which Eloquent writes even
-// when it is null/false/0 (oracle v12.55.1, /tmp/r14/probe_a.php U4 and I2/I3); filling it into a
-// struct would otherwise make it indistinguishable from an unset field. Non-map arguments add
-// nothing.
-func (r *OrmBuilder) withZeroFor(values ...any) *OrmBuilder {
+// withZeroFor adds every key of the given column maps to the query's WithZero list for the length of
+// one call, and returns the function that puts the handle's own list back; the Or* entry points run
+// `defer r.withZeroFor(...)()`. A value a caller passes in an attribute or value map is an explicit
+// assignment, which Eloquent writes even when it is null/false/0 (oracle v12.55.1, /tmp/r14/probe_a.php
+// U4 and I2/I3; /tmp/r15v/probe_v.out P1); filling it into a struct would otherwise make it
+// indistinguishable from an unset field. The keys belong to that one call: Eloquent's builder keeps
+// no record of them, so a later write on the same builder carries only its own attributes
+// (/tmp/r15v/probe_v.out P7b), and restoring the list keeps them from leaking into the next
+// statement the handle runs. Non-map arguments add nothing.
+func (r *OrmBuilder) withZeroFor(values ...any) (restore func()) {
 	var columns []string
 	for _, value := range values {
 		if mapping, ok := asColumnMap(value); ok {
@@ -1984,21 +1988,48 @@ func (r *OrmBuilder) withZeroFor(values ...any) *OrmBuilder {
 		}
 	}
 	if len(columns) == 0 {
-		return r
+		return func() {}
 	}
 
-	return r.WithZero(columns...).(*OrmBuilder)
+	own := r.conditions.withZero
+	r.WithZero(columns...)
+
+	return func() {
+		conditions := r.conditions
+		conditions.withZero = own
+		r.setConditions(conditions)
+	}
 }
 
-// writesZero reports whether a struct write carries column although its value is zero.
+// writesZero reports whether a struct write carries column although its value is zero. The "*"
+// wildcard does not reach the automatic timestamps: a zero created_at or updated_at stands for a
+// timestamp the struct does not carry, so a wildcard write never clears a stored one, the rule
+// saveAutoUpdateTime already applies to updated_at; naming the column explicitly writes it as NULL.
 func (r *OrmBuilder) writesZero(schema *modelSchema, column string) bool {
 	for _, name := range r.conditions.withZero {
-		if name == "*" || resolveInsertColumn(schema, name) == column {
+		if name == "*" {
+			if !automaticTimestampColumn(schema, column) {
+				return true
+			}
+
+			continue
+		}
+		if resolveInsertColumn(schema, name) == column {
 			return true
 		}
 	}
 
 	return false
+}
+
+// automaticTimestampColumn reports whether column is one of the model's automatic timestamps.
+func automaticTimestampColumn(schema *modelSchema, column string) bool {
+	if schema == nil {
+		return false
+	}
+	field, ok := schema.FieldsByDBName[column]
+
+	return ok && (field.AutoCreateTime != 0 || field.AutoUpdateTime != 0)
 }
 
 func (r *OrmBuilder) Omit(columns ...string) contractsorm.Query {
@@ -2502,18 +2533,32 @@ func (r *OrmBuilder) Save(dest any) error {
 		return err
 	}
 
+	// wrote records whether a statement ran: finishSave touches the owners only then.
+	var wrote bool
 	if update {
-		if dest, err = query.updating(dest); err != nil {
+		// Model::save runs performUpdate — and with it the updating and updated events — only
+		// when the model has something to write (`$saved = $this->isDirty() ?
+		// $this->performUpdate($query) : true`). With no attribute bag, "something to write" is a
+		// non-empty Save column set; a keyed model with none (no non-zero field, no WithZero, no
+		// automatic timestamp) runs no statement and fires saving and saved alone (oracle
+		// v12.55.1, /tmp/r15v/probe_v.out P4: a clean save logs no statement and the events
+		// ["saving","saved"]).
+		assignments, err := query.saveAssignments(dest)
+		if err != nil {
 			return err
 		}
-
-		var wrote bool
-		if wrote, err = query.save(dest); err != nil {
-			return err
-		}
-		if wrote {
-			if _, err := query.updated(dest); err != nil {
+		if len(assignments) > 0 {
+			if dest, err = query.updating(dest); err != nil {
 				return err
+			}
+
+			if wrote, err = query.save(dest); err != nil {
+				return err
+			}
+			if wrote {
+				if _, err := query.updated(dest); err != nil {
+					return err
+				}
 			}
 		}
 	} else {
@@ -2521,12 +2566,11 @@ func (r *OrmBuilder) Save(dest any) error {
 			return err
 		}
 
-		var inserted bool
-		if inserted, err = query.save(dest); err != nil {
+		if wrote, err = query.save(dest); err != nil {
 			return err
 		}
 		// Like create(): an insert the empty-attribute guard skipped fires no created event.
-		if inserted {
+		if wrote {
 			if err := query.created(dest); err != nil {
 				return err
 			}
@@ -2537,8 +2581,11 @@ func (r *OrmBuilder) Save(dest any) error {
 		return err
 	}
 
-	// finishSave touches the model's owners after a save, unless WithoutTouch asked otherwise.
-	if !query.conditions.withoutTouch {
+	// finishSave touches the model's owners after a save that wrote, unless WithoutTouch asked
+	// otherwise: `if ($this->isDirty() && ($options['touch'] ?? true))` — a save with nothing to
+	// write leaves the owners alone (/tmp/r15v/probe_v.out P4: no owner update on the clean save,
+	// one on the dirty save P4b).
+	if wrote && !query.conditions.withoutTouch {
 		if err := query.touchOwners(dest); err != nil {
 			return err
 		}
@@ -2753,7 +2800,7 @@ func (r *OrmBuilder) Update(column any, value ...any) (*contractsdb.Result, erro
 // constraint race reads the winning row back (createOrFirst) and that row is filled with the values
 // and saved too — Laravel's wasRecentlyCreated() branch.
 func (r *OrmBuilder) UpdateOrCreate(dest any, attributes any, values any) error {
-	r = r.withZeroFor(attributes, values)
+	defer r.withZeroFor(attributes, values)()
 	found, err := r.firstOrInit(dest, attributes, nil, nil)
 	if err != nil {
 		return err
@@ -4045,9 +4092,10 @@ func (r *OrmBuilder) retrieved(dest any) error {
 }
 
 // save writes a model, inserting it when it carries no key and updating the row it names when it
-// does. The update carries only the columns that changed since the model was loaded — plus the
-// save-time updated_at — and reports whether a statement ran, so Save can leave the updated event
-// out for a set that turned out empty (performUpdate's `if (count($dirty) > 0)` guard).
+// does. The update carries the columns saveAssignments reads from the struct — the non-zero fields,
+// the WithZero/Select-named zero ones and the save-time updated_at — and reports whether a statement
+// ran, so Save can leave the updated event out for a set that turned out empty (performUpdate's
+// `if (count($dirty) > 0)` guard).
 //
 // GORM also recreated the row when an update matched none, by upserting on the primary key. That is
 // deliberately not carried over: it made saving a soft-deleted model resurrect it and overwrite every
@@ -4063,8 +4111,8 @@ func (r *OrmBuilder) save(value any) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	// Nothing to set: performUpdate writes only a non-empty dirty set, and an empty assignment list
-	// would compile to a statement no dialect accepts.
+	// Nothing to set: performUpdate writes only a non-empty attribute set, and an empty assignment
+	// list would compile to a statement no dialect accepts.
 	if len(assignments) == 0 {
 		return false, nil
 	}

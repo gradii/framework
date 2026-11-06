@@ -195,7 +195,8 @@ type Query interface {
 	FirstOrFail(dest any) error
 	// FirstOrNew finds the first record that matches the given conditions or return a new instance
 	// of the model initialized with those attributes and with the query's pending attributes
-	// (WithAttributes), which merge underneath them.
+	// (WithAttributes), which merge underneath them. Nothing is written, so a zero value in the maps
+	// reaches a later Save only when that Save names its column through WithZero.
 	FirstOrNew(dest any, attributes any, values ...any) error
 	// Fresh reads model's row back from the database into dest — a new instance — mirroring
 	// Eloquent's Model::fresh: the read matches on the model's primary key (a pivot struct without
@@ -302,10 +303,14 @@ type Query interface {
 	Offset(offset int) Query
 	// Omit specifies columns that should be omitted from the query.
 	Omit(columns ...string) Query
-	// WithZero names columns a struct write (Create, Save) carries even when the field holds its Go
-	// zero value. A Go struct cannot tell an unset field from one set to zero, so struct writes leave
-	// zero fields out by default; WithZero opts the named columns in without narrowing the write the
-	// way Select does. "*" names every column; Omit wins over it.
+	// WithZero names columns a struct write (Create, Save, Update with a struct, and the relation
+	// writes, which carry the list to the child they persist) carries even when the field holds its
+	// Go zero value. A Go struct cannot tell an unset field from one set to zero, so struct writes
+	// leave zero fields out by default; WithZero opts the named columns in without narrowing the
+	// write the way Select does. "*" names every column but the automatic timestamps and a sole
+	// primary key, which join only when named; Omit wins over it. The attribute and value
+	// maps FirstOrCreate, CreateOrFirst, UpdateOrCreate and IncrementOrCreate are given are added to
+	// the list for that call only, since a map value is an explicit assignment.
 	WithZero(columns ...string) Query
 	// Order specifies the order in which the results should be returned.
 	// DEPRECATED Use OrderByRaw instead.
@@ -383,7 +388,9 @@ type Query interface {
 	Rollback() error
 	// Save persists a model: a model that carries no key inserts, and a model with a key updates that
 	// row. Either way the write carries the non-zero fields and the automatic timestamps; a zero field
-	// is written only when WithZero (or Select) names it. No previously loaded state is consulted.
+	// is written only when WithZero (or Select) names it. No previously loaded state is consulted. A
+	// keyed model with nothing to write runs no statement: only the saving and saved events fire and
+	// no owner is touched.
 	Save(value any) error
 	// SaveQuietly updates value in a database without firing events
 	SaveQuietly(value any) error

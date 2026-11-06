@@ -13,7 +13,7 @@ import (
 // to read the existing row back over the write connection — where(attributes)->first() — before
 // the error is rethrown as a typed violation.
 func (r *OrmBuilder) CreateOrFirst(dest any, conds ...any) error {
-	r = r.withZeroFor(conds...)
+	defer r.withZeroFor(conds...)()
 	if err := r.applyPendingAttributes(dest); err != nil {
 		return err
 	}
@@ -210,8 +210,11 @@ func (r *OrmBuilder) firstOrCreateWithCreated(dest any, conds ...any) (bool, err
 // the column (default "count"), the first number is the create default and the second the step
 // (default 1 each), and a map is the extra values.
 func (r *OrmBuilder) IncrementOrCreate(dest any, attributes any, args ...any) error {
-	r = r.withZeroFor(append([]any{attributes}, args...)...)
 	column, defaultAmount, step, extra := incrementOrCreateArgs(args)
+	// The create default is an explicit value like the attributes: Eloquent inserts it even when
+	// it is 0 (oracle v12.55.1, /tmp/r15v/probe_v.out P1: `insert into "counters" ("name",
+	// "count", ...)` with count = 0), so its column joins WithZero beside the attribute keys.
+	defer r.withZeroFor(attributes, extra, map[string]any{column: defaultAmount})()
 
 	created, err := r.firstOrCreateWithCreated(dest, attributes, map[string]any{column: defaultAmount})
 	if err != nil {
@@ -232,10 +235,10 @@ func (r *OrmBuilder) IncrementOrCreate(dest any, attributes any, args ...any) er
 // runs; a handler's error aborts the write (the Go reading of Eloquent's `return false`). The
 // statement compiles on a fresh, scope-less query scoped to the model's key — Laravel's
 // setKeysForSaveQuery(newQueryWithoutScopes()) — as the raw `<column> + <step>` expression, the
-// extras and the automatic updated-at stamp; the updated event runs; and the incremented column
-// re-baselines in the original bag, leaving the force-filled extras dirty, which is the state a
-// later save writes the extras and updated_at from (same probe: the follow-up save compiles
-// `update "table" set "val" = ?, "updated_at" = ? where "id" = ?`).
+// extras and the automatic updated-at stamp; and the updated event runs. Eloquent then syncs the
+// incremented column into the model's original bag; the port keeps no such bag (the implicit
+// original-value tracking was removed by the user's decision of 2026-11-06), so a later Save of the
+// model writes its non-zero fields and a stamped updated_at like any other keyed Save.
 func (r *OrmBuilder) incrementModel(dest any, column string, step any, extra map[string]any) error {
 	if _, ok := numericString(step); !ok {
 		return errors.OrmQueryIncrementNonNumeric.Args(step, "increment")
