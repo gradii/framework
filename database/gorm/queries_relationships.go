@@ -620,7 +620,7 @@ func (r *OrmBuilder) compileExistenceSubqueryIn(desc *relationDescriptor, callba
 	// A soft-deletable through model filters the through table inside the existence body too, after
 	// the related predicate - performJoin adds its named scope to the existence subquery (oracle,
 	// /tmp/r10/through_softdelete_probe.php N12/N13). A no-op for every non-through kind.
-	r.applySubquerySoftDelete(builder, desc.ThroughTable, desc.ThroughModel, subqueryScopeRemovals{})
+	r.applySubqueryThroughSoftDelete(builder, desc.ThroughTable, desc.ThroughModel, removals)
 
 	// addHasWhere merges the relation query's own constraints - the wherePivot scopes - into the
 	// existence query after the caller's closure ran, so the pivot filter binds last, after a
@@ -1208,6 +1208,33 @@ func (r *OrmBuilder) applySubquerySoftDelete(builder *querybuilder.Builder, tabl
 	// A structured where, so the grammar compiles Laravel's lowercase "is null"/"is not null"
 	// through compileWhereNull instead of rendering a raw fragment's own casing.
 	builder.WhereNull(table+"."+column, core.BooleanAnd, removals.onlyTrashed)
+}
+
+// applySubqueryThroughSoftDelete adds a soft-deletable through model's "not soft deleted" predicate
+// inside an existence subquery. Laravel registers it as the named "SoftDeletableHasManyThrough"
+// global scope (HasOneOrManyThrough::performJoin), so - exactly as on the main path
+// (applyThroughSoftDelete) - a removal of that name or the "*" wildcard withoutGlobalScopes() drops
+// it, while a withTrashed()/onlyTrashed() or a SoftDeletingScope removal leaves it in place: those
+// target the related model's scope alone. Oracle (illuminate/database v12.55.1, real sqlite,
+// /tmp/g13b_v/probeC.php): the whereHas body carries `... and "tc_posts"."deleted_at" is null and
+// "tc_users"."deleted_at" is null`; withoutGlobalScopes() drops both, a
+// withoutGlobalScope('SoftDeletableHasManyThrough') drops only the through predicate, and
+// withTrashed()/withoutGlobalScope(SoftDeletingScope) keep it.
+func (r *OrmBuilder) applySubqueryThroughSoftDelete(builder *querybuilder.Builder, table string, model any, removals subqueryScopeRemovals) {
+	if !usesFrameworkSoftDeleteModel(model) {
+		return
+	}
+
+	column, ok := softDeleteColumn(model)
+	if !ok {
+		return
+	}
+
+	if removals.removes(contractsorm.SoftDeletableHasManyThrough) {
+		return
+	}
+
+	builder.WhereNull(table+"."+column, core.BooleanAnd, false)
 }
 
 // applyRelatedGlobalScopes folds the related model's global scopes into an existence subquery.

@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	databaseorm "github.com/gradii/framework/database/orm"
 )
 
 // This file pins the global-scope-removal semantics of the existence and count subqueries
@@ -332,4 +333,271 @@ func TestSubqueryScopeRemoval_RelationDefaultAndCallbackRemovalsMerge(t *testing
 		return q.OnlyTrashed()
 	}).(*OrmBuilder)
 	assert.Equal(t, `select * from "rel_deep_owners" where exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and "rel_deep_mids"."deleted_at" is not null)`, subquerySelectSQL(t, q2, &[]subqueryScopeOwner{}))
+}
+
+// ---------------------------------------------------------------------------
+// round-13 verification: the morph existence subquery (MorphOne / MorphMany)
+// ---------------------------------------------------------------------------
+
+// subqMorphHouse is a morph related model carrying BOTH the framework soft-delete type and a named
+// user global scope ("published"), so a removal that drops only one of them is observable. It is the
+// morphMany target of subqMorphOwner.
+type subqMorphHouse struct {
+	ID            uint
+	HouseableID   uint
+	HouseableType string
+	Published     int
+	DeletedAt     databaseorm.DeletedAt `gorm:"column:deleted_at"`
+}
+
+func (subqMorphHouse) TableName() string { return "rel_deep_houses" }
+
+func (subqMorphHouse) GlobalScopes() []contractsorm.GlobalScope {
+	return []contractsorm.GlobalScope{
+		{Name: "published", Scope: func(q contractsorm.Query) contractsorm.Query { return q.Where("published", 1) }},
+	}
+}
+
+type subqMorphOwner struct {
+	ID     uint
+	Houses []*subqMorphHouse `gorm:"-"`
+}
+
+func (subqMorphOwner) TableName() string { return "rel_deep_owners" }
+
+func (subqMorphOwner) Relations() map[string]contractsorm.Relation {
+	return map[string]contractsorm.Relation{
+		"Houses": contractsorm.MorphMany{Related: &subqMorphHouse{}, Name: "houseable"},
+		"TrashedHouses": contractsorm.MorphMany{Related: &subqMorphHouse{}, Name: "houseable",
+			OnQuery: func(q contractsorm.Query) contractsorm.Query { return q.WithTrashed() }},
+		"NamedRmHouses": contractsorm.MorphMany{Related: &subqMorphHouse{}, Name: "houseable",
+			OnQuery: func(q contractsorm.Query) contractsorm.Query { return q.WithoutGlobalScopes("published") }},
+	}
+}
+
+// The morph existence subquery (MorphOne/MorphMany whereHas) shares the removal logic: the related
+// model's SoftDeletingScope precedes its user scopes, and a withTrashed()/onlyTrashed()/
+// withoutGlobalScope(s) the relation's default query or the caller's closure left on the subquery
+// governs both. Oracle (illuminate/database v12.55.1, real sqlite, /tmp/g13b/morph_removal_probe.php):
+// default `... and "mm_houses"."deleted_at" is null and "published" = ?`; withTrashed drops the
+// soft-delete predicate; onlyTrashed flips it to `is not null`; withoutGlobalScope('published') drops
+// only the user scope; withoutGlobalScopes() drops both.
+func TestSubqueryScopeRemoval_MorphExistenceCarriesCallerRemovals(t *testing.T) {
+	cases := []struct {
+		name     string
+		callback func(contractsorm.Query) contractsorm.Query
+		want     string
+	}{
+		{"default", func(q contractsorm.Query) contractsorm.Query { return q },
+			`select * from "rel_deep_owners" where exists (select * from "rel_deep_houses" where "rel_deep_owners"."id" = "rel_deep_houses"."houseable_id" and "rel_deep_houses"."houseable_type" = ? and "rel_deep_houses"."deleted_at" is null and "published" = ?)`},
+		{"withTrashed", func(q contractsorm.Query) contractsorm.Query { return q.WithTrashed() },
+			`select * from "rel_deep_owners" where exists (select * from "rel_deep_houses" where "rel_deep_owners"."id" = "rel_deep_houses"."houseable_id" and "rel_deep_houses"."houseable_type" = ? and "published" = ?)`},
+		{"onlyTrashed", func(q contractsorm.Query) contractsorm.Query { return q.OnlyTrashed() },
+			`select * from "rel_deep_owners" where exists (select * from "rel_deep_houses" where "rel_deep_owners"."id" = "rel_deep_houses"."houseable_id" and "rel_deep_houses"."houseable_type" = ? and "rel_deep_houses"."deleted_at" is not null and "published" = ?)`},
+		{"withoutGlobalScopes", func(q contractsorm.Query) contractsorm.Query { return q.WithoutGlobalScopes() },
+			`select * from "rel_deep_owners" where exists (select * from "rel_deep_houses" where "rel_deep_owners"."id" = "rel_deep_houses"."houseable_id" and "rel_deep_houses"."houseable_type" = ?)`},
+		{"namedRemoval", func(q contractsorm.Query) contractsorm.Query { return q.WithoutGlobalScopes("published") },
+			`select * from "rel_deep_owners" where exists (select * from "rel_deep_houses" where "rel_deep_owners"."id" = "rel_deep_houses"."houseable_id" and "rel_deep_houses"."houseable_type" = ? and "rel_deep_houses"."deleted_at" is null)`},
+	}
+
+	for _, c := range cases {
+		q := newRelQueryWith(t, &subqMorphOwner{}).WhereHas("Houses", c.callback).(*OrmBuilder)
+		assert.Equal(t, c.want, subquerySelectSQL(t, q, &[]subqMorphOwner{}), c.name)
+	}
+}
+
+// The relation-default OnQuery removals reach the morph existence subquery the same way - oracle
+// (/tmp/g13b/morph_removal_probe.php, relation-DEFAULT block).
+func TestSubqueryScopeRemoval_MorphRelationDefaultRemovals(t *testing.T) {
+	q := newRelQueryWith(t, &subqMorphOwner{}).WhereHas("TrashedHouses").(*OrmBuilder)
+	assert.Equal(t, `select * from "rel_deep_owners" where exists (select * from "rel_deep_houses" where "rel_deep_owners"."id" = "rel_deep_houses"."houseable_id" and "rel_deep_houses"."houseable_type" = ? and "published" = ?)`, subquerySelectSQL(t, q, &[]subqMorphOwner{}))
+
+	q2 := newRelQueryWith(t, &subqMorphOwner{}).WhereHas("NamedRmHouses").(*OrmBuilder)
+	assert.Equal(t, `select * from "rel_deep_owners" where exists (select * from "rel_deep_houses" where "rel_deep_owners"."id" = "rel_deep_houses"."houseable_id" and "rel_deep_houses"."houseable_type" = ? and "rel_deep_houses"."deleted_at" is null)`, subquerySelectSQL(t, q2, &[]subqMorphOwner{}))
+}
+
+// The caller's existence/count closure removal does NOT reach the ofMany aggregate subquery: it
+// governs the outer query only, while the relation's own OnQuery removals govern both. Oracle
+// (illuminate/database v12.55.1, real sqlite, /tmp/r13v/ofmany2_probe.php): whereHas(latestPost,
+// withTrashed()) keeps `deleted_at is null and "published" = ?` in the aggregate and drops the
+// soft-delete predicate on the outer query only; a caller's withoutGlobalScopes() likewise leaves the
+// aggregate untouched.
+func TestOneOfManyAggregate_CallerRemovalReachesTheOuterQueryOnly(t *testing.T) {
+	q := newRelQueryWith(t, &relLatestOwner{}).WhereHas("LatestMid", func(q contractsorm.Query) contractsorm.Query {
+		return q.WithTrashed()
+	}).(*OrmBuilder)
+	assert.Equal(t, `select * from "rel_deep_owners" where exists (select * from "rel_deep_mids" inner join (select MAX("rel_deep_mids"."id") as "id_aggregate", "rel_deep_mids"."owner_id" from "rel_deep_mids" where "rel_deep_mids"."deleted_at" is null and "active" = ? group by "rel_deep_mids"."owner_id") as "latest_mid" on "latest_mid"."id_aggregate" = "rel_deep_mids"."id" and "latest_mid"."owner_id" = "rel_deep_mids"."owner_id" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and "active" = ?)`, subquerySelectSQL(t, q, &[]relLatestOwner{}))
+
+	q2 := newRelQueryWith(t, &relLatestOwner{}).WhereHas("LatestMid", func(q contractsorm.Query) contractsorm.Query {
+		return q.WithoutGlobalScopes()
+	}).(*OrmBuilder)
+	assert.Equal(t, `select * from "rel_deep_owners" where exists (select * from "rel_deep_mids" inner join (select MAX("rel_deep_mids"."id") as "id_aggregate", "rel_deep_mids"."owner_id" from "rel_deep_mids" where "rel_deep_mids"."deleted_at" is null and "active" = ? group by "rel_deep_mids"."owner_id") as "latest_mid" on "latest_mid"."id_aggregate" = "rel_deep_mids"."id" and "latest_mid"."owner_id" = "rel_deep_mids"."owner_id" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id")`, subquerySelectSQL(t, q2, &[]relLatestOwner{}))
+}
+
+// The outbound morph existence variant (WhereHasMorph with explicit types, which the port routes
+// through compileMorphExistenceSubquery rather than the generic compileExistenceSubqueryIn) carries
+// the same removals - oracle /tmp/g13b/morph_removal_probe.php.
+func TestSubqueryScopeRemoval_MorphExistenceSubqueryHelperCarriesRemovals(t *testing.T) {
+	cases := []struct {
+		name     string
+		callback func(contractsorm.Query) contractsorm.Query
+		want     string
+	}{
+		{"default", nil,
+			`select * from "rel_deep_owners" where (exists (select * from "rel_deep_houses" where "rel_deep_owners"."id" = "rel_deep_houses"."houseable_id" and "rel_deep_houses"."houseable_type" = ? and "rel_deep_houses"."deleted_at" is null and "published" = ?))`},
+		{"withTrashed", func(q contractsorm.Query) contractsorm.Query { return q.WithTrashed() },
+			`select * from "rel_deep_owners" where (exists (select * from "rel_deep_houses" where "rel_deep_owners"."id" = "rel_deep_houses"."houseable_id" and "rel_deep_houses"."houseable_type" = ? and "published" = ?))`},
+		{"onlyTrashed", func(q contractsorm.Query) contractsorm.Query { return q.OnlyTrashed() },
+			`select * from "rel_deep_owners" where (exists (select * from "rel_deep_houses" where "rel_deep_owners"."id" = "rel_deep_houses"."houseable_id" and "rel_deep_houses"."houseable_type" = ? and "rel_deep_houses"."deleted_at" is not null and "published" = ?))`},
+	}
+
+	for _, c := range cases {
+		var q *OrmBuilder
+		if c.callback == nil {
+			q = newRelQueryWith(t, &subqMorphOwner{}).WhereHasMorph("Houses", []any{&subqMorphHouse{}}).(*OrmBuilder)
+		} else {
+			q = newRelQueryWith(t, &subqMorphOwner{}).WhereHasMorph("Houses", []any{&subqMorphHouse{}}, c.callback).(*OrmBuilder)
+		}
+		assert.Equal(t, c.want, subquerySelectSQL(t, q, &[]subqMorphOwner{}), c.name)
+	}
+}
+
+// The inverse morph existence variant (HasMorph over a MorphTo) carries the type's removals inside
+// its per-type BelongsTo subquery - oracle (illuminate/database v12.55.1, real sqlite,
+// /tmp/g13b/inverse_morph_probe.php): default `... and "img_posts"."deleted_at" is null`;
+// withTrashed drops it; onlyTrashed flips it to `is not null`.
+func TestSubqueryScopeRemoval_MorphToExistenceSubqueryHelperCarriesRemovals(t *testing.T) {
+	cases := []struct {
+		name     string
+		callback func(contractsorm.Query) contractsorm.Query
+		want     string
+	}{
+		{"default", nil,
+			`select * from "morph_images" where (("morph_images"."imageable_type" = ? and exists (select * from "rel_soft_morph_posts" where "morph_images"."imageable_id" = "rel_soft_morph_posts"."id" and "rel_soft_morph_posts"."deleted_at" is null)))`},
+		{"withTrashed", func(q contractsorm.Query) contractsorm.Query { return q.WithTrashed() },
+			`select * from "morph_images" where (("morph_images"."imageable_type" = ? and exists (select * from "rel_soft_morph_posts" where "morph_images"."imageable_id" = "rel_soft_morph_posts"."id")))`},
+		{"onlyTrashed", func(q contractsorm.Query) contractsorm.Query { return q.OnlyTrashed() },
+			`select * from "morph_images" where (("morph_images"."imageable_type" = ? and exists (select * from "rel_soft_morph_posts" where "morph_images"."imageable_id" = "rel_soft_morph_posts"."id" and "rel_soft_morph_posts"."deleted_at" is not null)))`},
+	}
+
+	for _, c := range cases {
+		var q *OrmBuilder
+		if c.callback == nil {
+			q = newRelQueryWith(t, &morphImage{}).HasMorph("Imageable", []any{&relSoftMorphPost{}}).(*OrmBuilder)
+		} else {
+			q = newRelQueryWith(t, &morphImage{}).HasMorph("Imageable", []any{&relSoftMorphPost{}}, c.callback).(*OrmBuilder)
+		}
+		assert.Equal(t, c.want, subquerySelectSQL(t, q, &[]morphImage{}), c.name)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// round-13 verification: a through relation's named soft-delete scope removal
+// ---------------------------------------------------------------------------
+
+// subqThroughOwner declares the relation-default forms for the tsd_countries -> tsd_posts through
+// tsd_users relation (both models soft-deletable). Laravel registers the through predicate as the
+// named "SoftDeletableHasManyThrough" global scope (HasOneOrManyThrough::performJoin), so - exactly
+// as on the main path (applyThroughSoftDelete) - a removal of that name (or the "*" wildcard
+// withoutGlobalScopes()) drops it from the existence subquery, while a
+// withTrashed()/onlyTrashed()/SoftDeletingScope removal keeps it (those target the related model's
+// scope alone). Oracle (illuminate/database v12.55.1, real sqlite, /tmp/g13b_v/probeC.php).
+type subqThroughOwner struct {
+	ID    uint
+	Posts []*tsdPost `gorm:"-"`
+}
+
+func (subqThroughOwner) TableName() string { return "tsd_countries" }
+
+func (subqThroughOwner) Relations() map[string]contractsorm.Relation {
+	return map[string]contractsorm.Relation{
+		"Posts": contractsorm.HasManyThrough{Related: &tsdPost{}, Through: &tsdUser{}, FirstKey: "country_id", SecondKey: "user_id"},
+		"PostsRmThrough": contractsorm.HasManyThrough{Related: &tsdPost{}, Through: &tsdUser{}, FirstKey: "country_id", SecondKey: "user_id",
+			OnQuery: func(q contractsorm.Query) contractsorm.Query {
+				return q.WithoutGlobalScopes(contractsorm.SoftDeletableHasManyThrough)
+			}},
+		"PostsRmAll": contractsorm.HasManyThrough{Related: &tsdPost{}, Through: &tsdUser{}, FirstKey: "country_id", SecondKey: "user_id",
+			OnQuery: func(q contractsorm.Query) contractsorm.Query { return q.WithoutGlobalScopes() }},
+		"LatestPostRm": contractsorm.HasOneThrough{Related: &tsdPost{}, Through: &tsdUser{}, FirstKey: "country_id", SecondKey: "user_id",
+			OnQuery: func(q contractsorm.Query) contractsorm.Query {
+				return q.WithoutGlobalScopes(contractsorm.SoftDeletableHasManyThrough).OfMany("", "")
+			}},
+	}
+}
+
+const subqThroughPrefix = `select * from "tsd_countries" where exists (select * from "tsd_posts" inner join "tsd_users" on "tsd_users"."id" = "tsd_posts"."user_id" where "tsd_countries"."id" = "tsd_users"."country_id"`
+
+// TestSubqueryThroughSoftDelete_RemovalsReachTheExistenceSubquery pins the through model's named
+// soft-delete predicate answering to the same removal state as the related model's: a
+// SoftDeletableHasManyThrough name (or the "*" wildcard) drops it, the trashed flags and a
+// SoftDeletingScope removal leave it. Without applySubqueryThroughSoftDelete the through predicate
+// survived every removal (the pre-fix behaviour), so each non-default row reddens.
+func TestSubqueryThroughSoftDelete_RemovalsReachTheExistenceSubquery(t *testing.T) {
+	related := ` and "tsd_posts"."deleted_at" is null`
+	through := ` and "tsd_users"."deleted_at" is null`
+	cases := []struct {
+		name string
+		rel  string
+		cb   func(contractsorm.Query) contractsorm.Query
+		want string
+	}{
+		{"default", "Posts", nil, subqThroughPrefix + related + through + ")"},
+		{"callbackWithoutGlobalScopes", "Posts", func(q contractsorm.Query) contractsorm.Query { return q.WithoutGlobalScopes() }, subqThroughPrefix + ")"},
+		{"callbackRemovesThroughScope", "Posts", func(q contractsorm.Query) contractsorm.Query {
+			return q.WithoutGlobalScopes(contractsorm.SoftDeletableHasManyThrough)
+		}, subqThroughPrefix + related + ")"},
+		{"callbackRemovesRelatedScope", "Posts", func(q contractsorm.Query) contractsorm.Query {
+			return q.WithoutGlobalScopes(contractsorm.SoftDeletingScope)
+		}, subqThroughPrefix + through + ")"},
+		{"callbackWithTrashed", "Posts", func(q contractsorm.Query) contractsorm.Query { return q.WithTrashed() }, subqThroughPrefix + through + ")"},
+		{"callbackOnlyTrashed", "Posts", func(q contractsorm.Query) contractsorm.Query { return q.OnlyTrashed() }, subqThroughPrefix + ` and "tsd_posts"."deleted_at" is not null` + through + ")"},
+		{"relationDefaultRemovesThroughScope", "PostsRmThrough", nil, subqThroughPrefix + related + ")"},
+		{"relationDefaultRemovesAllScopes", "PostsRmAll", nil, subqThroughPrefix + ")"},
+	}
+
+	for _, c := range cases {
+		var q *OrmBuilder
+		if c.cb == nil {
+			q = newRelQueryWith(t, &subqThroughOwner{}).WhereHas(c.rel).(*OrmBuilder)
+		} else {
+			q = newRelQueryWith(t, &subqThroughOwner{}).WhereHas(c.rel, c.cb).(*OrmBuilder)
+		}
+		assert.Equal(t, c.want, subquerySelectSQL(t, q, &[]subqThroughOwner{}), c.name)
+	}
+}
+
+// TestSubqueryThroughSoftDelete_WithCountCarriesTheRemoval pins the count subquery sharing the
+// existence builder: a closure's withoutGlobalScopes() drops both the related and the through
+// predicate from the count body - oracle /tmp/g13b_v/probeC.php withCount row.
+func TestSubqueryThroughSoftDelete_WithCountCarriesTheRemoval(t *testing.T) {
+	related := ` and "tsd_posts"."deleted_at" is null`
+	through := ` and "tsd_users"."deleted_at" is null`
+
+	q := newRelQueryWith(t, &subqThroughOwner{}).WithCount("Posts").(*OrmBuilder)
+	assert.Equal(t, `select "tsd_countries".*, (select count(*) from "tsd_posts" inner join "tsd_users" on "tsd_users"."id" = "tsd_posts"."user_id" where "tsd_countries"."id" = "tsd_users"."country_id"`+related+through+`) as "posts_count" from "tsd_countries"`, subquerySelectSQL(t, q, &[]subqThroughOwner{}))
+
+	q2 := newRelQueryWith(t, &subqThroughOwner{}).WithCount(contractsorm.RelationCount{Name: "Posts", Callback: func(q contractsorm.Query) contractsorm.Query { return q.WithoutGlobalScopes() }}).(*OrmBuilder)
+	assert.Equal(t, `select "tsd_countries".*, (select count(*) from "tsd_posts" inner join "tsd_users" on "tsd_users"."id" = "tsd_posts"."user_id" where "tsd_countries"."id" = "tsd_users"."country_id") as "posts_count" from "tsd_countries"`, subquerySelectSQL(t, q2, &[]subqThroughOwner{}))
+}
+
+// TestOneOfManyThrough_AggregateKeepsTheThroughPredicate pins the asymmetry the oracle shows: in the
+// ofMany-through AGGREGATE the through predicate survives the relation's SoftDeletableHasManyThrough
+// removal (performJoin re-registers the named scope on the aggregate's fresh query), while the
+// outer query's through predicate is dropped and the related predicate survives in both. Oracle
+// (illuminate/database v12.55.1, real sqlite, /tmp/g13b_v/probeD.php).
+func TestOneOfManyThrough_AggregateKeepsTheThroughPredicate(t *testing.T) {
+	q := newRelQueryWith(t, &subqThroughOwner{}).WhereHas("LatestPostRm").(*OrmBuilder)
+	assert.Equal(t, `select * from "tsd_countries" where exists (select * from "tsd_posts" inner join "tsd_users" on "tsd_users"."id" = "tsd_posts"."user_id" inner join (select MAX("tsd_posts"."id") as "id_aggregate", "tsd_users"."country_id" from "tsd_posts" inner join "tsd_users" on "tsd_users"."id" = "tsd_posts"."user_id" where "tsd_posts"."deleted_at" is null and "tsd_users"."deleted_at" is null group by "tsd_users"."country_id") as "latest_post_rm" on "latest_post_rm"."id_aggregate" = "tsd_posts"."id" and "latest_post_rm"."country_id" = "tsd_users"."country_id" where "tsd_countries"."id" = "tsd_users"."country_id" and "tsd_posts"."deleted_at" is null)`, subquerySelectSQL(t, q, &[]subqThroughOwner{}))
+}
+
+// TestSubqueryScopeRemoval_NestedRelationRemovalReachesTheLeaf pins the dotted-chain case: the
+// caller's closure binds at the leaf, so its removal governs the leaf's soft-delete predicate while
+// the intermediate segment keeps its own - oracle (illuminate/database v12.55.1, real sqlite,
+// /tmp/g13b_v/probeA.php): `whereHas(mids.leaves, withTrashed())` drops only the leaf's predicate.
+func TestSubqueryScopeRemoval_NestedRelationRemovalReachesTheLeaf(t *testing.T) {
+	q := newRelQueryWith(t, &relDeepOwner{}).WhereHas("Mids.Leaves", func(q contractsorm.Query) contractsorm.Query {
+		return q.WithTrashed()
+	}).(*OrmBuilder)
+
+	assert.Equal(t, `select * from "rel_deep_owners" where exists (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and exists (select * from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id") and "rel_deep_mids"."deleted_at" is null and "active" = ?)`, subquerySelectSQL(t, q, &[]relDeepOwner{}))
 }
