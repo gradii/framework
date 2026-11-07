@@ -3482,9 +3482,12 @@ func (r *OrmBuilder) WithTrashed() contractsorm.Query {
 
 func (r *OrmBuilder) OnlyTrashed() contractsorm.Query {
 	conditions := r.conditions
-	if !conditions.onlyTrashed {
-		conditions.onlyTrashedWhereIndex = len(r.query.State().Wheres)
-	}
+	// Laravel's macro writes one whereNotNull per call, so every call's position is kept. The list
+	// is copied, not appended in place, so a clone sharing the backing array is left untouched.
+	conditions.onlyTrashedCalls = append(slices.Clone(conditions.onlyTrashedCalls), onlyTrashedCall{
+		whereIndex:    len(r.query.State().Wheres),
+		relationIndex: len(conditions.relations),
+	})
 	conditions.onlyTrashed = true
 
 	return r.setConditions(conditions)
@@ -3573,11 +3576,13 @@ func (r *OrmBuilder) addNestedWhereQuery(callback func(contractsorm.Query) contr
 	// nothing when no where remains.
 	nested.flushWheres()
 
-	// A child OnlyTrashed would have had its "is not null" predicate appended when the child was
+	// A child OnlyTrashed would have had its "is not null" predicate written when the child was
 	// compiled; the child only ever merges as one group, so the predicate joins its wheres here -
-	// inside the group, where Laravel's onlyTrashed macro wrote it.
+	// inside the group, at the position each call recorded, where Laravel's onlyTrashed macro wrote
+	// it (oracle, /Users/dog/.claude/jobs/013c27a0/tmp/r15-probes/r15-r14-mutants/probe5.out N1, N2,
+	// N4: `("sr_users"."deleted_at" is not null and "email" = ?)` for onlyTrashed()->where()).
 	if nested.conditions.onlyTrashed {
-		if err := nested.appendSoftDeletePredicate(nested.query, true); err != nil {
+		if err := nested.spliceOnlyTrashed(nested.query); err != nil {
 			return r.withError(err)
 		}
 	}
@@ -3594,9 +3599,11 @@ func (r *OrmBuilder) newQueryWithoutRelationships() *OrmBuilder {
 	child.conditions = r.conditions.clone()
 	child.conditions.eagerLoad = nil
 	// Eloquent hands the closure a fresh builder, so the parent's trashed switches are not
-	// inherited: a switch the closure does not set itself stays off for its nested group.
+	// inherited: a switch the closure does not set itself stays off for its nested group, and the
+	// group writes only the OnlyTrashed calls the closure made.
 	child.conditions.withTrashed = false
 	child.conditions.onlyTrashed = false
+	child.conditions.onlyTrashedCalls = nil
 
 	return child
 }

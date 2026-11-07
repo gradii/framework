@@ -74,10 +74,10 @@ type Conditions struct {
 	withoutTouch bool
 	withTrashed  bool
 	onlyTrashed  bool
-	// onlyTrashedWhereIndex is the where count when OnlyTrashed was first called: Laravel's
-	// onlyTrashed macro writes its whereNotNull at call time, so the predicate is spliced back to
-	// that position when the statement compiles.
-	onlyTrashedWhereIndex int
+	// onlyTrashedCalls records every OnlyTrashed call in call order: Laravel's onlyTrashed macro
+	// writes its whereNotNull at call time - once per call - so each predicate is spliced back to the
+	// position its call recorded when the statement compiles.
+	onlyTrashedCalls []onlyTrashedCall
 	// pendingAttributes are the column values WithAttributes recorded for every model the query
 	// creates, mirroring Builder::$pendingAttributes. Keys are column names as the caller wrote them;
 	// the write path resolves them against the model's schema.
@@ -185,6 +185,16 @@ type selectSub struct {
 	function string // count | max | min | sum | avg | exists
 	alias    string
 	callback contractsorm.RelationCallback
+}
+
+// onlyTrashedCall is the position one OnlyTrashed call recorded: the where count at call time, and
+// the count of relation existence clauses recorded before it. The relation clauses are spliced into
+// the where list only when the statement compiles, so a clause recorded at the same where count is
+// ordered against the predicate by the second number - it precedes the predicate when it was
+// recorded before the call.
+type onlyTrashedCall struct {
+	whereIndex    int
+	relationIndex int
 }
 
 // relationExistence describes a deferred relationship existence/absence condition.

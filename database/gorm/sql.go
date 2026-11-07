@@ -378,13 +378,29 @@ func (r *OrmBuilder) applySoftDelete(builder *querybuilder.Builder) error {
 // applyOnlyTrashed writes OnlyTrashed's "is not null" predicate where Laravel's onlyTrashed macro
 // writes it: the macro removes SoftDeletingScope and calls whereNotNull on the builder at call time,
 // so the predicate sits at the where position the call recorded and nothing is regrouped (no scope
-// is applied for it). The relation existence clauses recorded at or after that position move one
-// place to the right, since they are spliced in afterwards.
+// is applied for it). Each call writes its own predicate, as each macro call does. The relation
+// existence clauses are spliced in afterwards, so each one moves right by the predicates written
+// before it: those whose call recorded a smaller where count, and those whose call recorded the same
+// where count before the clause itself was recorded.
+//
+// Oracle (illuminate/database v12.55.1, real sqlite, under
+// /Users/dog/.claude/jobs/013c27a0/tmp/r15-probes/r15-r14-mutants/: probe2.out P8, probe3.out
+// R1-R4): where->onlyTrashed->where->onlyTrashed compiles `"email" = ? and "deleted_at" is not null
+// and "id" = ? and "deleted_at" is not null`; whereHas->onlyTrashed compiles `exists (...) and
+// "deleted_at" is not null`, onlyTrashed->whereHas compiles `"deleted_at" is not null and exists
+// (...)`.
 func (r *OrmBuilder) applyOnlyTrashed(builder *querybuilder.Builder) error {
 	if !r.conditions.onlyTrashed || !r.usesFrameworkSoftDelete() {
 		return nil
 	}
 
+	return r.spliceOnlyTrashed(builder)
+}
+
+// spliceOnlyTrashed is applyOnlyTrashed's splice without the framework-type gate: it writes one
+// "is not null" predicate per recorded OnlyTrashed call at that call's where position. A where
+// closure's child query calls it directly for its own group (addNestedWhereQuery).
+func (r *OrmBuilder) spliceOnlyTrashed(builder *querybuilder.Builder) error {
 	whereCount := len(builder.State().Wheres)
 	if err := r.appendSoftDeletePredicate(builder, true); err != nil {
 		return err
@@ -393,17 +409,37 @@ func (r *OrmBuilder) applyOnlyTrashed(builder *querybuilder.Builder) error {
 		return nil
 	}
 
-	index := min(r.conditions.onlyTrashedWhereIndex, whereCount)
 	wheres := builder.State().Wheres
 	predicate := wheres[whereCount]
-	copy(wheres[index+1:], wheres[index:whereCount])
-	wheres[index] = predicate
+	original := slices.Clone(wheres[:whereCount])
+
+	calls := r.conditions.onlyTrashedCalls
+	if len(calls) == 0 {
+		calls = []onlyTrashedCall{{}}
+	}
+
+	// Rebuild the where list with one predicate per call, each at its call's position. The calls
+	// are in call order, so their where counts never decrease.
+	rebuilt := make([]core.Where, 0, whereCount+len(calls))
+	next := 0
+	for _, call := range calls {
+		index := min(call.whereIndex, whereCount)
+		rebuilt = append(rebuilt, original[next:max(next, index)]...)
+		next = max(next, index)
+		rebuilt = append(rebuilt, predicate)
+	}
+	rebuilt = append(rebuilt, original[next:]...)
+	builder.State().Wheres = rebuilt
 
 	items := make([]relationExistence, len(r.conditions.relations))
 	for i, item := range r.conditions.relations {
-		if item.whereIndex >= index {
-			item.whereIndex++
+		shift := 0
+		for _, call := range calls {
+			if call.whereIndex < item.whereIndex || (call.whereIndex == item.whereIndex && i >= call.relationIndex) {
+				shift++
+			}
 		}
+		item.whereIndex += shift
 		items[i] = item
 	}
 	r.conditions.relations = items
