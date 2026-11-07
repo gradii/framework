@@ -30,8 +30,10 @@ import (
 // ---------------------------------------------------------------------------
 // Public API: existence (has / whereHas / doesntHave / orWhereDoesntHave / ...)
 //
-// Each method appends a relationExistence to conditions.relations; the actual subquery is built
-// when the query is compiled to SQL (so the parent model from .Model() / dest can be resolved).
+// Each method writes a deferred where entry (deferredWhere carrying a relationExistence) at its call
+// position in the query's where list, the way Laravel's addHasWhere appends the exists clause at call
+// time; the subquery itself is built when the query is compiled to SQL, so the parent model from
+// .Model() / dest can be resolved.
 // ---------------------------------------------------------------------------
 
 // Has adds a relationship count / exists condition to the query.
@@ -411,23 +413,16 @@ func (r *OrmBuilder) queueRelationExistence(relation string, args []any, conjunc
 
 	// Laravel appends the exists clause to the builder's wheres at call time, so the clause sits
 	// between the wheres written before and after the call. The clause itself is rendered at compile
-	// time, when the parent model is known, so its position is recorded here: the earlier wheres are
-	// flushed now and the builder's counts become the splice points applyRelations uses.
+	// time, when the parent model is known, so the call writes a deferred entry at its position.
 	r = r.flushWheres()
-	whereIndex := len(r.query.State().Wheres)
-	bindingIndex := len(r.query.State().Bindings["where"])
+	r.deferWhere(existenceBoolean(conjunction), &deferredWhere{relation: relationExistence{
+		relation: relation,
+		operator: op,
+		count:    count,
+		callback: cb,
+	}})
 
-	conditions := r.conditions
-	conditions.relations = deep.Append(conditions.relations, relationExistence{
-		relation:     relation,
-		operator:     op,
-		count:        count,
-		conjunction:  conjunction,
-		callback:     cb,
-		whereIndex:   whereIndex,
-		bindingIndex: bindingIndex,
-	})
-	return r.setConditions(conditions)
+	return r
 }
 
 func (r *OrmBuilder) queueMorphExistence(relation string, types []any, args []any, conjunction string, doesntHave bool) contractsorm.Query {
@@ -453,27 +448,29 @@ func (r *OrmBuilder) queueMorphExistence(relation string, types []any, args []an
 		count = 1
 	}
 
-	// Same position recording as queueRelationExistence: the morph clause is appended to the
-	// statement's wheres at call time in Laravel, so the earlier wheres flush here and the current
-	// counts are remembered as the splice points.
+	// As queueRelationExistence: the morph clause is appended to the statement's wheres at call time
+	// in Laravel, so the call writes a deferred entry at its position.
 	r = r.flushWheres()
-	whereIndex := len(r.query.State().Wheres)
-	bindingIndex := len(r.query.State().Bindings["where"])
-
-	conditions := r.conditions
-	conditions.relations = deep.Append(conditions.relations, relationExistence{
+	r.deferWhere(existenceBoolean(conjunction), &deferredWhere{relation: relationExistence{
 		relation:      relation,
 		operator:      op,
 		count:         count,
-		conjunction:   conjunction,
 		callback:      cb,
 		morphTypes:    types,
 		morphCallback: mcb,
 		morphAuto:     morphAuto,
-		whereIndex:    whereIndex,
-		bindingIndex:  bindingIndex,
-	})
-	return r.setConditions(conditions)
+	}})
+
+	return r
+}
+
+// existenceBoolean is the where boolean an existence call's conjunction writes.
+func existenceBoolean(conjunction string) string {
+	if conjunction == "or" {
+		return core.BooleanOr
+	}
+
+	return core.BooleanAnd
 }
 
 // ---------------------------------------------------------------------------
@@ -740,173 +737,262 @@ func (r *OrmBuilder) compileAggregateSubquery(desc *relationDescriptor, sub sele
 // Internal: relation conditions on the compiled statement
 // ---------------------------------------------------------------------------
 
-// applyRelations puts the query's relation existence conditions on the compiled statement.
+// deferWhere writes one deferred where entry at the end of the query's where list, and its marker at
+// the end of the "where" bindings - the place Laravel's whereNotNull / addWhereExistsQuery write the
+// clause and its bindings at call time (see deferredWhere).
+func (r *OrmBuilder) deferWhere(boolean string, payload *deferredWhere) {
+	state := r.query.State()
+	state.Wheres = append(state.Wheres, core.Where{Type: core.WhereDeferredType, Boolean: boolean, Value: payload})
+	_ = r.query.AddBinding(payload, "where")
+}
+
+// deferredWhereScope is what the deferred entries of one where list render against: parent is the
+// model an existence clause correlates to and an onlyTrashed predicate filters; trashedTable is the
+// qualifier of that predicate, the parent's table when empty (an existence subquery names the
+// related side's, which may be the self-join alias); existenceAlias is the enclosing existence
+// level's self-join alias, which the existence clauses correlate to.
+type deferredWhereScope struct {
+	parent         any
+	trashedTable   string
+	existenceAlias string
+}
+
+// deferredWhereScope is the scope a query's own where list renders against: its model (or the
+// destination's), and the self-join alias of the existence level its builder scopes.
+func (r *OrmBuilder) deferredWhereScope() deferredWhereScope {
+	return deferredWhereScope{parent: r.parentModel(), existenceAlias: r.conditions.existenceAlias}
+}
+
+// resolveDeferredWheres renders every deferred entry in builder's where list - nested groups
+// included - now that the model is known, in place: an entry is replaced by the where(s) it renders
+// and its marker binding by their bindings, or both are removed when it renders nothing (an
+// onlyTrashed on a model without the framework's soft-delete type), and a nested group left with no
+// where disappears, as AddNestedWhereQuery would not have added it. So the statement reads in call
+// order, the way Laravel's single where list does.
+//
+// builder is always the statement's own copy (newBuilder's clone, withScopesApplied's clone, a
+// subquery's fresh scope builder): its where list and bindings are replaced, never written through.
+// A nested group's builder is shared with the query the copy was cloned from, so a group holding
+// deferred entries is cloned before it is rewritten - compiling twice, or ToSql then running, leaves
+// the persistent query as it was. The grammar never sees a deferred entry.
+func (r *OrmBuilder) resolveDeferredWheres(builder *querybuilder.Builder, scope deferredWhereScope) error {
+	state := builder.State()
+	if !containsDeferredWhere(state.Wheres) {
+		return nil
+	}
+
+	rendered := make(map[*deferredWhere][]any)
+	wheres, err := r.resolveDeferredList(builder, state.Wheres, scope, rendered)
+	if err != nil {
+		return err
+	}
+
+	state.Wheres = wheres
+	state.Bindings["where"] = replaceDeferredMarkers(state.Bindings["where"], rendered)
+
+	return nil
+}
+
+// resolveDeferredList renders the deferred entries of one where list, recursing into the nested
+// groups that hold any, and records each entry's rendered bindings under its marker. A nested group
+// renders against the same parent and alias - a where closure writes onto a query of the same model
+// - with its onlyTrashed qualified by the parent's own table, the way the closure's
+// newQueryWithoutRelationships qualifies it. Rendering errors inside a nested group are dropped with
+// the group's scratch receiver, as the finished group's own query dropped them; the clause it could
+// not render is simply absent.
+func (r *OrmBuilder) resolveDeferredList(builder *querybuilder.Builder, wheres []core.Where, scope deferredWhereScope, rendered map[*deferredWhere][]any) ([]core.Where, error) {
+	out := make([]core.Where, 0, len(wheres))
+
+	for _, where := range wheres {
+		switch {
+		case where.Type == core.WhereDeferredType:
+			payload, ok := where.Value.(*deferredWhere)
+			if !ok {
+				continue
+			}
+
+			// The entry renders onto a scratch builder of the same table, so its wheres and bindings
+			// come back apart from the list being rebuilt.
+			scratch := builder.ForNestedWhere()
+			if err := r.renderDeferredWhere(scratch, payload, where.Boolean, scope); err != nil {
+				return nil, err
+			}
+
+			out = append(out, scratch.State().Wheres...)
+			rendered[payload] = append([]any(nil), scratch.State().Bindings["where"]...)
+		case where.Type == core.WhereNestedType && where.Query != nil && containsDeferredWhere(where.Query.State().Wheres):
+			group, ok := where.Query.CloneForGrammar().(*querybuilder.Builder)
+			if !ok {
+				out = append(out, where)
+
+				continue
+			}
+
+			sink := *r
+			groupScope := deferredWhereScope{parent: scope.parent, existenceAlias: scope.existenceAlias}
+			groupWheres, err := sink.resolveDeferredList(group, group.State().Wheres, groupScope, rendered)
+			if err != nil {
+				return nil, err
+			}
+			if len(groupWheres) == 0 {
+				continue
+			}
+
+			group.State().Wheres = groupWheres
+			group.State().Bindings["where"] = replaceDeferredMarkers(group.State().Bindings["where"], rendered)
+			where.Query = group
+			out = append(out, where)
+		default:
+			out = append(out, where)
+		}
+	}
+
+	return out, nil
+}
+
+// replaceDeferredMarkers rebuilds a "where" binding list with every deferred entry's marker replaced,
+// in place, by the bindings the entry rendered (none when it rendered nothing).
+func replaceDeferredMarkers(bindings []any, rendered map[*deferredWhere][]any) []any {
+	out := make([]any, 0, len(bindings))
+	for _, binding := range bindings {
+		if marker, ok := binding.(*deferredWhere); ok {
+			out = append(out, rendered[marker]...)
+
+			continue
+		}
+
+		out = append(out, binding)
+	}
+
+	return out
+}
+
+// containsDeferredWhere reports whether a where list holds a deferred entry, directly or inside a
+// nested group.
+func containsDeferredWhere(wheres []core.Where) bool {
+	for _, where := range wheres {
+		if where.Type == core.WhereDeferredType {
+			return true
+		}
+		if where.Type == core.WhereNestedType && where.Query != nil && containsDeferredWhere(where.Query.State().Wheres) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// renderDeferredWhere renders one deferred entry onto builder: an onlyTrashed call's predicate, or
+// an existence clause with the entry's boolean.
+func (r *OrmBuilder) renderDeferredWhere(builder *querybuilder.Builder, payload *deferredWhere, boolean string, scope deferredWhereScope) error {
+	if payload.onlyTrashed {
+		return renderOnlyTrashed(builder, boolean, scope)
+	}
+
+	return r.renderRelationExistence(builder, payload.relation, boolean, scope)
+}
+
+// renderOnlyTrashed writes OnlyTrashed's "is not null" predicate where Laravel's onlyTrashed macro
+// writes it: the macro removes SoftDeletingScope and calls whereNotNull on the builder at call time,
+// so the predicate sits at the call's position and nothing is regrouped (no scope is applied for
+// it). Each call writes its own predicate, as each macro call does. A model without the framework's
+// soft-delete type renders nothing.
+//
+// Oracle (illuminate/database v12.55.1, real sqlite, under
+// /Users/dog/.claude/jobs/013c27a0/tmp/r15-probes/r15-r14-mutants/: probe2.out P8, probe3.out
+// R1-R4): where->onlyTrashed->where->onlyTrashed compiles `"email" = ? and "deleted_at" is not null
+// and "id" = ? and "deleted_at" is not null`; whereHas->onlyTrashed compiles `exists (...) and
+// "deleted_at" is not null`, onlyTrashed->whereHas compiles `"deleted_at" is not null and exists
+// (...)`.
+func renderOnlyTrashed(builder *querybuilder.Builder, boolean string, scope deferredWhereScope) error {
+	if scope.parent == nil {
+		return nil
+	}
+
+	column, ok := softDeleteColumn(scope.parent)
+	if !ok {
+		return nil
+	}
+
+	table := scope.trashedTable
+	if table == "" {
+		var err error
+		if table, err = tableNameFor(scope.parent); err != nil || table == "" {
+			return err
+		}
+	}
+
+	builder.WhereNull(table+"."+column, boolean, true)
+
+	return nil
+}
+
+// renderRelationExistence renders one relation existence condition onto builder.
 //
 // The correlated subquery is assembled by the framework builder and rendered to the SQL and bindings
 // the statement carries, so what is decided here is only the clause: the same EXISTS optimisation,
 // negation and conjunction the GORM path hands over, and for the polymorphic variants the same set of
 // per-type clauses joined into one group.
-func (r *OrmBuilder) applyRelations(builder *querybuilder.Builder) error {
-	if len(r.conditions.relations) == 0 {
-		return nil
+func (r *OrmBuilder) renderRelationExistence(builder *querybuilder.Builder, item relationExistence, boolean string, scope deferredWhereScope) error {
+	parent := scope.parent
+	if parent == nil {
+		return errors.OrmQueryEmptyRelation
 	}
 
-	parent := r.parentModel()
-
-	// Every clause is rendered at the tail; relocateAppendedClause then moves it back to the where
-	// position its call recorded, so the statement preserves Laravel's call order (a has() clause
-	// sits between the wheres written before and after it). The counters shift the recorded positions
-	// and binding offsets by what the clauses spliced before them added.
-	splicedWheres := 0
-	splicedBindings := 0
-
-	for _, item := range r.conditions.relations {
-		boolean := core.BooleanAnd
-		if item.conjunction == "or" {
-			boolean = core.BooleanOr
-		}
-
-		whereStart := len(builder.State().Wheres)
-		bindingStart := len(builder.State().Bindings["where"])
-
-		if item.nestedGroup != nil {
-			// The group keeps the where call's own boolean, "and not" / "or not" included
-			// (WhereNot / OrWhereNot closures).
-			if err := applyNestedGroup(builder, parent, item.nestedGroup, item.conjunction, r.conditions.existenceAlias); err != nil {
-				return err
-			}
-		} else if parent == nil {
-			return errors.OrmQueryEmptyRelation
-		} else if item.morphAuto || len(item.morphTypes) > 0 {
-			if err := r.applyMorphRelation(builder, parent, item, boolean); err != nil {
-				return err
-			}
-		} else {
-			desc, err := relations.ResolveRelation(parent, item.relation)
-			if err != nil {
-				return err
-			}
-
-			if desc.Kind == relKindMorphTo {
-				// Laravel's has() on a MorphTo delegates to hasMorph($relation, ['*'], ...): the
-				// morph values are read from the parent table itself rather than from model
-				// instances, so the clause resolves its types through the auto path.
-				item.morphAuto = true
-				if err := r.applyMorphRelation(builder, parent, item, boolean); err != nil {
-					return err
-				}
-			} else {
-				// hasNested always renders the first segment as a plain exists - not exists for the
-				// doesntHave shape (operator "<", count 1) - and hands the caller's operator/count to
-				// the final segment, so a dotted chain keeps its count comparison on the leaf.
-				leafOperator, leafCount := item.operator, item.count
-				outerOperator, outerCount := item.operator, item.count
-				if desc.Nested != nil {
-					outerOperator, outerCount = ">=", 1
-					if item.operator == "<" && item.count == 1 {
-						outerOperator = "<"
-						leafOperator, leafCount = ">=", 1
-					}
-				}
-
-				// A builder that is itself a self-aliased existence level - a whereHas callback's
-				// query inside getRelationExistenceQueryForSelfRelation, whose model's table was
-				// renamed to the alias - correlates its own existence clauses to the alias, and its
-				// from string is the aliased one, so a same-table relation under it does not alias
-				// again (`$parentQuery->getQuery()->from` is "<table> as <alias>").
-				parentFrom, parentQualifier := desc.ParentTable, desc.ParentTable
-				if alias := r.conditions.existenceAlias; alias != "" {
-					parentFrom, parentQualifier = desc.ParentTable+" as "+alias, alias
-				}
-
-				inner, _, err := r.compileExistenceSubqueryIn(desc, item.callback, parentFrom, parentQualifier, leafOperator, leafCount)
-				if err != nil {
-					return err
-				}
-				if inner == nil {
-					continue
-				}
-
-				applyExistenceClause(builder, inner, outerOperator, outerCount, boolean)
-			}
-		}
-
-		appendedWheres := len(builder.State().Wheres) - whereStart
-		appendedBindings := len(builder.State().Bindings["where"]) - bindingStart
-
-		relocateAppendedClause(builder, whereStart, bindingStart, item.whereIndex+splicedWheres, item.bindingIndex+splicedBindings)
-
-		splicedWheres += appendedWheres
-		splicedBindings += appendedBindings
+	if item.morphAuto || len(item.morphTypes) > 0 {
+		return r.applyMorphRelation(builder, parent, item, boolean)
 	}
 
-	return nil
-}
-
-// applyNestedGroup finishes a deferred where-closure group and appends it as one nested where: the
-// closure's onlyTrashed predicates and existence clauses are written into a copy of its where list
-// at the positions their calls recorded - the predicates first, since they shift the clauses'
-// positions, as withScopesApplied orders them on the main path - and the group joins the statement
-// through AddNestedWhereQuery, its bindings with it. The copy keeps the recorded group untouched, so
-// compiling the same query twice writes the clauses once each time. A closure nested in the closure
-// is itself a deferred group of the copy, finished by the same recursion.
-//
-// Oracle (illuminate/database v12.55.1, real sqlite): /Users/dog/.claude/jobs/013c27a0/tmp/r15b-probes/oracle.php W1-W8, V4, V5 -
-// where(fn => whereHas('posts')) compiles `where "id" = ? and (exists (select * from "sd_posts"
-// where ...)) and "sd_users"."deleted_at" is null` - and
-// /Users/dog/.claude/jobs/013c27a0/tmp/r15-probes/r15-r14-mutants/probe5.out N1, N2, N4 -
-// where(fn => onlyTrashed()->where('email', 'a')) compiles `("sr_users"."deleted_at" is not null and
-// "email" = ?)`.
-//
-// existenceAlias is the enclosing builder's self-join alias: a where closure inside a self-aliased
-// existence level writes onto that level's query, so its existence clauses correlate to the alias as
-// well (oracle /Users/dog/.claude/jobs/013c27a0/tmp/r15bgate-probes/selfnest.php P3).
-func applyNestedGroup(builder *querybuilder.Builder, parent any, nested *OrmBuilder, boolean, existenceAlias string) error {
-	group := nested.clone()
-	if parent != nil {
-		group.conditions.model = parent
-	}
-	group.conditions.existenceAlias = existenceAlias
-
-	if group.conditions.onlyTrashed {
-		if err := group.spliceOnlyTrashed(group.query); err != nil {
-			return err
-		}
-	}
-
-	if err := group.applyRelations(group.query); err != nil {
+	desc, err := relations.ResolveRelation(parent, item.relation)
+	if err != nil {
 		return err
 	}
 
-	builder.AddNestedWhereQuery(group.query, boolean)
+	if desc.Kind == relKindMorphTo {
+		// Laravel's has() on a MorphTo delegates to hasMorph($relation, ['*'], ...): the morph values
+		// are read from the parent table itself rather than from model instances, so the clause
+		// resolves its types through the auto path.
+		item.morphAuto = true
+
+		return r.applyMorphRelation(builder, parent, item, boolean)
+	}
+
+	// hasNested always renders the first segment as a plain exists - not exists for the doesntHave
+	// shape (operator "<", count 1) - and hands the caller's operator/count to the final segment, so
+	// a dotted chain keeps its count comparison on the leaf.
+	leafOperator, leafCount := item.operator, item.count
+	outerOperator, outerCount := item.operator, item.count
+	if desc.Nested != nil {
+		outerOperator, outerCount = ">=", 1
+		if item.operator == "<" && item.count == 1 {
+			outerOperator = "<"
+			leafOperator, leafCount = ">=", 1
+		}
+	}
+
+	// A builder that is itself a self-aliased existence level - a whereHas callback's query inside
+	// getRelationExistenceQueryForSelfRelation, whose model's table was renamed to the alias -
+	// correlates its own existence clauses to the alias, and its from string is the aliased one, so a
+	// same-table relation under it does not alias again (`$parentQuery->getQuery()->from` is
+	// "<table> as <alias>"). A where closure inside such a level writes onto that level's query, so
+	// its existence clauses correlate to the alias as well (oracle
+	// /Users/dog/.claude/jobs/013c27a0/tmp/r15bgate-probes/selfnest.php P3).
+	parentFrom, parentQualifier := desc.ParentTable, desc.ParentTable
+	if alias := scope.existenceAlias; alias != "" {
+		parentFrom, parentQualifier = desc.ParentTable+" as "+alias, alias
+	}
+
+	inner, _, err := r.compileExistenceSubqueryIn(desc, item.callback, parentFrom, parentQualifier, leafOperator, leafCount)
+	if err != nil {
+		return err
+	}
+	if inner == nil {
+		return nil
+	}
+
+	applyExistenceClause(builder, inner, outerOperator, outerCount, boolean)
 
 	return nil
-}
-
-// relocateAppendedClause moves the clauses a relation existence condition appended at the tail back
-// to the positions the condition recorded when its method was called, restoring Laravel's
-// call-order placement for a clause whose rendering is deferred to compile time. The move is a pure
-// re-slice of the where list and of its binding list: the bindings appended with the clause travel
-// to the parallel offset, so the statement's placeholders keep matching their values.
-func relocateAppendedClause(builder *querybuilder.Builder, whereStart, bindingStart, whereTarget, bindingTarget int) {
-	state := builder.State()
-
-	if moved := state.Wheres[whereStart:]; len(moved) > 0 && whereTarget < whereStart {
-		wheres := make([]core.Where, 0, len(state.Wheres))
-		wheres = append(wheres, state.Wheres[:whereTarget]...)
-		wheres = append(wheres, moved...)
-		wheres = append(wheres, state.Wheres[whereTarget:whereStart]...)
-		state.Wheres = wheres
-	}
-
-	bindings := state.Bindings["where"]
-	if moved := bindings[bindingStart:]; len(moved) > 0 && bindingTarget < bindingStart {
-		relocated := make([]any, 0, len(bindings))
-		relocated = append(relocated, bindings[:bindingTarget]...)
-		relocated = append(relocated, moved...)
-		relocated = append(relocated, bindings[bindingTarget:bindingStart]...)
-		state.Bindings["where"] = relocated
-	}
 }
 
 // applyMorphRelation adds a polymorphic existence condition. Each requested type is a table of its
@@ -1219,8 +1305,8 @@ func (r *OrmBuilder) relatedChild(table string, column string, values []any) *Or
 // own removals (addHasWhere -> mergeConstraintsFrom -> withoutGlobalScopes($from->removedScopes())),
 // so both sets land on one builder and every deferred scope is applied on top of them: a name (or the
 // port's "*" for withoutGlobalScopes()) drops exactly that scope, and withTrashed() and onlyTrashed()
-// drop the SoftDeletingScope - onlyTrashed's own "is not null" is a where its call wrote, spliced at
-// the call's position by spliceSubqueryOnlyTrashed, not a scope.
+// drop the SoftDeletingScope - onlyTrashed's own "is not null" is a where its call wrote, a deferred
+// entry rendered at the call's position by finishSubqueryScope, not a scope.
 type subqueryScopeRemovals struct {
 	names       []string
 	withTrashed bool
@@ -1279,7 +1365,7 @@ func (r *OrmBuilder) applySubquerySoftDelete(builder *querybuilder.Builder, tabl
 	// relation's default query or the caller's closure left on it - or a withoutGlobalScope of the
 	// SoftDeletingScope name / withoutGlobalScopes() - governs it as applySoftDelete governs the
 	// main-path predicate: each of them drops it. onlyTrashed is Laravel's macro, which removes the
-	// scope and writes its whereNotNull where it was called; spliceSubqueryOnlyTrashed wrote that
+	// scope and writes its whereNotNull where it was called; finishSubqueryScope rendered that
 	// predicate among the closure's / relation's own wheres, so nothing is written for it here.
 	if removals.onlyTrashed || removals.withTrashed || removals.removes(contractsorm.SoftDeletingScope) {
 		return
@@ -1328,7 +1414,9 @@ func (r *OrmBuilder) applySubqueryThroughSoftDelete(builder *querybuilder.Builde
 // table is the qualifier the subquery reads the related model under, as for applySubquerySoftDelete:
 // an onlyTrashed a scope calls is Laravel's macro running inside callScope after SoftDeletingScope
 // already applied, so its whereNotNull lands among the scope's own wheres at the call position and
-// the "is null" stays (oracle, illuminate/database v12.55.1, real sqlite, /Users/dog/.claude/jobs/013c27a0/tmp/r15b-verify-probes/paths.php E1,
+// the "is null" stays; a whereHas the scope calls correlates to the related model the same way. Both
+// are deferred entries on the scope's query, rendered in place against the related model before the
+// scope's wheres move onto the subquery (oracle, illuminate/database v12.55.1, real sqlite, /Users/dog/.claude/jobs/013c27a0/tmp/r15b-verify-probes/paths.php E1,
 // E2, E3 and /Users/dog/.claude/jobs/013c27a0/tmp/r15b-verify-probes/related_scope.php E5, E7, E8: whereHas('tposts') over a scope
 // where('id', '>', 0)->onlyTrashed() compiles `... and "sd_posts"."deleted_at" is null and "id" > ?
 // and "sd_posts"."deleted_at" is not null`).
@@ -1350,7 +1438,6 @@ func (r *OrmBuilder) applyRelatedGlobalScopes(builder *querybuilder.Builder, tab
 		}
 
 		originalWhereCount := len(builder.State().Wheres)
-		originalOnlyTrashedCalls := len(scoped.conditions.onlyTrashedCalls)
 
 		if returned, ok := globalScope.Scope(scoped).(*OrmBuilder); ok {
 			scoped = returned
@@ -1360,14 +1447,11 @@ func (r *OrmBuilder) applyRelatedGlobalScopes(builder *querybuilder.Builder, tab
 		// withScopesApplied gives the scopes of a top-level query.
 		scoped = scoped.flushWheres()
 
-		// The onlyTrashed calls this scope made write the related model's "is not null" at their
-		// call positions, before the scope's wheres move onto the subquery and are regrouped.
-		if calls := scoped.conditions.onlyTrashedCalls; len(calls) > originalOnlyTrashedCalls && usesFrameworkSoftDeleteModel(relatedModel) {
-			if column, ok := softDeleteColumn(relatedModel); ok {
-				whereCount := len(scoped.query.State().Wheres)
-				scoped.query.WhereNull(table+"."+column, core.BooleanAnd, true)
-				scoped.spliceOnlyTrashedPredicate(scoped.query, whereCount, calls[originalOnlyTrashedCalls:])
-			}
+		// The deferred entries this scope wrote - an onlyTrashed's "is not null", a whereHas's exists
+		// - render in place against the related model, before the scope's wheres move onto the
+		// subquery and are regrouped.
+		if err := scoped.resolveDeferredWheres(scoped.query, deferredWhereScope{parent: relatedModel, trashedTable: table}); err != nil {
+			r.keepFirstError(err)
 		}
 
 		// The scope starts from what the previous scopes produced - addGlobalScopes reuses its
@@ -1495,8 +1579,9 @@ func (r *OrmBuilder) applyRelationScope(builder *querybuilder.Builder, callback 
 // table and model name the related side, as for applyRelationScope: an onlyTrashed the relation's
 // default query called writes the related model's "is not null" among its wheres at its call
 // position (Laravel's macro writes it on the relation query, and mergeConstraintsFrom carries it
-// with the relation's other wheres). It is spliced after the one-of-many join took the constraints
-// written after OfMany, so the predicate stays on the existence query.
+// with the relation's other wheres). It renders after the one-of-many join took the constraints
+// written after OfMany - which leaves the deferred entries on the relation query - so the predicate
+// stays on the existence query.
 func (r *OrmBuilder) relationScopeQuery(desc *relationDescriptor, table string, model any) (*OrmBuilder, string, []any, error) {
 	if desc.OnQuery == nil {
 		return nil, "", nil, nil
@@ -1529,11 +1614,11 @@ func (r *OrmBuilder) relationScopeQuery(desc *relationDescriptor, table string, 
 	return scoped, "", nil, nil
 }
 
-// finishSubqueryScope writes what a relation scope or caller closure deferred onto its own builder,
-// against the related side the subquery reads: first each onlyTrashed predicate at its call position
-// (spliceSubqueryOnlyTrashed), then the existence clauses and where-closure groups it recorded
-// (applyRelations, with the related model as their parent), each at the position its call recorded.
-// Laravel wrote all of them onto the subquery builder at call time - a whereHas inside a whereHas
+// finishSubqueryScope renders what a relation scope or caller closure deferred on its own builder,
+// against the related side the subquery reads: each onlyTrashed predicate, existence clause and
+// where-closure group's entries, in place at its call position (resolveDeferredWheres, with the
+// related model as their parent and table as the onlyTrashed qualifier). Laravel wrote all of them
+// onto the subquery builder at call time - a whereHas inside a whereHas
 // callback correlates its own exists to the related table - so they lead the related model's
 // deferred scopes, which follow in the subquery. Oracle (illuminate/database v12.55.1, real sqlite,
 // /Users/dog/.claude/jobs/013c27a0/tmp/r15b-probes/oracle_sub.php S1-S5): whereHas('mids', fn => whereHas('leaves')) compiles `exists
@@ -1543,20 +1628,22 @@ func (r *OrmBuilder) relationScopeQuery(desc *relationDescriptor, table string, 
 // ?)`, and a where closure's onlyTrashed there writes `("id" = ? and "rel_deep_mids"."deleted_at" is
 // not null)` while the subquery keeps its own "is null" - the closure's builder is the one whose
 // scope the macro removed.
+//
+// The scoped builder is a fresh query with no model of its own, so the related side is named
+// explicitly: table is the qualifier the subquery reads the related model under (the self-join alias
+// when the level aliased itself, as Laravel's getQualifiedDeletedAtColumn does after
+// getRelationExistenceQueryForSelfRelation renamed the model's table), model the related model, and
+// each onlyTrashed call writes its own predicate (oracle, illuminate/database v12.55.1, real sqlite,
+// /Users/dog/.claude/jobs/013c27a0/tmp/r15b-probes/oracle.php X1, X4, X5, X6, O6, O8:
+// whereHas('posts', fn => where('id', 1)->onlyTrashed()->where('id', 2)) compiles `exists (select *
+// from "sd_posts" where "sd_users"."id" = "sd_posts"."sd_user_id" and "id" = ? and
+// "sd_posts"."deleted_at" is not null and "id" = ?)`).
 func finishSubqueryScope(scoped *OrmBuilder, table string, model any) error {
-	spliceSubqueryOnlyTrashed(scoped, table, model)
-
-	if len(scoped.conditions.relations) == 0 {
-		return nil
-	}
-
-	scoped.conditions.model = model
-	if err := scoped.applyRelations(scoped.query); err != nil {
-		return err
-	}
-	scoped.conditions.relations = nil
-
-	return nil
+	return scoped.resolveDeferredWheres(scoped.query, deferredWhereScope{
+		parent:         model,
+		trashedTable:   table,
+		existenceAlias: scoped.conditions.existenceAlias,
+	})
 }
 
 // keepFirstError carries err on the query for the statement to report, unless an earlier error is
@@ -1565,34 +1652,6 @@ func (r *OrmBuilder) keepFirstError(err error) {
 	if err != nil && r.conditions.err == nil {
 		r.conditions.err = err
 	}
-}
-
-// spliceSubqueryOnlyTrashed writes the related model's "is not null" predicate onto a relation
-// scope's or caller closure's builder once per OnlyTrashed call it made, at the where position each
-// call recorded - the shape Laravel's onlyTrashed macro leaves: the macro runs whereNotNull on the
-// subquery builder at call time, between the wheres written before and after it, and each call
-// writes its own predicate. The scoped builder is a fresh query with no model of its own, so the
-// related side is named explicitly: table is the qualifier the subquery reads the related model
-// under (the self-join alias when the level aliased itself, as Laravel's getQualifiedDeletedAtColumn
-// does after getRelationExistenceQueryForSelfRelation renamed the model's table), model the related
-// model. Only the framework's own soft-delete type is handled, as everywhere else on the compiled
-// path. Oracle (illuminate/database v12.55.1, real sqlite, /Users/dog/.claude/jobs/013c27a0/tmp/r15b-probes/oracle.php X1, X4, X5, X6, O6,
-// O8): whereHas('posts', fn => where('id', 1)->onlyTrashed()->where('id', 2)) compiles `exists
-// (select * from "sd_posts" where "sd_users"."id" = "sd_posts"."sd_user_id" and "id" = ? and
-// "sd_posts"."deleted_at" is not null and "id" = ?)`.
-func spliceSubqueryOnlyTrashed(scoped *OrmBuilder, table string, model any) {
-	if scoped == nil || !scoped.conditions.onlyTrashed || !usesFrameworkSoftDeleteModel(model) {
-		return
-	}
-
-	column, ok := softDeleteColumn(model)
-	if !ok {
-		return
-	}
-
-	whereCount := len(scoped.query.State().Wheres)
-	scoped.query.WhereNull(table+"."+column, core.BooleanAnd, true)
-	scoped.spliceOnlyTrashedPredicate(scoped.query, whereCount, scoped.conditions.onlyTrashedCalls)
 }
 
 // appendWhereClauses moves a child query's where clauses onto the subquery builder, bindings

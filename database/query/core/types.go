@@ -45,6 +45,15 @@ const (
 	WhereYearType            WhereType = "Year"
 	WhereLikeType            WhereType = "Like"
 	WhereExpressionType      WhereType = "Expression"
+
+	// WhereDeferredType is not one of Laravel's types and no grammar compiles it: it marks an entry
+	// the ORM layer writes at call time and renders before a statement compiles. Laravel writes an
+	// onlyTrashed predicate or a has() exists clause onto $this->wheres when it is called; the Go ORM
+	// may only learn the model those clauses need from the destination a read is given, so it keeps
+	// the entry in place in the one ordered where list - its Boolean the call's, its Value an opaque
+	// payload, and one marker binding at its place in the "where" bindings - and replaces both with
+	// the rendered clauses on the statement's copy.
+	WhereDeferredType WhereType = "Deferred"
 )
 
 // Where is one where descriptor. Laravel stores these as associative arrays holding only the

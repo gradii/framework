@@ -269,7 +269,8 @@ func existsSelectExpression(driver, subquery, alias string) string {
 // newBuilder builds a query builder carrying everything the conditions describe. The persistent
 // builder already holds the SQL clauses (select, join, where, group, having, order, limit, offset,
 // distinct, lock); this clones it and adds the ORM-specific parts that compile differently per
-// statement: table, where, relation-existence subqueries, soft-delete predicate, and select-subs.
+// statement: table, the deferred where entries (relation-existence subqueries, onlyTrashed
+// predicates), soft-delete predicate, and select-subs.
 func (r *OrmBuilder) newBuilder() (*querybuilder.Builder, error) {
 	// A queued scope is one of the model's global scopes, folded in by addGlobalScopes: Laravel
 	// registers global scopes with withGlobalScope() and applies them when the statement compiles
@@ -292,7 +293,7 @@ func (r *OrmBuilder) newBuilder() (*querybuilder.Builder, error) {
 	}
 
 	// Clone the persistent builder so compiling multiple statements from the same query doesn't
-	// accumulate state (soft-delete predicate, relation subqueries).
+	// accumulate state (soft-delete predicate, rendered deferred entries).
 	builder := r.query.Clone()
 
 	if err := r.applyTable(builder); err != nil {
@@ -315,15 +316,12 @@ func (r *OrmBuilder) newBuilder() (*querybuilder.Builder, error) {
 	// conditions the ORM records internally (Find's, the FirstOr* fold's, the pivot chain's) all
 	// write to the persistent builder when they are called.
 
-	// Relation existence conditions a user scope queued join the where clause at the positions that
-	// scope recorded; the ones the caller queued were spliced in by withScopesApplied.
-	if err := r.applyRelations(builder); err != nil {
+	// The deferred entries still in the where list - the ones a user scope wrote, regrouped with
+	// that scope's wheres - render in place now; the ones the caller wrote were rendered by
+	// withScopesApplied, before the soft-delete predicate it composed as the first applied scope.
+	if err := r.resolveDeferredWheres(builder, r.deferredWhereScope()); err != nil {
 		return nil, err
 	}
-
-	// The soft-delete predicate was composed by withScopesApplied, as the first applied scope. The
-	// relation existence clauses spliced above are the ones a user scope queued after it ran, at the
-	// positions that scope recorded.
 
 	// A through read filters a soft-deletable through model too, its predicate after the related
 	// model's - Laravel applies the related SoftDeletingScope first, then the named through scope.
@@ -334,8 +332,8 @@ func (r *OrmBuilder) newBuilder() (*querybuilder.Builder, error) {
 
 // applySoftDelete adds the model's default soft-delete predicate when the statement is not unscoped,
 // composed as Laravel's first applied scope (withScopesApplied calls it before any user scope, and
-// the wheres before it are regrouped when they carry an or); OnlyTrashed's "is not null" is written
-// by applyOnlyTrashed at its call position instead. The
+// the wheres before it are regrouped when they carry an or); OnlyTrashed's "is not null" is a
+// deferred where entry rendered at its call position instead (renderOnlyTrashed). The
 // predicate is written as a structured where so the grammar compiles it through compileWhereNull -
 // the same lowercase path Laravel's SoftDeletingScope::apply uses - instead of as a raw fragment.
 //
@@ -371,7 +369,7 @@ func (r *OrmBuilder) applySoftDelete(builder *querybuilder.Builder) error {
 		return nil
 	}
 
-	// onlyTrashed's predicate is not a scope: applyOnlyTrashed wrote it at its call position.
+	// onlyTrashed's predicate is not a scope: its deferred entry rendered it at its call position.
 	if r.conditions.onlyTrashed {
 		return nil
 	}
@@ -381,7 +379,7 @@ func (r *OrmBuilder) applySoftDelete(builder *querybuilder.Builder) error {
 	// (addNewWheresWithinGroup), so a user or-chain is wrapped in one group before the predicate is
 	// and-ed on.
 	originalWhereCount := len(builder.State().Wheres)
-	if err := r.appendSoftDeletePredicate(builder, false); err != nil {
+	if err := r.appendSoftDeletePredicate(builder); err != nil {
 		return err
 	}
 	if len(builder.State().Wheres) > originalWhereCount {
@@ -389,95 +387,6 @@ func (r *OrmBuilder) applySoftDelete(builder *querybuilder.Builder) error {
 	}
 
 	return nil
-}
-
-// applyOnlyTrashed writes OnlyTrashed's "is not null" predicate where Laravel's onlyTrashed macro
-// writes it: the macro removes SoftDeletingScope and calls whereNotNull on the builder at call time,
-// so the predicate sits at the where position the call recorded and nothing is regrouped (no scope
-// is applied for it). Each call writes its own predicate, as each macro call does. The relation
-// existence clauses are spliced in afterwards, so each one moves right by the predicates written
-// before it: those whose call recorded a smaller where count, and those whose call recorded the same
-// where count before the clause itself was recorded.
-//
-// Oracle (illuminate/database v12.55.1, real sqlite, under
-// /Users/dog/.claude/jobs/013c27a0/tmp/r15-probes/r15-r14-mutants/: probe2.out P8, probe3.out
-// R1-R4): where->onlyTrashed->where->onlyTrashed compiles `"email" = ? and "deleted_at" is not null
-// and "id" = ? and "deleted_at" is not null`; whereHas->onlyTrashed compiles `exists (...) and
-// "deleted_at" is not null`, onlyTrashed->whereHas compiles `"deleted_at" is not null and exists
-// (...)`.
-func (r *OrmBuilder) applyOnlyTrashed(builder *querybuilder.Builder) error {
-	if !r.conditions.onlyTrashed || !r.usesFrameworkSoftDelete() {
-		return nil
-	}
-
-	return r.spliceOnlyTrashed(builder)
-}
-
-// spliceOnlyTrashed is applyOnlyTrashed's splice without the framework-type gate: it writes one
-// "is not null" predicate per recorded OnlyTrashed call at that call's where position. A where
-// closure's child query calls it directly for its own group (addNestedWhereQuery).
-func (r *OrmBuilder) spliceOnlyTrashed(builder *querybuilder.Builder) error {
-	return r.spliceOnlyTrashedCalls(builder, r.conditions.onlyTrashedCalls)
-}
-
-// spliceOnlyTrashedCalls writes the model's "is not null" predicate once for each of the given
-// OnlyTrashed calls, at the where position each call recorded. applyScope passes only the calls a
-// user global scope made, so a call the caller made before the scopes ran - already written by
-// withScopesApplied - is not written a second time.
-func (r *OrmBuilder) spliceOnlyTrashedCalls(builder *querybuilder.Builder, calls []onlyTrashedCall) error {
-	whereCount := len(builder.State().Wheres)
-	if err := r.appendSoftDeletePredicate(builder, true); err != nil {
-		return err
-	}
-	if len(builder.State().Wheres) == whereCount {
-		return nil
-	}
-
-	r.spliceOnlyTrashedPredicate(builder, whereCount, calls)
-
-	return nil
-}
-
-// spliceOnlyTrashedPredicate moves the predicate just appended at index whereCount back to the where
-// position of each given OnlyTrashed call - one copy per call - and shifts the recorded positions of
-// the relation existence clauses still to be spliced by the predicates written before them: those
-// whose call recorded a smaller where count, and those whose call recorded the same where count
-// before the clause itself was recorded. An existence subquery's relation scope and caller closure
-// share it (spliceSubqueryOnlyTrashed), so their onlyTrashed is positional too.
-func (r *OrmBuilder) spliceOnlyTrashedPredicate(builder *querybuilder.Builder, whereCount int, calls []onlyTrashedCall) {
-	wheres := builder.State().Wheres
-	predicate := wheres[whereCount]
-	original := slices.Clone(wheres[:whereCount])
-
-	if len(calls) == 0 {
-		calls = []onlyTrashedCall{{}}
-	}
-
-	// Rebuild the where list with one predicate per call, each at its call's position. The calls
-	// are in call order, so their where counts never decrease.
-	rebuilt := make([]core.Where, 0, whereCount+len(calls))
-	next := 0
-	for _, call := range calls {
-		index := min(call.whereIndex, whereCount)
-		rebuilt = append(rebuilt, original[next:max(next, index)]...)
-		next = max(next, index)
-		rebuilt = append(rebuilt, predicate)
-	}
-	rebuilt = append(rebuilt, original[next:]...)
-	builder.State().Wheres = rebuilt
-
-	items := make([]relationExistence, len(r.conditions.relations))
-	for i, item := range r.conditions.relations {
-		shift := 0
-		for _, call := range calls {
-			if call.whereIndex < item.whereIndex || (call.whereIndex == item.whereIndex && i >= call.relationIndex) {
-				shift++
-			}
-		}
-		item.whereIndex += shift
-		items[i] = item
-	}
-	r.conditions.relations = items
 }
 
 // globalScopeRemoved reports whether the query removed the named global scope - Laravel's
@@ -494,10 +403,9 @@ func (r *OrmBuilder) globalScopeRemoved(name string) bool {
 
 // appendSoftDeletePredicate writes the model's soft-delete predicate onto a compiled builder through
 // the builder's own WhereNull, so the grammar renders Laravel's compileWhereNull output ("is null",
-// lowercase - "is not null" for the trashed side). It is shared by the compiled reads
-// (applySoftDelete) and by the nested where closure a child query merges from, whose OnlyTrashed
-// cannot wait for applySoftDelete: the child is never compiled on its own.
-func (r *OrmBuilder) appendSoftDeletePredicate(builder *querybuilder.Builder, not bool) error {
+// lowercase). The compiled reads use it for the default predicate (applySoftDelete); OnlyTrashed's
+// "is not null" renders from its deferred entry (renderOnlyTrashed).
+func (r *OrmBuilder) appendSoftDeletePredicate(builder *querybuilder.Builder) error {
 	model := r.parentModel()
 	if model == nil {
 		return nil
@@ -513,7 +421,7 @@ func (r *OrmBuilder) appendSoftDeletePredicate(builder *querybuilder.Builder, no
 		return err
 	}
 
-	builder.WhereNull(table+"."+column, core.BooleanAnd, not)
+	builder.WhereNull(table+"."+column, core.BooleanAnd, false)
 
 	return nil
 }

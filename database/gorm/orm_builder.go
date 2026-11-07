@@ -3489,15 +3489,14 @@ func (r *OrmBuilder) WithTrashed() contractsorm.Query {
 
 func (r *OrmBuilder) OnlyTrashed() contractsorm.Query {
 	conditions := r.conditions
-	// Laravel's macro writes one whereNotNull per call, so every call's position is kept. The list
-	// is copied, not appended in place, so a clone sharing the backing array is left untouched.
-	conditions.onlyTrashedCalls = append(slices.Clone(conditions.onlyTrashedCalls), onlyTrashedCall{
-		whereIndex:    len(r.query.State().Wheres),
-		relationIndex: len(conditions.relations),
-	})
 	conditions.onlyTrashed = true
 
-	return r.setConditions(conditions)
+	// Laravel's macro removes SoftDeletingScope and writes one whereNotNull per call at call time.
+	// The predicate names the model's table, which may only be known when the statement compiles,
+	// so the call writes a deferred entry at its position instead (deferredWhere).
+	r.setConditions(conditions).deferWhere(core.BooleanAnd, &deferredWhere{onlyTrashed: true})
+
+	return r
 }
 
 func (r *OrmBuilder) addGlobalScopes() *OrmBuilder {
@@ -3583,23 +3582,11 @@ func (r *OrmBuilder) addNestedWhereQuery(callback func(contractsorm.Query) contr
 	// nothing when no where remains.
 	nested.flushWheres()
 
-	// An onlyTrashed or a whereHas / has / doesntHave the closure called wrote its clause onto the
-	// closure's builder at call time in Laravel - the macro's whereNotNull, and addHasWhere's exists
-	// - so both are part of the nested group, at the position each call recorded. Rendering them
-	// needs the model, which a query may only learn from its destination when it compiles, so such
-	// a group is deferred whole: it is recorded with the relation existence clauses at this where
-	// position, and applyRelations finishes it (applyNestedGroup) and splices it back here.
-	if nested.conditions.onlyTrashed || len(nested.conditions.relations) > 0 {
-		r.conditions.relations = deep.Append(r.conditions.relations, relationExistence{
-			conjunction:  boolean,
-			whereIndex:   len(r.query.State().Wheres),
-			bindingIndex: len(r.query.State().Bindings["where"]),
-			nestedGroup:  nested,
-		})
-
-		return r
-	}
-
+	// An onlyTrashed or a whereHas / has / doesntHave the closure called is a deferred entry in the
+	// closure's own where list, with its marker among the closure's bindings, exactly where Laravel's
+	// macro and addHasWhere write their clauses onto the closure's builder. The group joins this
+	// query like any other, so the entries travel inside it and render in place when the statement
+	// compiles (resolveDeferredWheres).
 	r.query.AddNestedWhereQuery(nested.query, boolean)
 
 	return r
@@ -3612,17 +3599,14 @@ func (r *OrmBuilder) newQueryWithoutRelationships() *OrmBuilder {
 	child.conditions = r.conditions.clone()
 	child.conditions.eagerLoad = nil
 	// Eloquent hands the closure a fresh builder, so the parent's trashed switches are not
-	// inherited: a switch the closure does not set itself stays off for its nested group, and the
-	// group writes only the OnlyTrashed calls the closure made.
-	child.conditions.withTrashed = false
-	child.conditions.onlyTrashed = false
-	child.conditions.onlyTrashedCalls = nil
-	// Nor are the parent's relation existence clauses: the ones the closure records are its own
-	// nested group's, and an inherited one would be rendered a second time inside the group (oracle,
-	// illuminate/database v12.55.1, real sqlite, /Users/dog/.claude/jobs/013c27a0/tmp/r15b-verify-probes/inherit.php D1:
+	// inherited: a switch the closure does not set itself stays off for its nested group. The
+	// parent's deferred entries live in the parent's where list, which the fresh child does not
+	// carry, so the group renders only the entries the closure wrote (oracle, illuminate/database
+	// v12.55.1, real sqlite, /Users/dog/.claude/jobs/013c27a0/tmp/r15b-verify-probes/inherit.php D1:
 	// whereHas('posts')->where(fn => where('email', 'a')) compiles `where exists (...) and ("email" =
 	// ?)`).
-	child.conditions.relations = nil
+	child.conditions.withTrashed = false
+	child.conditions.onlyTrashed = false
 
 	return child
 }
@@ -3818,19 +3802,14 @@ func (r *OrmBuilder) withScopesApplied() *OrmBuilder {
 
 	// The built-in SoftDeletingScope is the model's first registered global scope (bootSoftDeletes
 	// runs before any booted() registration), so applyScopes applies it before every user scope. The
-	// relation existence clauses recorded so far belong to the where list it splits, so they are
-	// spliced in first - Eloquent appended them at call time.
+	// deferred entries recorded so far belong to the where list it splits - Eloquent appended their
+	// clauses at call time - so they are rendered in place first, on this copy's builder.
 	if !query.conditions.softDeleteScopeApplied {
 		query.conditions.softDeleteScopeApplied = true
 
-		if err := query.applyOnlyTrashed(query.query); err != nil {
+		if err := query.resolveDeferredWheres(query.query, query.deferredWhereScope()); err != nil {
 			query.conditions.err = err
 		}
-
-		if err := query.applyRelations(query.query); err != nil {
-			query.conditions.err = err
-		}
-		query.conditions.relations = nil
 
 		if !query.scopesRemoveSoftDeletingScope(scopes) {
 			if err := query.applySoftDelete(query.query); err != nil {
@@ -3888,7 +3867,6 @@ func (r *OrmBuilder) scopesRemoveSoftDeletingScope(scopes []func(contractsorm.Qu
 // returning something other than an OrmBuilder is tolerated by keeping the receiver as the chain.
 func (r *OrmBuilder) applyScope(apply func(contractsorm.Query) contractsorm.Query) *OrmBuilder {
 	originalWhereCount := len(r.query.State().Wheres)
-	originalOnlyTrashedCalls := len(r.conditions.onlyTrashedCalls)
 
 	scoped, ok := apply(r).(*OrmBuilder)
 	if !ok {
@@ -3901,21 +3879,16 @@ func (r *OrmBuilder) applyScope(apply func(contractsorm.Query) contractsorm.Quer
 
 	query := scoped.flushWheres()
 
-	// An onlyTrashed the scope called is Laravel's macro running inside callScope: its whereNotNull
-	// lands on the query at call time, among the scope's own wheres and before they are regrouped.
-	// The soft-delete step of withScopesApplied has already run by now - SoftDeletingScope is the
-	// first applied scope, so the macro's withoutGlobalScope comes too late to drop the "is null" -
-	// so the calls this scope recorded are written here. Oracle (illuminate/database v12.55.1, real
-	// sqlite, /Users/dog/.claude/jobs/013c27a0/tmp/r15b-probes/oracle.php G1, first measured in
-	// /Users/dog/.claude/jobs/013c27a0/tmp/r15-probes/r15-r14-mutants/probe4.out): a scope calling
-	// onlyTrashed() compiles `where "email" = ? and "sr_users"."deleted_at" is null and
+	// An onlyTrashed or a whereHas the scope called is Laravel's macro / addHasWhere running inside
+	// callScope: its clause lands on the query at call time, among the scope's own wheres and before
+	// they are regrouped. The deferred entry the call wrote is already there, so it is regrouped with
+	// the scope's slice and renders in place when the statement compiles (newBuilder). The
+	// soft-delete step of withScopesApplied has already run by now - SoftDeletingScope is the first
+	// applied scope, so the macro's withoutGlobalScope comes too late to drop the "is null". Oracle
+	// (illuminate/database v12.55.1, real sqlite, /Users/dog/.claude/jobs/013c27a0/tmp/r15b-probes/oracle.php
+	// G1, first measured in /Users/dog/.claude/jobs/013c27a0/tmp/r15-probes/r15-r14-mutants/probe4.out): a
+	// scope calling onlyTrashed() compiles `where "email" = ? and "sr_users"."deleted_at" is null and
 	// "sr_users"."deleted_at" is not null`.
-	if calls := query.conditions.onlyTrashedCalls; len(calls) > originalOnlyTrashedCalls && query.usesFrameworkSoftDelete() {
-		if err := query.spliceOnlyTrashedCalls(query.query, calls[originalOnlyTrashedCalls:]); err != nil {
-			query.conditions.err = err
-		}
-	}
-
 	if len(query.query.State().Wheres) > originalWhereCount {
 		query.addNewWheresWithinGroup(originalWhereCount)
 	}
@@ -3971,8 +3944,8 @@ func groupWhereSliceForScopeIn(builder *querybuilder.Builder, whereSlice []core.
 }
 
 // flushWheres marks the points where the ORM's internally recorded conditions had to be on the
-// builder before the next clause was written: the splice position a relationship existence
-// condition records, a scope's starting where count, a nested group's merge. Every such condition
+// builder before the next clause was written: a deferred where entry's position, a scope's starting
+// where count, a nested group's merge. Every such condition
 // is now written onto the builder when it is called (addWhere, withFindConditions,
 // foldFindCondition), so the builder already holds the single ordered where list — the way Eloquent
 // keeps every where on the underlying Query\Builder — and there is nothing left to flush. The call

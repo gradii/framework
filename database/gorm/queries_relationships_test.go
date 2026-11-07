@@ -8,6 +8,7 @@ import (
 
 	contractsdatabase "github.com/gradii/framework/contracts/database"
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	"github.com/gradii/framework/database/query/core"
 	"github.com/gradii/framework/errors"
 )
 
@@ -25,13 +26,33 @@ func toQuery(q contractsorm.Query) *OrmBuilder {
 	return q.(*OrmBuilder)
 }
 
+// queuedRelation is one existence condition a query queued: the deferred entry's payload and the
+// entry's where boolean as its conjunction.
+type queuedRelation struct {
+	relationExistence
+	conjunction string
+}
+
+// queuedRelations reads the existence conditions a query queued from the deferred entries of its
+// where list, in call order.
+func queuedRelations(q *OrmBuilder) []queuedRelation {
+	var out []queuedRelation
+	for _, where := range q.query.State().Wheres {
+		if payload, ok := where.Value.(*deferredWhere); ok && where.Type == core.WhereDeferredType && !payload.onlyTrashed {
+			out = append(out, queuedRelation{relationExistence: payload.relation, conjunction: where.Boolean})
+		}
+	}
+
+	return out
+}
+
 // --- Existence queueing ----------------------------------------------------
 
 func TestHasQueueing(t *testing.T) {
 	q := newRelQuery(t)
 	got := toQuery(q.Has("Books"))
-	assert.Len(t, got.conditions.relations, 1)
-	rel := got.conditions.relations[0]
+	assert.Len(t, queuedRelations(got), 1)
+	rel := queuedRelations(got)[0]
 	assert.Equal(t, "Books", rel.relation)
 	assert.Equal(t, ">=", rel.operator)
 	assert.Equal(t, 1, rel.count)
@@ -43,8 +64,8 @@ func TestHasWithCallbackOpAndCount(t *testing.T) {
 	q := newRelQuery(t)
 	cb := contractsorm.RelationCallback(func(query contractsorm.Query) contractsorm.Query { return query })
 	got := toQuery(q.Has("Books", cb, ">", 3))
-	assert.Len(t, got.conditions.relations, 1)
-	rel := got.conditions.relations[0]
+	assert.Len(t, queuedRelations(got), 1)
+	rel := queuedRelations(got)[0]
 	assert.Equal(t, ">", rel.operator)
 	assert.Equal(t, 3, rel.count)
 	assert.NotNil(t, rel.callback)
@@ -53,13 +74,13 @@ func TestHasWithCallbackOpAndCount(t *testing.T) {
 func TestOrHasQueueing(t *testing.T) {
 	q := newRelQuery(t)
 	got := toQuery(q.OrHas("Books"))
-	assert.Equal(t, "or", got.conditions.relations[0].conjunction)
+	assert.Equal(t, "or", queuedRelations(got)[0].conjunction)
 }
 
 func TestDoesntHaveQueueing(t *testing.T) {
 	q := newRelQuery(t)
 	got := toQuery(q.DoesntHave("Books"))
-	rel := got.conditions.relations[0]
+	rel := queuedRelations(got)[0]
 	assert.Equal(t, "<", rel.operator)
 	assert.Equal(t, 1, rel.count)
 	assert.Equal(t, "and", rel.conjunction)
@@ -68,8 +89,8 @@ func TestDoesntHaveQueueing(t *testing.T) {
 func TestOrDoesntHaveQueueing(t *testing.T) {
 	q := newRelQuery(t)
 	got := toQuery(q.OrDoesntHave("Books"))
-	assert.Equal(t, "or", got.conditions.relations[0].conjunction)
-	assert.Equal(t, "<", got.conditions.relations[0].operator)
+	assert.Equal(t, "or", queuedRelations(got)[0].conjunction)
+	assert.Equal(t, "<", queuedRelations(got)[0].operator)
 }
 
 func TestWhereHasFamilyQueueing(t *testing.T) {
@@ -89,10 +110,10 @@ func TestWhereHasFamilyQueueing(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			q := newRelQuery(t)
 			got := toQuery(tc.invoke(q))
-			assert.Len(t, got.conditions.relations, 1)
-			assert.Equal(t, tc.conjunction, got.conditions.relations[0].conjunction)
-			assert.Equal(t, tc.operator, got.conditions.relations[0].operator)
-			assert.NotNil(t, got.conditions.relations[0].callback)
+			assert.Len(t, queuedRelations(got), 1)
+			assert.Equal(t, tc.conjunction, queuedRelations(got)[0].conjunction)
+			assert.Equal(t, tc.operator, queuedRelations(got)[0].operator)
+			assert.NotNil(t, queuedRelations(got)[0].callback)
 		})
 	}
 }
@@ -109,8 +130,8 @@ func TestHasInvalidArgErrorPropagated(t *testing.T) {
 func TestHasMorphQueueing(t *testing.T) {
 	q := newRelQuery(t)
 	got := toQuery(q.HasMorph("Houseable", []any{&relUser{}}))
-	assert.Len(t, got.conditions.relations, 1)
-	rel := got.conditions.relations[0]
+	assert.Len(t, queuedRelations(got), 1)
+	rel := queuedRelations(got)[0]
 	assert.Equal(t, "Houseable", rel.relation)
 	assert.Len(t, rel.morphTypes, 1)
 }
@@ -121,8 +142,8 @@ func TestHasMorphAutoDiscoveryQueueing(t *testing.T) {
 	// compile time.
 	q := newRelQuery(t)
 	got := toQuery(q.HasMorph("Houseable", []any{"*"}))
-	assert.Len(t, got.conditions.relations, 1)
-	rel := got.conditions.relations[0]
+	assert.Len(t, queuedRelations(got), 1)
+	rel := queuedRelations(got)[0]
 	assert.True(t, rel.morphAuto)
 	assert.Empty(t, rel.morphTypes)
 }
@@ -147,9 +168,9 @@ func TestMorphFamilyQueueing(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			q := newRelQuery(t)
 			got := toQuery(tc.invoke(q))
-			assert.Len(t, got.conditions.relations, 1)
-			assert.Equal(t, tc.conjunction, got.conditions.relations[0].conjunction)
-			assert.Equal(t, tc.operator, got.conditions.relations[0].operator)
+			assert.Len(t, queuedRelations(got), 1)
+			assert.Equal(t, tc.conjunction, queuedRelations(got)[0].conjunction)
+			assert.Equal(t, tc.operator, queuedRelations(got)[0].operator)
 		})
 	}
 }

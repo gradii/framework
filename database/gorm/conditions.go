@@ -18,9 +18,13 @@ import (
 //     write-path filters (omit, pendingAttributes) and switches (useWritePdo, withoutEvents,
 //     withoutGlobalScopes, withoutTimestamps, withoutTouch, withTrashed, onlyTrashed), and the
 //     error a rejected condition carries;
-//   - deferred, model-dependent clauses: selectSubs (WithCount and the like) and relations (the
-//     relationship existence conditions), rendered at compile time when the parent model is known;
+//   - deferred, model-dependent select expressions: selectSubs (WithCount and the like), rendered
+//     at compile time when the parent model is known;
 //   - relation shaping: oneOfMany, throughRead and pivotRead, which rewrite a relation read.
+//
+// The model-dependent where clauses - an OnlyTrashed predicate and a Has / WhereHas / DoesntHave
+// existence clause - are not here either: each is a deferred entry in the builder's one where list
+// at its call position (deferredWhere), rendered in place on the statement's copy.
 //
 // raw is the one SQL-level member kept on purpose: a caller-supplied whole statement (Raw) has no
 // home on the query builder, whose State models clauses the grammar compiles rather than a finished
@@ -49,15 +53,14 @@ type Conditions struct {
 	// second addGlobalScopes on that copy must not queue the model's scopes again.
 	scopesApplied bool
 	// softDeleteScopeApplied marks a query whose built-in soft-delete scope has already been applied
-	// by withScopesApplied: the relation existence clauses recorded so far are spliced into the
-	// where list and the predicate is composed the way Eloquent's callScope composes the first
-	// registered scope (SoftDeletingScope registers before every user scope). A compile from that
-	// query must not apply it again.
+	// by withScopesApplied: the deferred where entries recorded so far are rendered in place and the
+	// predicate is composed the way Eloquent's callScope composes the first registered scope
+	// (SoftDeletingScope registers before every user scope). A compile from that query must not
+	// apply it again.
 	softDeleteScopeApplied bool
 	raw                    *Select
 	selectSubs             []selectSub
 	eagerLoad              []eagerLoadEntry
-	relations              []relationExistence
 	oneOfMany              *oneOfManyConfig
 	useWritePdo            bool
 	withoutEvents          bool
@@ -72,16 +75,17 @@ type Conditions struct {
 	// model-update branch they share in the ORM does; the model-update touch hook skips
 	// touchOwners while it is set.
 	withoutTouch bool
-	withTrashed  bool
-	onlyTrashed  bool
-	// onlyTrashedCalls records every OnlyTrashed call in call order: Laravel's onlyTrashed macro
-	// writes its whereNotNull at call time - once per call - so each predicate is spliced back to the
-	// position its call recorded when the statement compiles.
-	onlyTrashedCalls []onlyTrashedCall
+	// withTrashed and onlyTrashed are the scope-removal switches the soft-delete predicate answers
+	// to: WithTrashed removes SoftDeletingScope, and OnlyTrashed removes it too - Laravel's macro is
+	// withoutGlobalScope then whereNotNull. The "is not null" each OnlyTrashed call writes is not a
+	// switch: it is a deferred where entry at the call's position (deferredWhere).
+	withTrashed bool
+	onlyTrashed bool
 	// existenceAlias is set on a whereHas callback's builder when the existence level it scopes
 	// aliased its table (getRelationExistenceQueryForSelfRelation renames the related model's table
-	// to the laravel_reserved_N hash): the existence clauses the callback wrote then correlate to the
-	// alias, and a same-table relation under it sees the aliased from string, so it does not alias.
+	// to the laravel_reserved_N hash): the existence entries the callback deferred then correlate to
+	// the alias when they render, and a same-table relation under it sees the aliased from string,
+	// so it does not alias.
 	existenceAlias string
 	// pendingAttributes are the column values WithAttributes recorded for every model the query
 	// creates, mirroring Builder::$pendingAttributes. Keys are column names as the caller wrote them;
@@ -198,32 +202,32 @@ type selectSub struct {
 	callback contractsorm.RelationCallback
 }
 
-// onlyTrashedCall is the position one OnlyTrashed call recorded: the where count at call time, and
-// the count of relation existence clauses recorded before it. The relation clauses are spliced into
-// the where list only when the statement compiles, so a clause recorded at the same where count is
-// ordered against the predicate by the second number - it precedes the predicate when it was
-// recorded before the call.
-type onlyTrashedCall struct {
-	whereIndex    int
-	relationIndex int
+// deferredWhere is the payload of one deferred where entry (core.WhereDeferredType): a clause the
+// query writes at call time, the way Laravel writes it onto $this->wheres, but can only render once
+// the model it addresses is known - which a Go query may learn from the destination of the read
+// (Query().WhereHas("Posts").Get(&users)). Either onlyTrashed is set - one OnlyTrashed call's
+// "is not null" predicate (SoftDeletingScope::addOnlyTrashed's whereNotNull) - or relation describes
+// one Has / WhereHas / DoesntHave existence clause (Query\Builder::addWhereExistsQuery's exists).
+//
+// The entry sits in the builder's where list at its call position, its Boolean the call's, and the
+// payload pointer itself is the entry's one marker in the builder's "where" bindings, at the place
+// the clause's bindings belong. A where closure's entries travel inside its nested group, and their
+// markers with the group's bindings. resolveDeferredWheres renders every entry on the statement's
+// copy and replaces it, and its marker, in place - or removes both when nothing renders. The payload
+// is never changed after the call, so clones may share it.
+type deferredWhere struct {
+	onlyTrashed bool
+	relation    relationExistence
 }
 
-// relationExistence describes a deferred relationship existence/absence condition.
-// Building is deferred so the parent model can be resolved from conditions.model or conditions.dest
-// (the latter is set by Find/First/Get when the user passes a dest).
+// relationExistence describes a deferred relationship existence/absence condition: the payload of a
+// deferredWhere for a Has / WhereHas / DoesntHave call (and their or / morph forms). The conjunction
+// is the entry's Boolean.
 type relationExistence struct {
-	relation    string
-	operator    string
-	count       int
-	conjunction string // "and" | "or"
-	callback    contractsorm.RelationCallback
-
-	// whereIndex and bindingIndex remember where the condition belongs among the statement's where
-	// clauses: the number of where clauses and "where" bindings the builder held when the method was
-	// called. Laravel appends the exists clause at call time; this port renders it at compile time,
-	// so applyRelations splices each compiled clause back to the position its call recorded.
-	whereIndex   int
-	bindingIndex int
+	relation string
+	operator string
+	count    int
+	callback contractsorm.RelationCallback
 
 	// morph specifics (zero-valued for non-morph queries)
 	morphTypes    []any
@@ -233,13 +237,6 @@ type relationExistence struct {
 	// distinct type-column values when the statement is compiled, instead of coming from
 	// model instances.
 	morphAuto bool
-
-	// nestedGroup is a where closure's query whose wheres need the parent model to be finished: an
-	// existence clause or an onlyTrashed predicate the closure wrote. Laravel writes both onto the
-	// closure's builder at call time; the port renders them when the statement compiles (the model
-	// may only be known from the destination by then), so the whole nested group is deferred as one
-	// clause at the position the where call recorded, and applyRelations finishes and splices it.
-	nestedGroup *OrmBuilder
 }
 
 // hasStringColumns returns true if selectItems contains any string (regular column) entries
@@ -273,7 +270,6 @@ func (c Conditions) clone() Conditions {
 	out.scopes = append([]func(contractsorm.Query) contractsorm.Query(nil), c.scopes...)
 	out.selectSubs = append([]selectSub(nil), c.selectSubs...)
 	out.eagerLoad = append([]eagerLoadEntry(nil), c.eagerLoad...)
-	out.relations = append([]relationExistence(nil), c.relations...)
 	out.withoutGlobalScopes = append([]string(nil), c.withoutGlobalScopes...)
 	if c.pendingAttributes != nil {
 		out.pendingAttributes = make(map[string]any, len(c.pendingAttributes))

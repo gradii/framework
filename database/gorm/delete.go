@@ -76,11 +76,32 @@ func (r *OrmBuilder) execDelete() (*contractsdb.Result, error) {
 // "users"."deleted_at" is null` over the live rows alone. Only a statement whose where clause would be
 // empty is refused - the one divergence kept on purpose, since Laravel runs such an update or delete
 // over the whole table. The conditions the ORM records internally are on the compiled where list
-// too, written to the builder when they were called; a deferred relationship existence condition and
-// a raw statement are the two constraints the list cannot show yet, so they are counted beside it.
+// too, written to the builder when they were called. A deferred existence entry still on the
+// query's own list - one a user scope wrote, which renders on the compiled copy only - counts as a
+// where even when it renders nothing there, and so does a where-closure group holding a deferred
+// entry; an onlyTrashed entry counts only through the predicate it renders, so on a model without
+// the framework's soft-delete type it constrains nothing. A raw statement is the one constraint the
+// list cannot show, so it is counted beside it.
 func (r *OrmBuilder) hasWhereConditions(builder *querybuilder.Builder) bool {
 	return len(builder.State().Wheres) > 0 ||
-		len(r.conditions.relations) > 0 || r.conditions.raw != nil
+		holdsDeferredConstraint(r.query.State().Wheres) || r.conditions.raw != nil
+}
+
+// holdsDeferredConstraint reports whether a where list holds a deferred existence entry, or a nested
+// group holding any deferred entry, at its top level.
+func holdsDeferredConstraint(wheres []core.Where) bool {
+	for _, where := range wheres {
+		switch {
+		case where.Type == core.WhereDeferredType:
+			if payload, ok := where.Value.(*deferredWhere); ok && !payload.onlyTrashed {
+				return true
+			}
+		case where.Type == core.WhereNestedType && where.Query != nil && containsDeferredWhere(where.Query.State().Wheres):
+			return true
+		}
+	}
+
+	return false
 }
 
 // applyUpdateKeyWhere scopes an update to the row its model identifies.

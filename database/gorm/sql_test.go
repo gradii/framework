@@ -12,6 +12,7 @@ import (
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
 	databasedriver "github.com/gradii/framework/database/driver"
 	querybuilder "github.com/gradii/framework/database/query"
+	"github.com/gradii/framework/database/query/core"
 	"github.com/gradii/framework/errors"
 )
 
@@ -254,9 +255,9 @@ func TestCompileUpdate_ScopesToTheModelKey(t *testing.T) {
 // existence conditions, whose types are separate tables and therefore become one clause each.
 func TestCompiledStatement_CompilesPolymorphicExistence(t *testing.T) {
 	outbound := newRelQueryWith(t, &relUser{})
-	outbound.conditions.relations = []relationExistence{{
-		relation: "Houses", operator: ">=", count: 1, conjunction: "and", morphTypes: []any{&relUser{}},
-	}}
+	outbound.deferWhere(core.BooleanAnd, &deferredWhere{relation: relationExistence{
+		relation: "Houses", operator: ">=", count: 1, morphTypes: []any{&relUser{}},
+	}})
 
 	statement, bindings, err := outbound.compileSelect()
 	require.NoError(t, err)
@@ -267,9 +268,9 @@ func TestCompiledStatement_CompilesPolymorphicExistence(t *testing.T) {
 	assert.Len(t, bindings, 1)
 
 	negated := newRelQueryWith(t, &relUser{})
-	negated.conditions.relations = []relationExistence{{
-		relation: "Houses", operator: "<", count: 1, conjunction: "and", morphTypes: []any{&relUser{}},
-	}}
+	negated.deferWhere(core.BooleanAnd, &deferredWhere{relation: relationExistence{
+		relation: "Houses", operator: "<", count: 1, morphTypes: []any{&relUser{}},
+	}})
 
 	negatedStatement, _, err := negated.compileSelect()
 	require.NoError(t, err)
@@ -277,9 +278,9 @@ func TestCompiledStatement_CompilesPolymorphicExistence(t *testing.T) {
 
 	// A count comparison re-selects the subquery as an aggregate and appends its own limit.
 	counted := newRelQueryWith(t, &relUser{})
-	counted.conditions.relations = []relationExistence{{
-		relation: "Houses", operator: ">", count: 3, conjunction: "and", morphTypes: []any{&relUser{}},
-	}}
+	counted.deferWhere(core.BooleanAnd, &deferredWhere{relation: relationExistence{
+		relation: "Houses", operator: ">", count: 3, morphTypes: []any{&relUser{}},
+	}})
 
 	countedStatement, countedBindings, err := counted.compileSelect()
 	require.NoError(t, err)
@@ -293,9 +294,9 @@ func TestCompiledStatement_CompilesPolymorphicExistence(t *testing.T) {
 
 	// The inverse relation pins the type against the parent's own morph column.
 	inverse := newRelQueryWith(t, &morphImage{})
-	inverse.conditions.relations = []relationExistence{{
-		relation: "Imageable", operator: ">=", count: 1, conjunction: "and", morphTypes: []any{&relUser{}},
-	}}
+	inverse.deferWhere(core.BooleanAnd, &deferredWhere{relation: relationExistence{
+		relation: "Imageable", operator: ">=", count: 1, morphTypes: []any{&relUser{}},
+	}})
 
 	inverseStatement, _, err := inverse.compileSelect()
 	require.NoError(t, err)

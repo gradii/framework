@@ -1360,6 +1360,13 @@ func oneOfManyAlias(desc *relationDescriptor) string {
 // ofMany closure receives the subquery builder and writes to it directly; the Go formulation chains
 // the closure constraints after OfMany inside the relation's OnQuery, and the marks OfMany recorded
 // delimit them.
+//
+// A deferred where entry written after OfMany - an onlyTrashed, a whereHas, or a where closure
+// holding one - stays on the relation query with its bindings, after the clauses written before
+// OfMany: the chain after OfMany doubles as Laravel's relation-level calls chained after ofMany(),
+// which act on the relation query (latestOfMany()->onlyTrashed() writes its whereNotNull there,
+// oracle /Users/dog/.claude/jobs/013c27a0/tmp/r15b-probes/oracle.php O4, L2), and the aggregate
+// subquery renders no deferred entry.
 func (b *OrmBuilder) takeOneOfManyClauses(cfg *oneOfManyConfig) (wheres []core.Where, whereBindings []any, joins []core.Join, joinBindings []any) {
 	state := b.query.State()
 
@@ -1371,6 +1378,13 @@ func (b *OrmBuilder) takeOneOfManyClauses(cfg *oneOfManyConfig) (wheres []core.W
 		whereBindings = append([]any(nil), state.Bindings["where"][cfg.whereBindMark:]...)
 		state.Bindings["where"] = state.Bindings["where"][:cfg.whereBindMark]
 	}
+	if containsDeferredWhere(wheres) {
+		var keptWheres []core.Where
+		var keptBindings []any
+		wheres, whereBindings, keptWheres, keptBindings = splitDeferredWheres(wheres, whereBindings)
+		state.Wheres = append(state.Wheres, keptWheres...)
+		state.Bindings["where"] = append(state.Bindings["where"], keptBindings...)
+	}
 	if cfg.joinMark < len(state.Joins) {
 		joins = append([]core.Join(nil), state.Joins[cfg.joinMark:]...)
 		state.Joins = state.Joins[:cfg.joinMark]
@@ -1381,6 +1395,68 @@ func (b *OrmBuilder) takeOneOfManyClauses(cfg *oneOfManyConfig) (wheres []core.W
 	}
 
 	return wheres, whereBindings, joins, joinBindings
+}
+
+// splitDeferredWheres separates the wheres that hold a deferred entry - the entry itself, or a nested
+// group holding one - from the rest of a where slice, and their bindings from the slice's bindings.
+// Each where's bindings are contiguous in the slice's bindings, in where order: a deferred entry's is
+// its one marker, a nested group's the run its own binding list was copied in as, located by the
+// first marker it holds.
+func splitDeferredWheres(wheres []core.Where, bindings []any) (moved []core.Where, movedBindings []any, kept []core.Where, keptBindings []any) {
+	keep := make([]bool, len(bindings))
+
+	for _, where := range wheres {
+		switch {
+		case where.Type == core.WhereDeferredType:
+			if index := markerIndex(bindings, where.Value); index >= 0 {
+				keep[index] = true
+			}
+			kept = append(kept, where)
+		case where.Type == core.WhereNestedType && where.Query != nil && containsDeferredWhere(where.Query.State().Wheres):
+			group := where.Query.State().Bindings["where"]
+			for offset, binding := range group {
+				if _, ok := binding.(*deferredWhere); !ok {
+					continue
+				}
+				if start := markerIndex(bindings, binding) - offset; start >= 0 && start+len(group) <= len(bindings) {
+					for i := start; i < start+len(group); i++ {
+						keep[i] = true
+					}
+				}
+
+				break
+			}
+			kept = append(kept, where)
+		default:
+			moved = append(moved, where)
+		}
+	}
+
+	for i, binding := range bindings {
+		if keep[i] {
+			keptBindings = append(keptBindings, binding)
+		} else {
+			movedBindings = append(movedBindings, binding)
+		}
+	}
+
+	return moved, movedBindings, kept, keptBindings
+}
+
+// markerIndex returns the position of a deferred entry's marker in a binding list, -1 when absent.
+func markerIndex(bindings []any, marker any) int {
+	target, ok := marker.(*deferredWhere)
+	if !ok {
+		return -1
+	}
+
+	for i, binding := range bindings {
+		if candidate, ok := binding.(*deferredWhere); ok && candidate == target {
+			return i
+		}
+	}
+
+	return -1
 }
 
 // takeEagerOneOfManyConstraints pops the constraints the eager loader wrote when it built the child
