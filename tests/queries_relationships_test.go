@@ -870,6 +870,29 @@ func (s *QueriesRelationshipsTestSuite) TestWithExists_Retrieve() {
 			s.Require().Len(rows, 2)
 			s.False(rows[0].BooksExists, "agg_exist_no has no books")
 			s.True(rows[1].BooksExists, "agg_exist_yes has books")
+
+			// The executed column is Laravel's `exists(select * ...) as "alias"` on every engine
+			// this suite runs (withAggregate, QueriesRelationships.php:925-929; oracle
+			// /tmp/r15bd/withexists.php executed it on real sqlite, MySQL 9.7 and PostgreSQL 18:
+			// 1/0 integers on sqlite and MySQL, a native boolean on PostgreSQL), and a bool dest
+			// reads it on all three - Laravel casts the alias to bool.
+			// SQL Server (x86 runs only) keeps the CASE fold: T-SQL has no boolean scalar, so the
+			// EXISTS predicate cannot stand in a select list there.
+			wrap := func(identifier string) string { return `"` + identifier + `"` }
+			column := func(subquery, alias string) string { return "exists(" + subquery + ") as " + alias }
+			switch driver {
+			case "MySQL":
+				wrap = func(identifier string) string { return "`" + identifier + "`" }
+			case "SQL Server":
+				wrap = func(identifier string) string { return "[" + identifier + "]" }
+				column = func(subquery, alias string) string {
+					return "CASE WHEN EXISTS (" + subquery + ") THEN 1 ELSE 0 END AS " + alias
+				}
+			}
+			users, books := wrap("users"), wrap("books")
+			subquery := "select * from " + books + " where " + users + "." + wrap("id") + " = " + books + "." + wrap("user_id")
+			s.Equal("select "+users+".*, "+column(subquery, wrap("books_exists"))+" from "+users+" where "+users+"."+wrap("deleted_at")+" is null",
+				query.Query().Model(&User{}).WithExists("Books").ToSql().Get(&[]userAggregates{}))
 		})
 	}
 }

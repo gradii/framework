@@ -96,7 +96,9 @@ func (t *hasOneOrManyThroughRelation) WithTrashedParents() contractsorm.HasOneTh
 // 'gl_tusers.country_id']); E2 the eager form wears shouldSelect inside the rewrite and reads one
 // post per country. The legacy MySQL branch (MySQL before 8.0.11 numbers rows through session
 // variables and partitions by the aliased `laravel_through_key`) is ported from the source lines
-// above and read off the seam's UseLegacyGroupLimit — the sqlite oracle cannot execute it.
+// above and read off the seam's UseLegacyGroupLimit; it is pinned on the real MySQL grammar given
+// a 5.7.44 server version (tests/database/gorm/dialect_shapes_test.go, oracle
+// /tmp/r15bd/legacy.php E2).
 
 // Take is the alias of Limit — HasOneOrManyThrough::take (HasOneOrManyThrough.php:761).
 func (t *hasOneOrManyThroughRelation) Take(value int) contractsorm.Query {

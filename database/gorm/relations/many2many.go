@@ -322,8 +322,9 @@ func (m *belongsToManyRelationQuery) Take(value int) contractsorm.Query {
 
 // Limit sets the relation's limit — BelongsToMany::limit (BelongsToMany.php:1503): the plain query
 // limit for an existing parent, the per-parent group limit on getExistenceCompareKey() otherwise
-// (the aliased pivot column on the legacy MySQL rewrite). The relation object is returned, as
-// Laravel's `return $this`.
+// (the aliased pivot column on the legacy MySQL rewrite, pinned on the real MySQL grammar given a
+// 5.7.44 server version: tests/database/gorm/dialect_shapes_test.go, oracle /tmp/r15bd/legacy.php
+// E1). The relation object is returned, as Laravel's `return $this`.
 func (m *belongsToManyRelationQuery) Limit(value int) contractsorm.Query {
 	if m.parentExists() {
 		m.rebuild(m.Builder.Limit(value))

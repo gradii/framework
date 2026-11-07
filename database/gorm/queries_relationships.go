@@ -326,10 +326,12 @@ func (r *OrmBuilder) WithAvg(relation string, column any, args ...any) contracts
 	return r.WithAggregate(relation, column, "avg", args...)
 }
 
-// WithExists adds sub-select queries to include the existence of related models. The result is
-// emitted as `CASE WHEN EXISTS (...) THEN 1 ELSE 0 END` for cross-dialect portability (SQL Server
-// has no boolean literal). The dest field may be either `bool` or an integer type - Go's
-// database/sql layer converts 0/1 ints to bool automatically.
+// WithExists adds sub-select queries to include the existence of related models -
+// withExists($relation), which is withAggregate($relation, '*', 'exists'). The column is
+// existsSelectExpression's: Laravel's `exists(select * ...) as alias` (0/1 on MySQL and SQLite, a
+// native boolean on PostgreSQL), folded into a CASE 0/1 on SQL Server. Laravel casts the alias to
+// bool, so a `bool` dest field is the one that reads it on every driver; an integer field cannot
+// take PostgreSQL's boolean.
 func (r *OrmBuilder) WithExists(relations ...string) contractsorm.Query {
 	current := r
 	for _, rel := range relations {
@@ -685,7 +687,13 @@ func (r *OrmBuilder) compileMorphExistenceSubquery(desc *relationDescriptor, mor
 }
 
 // compileAggregateSubquery returns the framework builder for the inner SELECT of an aggregate. The
-// select expression is dictated by sub.function.
+// select expression is withAggregate's (QueriesRelationships.php:876-887, vendor v12.55.1): the
+// aggregate column - an Expression's raw value, or the wrapped column qualified with the related
+// table ("*" kept bare) - inside the function call, and the bare aggregate column for exists:
+//
+//	$expression = $function === 'exists' ? $aggregateColumn : sprintf('%s(%s)', $function, $aggregateColumn);
+//
+// so withExists('foo') reads `exists(select * from ...)`.
 func (r *OrmBuilder) compileAggregateSubquery(desc *relationDescriptor, sub selectSub) (*querybuilder.Builder, error) {
 	inner, selfAlias, err := r.compileExistenceSubquery(desc, sub.callback)
 	if err != nil {
@@ -697,30 +705,31 @@ func (r *OrmBuilder) compileAggregateSubquery(desc *relationDescriptor, sub sele
 
 	columnValue, _ := aggregateColumnValue(sub.column)
 
-	var selectExpr string
-	switch {
-	case sub.function == "exists":
-		selectExpr = "1"
-	case core.IsExpression(sub.column):
-		// An Expression column is spliced verbatim: sprintf('%s(%s)', $function, getValue($column)).
-		selectExpr = fmt.Sprintf("%s(%s)", sub.function, columnValue)
-	default:
-		column := "*"
+	var aggregateColumn string
+	if core.IsExpression(sub.column) {
+		// An Expression column is spliced verbatim: getValue($column).
+		aggregateColumn = columnValue
+	} else {
+		aggregateColumn = "*"
 		switch {
 		case columnValue == "*" || columnValue == "":
 			// The default "*" stands.
 		case strings.Contains(columnValue, "."):
 			// A qualified column is wrapped as-is; qualifyColumn leaves a dotted name alone, so a
 			// pivot column like "user_role.price" keeps its own table.
-			column = r.queryGrammar.Wrap(columnValue)
+			aggregateColumn = r.queryGrammar.Wrap(columnValue)
 		case selfAlias != "":
 			// The self-join's column wears the subquery alias, the way getRelationHashedColumn
 			// prefixes getRelationCountHash(false) for a same-table column.
-			column = r.ident(selfAlias, columnValue)
+			aggregateColumn = r.ident(selfAlias, columnValue)
 		default:
-			column = r.ident(desc.RelatedTable, columnValue)
+			aggregateColumn = r.ident(desc.RelatedTable, columnValue)
 		}
-		selectExpr = fmt.Sprintf("%s(%s)", sub.function, column)
+	}
+
+	selectExpr := aggregateColumn
+	if sub.function != "exists" {
+		selectExpr = fmt.Sprintf("%s(%s)", sub.function, aggregateColumn)
 	}
 	setSubquerySelect(inner, selectExpr)
 

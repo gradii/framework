@@ -1,12 +1,14 @@
 package gorm
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	contractsdatabase "github.com/gradii/framework/contracts/database"
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
 	"github.com/gradii/framework/database/gorm/relations"
 	databaseorm "github.com/gradii/framework/database/orm"
@@ -227,9 +229,17 @@ func TestCompileAggregateSubquery_Avg_SQL(t *testing.T) {
 	assert.Equal(t, `select avg("rel_books"."id") from "rel_books" where "rel_users"."id" = "rel_books"."user_id"`, sql)
 }
 
+// withAggregate selects the bare aggregate column for exists ($function === 'exists' ?
+// $aggregateColumn : ...): "*" for withExists, the qualified column otherwise. Oracle
+// (illuminate/database v12.55.1, php .claude/laravel-oracle/oracle.php /tmp/r15bd/fixtures.php):
+// F1 withExists('books') -> `exists(select * from "rel_books" where ...)`; F1c
+// withAggregate('books', 'id', 'exists') -> `exists(select "rel_books"."id" from "rel_books" where ...)`.
 func TestCompileAggregateSubquery_Exists_SQL(t *testing.T) {
 	sql := runAggregateSQL(t, selectSub{relation: "Books", column: "*", function: "exists"})
-	assert.Equal(t, `select 1 from "rel_books" where "rel_users"."id" = "rel_books"."user_id"`, sql)
+	assert.Equal(t, `select * from "rel_books" where "rel_users"."id" = "rel_books"."user_id"`, sql)
+
+	sql = runAggregateSQL(t, selectSub{relation: "Books", column: "id", function: "exists"})
+	assert.Equal(t, `select "rel_books"."id" from "rel_books" where "rel_users"."id" = "rel_books"."user_id"`, sql)
 }
 
 // The aggregate body over a through relation wears the through join the oracle renders
@@ -275,7 +285,23 @@ func TestWithExists_FrameworkSoftDeleteRelation(t *testing.T) {
 	require.NoError(t, err)
 	sql, _ := builder.ToSelectSQL()
 
-	assert.Equal(t, `select "rel_soft_owners".*, CASE WHEN EXISTS (select 1 from "rel_soft_books" where "rel_soft_owners"."id" = "rel_soft_books"."user_id" and "rel_soft_books"."deleted_at" is null) THEN 1 ELSE 0 END AS "books_exists" from "rel_soft_owners"`, sql)
+	// Oracle F2 (/tmp/r15bd/fixtures.php): Laravel's `exists(...) as "alias"` on a non-SQL Server
+	// connection.
+	assert.Equal(t, `select "rel_soft_owners".*, exists(select * from "rel_soft_books" where "rel_soft_owners"."id" = "rel_soft_books"."user_id" and "rel_soft_books"."deleted_at" is null) as "books_exists" from "rel_soft_owners"`, sql)
+}
+
+// On a SQL Server connection the exists column keeps the CASE fold: T-SQL has no boolean scalar,
+// so the `exists(...) as [alias]` text the oracle compiles for sqlsrv does not execute there. The
+// body is still withAggregate's `select *`. The driver's bracket quoting is pinned with the real
+// grammar in tests/database/gorm; this root pin runs on the base grammar.
+func TestWithExists_SqlServerFoldsThePredicateIntoAnInteger(t *testing.T) {
+	conditions := Conditions{model: &relSoftOwner{}}
+	q := newDialectQuery(context.Background(), nil, contractsdatabase.Config{Driver: "sqlserver"}, stubWriter(t), nil, nil, nil, nil, &conditions, nil)
+	builder, err := toQuery(q.WithExists("Books")).newBuilder()
+	require.NoError(t, err)
+	sql, _ := builder.ToSelectSQL()
+
+	assert.Equal(t, `select "rel_soft_owners".*, CASE WHEN EXISTS (select * from "rel_soft_books" where "rel_soft_owners"."id" = "rel_soft_books"."user_id" and "rel_soft_books"."deleted_at" is null) THEN 1 ELSE 0 END AS "books_exists" from "rel_soft_owners"`, sql)
 }
 
 // ---------------------------------------------------------------------------

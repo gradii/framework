@@ -26,8 +26,6 @@
 // equivalent Go chain compiled against the harness) and the test is skipped with the concrete
 // divergence — never weakened. The recurring divergences:
 //
-//   - withExists: `CASE WHEN EXISTS (select 1 ...) THEN 1 ELSE 0 END` where Laravel emits a bare
-//     `exists(select * ...)`;
 //   - relation existence in WHERE: callback clauses beyond wheres (having/join) and a
 //     callback-nested whereHas are dropped;
 //   - no WhereMorphedTo family, SelectSub, onDelete, onClone, Pipe on the Go builder;
@@ -81,14 +79,6 @@ const (
 	builderSkipNoOnClone = "our ORM diverges: no onClone callback registry — Clone() copies the query's conditions but no callback observes the copy (probe: only the query itself is cloned)"
 
 	builderSkipNoPipe = "our ORM diverges: the Go builder has no Pipe — a caller passes the query to a plain Go function"
-
-	builderSkipAggregateExists = "our ORM diverges: withExists compiles `CASE WHEN EXISTS (select 1 from ...) THEN 1 ELSE 0 END AS \"foo_exists\"` (probe) where the oracle compiles a bare `exists(select * from ...) as \"foo_exists\"`; the subquery's correlation and joins byte-match the oracle (belongsTo parent-first, m2m join related-first; probe), so only the CASE wrapper and its `select 1` body keep this skip"
-
-	builderSkipSelfAggregateExists = "our ORM diverges: the self-referential withExists subquery wears Laravel's table alias (`from \"self_related_stubs\" as \"laravel_reserved_N\"`, normalised; probe) and correlates parent-first, but still wraps the body in `CASE WHEN EXISTS (select 1 from ...) THEN 1 ELSE 0 END` where Laravel emits a bare `exists (select * ...)` - only the CASE wrapper and its `select 1` body keep this skip"
-
-	builderSkipAggregateExistsCallback = "our ORM diverges: WithExists accepts plain relation strings only, so a scoping closure cannot be passed at all, and the compiled shape is additionally `CASE WHEN EXISTS (select 1 ...) THEN 1 ELSE 0 END` where the oracle emits `exists(select * ...)`"
-
-	builderSkipAggregateExistsRename = "our ORM diverges: WithExists now parses the \"as\" rename like the oracle (`... as \"foo_bar\"`; probe) but still compiles the `CASE WHEN EXISTS (select 1 from ...) THEN 1 ELSE 0 END` wrapper where the oracle emits a bare `exists(select * from ...)` - only the CASE / `select 1` body keeps this skip"
 
 	builderSkipExistenceWhere = "our ORM diverges: clauses a callback adds beyond wheres (having, join) are dropped instead of carried into the subquery (probe)"
 
@@ -2416,22 +2406,44 @@ func TestBuilder_WithAggregateAndSelfRelationConstrain(t *testing.T) {
 	t.Skip(builderSkipPHPOnlyDynamicRelation)
 }
 
-// --- skips: withExists family ----------------------------------------------------
+// --- withExists family ------------------------------------------------------------
+//
+// Laravel's withAggregate selects `exists(<body>) as <alias>` with the bare aggregate column as the
+// body's select (QueriesRelationships.php:887, :925-929); the expected strings are the corpus
+// assertions (DatabaseEloquentBuilderTest.php:1510-1597), re-measured with the oracle
+// (php .claude/laravel-oracle/oracle.php /tmp/r15bd/corpus.php, v12.55.1, rows C1-C7).
 
 func TestBuilder_WithExists(t *testing.T) {
+	query := newRelationQuery(t)
+
 	// Laravel: withExists('foo') pins a bare exists(select * ...) aliased foo_exists.
-	t.Skip(builderSkipAggregateExists)
+	assert.Equal(t,
+		`select "eloquent_builder_test_model_parent_stubs".*, exists(select * from "eloquent_builder_test_model_close_related_stubs" where "eloquent_builder_test_model_parent_stubs"."foo_id" = "eloquent_builder_test_model_close_related_stubs"."id") as "foo_exists" from "eloquent_builder_test_model_parent_stubs"`,
+		cloneRelationQuery(t, query).Model(&builderAggregateParentStub{}).WithExists("foo").ToSql().Get(&builderAggregateParentStub{}))
 }
 
 func TestBuilder_WithExistsAndSelect(t *testing.T) {
+	query := newRelationQuery(t)
+
 	// Laravel: select('id')->withExists('foo') pins the exists column after the explicit column.
-	t.Skip(builderSkipAggregateExists)
+	assert.Equal(t,
+		`select "id", exists(select * from "eloquent_builder_test_model_close_related_stubs" where "eloquent_builder_test_model_parent_stubs"."foo_id" = "eloquent_builder_test_model_close_related_stubs"."id") as "foo_exists" from "eloquent_builder_test_model_parent_stubs"`,
+		cloneRelationQuery(t, query).Model(&builderAggregateParentStub{}).Select("id").WithExists("foo").ToSql().Get(&builderAggregateParentStub{}))
 }
 
 func TestBuilder_WithExistsAndMergedWheres(t *testing.T) {
+	query := newRelationQuery(t)
+
 	// Laravel: withExists(['activeFoo' => closure]) scopes the exists subquery with the closure's
-	// where and the relation's own where (bindings ['qux', true]).
-	t.Skip(builderSkipAggregateExistsCallback)
+	// where and the relation's own where (bindings ['qux', true]). The Go WithExists takes relation
+	// names only; withExists is withAggregate($relation, '*', 'exists'), and WithAggregate carries
+	// the closure.
+	closure := func(q contractsorm.Query) contractsorm.Query { return q.Where("bam", ">", "qux") }
+	assert.Equal(t,
+		`select "id", exists(select * from "eloquent_builder_test_model_close_related_stubs" where "eloquent_builder_test_model_parent_stubs"."foo_id" = "eloquent_builder_test_model_close_related_stubs"."id" and "bam" > ? and "active" = ?) as "active_foo_exists" from "eloquent_builder_test_model_parent_stubs"`,
+		cloneRelationQuery(t, query).Model(&builderAggregateParentStub{}).Select("id").
+			WithAggregate("activeFoo", "*", "exists", closure).
+			ToSql().Get(&builderAggregateParentStub{}))
 }
 
 func TestBuilder_WithExistsAndGlobalScope(t *testing.T) {
@@ -2441,23 +2453,39 @@ func TestBuilder_WithExistsAndGlobalScope(t *testing.T) {
 }
 
 func TestBuilder_WithExistsOnBelongsToMany(t *testing.T) {
+	query := newRelationQuery(t)
+
 	// Laravel: withExists('roles') pins the exists over the pivot join aliased roles_exists.
-	t.Skip(builderSkipAggregateExists)
+	assert.Equal(t,
+		`select "eloquent_builder_test_model_parent_stubs".*, exists(select * from "eloquent_builder_test_model_far_related_stubs" inner join "user_role" on "eloquent_builder_test_model_far_related_stubs"."id" = "user_role"."related_id" where "eloquent_builder_test_model_parent_stubs"."id" = "user_role"."self_id") as "roles_exists" from "eloquent_builder_test_model_parent_stubs"`,
+		cloneRelationQuery(t, query).Model(&builderAggregateParentStub{}).WithExists("roles").ToSql().Get(&builderAggregateParentStub{}))
 }
 
 func TestBuilder_WithExistsOnSelfRelated(t *testing.T) {
+	query := newRelationQuery(t)
+
 	// Laravel (normalised): the self-relation exists subquery pins the laravel_reserved_N alias.
-	t.Skip(builderSkipSelfAggregateExists)
+	assert.Equal(t,
+		`select "self_related_stubs".*, exists(select * from "self_related_stubs" as "self_alias_hash" where "self_related_stubs"."id" = "self_alias_hash"."parent_id") as "child_foos_exists" from "self_related_stubs"`,
+		normalizeBuilderSelfAlias(cloneRelationQuery(t, query).Model(&builderSelfRow{}).WithExists("ChildFoos").ToSql().Get(&builderSelfRow{})))
 }
 
 func TestBuilder_WithExistsAndRename(t *testing.T) {
+	query := newRelationQuery(t)
+
 	// Laravel: withExists('foo as foo_bar') pins the exists aliased foo_bar.
-	t.Skip(builderSkipAggregateExistsRename)
+	assert.Equal(t,
+		`select "eloquent_builder_test_model_parent_stubs".*, exists(select * from "eloquent_builder_test_model_close_related_stubs" where "eloquent_builder_test_model_parent_stubs"."foo_id" = "eloquent_builder_test_model_close_related_stubs"."id") as "foo_bar" from "eloquent_builder_test_model_parent_stubs"`,
+		cloneRelationQuery(t, query).Model(&builderAggregateParentStub{}).WithExists("foo as foo_bar").ToSql().Get(&builderAggregateParentStub{}))
 }
 
 func TestBuilder_WithExistsMultipleAndPartialRename(t *testing.T) {
+	query := newRelationQuery(t)
+
 	// Laravel: withExists(['foo as foo_bar', 'foo']) pins one renamed and one default alias.
-	t.Skip(builderSkipAggregateExistsRename)
+	assert.Equal(t,
+		`select "eloquent_builder_test_model_parent_stubs".*, exists(select * from "eloquent_builder_test_model_close_related_stubs" where "eloquent_builder_test_model_parent_stubs"."foo_id" = "eloquent_builder_test_model_close_related_stubs"."id") as "foo_bar", exists(select * from "eloquent_builder_test_model_close_related_stubs" where "eloquent_builder_test_model_parent_stubs"."foo_id" = "eloquent_builder_test_model_close_related_stubs"."id") as "foo_exists" from "eloquent_builder_test_model_parent_stubs"`,
+		cloneRelationQuery(t, query).Model(&builderAggregateParentStub{}).WithExists("foo as foo_bar", "foo").ToSql().Get(&builderAggregateParentStub{}))
 }
 
 // --- skips: has-with-constraints ------------------------------------------------

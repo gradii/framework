@@ -210,17 +210,16 @@ func TestSubqueryScopeRemoval_WithCountCarriesTheClosureRemovals(t *testing.T) {
 	}
 }
 
-// withExists: the existence subquery is the one WithCount builds; the port wraps it in a
-// CASE WHEN ... THEN 1 ELSE 0 END (the documented cross-dialect divergence from Laravel's
-// `exists(select ...)` - SQL Server has no boolean literal), so the removals reach the inner
-// subquery while the wrapper differs by design. Oracle for the inner subquery: /tmp/r13v/probe.php
-// withExists rows.
+// withExists: the existence subquery is the one WithCount builds, selected as Laravel's
+// `exists(select * ...) as "alias"`, so the removals reach the inner subquery. Oracle
+// (illuminate/database v12.55.1, php .claude/laravel-oracle/oracle.php /tmp/r15bd/fixtures.php) F3
+// and F4.
 func TestSubqueryScopeRemoval_WithExistsCarriesTheRemoval(t *testing.T) {
 	q := newRelQueryWith(t, &relDeepOwner{}).WithExists("Mids").(*OrmBuilder)
-	assert.Equal(t, `select "rel_deep_owners".*, CASE WHEN EXISTS (select 1 from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and "rel_deep_mids"."deleted_at" is null and "active" = ?) THEN 1 ELSE 0 END AS "mids_exists" from "rel_deep_owners"`, subquerySelectSQL(t, q, &[]relDeepOwner{}))
+	assert.Equal(t, `select "rel_deep_owners".*, exists(select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and "rel_deep_mids"."deleted_at" is null and "active" = ?) as "mids_exists" from "rel_deep_owners"`, subquerySelectSQL(t, q, &[]relDeepOwner{}))
 
 	q2 := newRelQueryWith(t, &relOwnerOnlyTrashed{}).WithExists("Mids").(*OrmBuilder)
-	assert.Equal(t, `select "rel_deep_owners".*, CASE WHEN EXISTS (select 1 from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and "rel_deep_mids"."deleted_at" is not null and "active" = ?) THEN 1 ELSE 0 END AS "mids_exists" from "rel_deep_owners"`, subquerySelectSQL(t, q2, &[]relOwnerOnlyTrashed{}))
+	assert.Equal(t, `select "rel_deep_owners".*, exists(select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and "rel_deep_mids"."deleted_at" is not null and "active" = ?) as "mids_exists" from "rel_deep_owners"`, subquerySelectSQL(t, q2, &[]relOwnerOnlyTrashed{}))
 }
 
 // ---------------------------------------------------------------------------

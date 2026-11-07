@@ -237,9 +237,7 @@ func (r *OrmBuilder) applySelectSubAggregates(builder *querybuilder.Builder) err
 		}
 
 		if sub.function == "exists" {
-			// A bare EXISTS as a column is a native bool on PostgreSQL, which will not scan into an
-			// integer field, and SQL Server rejects it outright, so it is wrapped into a portable 0/1.
-			builder.SelectRaw("CASE WHEN EXISTS ("+subquery+") THEN 1 ELSE 0 END AS "+r.ident(alias), bindings)
+			builder.SelectRaw(existsSelectExpression(r.dbConfig.Driver, subquery, r.ident(alias)), bindings)
 
 			continue
 		}
@@ -248,6 +246,24 @@ func (r *OrmBuilder) applySelectSubAggregates(builder *querybuilder.Builder) err
 	}
 
 	return nil
+}
+
+// existsSelectExpression renders a withExists column. Laravel's withAggregate emits the same text on
+// every grammar (QueriesRelationships.php:925-929, vendor v12.55.1):
+//
+//	sprintf('exists(%s) as %s', $query->toSql(), $this->getQuery()->grammar->wrap($alias))
+//
+// and casts the alias to bool. The oracle compiles that text for mysql, pgsql, sqlite and sqlsrv
+// alike; it executes on MySQL and SQLite (an integer 0/1) and on PostgreSQL (a native boolean), so
+// this port emits it for those dialects. T-SQL has no boolean scalar type: EXISTS is a predicate
+// only and cannot stand in a select list, so Laravel's own text fails on SQL Server. There the
+// predicate is folded into a 0/1 integer with CASE, the form that executes.
+func existsSelectExpression(driver, subquery, alias string) string {
+	if querybuilder.CanonicalDialect(driver) == querybuilder.DialectSqlServer {
+		return "CASE WHEN EXISTS (" + subquery + ") THEN 1 ELSE 0 END AS " + alias
+	}
+
+	return "exists(" + subquery + ") as " + alias
 }
 
 // newBuilder builds a query builder carrying everything the conditions describe. The persistent

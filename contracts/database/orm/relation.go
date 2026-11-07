@@ -127,10 +127,11 @@ type QueryWithRelations interface {
 	WithSum(relation string, column any, args ...any) Query
 	// WithAvg adds sub-select queries to include the average of the relation's column.
 	WithAvg(relation string, column any, args ...any) Query
-	// WithExists adds sub-select queries to include the existence of related models. The result
-	// is emitted as `CASE WHEN EXISTS (...) THEN 1 ELSE 0 END` for cross-dialect portability
-	// (SQL Server has no boolean literal), but the dest field may be either `bool` or an integer
-	// type - Go's database/sql layer converts 0/1 ints to bool automatically.
+	// WithExists adds sub-select queries to include the existence of related models. The column
+	// is Laravel's `exists(...) as alias` (an integer 0/1 on MySQL and SQLite, a native boolean on
+	// PostgreSQL), and `CASE WHEN EXISTS (...) THEN 1 ELSE 0 END` on SQL Server, where EXISTS cannot
+	// stand in a select list. Laravel casts the alias to bool; a `bool` dest field reads it on every
+	// driver, an integer one does not on PostgreSQL.
 	WithExists(relations ...string) Query
 
 	// WhereRelation adds a relationship existence condition with a single where on the related
