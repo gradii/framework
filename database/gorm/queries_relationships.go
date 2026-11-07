@@ -573,7 +573,10 @@ func (r *OrmBuilder) compileExistenceSubqueryIn(desc *relationDescriptor, callba
 	// clauses after the caller's closure: Laravel merges the join inside getRelationExistenceQuery
 	// but mergeConstraintsFrom appends the relation's own wheres after callScope has run the
 	// closure, so the closure's clauses bind first.
-	relationScoped, joinSQL, joinArgs := r.relationScopeQuery(desc)
+	relationScoped, joinSQL, joinArgs, err := r.relationScopeQuery(desc, relatedQualifier, desc.RelatedModel)
+	if err != nil {
+		return nil, "", err
+	}
 	if joinSQL != "" {
 		builder.JoinRaw(joinSQL, joinArgs, "inner")
 	}
@@ -587,7 +590,10 @@ func (r *OrmBuilder) compileExistenceSubqueryIn(desc *relationDescriptor, callba
 	// segment as a plain whereHas, so only the leaf clause carries the count comparison.
 	var callbackScoped *OrmBuilder
 	if desc.Nested == nil {
-		callbackScoped = r.applyRelationScope(builder, callback)
+		callbackScoped, err = r.applyRelationScope(builder, callback, relatedQualifier, desc.RelatedModel)
+		if err != nil {
+			return nil, "", err
+		}
 	} else {
 		nested, _, err := r.compileExistenceSubqueryIn(desc.Nested, callback, fromString, relatedQualifier, leafOperator, leafCount)
 		if err != nil {
@@ -615,7 +621,7 @@ func (r *OrmBuilder) compileExistenceSubqueryIn(desc *relationDescriptor, callba
 	// user scope - the order the oracle pins (/tmp/r13/scope_removal_probe5.php G1:
 	// `... and "sr_posts"."deleted_at" is null and "published" = ?`).
 	r.applySubquerySoftDelete(builder, relatedQualifier, desc.RelatedModel, removals)
-	r.applyRelatedGlobalScopes(builder, desc.RelatedModel, removals)
+	r.applyRelatedGlobalScopes(builder, relatedQualifier, desc.RelatedModel, removals)
 
 	// A soft-deletable through model filters the through table inside the existence body too, after
 	// the related predicate - performJoin adds its named scope to the existence subquery (oracle,
@@ -659,17 +665,21 @@ func (r *OrmBuilder) compileMorphExistenceSubquery(desc *relationDescriptor, mor
 		builder.WhereRaw(r.ident(ref.PrimaryTable, ref.PrimaryColumn)+" = "+r.ident(ref.ForeignTable, ref.ForeignColumn), nil, core.BooleanAnd)
 	}
 	builder.WhereRaw(r.ident(desc.RelatedTable, desc.MorphTypeColumn)+" = ?", []any{morphValue}, core.BooleanAnd)
-	relationScoped, joinSQL, joinArgs := r.relationScopeQuery(desc)
+	// This variant reports no error of its own, so a nested clause a callback could not render is
+	// carried on the query (conditions.err) for the statement to report.
+	relationScoped, joinSQL, joinArgs, err := r.relationScopeQuery(desc, desc.RelatedTable, desc.RelatedModel)
+	r.keepFirstError(err)
 	if joinSQL != "" {
 		builder.JoinRaw(joinSQL, joinArgs, "inner")
 	}
-	callbackScoped := r.applyRelationScope(builder, callback)
+	callbackScoped, err := r.applyRelationScope(builder, callback, desc.RelatedTable, desc.RelatedModel)
+	r.keepFirstError(err)
 	if relationScoped != nil {
 		appendWhereClauses(builder, relationScoped.query)
 	}
 	removals := scopeRemovalsOf(relationScoped).merge(scopeRemovalsOf(callbackScoped))
 	r.applySubquerySoftDelete(builder, desc.RelatedTable, desc.RelatedModel, removals)
-	r.applyRelatedGlobalScopes(builder, desc.RelatedModel, removals)
+	r.applyRelatedGlobalScopes(builder, desc.RelatedTable, desc.RelatedModel, removals)
 
 	return builder
 }
@@ -733,9 +743,6 @@ func (r *OrmBuilder) applyRelations(builder *querybuilder.Builder) error {
 	}
 
 	parent := r.parentModel()
-	if parent == nil {
-		return errors.OrmQueryEmptyRelation
-	}
 
 	// Every clause is rendered at the tail; relocateAppendedClause then moves it back to the where
 	// position its call recorded, so the statement preserves Laravel's call order (a has() clause
@@ -753,7 +760,15 @@ func (r *OrmBuilder) applyRelations(builder *querybuilder.Builder) error {
 		whereStart := len(builder.State().Wheres)
 		bindingStart := len(builder.State().Bindings["where"])
 
-		if item.morphAuto || len(item.morphTypes) > 0 {
+		if item.nestedGroup != nil {
+			// The group keeps the where call's own boolean, "and not" / "or not" included
+			// (WhereNot / OrWhereNot closures).
+			if err := applyNestedGroup(builder, parent, item.nestedGroup, item.conjunction); err != nil {
+				return err
+			}
+		} else if parent == nil {
+			return errors.OrmQueryEmptyRelation
+		} else if item.morphAuto || len(item.morphTypes) > 0 {
 			if err := r.applyMorphRelation(builder, parent, item, boolean); err != nil {
 				return err
 			}
@@ -805,6 +820,41 @@ func (r *OrmBuilder) applyRelations(builder *querybuilder.Builder) error {
 		splicedWheres += appendedWheres
 		splicedBindings += appendedBindings
 	}
+
+	return nil
+}
+
+// applyNestedGroup finishes a deferred where-closure group and appends it as one nested where: the
+// closure's onlyTrashed predicates and existence clauses are written into a copy of its where list
+// at the positions their calls recorded - the predicates first, since they shift the clauses'
+// positions, as withScopesApplied orders them on the main path - and the group joins the statement
+// through AddNestedWhereQuery, its bindings with it. The copy keeps the recorded group untouched, so
+// compiling the same query twice writes the clauses once each time. A closure nested in the closure
+// is itself a deferred group of the copy, finished by the same recursion.
+//
+// Oracle (illuminate/database v12.55.1, real sqlite): /Users/dog/.claude/jobs/013c27a0/tmp/r15b-probes/oracle.php W1-W8, V4, V5 -
+// where(fn => whereHas('posts')) compiles `where "id" = ? and (exists (select * from "sd_posts"
+// where ...)) and "sd_users"."deleted_at" is null` - and
+// /Users/dog/.claude/jobs/013c27a0/tmp/r15-probes/r15-r14-mutants/probe5.out N1, N2, N4 -
+// where(fn => onlyTrashed()->where('email', 'a')) compiles `("sr_users"."deleted_at" is not null and
+// "email" = ?)`.
+func applyNestedGroup(builder *querybuilder.Builder, parent any, nested *OrmBuilder, boolean string) error {
+	group := nested.clone()
+	if parent != nil {
+		group.conditions.model = parent
+	}
+
+	if group.conditions.onlyTrashed {
+		if err := group.spliceOnlyTrashed(group.query); err != nil {
+			return err
+		}
+	}
+
+	if err := group.applyRelations(group.query); err != nil {
+		return err
+	}
+
+	builder.AddNestedWhereQuery(group.query, boolean)
 
 	return nil
 }
@@ -1062,17 +1112,21 @@ func (r *OrmBuilder) compileMorphToExistenceSubquery(desc *relationDescriptor, r
 	// "photos"."imageable_id" = "posts"."id")`).
 	builder.WhereRaw(r.ident(desc.ParentTable, desc.MorphIDColumn)+" = "+r.ident(relatedTable, ownerKey), nil, core.BooleanAnd)
 
-	relationScoped, joinSQL, joinArgs := r.relationScopeQuery(desc)
+	// As compileMorphExistenceSubquery: a nested clause a callback could not render is carried on
+	// the query (conditions.err).
+	relationScoped, joinSQL, joinArgs, err := r.relationScopeQuery(desc, relatedTable, relatedModel)
+	r.keepFirstError(err)
 	if joinSQL != "" {
 		builder.JoinRaw(joinSQL, joinArgs, "inner")
 	}
-	callbackScoped := r.applyRelationScope(builder, callback)
+	callbackScoped, err := r.applyRelationScope(builder, callback, relatedTable, relatedModel)
+	r.keepFirstError(err)
 	if relationScoped != nil {
 		appendWhereClauses(builder, relationScoped.query)
 	}
 	removals := scopeRemovalsOf(relationScoped).merge(scopeRemovalsOf(callbackScoped))
 	r.applySubquerySoftDelete(builder, relatedTable, relatedModel, removals)
-	r.applyRelatedGlobalScopes(builder, relatedModel, removals)
+	r.applyRelatedGlobalScopes(builder, relatedTable, relatedModel, removals)
 
 	return builder
 }
@@ -1140,8 +1194,9 @@ func (r *OrmBuilder) relatedChild(table string, column string, values []any) *Or
 // does. Laravel runs the closure on the subquery (Builder::has -> callScope) and merges the relation's
 // own removals (addHasWhere -> mergeConstraintsFrom -> withoutGlobalScopes($from->removedScopes())),
 // so both sets land on one builder and every deferred scope is applied on top of them: a name (or the
-// port's "*" for withoutGlobalScopes()) drops exactly that scope, withTrashed() drops the
-// SoftDeletingScope, and onlyTrashed() replaces it with "is not null".
+// port's "*" for withoutGlobalScopes()) drops exactly that scope, and withTrashed() and onlyTrashed()
+// drop the SoftDeletingScope - onlyTrashed's own "is not null" is a where its call wrote, spliced at
+// the call's position by spliceSubqueryOnlyTrashed, not a scope.
 type subqueryScopeRemovals struct {
 	names       []string
 	withTrashed bool
@@ -1199,15 +1254,16 @@ func (r *OrmBuilder) applySubquerySoftDelete(builder *querybuilder.Builder, tabl
 	// The predicate is a global scope on the subquery builder, so a withTrashed()/onlyTrashed() the
 	// relation's default query or the caller's closure left on it - or a withoutGlobalScope of the
 	// SoftDeletingScope name / withoutGlobalScopes() - governs it as applySoftDelete governs the
-	// main-path predicate: withTrashed() and withoutGlobalScope(SoftDeletingScope) drop it,
-	// onlyTrashed() replaces it with "is not null".
-	if !removals.onlyTrashed && (removals.withTrashed || removals.removes(contractsorm.SoftDeletingScope)) {
+	// main-path predicate: each of them drops it. onlyTrashed is Laravel's macro, which removes the
+	// scope and writes its whereNotNull where it was called; spliceSubqueryOnlyTrashed wrote that
+	// predicate among the closure's / relation's own wheres, so nothing is written for it here.
+	if removals.onlyTrashed || removals.withTrashed || removals.removes(contractsorm.SoftDeletingScope) {
 		return
 	}
 
-	// A structured where, so the grammar compiles Laravel's lowercase "is null"/"is not null"
-	// through compileWhereNull instead of rendering a raw fragment's own casing.
-	builder.WhereNull(table+"."+column, core.BooleanAnd, removals.onlyTrashed)
+	// A structured where, so the grammar compiles Laravel's lowercase "is null" through
+	// compileWhereNull instead of rendering a raw fragment's own casing.
+	builder.WhereNull(table+"."+column, core.BooleanAnd, false)
 }
 
 // applySubqueryThroughSoftDelete adds a soft-deletable through model's "not soft deleted" predicate
@@ -1244,7 +1300,15 @@ func (r *OrmBuilder) applySubqueryThroughSoftDelete(builder *querybuilder.Builde
 // relation's constraints, each in its declaration order - the order addGlobalScopes gives the
 // scopes of a top-level query - and each is regrouped the way the callScope addGlobalScopes runs it,
 // so a scope's or-chain becomes its own nested group before the next scope's clauses land.
-func (r *OrmBuilder) applyRelatedGlobalScopes(builder *querybuilder.Builder, relatedModel any, removals subqueryScopeRemovals) {
+//
+// table is the qualifier the subquery reads the related model under, as for applySubquerySoftDelete:
+// an onlyTrashed a scope calls is Laravel's macro running inside callScope after SoftDeletingScope
+// already applied, so its whereNotNull lands among the scope's own wheres at the call position and
+// the "is null" stays (oracle, illuminate/database v12.55.1, real sqlite, /Users/dog/.claude/jobs/013c27a0/tmp/r15b-verify-probes/paths.php E1,
+// E2, E3 and /Users/dog/.claude/jobs/013c27a0/tmp/r15b-verify-probes/related_scope.php E5, E7, E8: whereHas('tposts') over a scope
+// where('id', '>', 0)->onlyTrashed() compiles `... and "sd_posts"."deleted_at" is null and "id" > ?
+// and "sd_posts"."deleted_at" is not null`).
+func (r *OrmBuilder) applyRelatedGlobalScopes(builder *querybuilder.Builder, table string, relatedModel any, removals subqueryScopeRemovals) {
 	scopes := relatedGlobalScopes(relatedModel)
 	if len(scopes) == 0 {
 		return
@@ -1262,6 +1326,7 @@ func (r *OrmBuilder) applyRelatedGlobalScopes(builder *querybuilder.Builder, rel
 		}
 
 		originalWhereCount := len(builder.State().Wheres)
+		originalOnlyTrashedCalls := len(scoped.conditions.onlyTrashedCalls)
 
 		if returned, ok := globalScope.Scope(scoped).(*OrmBuilder); ok {
 			scoped = returned
@@ -1270,6 +1335,16 @@ func (r *OrmBuilder) applyRelatedGlobalScopes(builder *querybuilder.Builder, rel
 		// Flush after each scope so the next one's clauses land after the previous one's, the order
 		// withScopesApplied gives the scopes of a top-level query.
 		scoped = scoped.flushWheres()
+
+		// The onlyTrashed calls this scope made write the related model's "is not null" at their
+		// call positions, before the scope's wheres move onto the subquery and are regrouped.
+		if calls := scoped.conditions.onlyTrashedCalls; len(calls) > originalOnlyTrashedCalls && usesFrameworkSoftDeleteModel(relatedModel) {
+			if column, ok := softDeleteColumn(relatedModel); ok {
+				whereCount := len(scoped.query.State().Wheres)
+				scoped.query.WhereNull(table+"."+column, core.BooleanAnd, true)
+				scoped.spliceOnlyTrashedPredicate(scoped.query, whereCount, calls[originalOnlyTrashedCalls:])
+			}
+		}
 
 		// The scope starts from what the previous scopes produced - addGlobalScopes reuses its
 		// query per scope - so only the wheres it added move onto the subquery now.
@@ -1347,9 +1422,14 @@ func setSubquerySelect(builder *querybuilder.Builder, expression string) {
 // applied here. Non-where clauses the callback sets (an order by, a limit) are deliberately not
 // carried: Laravel emits them inside the subquery, but SQL Server rejects ORDER BY in a subquery,
 // and relation_sql_test.go pins the difference.
-func (r *OrmBuilder) applyRelationScope(builder *querybuilder.Builder, callback contractsorm.RelationCallback) *OrmBuilder {
+//
+// table and model are the related side the subquery reads (table is the self-join alias when the
+// level aliased itself): the clauses the callback deferred - its onlyTrashed predicates, the
+// existence clauses and where-closure groups it wrote - are finished against the related model
+// (finishSubqueryScope) before the clauses are carried over.
+func (r *OrmBuilder) applyRelationScope(builder *querybuilder.Builder, callback contractsorm.RelationCallback, table string, model any) (*OrmBuilder, error) {
 	if callback == nil {
-		return nil
+		return nil, nil
 	}
 
 	originalWhereCount := len(builder.State().Wheres)
@@ -1360,6 +1440,9 @@ func (r *OrmBuilder) applyRelationScope(builder *querybuilder.Builder, callback 
 	}
 
 	scoped = scoped.flushWheres()
+	if err := finishSubqueryScope(scoped, table, model); err != nil {
+		return nil, err
+	}
 
 	appendWhereClauses(builder, scoped.query)
 
@@ -1367,7 +1450,7 @@ func (r *OrmBuilder) applyRelationScope(builder *querybuilder.Builder, callback 
 		addNewWheresWithinGroupIn(builder, originalWhereCount)
 	}
 
-	return scoped
+	return scoped, nil
 }
 
 // applyOneOfManyRelationScope applies a relation's default scope to an existence subquery. A plain
@@ -1381,9 +1464,15 @@ func (r *OrmBuilder) applyRelationScope(builder *querybuilder.Builder, callback 
 // position. The split mirrors Laravel: HasOne::getRelationExistenceQuery merges the of-many join
 // into the existence query, while mergeConstraintsFrom appends the relation's own wheres after the
 // caller's closure has run.
-func (r *OrmBuilder) relationScopeQuery(desc *relationDescriptor) (*OrmBuilder, string, []any) {
+//
+// table and model name the related side, as for applyRelationScope: an onlyTrashed the relation's
+// default query called writes the related model's "is not null" among its wheres at its call
+// position (Laravel's macro writes it on the relation query, and mergeConstraintsFrom carries it
+// with the relation's other wheres). It is spliced after the one-of-many join took the constraints
+// written after OfMany, so the predicate stays on the existence query.
+func (r *OrmBuilder) relationScopeQuery(desc *relationDescriptor, table string, model any) (*OrmBuilder, string, []any, error) {
 	if desc.OnQuery == nil {
-		return nil, "", nil
+		return nil, "", nil, nil
 	}
 
 	scoped := r.fresh()
@@ -1396,11 +1485,87 @@ func (r *OrmBuilder) relationScopeQuery(desc *relationDescriptor) (*OrmBuilder, 
 		if err == nil && join != "" {
 			// Constraints written before OfMany stay on the existence query itself; the ones after
 			// it were moved into the aggregate subquery by the join builder.
-			return scoped.flushWheres(), join, args
+			scoped = scoped.flushWheres()
+			if err := finishSubqueryScope(scoped, table, model); err != nil {
+				return nil, "", nil, err
+			}
+
+			return scoped, join, args, nil
 		}
 	}
 
-	return scoped.flushWheres(), "", nil
+	scoped = scoped.flushWheres()
+	if err := finishSubqueryScope(scoped, table, model); err != nil {
+		return nil, "", nil, err
+	}
+
+	return scoped, "", nil, nil
+}
+
+// finishSubqueryScope writes what a relation scope or caller closure deferred onto its own builder,
+// against the related side the subquery reads: first each onlyTrashed predicate at its call position
+// (spliceSubqueryOnlyTrashed), then the existence clauses and where-closure groups it recorded
+// (applyRelations, with the related model as their parent), each at the position its call recorded.
+// Laravel wrote all of them onto the subquery builder at call time - a whereHas inside a whereHas
+// callback correlates its own exists to the related table - so they lead the related model's
+// deferred scopes, which follow in the subquery. Oracle (illuminate/database v12.55.1, real sqlite,
+// /Users/dog/.claude/jobs/013c27a0/tmp/r15b-probes/oracle_sub.php S1-S5): whereHas('mids', fn => whereHas('leaves')) compiles `exists
+// (select * from "rel_deep_mids" where "rel_deep_owners"."id" = "rel_deep_mids"."owner_id" and
+// exists (select * from "rel_deep_leaves" where "rel_deep_mids"."id" = "rel_deep_leaves"."mid_id" and
+// "rel_deep_leaves"."deleted_at" is null) and "rel_deep_mids"."deleted_at" is null and "active" =
+// ?)`, and a where closure's onlyTrashed there writes `("id" = ? and "rel_deep_mids"."deleted_at" is
+// not null)` while the subquery keeps its own "is null" - the closure's builder is the one whose
+// scope the macro removed.
+func finishSubqueryScope(scoped *OrmBuilder, table string, model any) error {
+	spliceSubqueryOnlyTrashed(scoped, table, model)
+
+	if len(scoped.conditions.relations) == 0 {
+		return nil
+	}
+
+	scoped.conditions.model = model
+	if err := scoped.applyRelations(scoped.query); err != nil {
+		return err
+	}
+	scoped.conditions.relations = nil
+
+	return nil
+}
+
+// keepFirstError carries err on the query for the statement to report, unless an earlier error is
+// already carried. The morph existence variants use it: they report no error of their own.
+func (r *OrmBuilder) keepFirstError(err error) {
+	if err != nil && r.conditions.err == nil {
+		r.conditions.err = err
+	}
+}
+
+// spliceSubqueryOnlyTrashed writes the related model's "is not null" predicate onto a relation
+// scope's or caller closure's builder once per OnlyTrashed call it made, at the where position each
+// call recorded - the shape Laravel's onlyTrashed macro leaves: the macro runs whereNotNull on the
+// subquery builder at call time, between the wheres written before and after it, and each call
+// writes its own predicate. The scoped builder is a fresh query with no model of its own, so the
+// related side is named explicitly: table is the qualifier the subquery reads the related model
+// under (the self-join alias when the level aliased itself, as Laravel's getQualifiedDeletedAtColumn
+// does after getRelationExistenceQueryForSelfRelation renamed the model's table), model the related
+// model. Only the framework's own soft-delete type is handled, as everywhere else on the compiled
+// path. Oracle (illuminate/database v12.55.1, real sqlite, /Users/dog/.claude/jobs/013c27a0/tmp/r15b-probes/oracle.php X1, X4, X5, X6, O6,
+// O8): whereHas('posts', fn => where('id', 1)->onlyTrashed()->where('id', 2)) compiles `exists
+// (select * from "sd_posts" where "sd_users"."id" = "sd_posts"."sd_user_id" and "id" = ? and
+// "sd_posts"."deleted_at" is not null and "id" = ?)`.
+func spliceSubqueryOnlyTrashed(scoped *OrmBuilder, table string, model any) {
+	if scoped == nil || !scoped.conditions.onlyTrashed || !usesFrameworkSoftDeleteModel(model) {
+		return
+	}
+
+	column, ok := softDeleteColumn(model)
+	if !ok {
+		return
+	}
+
+	whereCount := len(scoped.query.State().Wheres)
+	scoped.query.WhereNull(table+"."+column, core.BooleanAnd, true)
+	scoped.spliceOnlyTrashedPredicate(scoped.query, whereCount, scoped.conditions.onlyTrashedCalls)
 }
 
 // appendWhereClauses moves a child query's where clauses onto the subquery builder, bindings

@@ -401,6 +401,14 @@ func (r *OrmBuilder) applyOnlyTrashed(builder *querybuilder.Builder) error {
 // "is not null" predicate per recorded OnlyTrashed call at that call's where position. A where
 // closure's child query calls it directly for its own group (addNestedWhereQuery).
 func (r *OrmBuilder) spliceOnlyTrashed(builder *querybuilder.Builder) error {
+	return r.spliceOnlyTrashedCalls(builder, r.conditions.onlyTrashedCalls)
+}
+
+// spliceOnlyTrashedCalls writes the model's "is not null" predicate once for each of the given
+// OnlyTrashed calls, at the where position each call recorded. applyScope passes only the calls a
+// user global scope made, so a call the caller made before the scopes ran - already written by
+// withScopesApplied - is not written a second time.
+func (r *OrmBuilder) spliceOnlyTrashedCalls(builder *querybuilder.Builder, calls []onlyTrashedCall) error {
 	whereCount := len(builder.State().Wheres)
 	if err := r.appendSoftDeletePredicate(builder, true); err != nil {
 		return err
@@ -409,11 +417,22 @@ func (r *OrmBuilder) spliceOnlyTrashed(builder *querybuilder.Builder) error {
 		return nil
 	}
 
+	r.spliceOnlyTrashedPredicate(builder, whereCount, calls)
+
+	return nil
+}
+
+// spliceOnlyTrashedPredicate moves the predicate just appended at index whereCount back to the where
+// position of each given OnlyTrashed call - one copy per call - and shifts the recorded positions of
+// the relation existence clauses still to be spliced by the predicates written before them: those
+// whose call recorded a smaller where count, and those whose call recorded the same where count
+// before the clause itself was recorded. An existence subquery's relation scope and caller closure
+// share it (spliceSubqueryOnlyTrashed), so their onlyTrashed is positional too.
+func (r *OrmBuilder) spliceOnlyTrashedPredicate(builder *querybuilder.Builder, whereCount int, calls []onlyTrashedCall) {
 	wheres := builder.State().Wheres
 	predicate := wheres[whereCount]
 	original := slices.Clone(wheres[:whereCount])
 
-	calls := r.conditions.onlyTrashedCalls
 	if len(calls) == 0 {
 		calls = []onlyTrashedCall{{}}
 	}
@@ -443,8 +462,6 @@ func (r *OrmBuilder) spliceOnlyTrashed(builder *querybuilder.Builder) error {
 		items[i] = item
 	}
 	r.conditions.relations = items
-
-	return nil
 }
 
 // globalScopeRemoved reports whether the query removed the named global scope - Laravel's

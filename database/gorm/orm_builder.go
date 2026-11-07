@@ -1809,6 +1809,13 @@ func (r *OrmBuilder) setOneOfMany(columns []oneOfManyColumn, keyAggregate string
 		joinMark:      len(state.Joins),
 		whereBindMark: len(state.Bindings["where"]),
 		joinBindMark:  len(state.Bindings["join"]),
+		// The removals are taken now, as newOneOfManySubQuery takes removedScopes() when ofMany
+		// runs: only the ones written before OfMany reach the aggregate (oracle, illuminate/database
+		// v12.55.1, real sqlite, /Users/dog/.claude/jobs/013c27a0/tmp/r15b-probes/oracle.php O1-O5, O7, L1-L3 and
+		// /tmp/r14v/probe_ofmany_orders.php: latestOfMany()->withoutGlobalScope('active') keeps
+		// `"deleted_at" is null and "active" = ?` in the aggregate and drops "active" from the outer
+		// query only).
+		removals: scopeRemovalsOf(r),
 	}
 	return r.setConditions(conditions)
 }
@@ -3576,15 +3583,21 @@ func (r *OrmBuilder) addNestedWhereQuery(callback func(contractsorm.Query) contr
 	// nothing when no where remains.
 	nested.flushWheres()
 
-	// A child OnlyTrashed would have had its "is not null" predicate written when the child was
-	// compiled; the child only ever merges as one group, so the predicate joins its wheres here -
-	// inside the group, at the position each call recorded, where Laravel's onlyTrashed macro wrote
-	// it (oracle, /Users/dog/.claude/jobs/013c27a0/tmp/r15-probes/r15-r14-mutants/probe5.out N1, N2,
-	// N4: `("sr_users"."deleted_at" is not null and "email" = ?)` for onlyTrashed()->where()).
-	if nested.conditions.onlyTrashed {
-		if err := nested.spliceOnlyTrashed(nested.query); err != nil {
-			return r.withError(err)
-		}
+	// An onlyTrashed or a whereHas / has / doesntHave the closure called wrote its clause onto the
+	// closure's builder at call time in Laravel - the macro's whereNotNull, and addHasWhere's exists
+	// - so both are part of the nested group, at the position each call recorded. Rendering them
+	// needs the model, which a query may only learn from its destination when it compiles, so such
+	// a group is deferred whole: it is recorded with the relation existence clauses at this where
+	// position, and applyRelations finishes it (applyNestedGroup) and splices it back here.
+	if nested.conditions.onlyTrashed || len(nested.conditions.relations) > 0 {
+		r.conditions.relations = deep.Append(r.conditions.relations, relationExistence{
+			conjunction:  boolean,
+			whereIndex:   len(r.query.State().Wheres),
+			bindingIndex: len(r.query.State().Bindings["where"]),
+			nestedGroup:  nested,
+		})
+
+		return r
 	}
 
 	r.query.AddNestedWhereQuery(nested.query, boolean)
@@ -3604,6 +3617,12 @@ func (r *OrmBuilder) newQueryWithoutRelationships() *OrmBuilder {
 	child.conditions.withTrashed = false
 	child.conditions.onlyTrashed = false
 	child.conditions.onlyTrashedCalls = nil
+	// Nor are the parent's relation existence clauses: the ones the closure records are its own
+	// nested group's, and an inherited one would be rendered a second time inside the group (oracle,
+	// illuminate/database v12.55.1, real sqlite, /Users/dog/.claude/jobs/013c27a0/tmp/r15b-verify-probes/inherit.php D1:
+	// whereHas('posts')->where(fn => where('email', 'a')) compiles `where exists (...) and ("email" =
+	// ?)`).
+	child.conditions.relations = nil
 
 	return child
 }
@@ -3869,6 +3888,7 @@ func (r *OrmBuilder) scopesRemoveSoftDeletingScope(scopes []func(contractsorm.Qu
 // returning something other than an OrmBuilder is tolerated by keeping the receiver as the chain.
 func (r *OrmBuilder) applyScope(apply func(contractsorm.Query) contractsorm.Query) *OrmBuilder {
 	originalWhereCount := len(r.query.State().Wheres)
+	originalOnlyTrashedCalls := len(r.conditions.onlyTrashedCalls)
 
 	scoped, ok := apply(r).(*OrmBuilder)
 	if !ok {
@@ -3880,6 +3900,21 @@ func (r *OrmBuilder) applyScope(apply func(contractsorm.Query) contractsorm.Quer
 	scoped.conditions.scopes = nil
 
 	query := scoped.flushWheres()
+
+	// An onlyTrashed the scope called is Laravel's macro running inside callScope: its whereNotNull
+	// lands on the query at call time, among the scope's own wheres and before they are regrouped.
+	// The soft-delete step of withScopesApplied has already run by now - SoftDeletingScope is the
+	// first applied scope, so the macro's withoutGlobalScope comes too late to drop the "is null" -
+	// so the calls this scope recorded are written here. Oracle (illuminate/database v12.55.1, real
+	// sqlite, /Users/dog/.claude/jobs/013c27a0/tmp/r15b-probes/oracle.php G1, first measured in
+	// /Users/dog/.claude/jobs/013c27a0/tmp/r15-probes/r15-r14-mutants/probe4.out): a scope calling
+	// onlyTrashed() compiles `where "email" = ? and "sr_users"."deleted_at" is null and
+	// "sr_users"."deleted_at" is not null`.
+	if calls := query.conditions.onlyTrashedCalls; len(calls) > originalOnlyTrashedCalls && query.usesFrameworkSoftDelete() {
+		if err := query.spliceOnlyTrashedCalls(query.query, calls[originalOnlyTrashedCalls:]); err != nil {
+			query.conditions.err = err
+		}
+	}
 
 	if len(query.query.State().Wheres) > originalWhereCount {
 		query.addNewWheresWithinGroup(originalWhereCount)

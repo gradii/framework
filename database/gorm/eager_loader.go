@@ -1280,25 +1280,24 @@ func (r *OrmBuilder) oneOfManyJoin(builder *OrmBuilder, desc *relationDescriptor
 
 		// The related model's soft-delete predicate and its remaining global scopes reach every
 		// aggregate level the way Laravel's scopes do: the SoftDeletingScope first (the trait boots
-		// before the model's own scopes), then each user scope in declaration order; the relation's
-		// own removals - its OnQuery's withTrashed()/onlyTrashed()/withoutGlobalScope() - govern
-		// both, the way mergeConstraintsFrom folds the relation's removedScopes into the ofMany
-		// subquery. The caller's existence/count closure does NOT reach this subquery (oracle,
+		// before the model's own scopes), then each user scope in declaration order; the removals
+		// the relation query carried when OfMany was called - its OnQuery's withTrashed()/
+		// onlyTrashed()/withoutGlobalScope() written before OfMany - govern both, the way
+		// newOneOfManySubQuery starts from withoutGlobalScopes($this->removedScopes()) at ofMany
+		// time. A removal written after OfMany governs the outer query only (oracle,
+		// /Users/dog/.claude/jobs/013c27a0/tmp/r15b-probes/oracle.php O1-O5, L1-L3), and so does the caller's existence/count closure (oracle,
 		// /tmp/r13v/ofmany_probe.php + ofmany2_probe.php + ofmany3_probe.php: the aggregate carries
 		// `and "om_posts"."deleted_at" is null and "published" = ?`, dropping either under the
 		// relation's removals; a caller's withoutGlobalScopes() removes them only from the outer
 		// query).
-		removals := scopeRemovalsOf(builder)
 		// onlyTrashed is a macro: it removes SoftDeletingScope and writes its whereNotNull onto the
 		// relation query alone. The aggregate subquery (newOneOfManySubQuery) inherits only the
 		// removal, so it carries no soft-delete predicate at all (oracle,
-		// /Users/dog/.claude/jobs/013c27a0/tmp/r14-probes/probe_ofmany.out E3).
-		if removals.onlyTrashed {
-			removals.onlyTrashed = false
-			removals.withTrashed = true
-		}
+		// /Users/dog/.claude/jobs/013c27a0/tmp/r14-probes/probe_ofmany.out E3) - applySubquerySoftDelete
+		// writes nothing for an onlyTrashed removal.
+		removals := cfg.removals
 		r.applySubquerySoftDelete(sub, desc.RelatedTable, desc.RelatedModel, removals)
-		r.applyRelatedGlobalScopes(sub, desc.RelatedModel, removals)
+		r.applyRelatedGlobalScopes(sub, desc.RelatedTable, desc.RelatedModel, removals)
 
 		// A soft-deletable through model's predicate reaches every aggregate level too, after the
 		// related model's: each level performs the through join, so the through table is filtered

@@ -135,6 +135,12 @@ type oneOfManyConfig struct {
 	joinMark      int
 	whereBindMark int
 	joinBindMark  int
+
+	// removals is the scope-removal state the relation query carried when OfMany was called.
+	// Laravel's newOneOfManySubQuery builds the aggregate from withoutGlobalScopes(
+	// $this->removedScopes()) at ofMany time, so a removal written before OfMany reaches the
+	// aggregate while one written after it governs the outer relation query alone.
+	removals subqueryScopeRemovals
 }
 
 type Select struct {
@@ -222,6 +228,13 @@ type relationExistence struct {
 	// distinct type-column values when the statement is compiled, instead of coming from
 	// model instances.
 	morphAuto bool
+
+	// nestedGroup is a where closure's query whose wheres need the parent model to be finished: an
+	// existence clause or an onlyTrashed predicate the closure wrote. Laravel writes both onto the
+	// closure's builder at call time; the port renders them when the statement compiles (the model
+	// may only be known from the destination by then), so the whole nested group is deferred as one
+	// clause at the position the where call recorded, and applyRelations finishes and splices it.
+	nestedGroup *OrmBuilder
 }
 
 // hasStringColumns returns true if selectItems contains any string (regular column) entries
