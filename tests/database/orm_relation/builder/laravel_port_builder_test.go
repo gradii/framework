@@ -26,8 +26,7 @@
 // equivalent Go chain compiled against the harness) and the test is skipped with the concrete
 // divergence — never weakened. The recurring divergences:
 //
-//   - relation existence in WHERE: callback clauses beyond wheres (having/join) and a
-//     callback-nested whereHas are dropped;
+//   - relation existence in WHERE: callback clauses beyond wheres (having/join) are dropped;
 //   - no WhereMorphedTo family, SelectSub, onDelete, onClone, Pipe on the Go builder;
 //   - an update with no where/key is refused (OrmMissingWhereClause) where Laravel compiles a
 //     full-table update.
@@ -81,10 +80,6 @@ const (
 	builderSkipNoPipe = "our ORM diverges: the Go builder has no Pipe — a caller passes the query to a plain Go function"
 
 	builderSkipExistenceWhere = "our ORM diverges: clauses a callback adds beyond wheres (having, join) are dropped instead of carried into the subquery (probe)"
-
-	builderSkipSelfExistence = "our ORM diverges: the callback-nested form whereHas(\"parentFoo\", q => q.has(\"childFoo\")) drops the queued nested exists instead of carrying it into the subquery (probe: the nested form compiles to `select * from \"self_related_stubs\" where exists (select * from \"self_related_stubs\" as \"self_alias_hash\" where \"self_alias_hash\".\"id\" = \"self_related_stubs\".\"parent_id\")`, the inner exists is absent from the nested form), so the corpus equality between the two forms cannot hold; the self aliasing itself now matches the oracle, and the dotted form is pinned by TestBuilder_SelfHasNestedUsesAlias"
-
-	builderSkipHasNestedCallback = "our ORM diverges: the dotted form `has(\"foo.bar\")` compiles (and both Go forms agree on the simple case), but the callback-nested form `whereHas(\"foo\", q => q.whereHas(\"bar\", ...))` drops the inner whereHas' constraints entirely (probe)"
 
 	builderSkipNoMorphedTo = "our ORM diverges: the Go builder has no WhereMorphedTo / WhereNotMorphedTo / OrWhereMorphedTo family (nor the class-string, null or morph-map variants). Oracle pins e.g. `where ((\"...\".\"morph_type\" = ? and \"...\".\"morph_id\" in (?)))` and, for sqlite's null-safe form, `where not ((\"...\".\"morph_type\" is ? and \"...\".\"morph_id\" in (?)))`"
 
@@ -399,6 +394,8 @@ func (builderAggregateCloseRelatedStub) Relations() map[string]contractsorm.Rela
 		// bar(): hasMany(FarRelatedStub::class) - the FK default derives from this stub's type name,
 		// the key the corpus's nested doesntHave('foo.bar') assertion pins.
 		"bar": contractsorm.HasMany{Related: &builderAggregateFarRelatedStub{}, ForeignKey: "eloquent_builder_test_model_close_related_stub_id"},
+		// baz(): the same hasMany(FarRelatedStub::class), the second relation testOrHasNested reads.
+		"baz": contractsorm.HasMany{Related: &builderAggregateFarRelatedStub{}, ForeignKey: "eloquent_builder_test_model_close_related_stub_id"},
 	}
 }
 
@@ -2546,18 +2543,49 @@ func TestBuilder_WithExistsAndConstraintsWithBindingInSelectSub(t *testing.T) {
 	t.Skip(builderSkipNoSelectSub)
 }
 
-// --- skips: nested has -----------------------------------------------------------
+// --- nested has ------------------------------------------------------------------
+//
+// The corpus asserts the callback-nested form equals the dotted one; both are pinned to the
+// statement the oracle compiles (php .claude/laravel-oracle/oracle.php /Users/dog/.claude/jobs/013c27a0/tmp/r15bgate-probes/nested.php,
+// v12.55.1, rows N1-N4: each row's callback and dotted forms print the same text).
+
+// builderNestedBarExists is the inner exists has('foo.bar') nests inside the foo subquery.
+const builderNestedBarExists = `exists (select * from "eloquent_builder_test_model_far_related_stubs" where "eloquent_builder_test_model_close_related_stubs"."id" = "eloquent_builder_test_model_far_related_stubs"."eloquent_builder_test_model_close_related_stub_id"`
+
+// builderNestedFooExists opens the foo subquery the nested has-family rows share.
+const builderNestedFooExists = `exists (select * from "eloquent_builder_test_model_close_related_stubs" where "eloquent_builder_test_model_parent_stubs"."foo_id" = "eloquent_builder_test_model_close_related_stubs"."id" and `
 
 func TestBuilder_HasNestedWithConstraints(t *testing.T) {
+	query := newRelationQuery(t)
+
 	// Laravel: whereHas('foo', q => q.whereHas('bar', constraint)) must compile to the same SQL as
-	// the dotted whereHas('foo.bar', constraint).
-	t.Skip(builderSkipHasNestedCallback)
+	// the dotted whereHas('foo.bar', constraint) (oracle N1).
+	want := `select * from "eloquent_builder_test_model_parent_stubs" where ` + builderNestedFooExists + builderNestedBarExists + ` and "baz" = ?))`
+	constraint := func(q contractsorm.Query) contractsorm.Query { return q.Where("baz", "bam") }
+
+	nested := cloneRelationQuery(t, query).Model(&builderAggregateParentStub{}).WhereHas("foo", func(q contractsorm.Query) contractsorm.Query {
+		return q.WhereHas("bar", constraint)
+	}).ToSql().Get(&builderAggregateParentStub{})
+	dotted := cloneRelationQuery(t, query).Model(&builderAggregateParentStub{}).WhereHas("foo.bar", constraint).ToSql().Get(&builderAggregateParentStub{})
+
+	assert.Equal(t, want, nested)
+	assert.Equal(t, nested, dotted)
 }
 
 func TestBuilder_HasNested(t *testing.T) {
+	query := newRelationQuery(t)
+
 	// Laravel: whereHas('foo', q => q.has('bar')) must compile to the same statement as
-	// has('foo.bar').
-	t.Skip(builderSkipHasNestedCallback)
+	// has('foo.bar') (oracle N2).
+	want := `select * from "eloquent_builder_test_model_parent_stubs" where ` + builderNestedFooExists + builderNestedBarExists + `))`
+
+	nested := cloneRelationQuery(t, query).Model(&builderAggregateParentStub{}).WhereHas("foo", func(q contractsorm.Query) contractsorm.Query {
+		return q.Has("bar")
+	}).ToSql().Get(&builderAggregateParentStub{})
+	dotted := cloneRelationQuery(t, query).Model(&builderAggregateParentStub{}).Has("foo.bar").ToSql().Get(&builderAggregateParentStub{})
+
+	assert.Equal(t, want, nested)
+	assert.Equal(t, nested, dotted)
 }
 
 func TestBuilder_HasNestedWithMorphTo(t *testing.T) {
@@ -2573,15 +2601,71 @@ func TestBuilder_HasNestedWithMorphToAndMultipleSubRelations(t *testing.T) {
 }
 
 func TestBuilder_OrHasNested(t *testing.T) {
+	query := newRelationQuery(t)
+
 	// Laravel: whereHas('foo', has('bar'))->orWhereHas('foo', has('baz')) must match
-	// has('foo.bar')->orHas('foo.baz').
-	t.Skip(builderSkipHasNestedCallback)
+	// has('foo.bar')->orHas('foo.baz') (oracle N3; bar and baz read the same table).
+	branch := builderNestedFooExists + builderNestedBarExists + `))`
+	want := `select * from "eloquent_builder_test_model_parent_stubs" where ` + branch + ` or ` + branch
+
+	nested := cloneRelationQuery(t, query).Model(&builderAggregateParentStub{}).
+		WhereHas("foo", func(q contractsorm.Query) contractsorm.Query { return q.Has("bar") }).
+		OrWhereHas("foo", func(q contractsorm.Query) contractsorm.Query { return q.Has("baz") }).
+		ToSql().Get(&builderAggregateParentStub{})
+	dotted := cloneRelationQuery(t, query).Model(&builderAggregateParentStub{}).Has("foo.bar").OrHas("foo.baz").ToSql().Get(&builderAggregateParentStub{})
+
+	assert.Equal(t, want, nested)
+	assert.Equal(t, nested, dotted)
 }
 
 func TestBuilder_SelfHasNested(t *testing.T) {
+	query := newRelationQuery(t)
+
 	// Laravel: whereHas('parentFoo', has('childFoo')) must match has('parentFoo.childFoo') once the
-	// dynamic alias is normalised.
-	t.Skip(builderSkipSelfExistence)
+	// dynamic alias is normalised (oracle N4). The callback runs on the self-aliased query, so the
+	// inner exists correlates to the alias and does not alias the table again.
+	want := `select * from "self_related_stubs" where exists (select * from "self_related_stubs" as "self_alias_hash" where "self_alias_hash"."id" = "self_related_stubs"."parent_id" and exists (select * from "self_related_stubs" where "self_alias_hash"."id" = "self_related_stubs"."parent_id"))`
+
+	nested := normalizeBuilderSelfAlias(cloneRelationQuery(t, query).Model(&builderSelfRow{}).WhereHas("ParentFoo", func(q contractsorm.Query) contractsorm.Query {
+		return q.Has("ChildFoo")
+	}).ToSql().Get(&builderSelfRow{}))
+	dotted := normalizeBuilderSelfAlias(cloneRelationQuery(t, query).Model(&builderSelfRow{}).Has("ParentFoo.ChildFoo").ToSql().Get(&builderSelfRow{}))
+
+	assert.Equal(t, want, nested)
+	assert.Equal(t, nested, dotted)
+}
+
+// TestBuilder_SelfHasNestedReadsTheParentsChildren checks the callback-nested self form against real
+// rows: the inner has correlates to the aliased parent, so it reads "whose parent has a child" -
+// Laravel's rows for this seed (1 root, 2 under 1, 3 under 2, 4 root) are [2, 3] for
+// whereHas('parentFoo', has('childFoo')) and [1] for whereHas('childFoos', has('childFoos'))
+// (oracle /Users/dog/.claude/jobs/013c27a0/tmp/r15bgate-probes/selfnest.php R1, R4, the same shapes on sn_nodes). Correlated to the
+// outermost row instead, the first read would drop 3 (whose own row has no child).
+func TestBuilder_SelfHasNestedReadsTheParentsChildren(t *testing.T) {
+	query := newRelationQuery(t)
+	runRelationSchema(t, query, `create table self_related_stubs (id integer primary key autoincrement, parent_id integer)`)
+	_, err := cloneRelationQuery(t, query).Exec(`insert into self_related_stubs (id, parent_id) values (1, null), (2, 1), (3, 2), (4, null)`)
+	require.NoError(t, err)
+
+	ids := func(rows []builderSelfRow) []uint64 {
+		out := make([]uint64, 0, len(rows))
+		for _, row := range rows {
+			out = append(out, row.ID)
+		}
+		return out
+	}
+
+	var rows []builderSelfRow
+	require.NoError(t, cloneRelationQuery(t, query).Model(&builderSelfRow{}).WhereHas("ParentFoo", func(q contractsorm.Query) contractsorm.Query {
+		return q.Has("ChildFoo")
+	}).Order("id").Get(&rows))
+	assert.Equal(t, []uint64{2, 3}, ids(rows))
+
+	rows = nil
+	require.NoError(t, cloneRelationQuery(t, query).Model(&builderSelfRow{}).WhereHas("ChildFoos", func(q contractsorm.Query) contractsorm.Query {
+		return q.Has("ChildFoos")
+	}).Order("id").Get(&rows))
+	assert.Equal(t, []uint64{1}, ids(rows))
 }
 
 func TestBuilder_SelfHasNestedUsesAlias(t *testing.T) {

@@ -78,6 +78,11 @@ type Conditions struct {
 	// writes its whereNotNull at call time - once per call - so each predicate is spliced back to the
 	// position its call recorded when the statement compiles.
 	onlyTrashedCalls []onlyTrashedCall
+	// existenceAlias is set on a whereHas callback's builder when the existence level it scopes
+	// aliased its table (getRelationExistenceQueryForSelfRelation renames the related model's table
+	// to the laravel_reserved_N hash): the existence clauses the callback wrote then correlate to the
+	// alias, and a same-table relation under it sees the aliased from string, so it does not alias.
+	existenceAlias string
 	// pendingAttributes are the column values WithAttributes recorded for every model the query
 	// creates, mirroring Builder::$pendingAttributes. Keys are column names as the caller wrote them;
 	// the write path resolves them against the model's schema.

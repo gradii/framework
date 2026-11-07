@@ -592,7 +592,7 @@ func (r *OrmBuilder) compileExistenceSubqueryIn(desc *relationDescriptor, callba
 	// segment as a plain whereHas, so only the leaf clause carries the count comparison.
 	var callbackScoped *OrmBuilder
 	if desc.Nested == nil {
-		callbackScoped, err = r.applyRelationScope(builder, callback, relatedQualifier, desc.RelatedModel)
+		callbackScoped, err = r.applyRelationScope(builder, callback, relatedQualifier, desc.RelatedModel, selfAlias)
 		if err != nil {
 			return nil, "", err
 		}
@@ -674,7 +674,7 @@ func (r *OrmBuilder) compileMorphExistenceSubquery(desc *relationDescriptor, mor
 	if joinSQL != "" {
 		builder.JoinRaw(joinSQL, joinArgs, "inner")
 	}
-	callbackScoped, err := r.applyRelationScope(builder, callback, desc.RelatedTable, desc.RelatedModel)
+	callbackScoped, err := r.applyRelationScope(builder, callback, desc.RelatedTable, desc.RelatedModel, "")
 	r.keepFirstError(err)
 	if relationScoped != nil {
 		appendWhereClauses(builder, relationScoped.query)
@@ -772,7 +772,7 @@ func (r *OrmBuilder) applyRelations(builder *querybuilder.Builder) error {
 		if item.nestedGroup != nil {
 			// The group keeps the where call's own boolean, "and not" / "or not" included
 			// (WhereNot / OrWhereNot closures).
-			if err := applyNestedGroup(builder, parent, item.nestedGroup, item.conjunction); err != nil {
+			if err := applyNestedGroup(builder, parent, item.nestedGroup, item.conjunction, r.conditions.existenceAlias); err != nil {
 				return err
 			}
 		} else if parent == nil {
@@ -809,7 +809,17 @@ func (r *OrmBuilder) applyRelations(builder *querybuilder.Builder) error {
 					}
 				}
 
-				inner, _, err := r.compileExistenceSubqueryIn(desc, item.callback, desc.ParentTable, desc.ParentTable, leafOperator, leafCount)
+				// A builder that is itself a self-aliased existence level - a whereHas callback's
+				// query inside getRelationExistenceQueryForSelfRelation, whose model's table was
+				// renamed to the alias - correlates its own existence clauses to the alias, and its
+				// from string is the aliased one, so a same-table relation under it does not alias
+				// again (`$parentQuery->getQuery()->from` is "<table> as <alias>").
+				parentFrom, parentQualifier := desc.ParentTable, desc.ParentTable
+				if alias := r.conditions.existenceAlias; alias != "" {
+					parentFrom, parentQualifier = desc.ParentTable+" as "+alias, alias
+				}
+
+				inner, _, err := r.compileExistenceSubqueryIn(desc, item.callback, parentFrom, parentQualifier, leafOperator, leafCount)
 				if err != nil {
 					return err
 				}
@@ -847,11 +857,16 @@ func (r *OrmBuilder) applyRelations(builder *querybuilder.Builder) error {
 // /Users/dog/.claude/jobs/013c27a0/tmp/r15-probes/r15-r14-mutants/probe5.out N1, N2, N4 -
 // where(fn => onlyTrashed()->where('email', 'a')) compiles `("sr_users"."deleted_at" is not null and
 // "email" = ?)`.
-func applyNestedGroup(builder *querybuilder.Builder, parent any, nested *OrmBuilder, boolean string) error {
+//
+// existenceAlias is the enclosing builder's self-join alias: a where closure inside a self-aliased
+// existence level writes onto that level's query, so its existence clauses correlate to the alias as
+// well (oracle /Users/dog/.claude/jobs/013c27a0/tmp/r15bgate-probes/selfnest.php P3).
+func applyNestedGroup(builder *querybuilder.Builder, parent any, nested *OrmBuilder, boolean, existenceAlias string) error {
 	group := nested.clone()
 	if parent != nil {
 		group.conditions.model = parent
 	}
+	group.conditions.existenceAlias = existenceAlias
 
 	if group.conditions.onlyTrashed {
 		if err := group.spliceOnlyTrashed(group.query); err != nil {
@@ -1128,7 +1143,7 @@ func (r *OrmBuilder) compileMorphToExistenceSubquery(desc *relationDescriptor, r
 	if joinSQL != "" {
 		builder.JoinRaw(joinSQL, joinArgs, "inner")
 	}
-	callbackScoped, err := r.applyRelationScope(builder, callback, relatedTable, relatedModel)
+	callbackScoped, err := r.applyRelationScope(builder, callback, relatedTable, relatedModel, "")
 	r.keepFirstError(err)
 	if relationScoped != nil {
 		appendWhereClauses(builder, relationScoped.query)
@@ -1435,8 +1450,10 @@ func setSubquerySelect(builder *querybuilder.Builder, expression string) {
 // table and model are the related side the subquery reads (table is the self-join alias when the
 // level aliased itself): the clauses the callback deferred - its onlyTrashed predicates, the
 // existence clauses and where-closure groups it wrote - are finished against the related model
-// (finishSubqueryScope) before the clauses are carried over.
-func (r *OrmBuilder) applyRelationScope(builder *querybuilder.Builder, callback contractsorm.RelationCallback, table string, model any) (*OrmBuilder, error) {
+// (finishSubqueryScope) before the clauses are carried over. selfAlias is the alias the level gave
+// the related table ("" when it did not alias): the callback's builder is that aliased query, so the
+// existence clauses it wrote correlate to the alias (finishSubqueryScope).
+func (r *OrmBuilder) applyRelationScope(builder *querybuilder.Builder, callback contractsorm.RelationCallback, table string, model any, selfAlias string) (*OrmBuilder, error) {
 	if callback == nil {
 		return nil, nil
 	}
@@ -1449,6 +1466,7 @@ func (r *OrmBuilder) applyRelationScope(builder *querybuilder.Builder, callback 
 	}
 
 	scoped = scoped.flushWheres()
+	scoped.conditions.existenceAlias = selfAlias
 	if err := finishSubqueryScope(scoped, table, model); err != nil {
 		return nil, err
 	}
