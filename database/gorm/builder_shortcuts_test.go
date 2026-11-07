@@ -294,6 +294,37 @@ func TestWithAttributesReachTheCreatedModel(t *testing.T) {
 	assert.Equal(t, "kept", batch[1].Name)
 }
 
+// A zero the query's WithZero list names is an attribute the caller carries, so it beats a pending
+// one, as Eloquent's caller false/0/null beats $pendingAttributes (array_merge($pending,
+// $attributes); oracle v12.55.1, executed, /tmp/r15b/pending.php P1-P3: `insert into "pa_posts"
+// ("flag", "title") values (?, ?)` [false|null|0, "a"]). A zero WithZero does not name still takes
+// the pending value (P4).
+func TestWithAttributesYieldToAWithZeroCallerZero(t *testing.T) {
+	query := compiledQuery(t, &shortcutUser{}, Conditions{}).WithAttributes("score", 9, false).(*OrmBuilder)
+
+	unnamed := &shortcutUser{}
+	require.NoError(t, query.applyPendingAttributes(unnamed))
+	assert.Equal(t, 9, unnamed.Score, "an unnamed zero takes the pending value")
+
+	named := &shortcutUser{}
+	require.NoError(t, query.WithZero("Score").(*OrmBuilder).applyPendingAttributes(named))
+	assert.Equal(t, 0, named.Score, "a WithZero-named zero is the caller's value and wins")
+}
+
+// The create path: the WithZero-named zero is the value the INSERT writes, not the pending one.
+func TestCreateWritesAWithZeroCallerZeroOverThePendingAttribute(t *testing.T) {
+	query, recorder := newPostgresKeyQuery(t, &shortcutUser{})
+	recorder.returnLastInsertID(1)
+
+	user := &shortcutUser{Name: "n"}
+	require.NoError(t, query.WithAttributes("score", 9, false).WithZero("score").Create(user))
+
+	assert.Equal(t, 0, user.Score)
+	assert.Contains(t, recorder.last(t).sql, `"score"`)
+	assert.Contains(t, recorder.last(t).args, int64(0))
+	assert.NotContains(t, recorder.last(t).args, int64(9))
+}
+
 // The pending attributes are written to the row when the model is created.
 func TestCreateWritesThePendingAttributes(t *testing.T) {
 	query, recorder := newPostgresKeyQuery(t, &shortcutUser{})
@@ -471,9 +502,25 @@ func TestTouchStampsTheUpdatedAtColumn(t *testing.T) {
 	assert.Equal(t, `update "shortcut_users" set "updated_at" = ? where "id" = ?`, statement)
 	assert.Equal(t, []any{123, 1}, bindings)
 
-	noTimestamps := compiledQuery(t, &relUser{}, Conditions{}).Where("id", 1).(*OrmBuilder)
-	_, err = noTimestamps.Touch()
+	// A query with no model has no Eloquent touch to mirror (DB::table()->touch() is a
+	// BadMethodCallException, /tmp/r15b/touch.php T9) and reports the named error.
+	modelless := compiledQuery(t, nil, Conditions{}).Table("rel_users").Where("id", 1).(*OrmBuilder)
+	_, err = modelless.Touch()
 	assert.ErrorIs(t, err, errors.OrmQueryTimestampColumnNotFound)
+}
+
+// A model declaring no updated-at column touches nothing: Builder::touch returns false before any
+// statement (oracle v12.55.1, executed, /tmp/r15b/touch.php T1/T2: `false`, empty query log).
+// The Go signature spells false as a zero-row result and no error. A named column is still
+// stamped (T3), so only the column-less call short-circuits.
+func TestTouchWithoutUpdatedAtColumnRunsNoStatement(t *testing.T) {
+	query, recorder := newPostgresKeyQuery(t, &relUser{})
+
+	result, err := query.Where("id", 1).Touch()
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Zero(t, result.RowsAffected)
+	assert.Equal(t, 0, recorder.count(), "a model without an updated-at column runs no statement")
 }
 
 // --- Upsert ------------------------------------------------------------------------------------------

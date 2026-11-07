@@ -570,6 +570,14 @@ func SyncCore(b Builder, parent any, relation string, ids []any, detachMissing b
 	if err != nil {
 		return nil, err
 	}
+	records := orderedRecordIDs(ids)
+	// InteractsWithPivotTable::sync returns before any statement when the records are empty and it
+	// is not detaching (:106). A detaching sync still reads, to know what to detach, and toggle has
+	// no such check: it plucks the current ids whatever it was given (:34). Oracle v12.55.1,
+	// executed, /tmp/r15b/sync_empty.php A1-A3/A7, A4/A6 and A5.
+	if len(records) == 0 && !detachMissing && !toggle {
+		return &dbcontract.SyncResult{}, nil
+	}
 	// The current-ids read: toggle plucks the related key at the query level, the sync-family
 	// cores read `select *` (Laravel getCurrentlyAttachedPivots; oracle C1/C2).
 	var current []any
@@ -585,7 +593,6 @@ func SyncCore(b Builder, parent any, relation string, ids []any, detachMissing b
 	for _, id := range current {
 		currentSet[DictionaryKey(id)] = id
 	}
-	records := orderedRecordIDs(ids)
 	wantSet := make(map[string]struct{}, len(records))
 	for _, id := range records {
 		wantSet[DictionaryKey(id)] = struct{}{}
@@ -736,6 +743,14 @@ func SyncCoreWithPivot(b Builder, parent any, relation string, ids []any, idsWit
 	if err != nil {
 		return nil, err
 	}
+	records := orderedRecordIDs(ids)
+	// InteractsWithPivotTable::sync returns before any statement when the records are empty and it
+	// is not detaching (:106). A detaching sync still reads, to know what to detach, and toggle has
+	// no such check: it plucks the current ids whatever it was given (:34). Oracle v12.55.1,
+	// executed, /tmp/r15b/sync_empty.php A1-A3/A7, A4/A6 and A5.
+	if len(records) == 0 && !detachMissing && !toggle {
+		return &dbcontract.SyncResult{}, nil
+	}
 	// The current-ids read: toggle plucks the related key at the query level, the sync-family
 	// cores read `select *` (Laravel getCurrentlyAttachedPivots; oracle C1/C2).
 	var current []any
@@ -751,7 +766,6 @@ func SyncCoreWithPivot(b Builder, parent any, relation string, ids []any, idsWit
 	for _, id := range current {
 		currentSet[DictionaryKey(id)] = id
 	}
-	records := orderedRecordIDs(ids)
 	wantSet := make(map[string]struct{}, len(records))
 	for _, id := range records {
 		wantSet[DictionaryKey(id)] = struct{}{}

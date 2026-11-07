@@ -103,8 +103,9 @@ func (r *OrmBuilder) WriteSession() contractsorm.Query {
 }
 
 // ApplyPendingAttributes writes the query's WithAttributes-recorded pending attributes onto dest,
-// the caller's own non-zero values winning — applyPendingAttributes, the twin SetRelationFKOnChild
-// calls to run setForeignAttributesForCreate's pending loop (HasOneOrMany.php:498-504).
+// the caller's own non-zero values and WithZero-named zeros winning — applyPendingAttributes, the
+// twin SetRelationFKOnChild calls to run setForeignAttributesForCreate's pending loop
+// (HasOneOrMany.php:498-504).
 func (r *OrmBuilder) ApplyPendingAttributes(dest any) error {
 	return r.applyPendingAttributes(dest)
 }

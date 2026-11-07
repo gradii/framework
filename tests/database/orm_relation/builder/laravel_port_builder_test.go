@@ -103,8 +103,6 @@ const (
 	builderSkipNoSelectSub = "our ORM diverges: the corpus closure calls `$q->selectSub($query, 'bam_3_count')` and the ORM query exposes no SelectSub (only SelectRaw), so the closure as written cannot be ported; the oracle's observable - the SQL keeps only the aggregate column and the bindings stay empty (the extra select column is truncated and its binding cleared) - is guaranteed structurally by the Go pipeline (an aggregate callback contributes only where clauses), so a raw-SQL emulation would pass vacuously"
 
 	builderSkipUpdateGuard = "our ORM diverges: an update with no where clause or model key is refused (OrmMissingWhereClause — ToSql().Update returns \"\"), where the corpus compiles the full-table `update \"table\" set \"foo\" = ?, \"updated_at\" = ?` (oracle, sqlite grammar); with a keyed model the Go statement adds `where \"id\" = ?`, so the pinned statement cannot be produced"
-
-	builderSkipTouchNoColumn = "our ORM diverges: Touch on a model without an updated-at column returns the named error OrmQueryTimestampColumnNotFound (probe) where Laravel's touch() reports false"
 )
 
 // --- models --------------------------------------------------------------------
@@ -141,8 +139,8 @@ type builderStub struct {
 
 func (builderStub) TableName() string { return "table" }
 
-// builderStubNoTimestamp ports EloquentBuilderTestStubWithoutTimestamp (UPDATED_AT = null) for the
-// touch skip probe — kept so the skip's probe is reproducible.
+// builderStubNoTimestamp ports EloquentBuilderTestStubWithoutTimestamp (UPDATED_AT = null): no
+// auto-update field, so the model declares no updated-at column.
 type builderStubNoTimestamp struct {
 	ID  uint64 `gorm:"column:id;primaryKey;autoIncrement"`
 	Foo string `gorm:"column:foo"`
@@ -2782,11 +2780,32 @@ func TestBuilder_UpdateWithAliasWithQualifiedTimestampValue(t *testing.T) {
 	t.Skip(builderSkipUpdateGuard)
 }
 
-// --- skips: touch without timestamp ----------------------------------------------
+// --- touch without timestamp ------------------------------------------------------
 
 func TestBuilder_TouchWithoutUpdatedAtColumn(t *testing.T) {
-	// Laravel: touch() on a model whose UPDATED_AT is null performs no update and returns false.
-	t.Skip(builderSkipTouchNoColumn)
+	query := newRelationQuery(t)
+	runRelationSchema(t, query, `create table "table" (id integer primary key autoincrement, foo text)`)
+	require.NoError(t, cloneRelationQuery(t, query).Create(&builderStubNoTimestamp{Foo: "bar"}))
+
+	// Laravel: touch() on a model whose UPDATED_AT is null performs no update and returns false
+	// (the corpus's shouldNotReceive('update') + assertFalse). Oracle v12.55.1, executed,
+	// /tmp/r15b/touch.php T1: `false`, empty query log. The Go signature's false is a zero-row
+	// result with no error, and the query log proves no statement ran.
+	withContext, ctx := builderChunkContext(t, query)
+	result, err := withContext.WithContext(ctx).Model(&builderStubNoTimestamp{}).Where("id", 1).Touch()
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Zero(t, result.RowsAffected)
+	assert.Empty(t, databasedb.GetQueryLog(ctx), "touch() on a model without UPDATED_AT runs no statement")
+
+	// Control (oracle T3): a named column is still stamped on the same model, and the same log
+	// records it — so the empty log above is not a log that records nothing.
+	named, err := withContext.WithContext(ctx).Model(&builderStubNoTimestamp{}).Where("id", 1).Touch("foo")
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), named.RowsAffected)
+	logs := databasedb.GetQueryLog(ctx)
+	require.Len(t, logs, 1)
+	assert.Contains(t, logs[0].Query, `update "table" set "foo" = `)
 }
 
 // --- skips: casts / clone model / passthru / pipe --------------------------------

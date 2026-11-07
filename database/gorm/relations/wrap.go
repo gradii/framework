@@ -325,8 +325,9 @@ type Builder interface {
 	// the error-reporting form of Hooks.ModelTable.
 	TableOf(model any) (string, error)
 	// ApplyPendingAttributes writes the query's WithAttributes-recorded pending attributes onto
-	// dest, the caller's own non-zero values winning — applyPendingAttributes, the twin
-	// setRelationFKOnChild reaches for setForeignAttributesForCreate's pending loop
+	// dest, the caller's own non-zero values and WithZero-named zeros winning —
+	// applyPendingAttributes, the twin setRelationFKOnChild reaches for
+	// setForeignAttributesForCreate's pending loop
 	// (HasOneOrMany.php:498-504, Builder::$pendingAttributes).
 	ApplyPendingAttributes(dest any) error
 	// RelationInfoOf resolves parent's relation by name and hands back its projection — the

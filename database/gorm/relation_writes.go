@@ -508,6 +508,7 @@ func (r *OrmBuilder) FindOrNewRelation(parent any, relation string, id any, dest
 // Many2Many, MorphToMany (the search is the plain related read and the miss response is the
 // attrs+values overlay; the pivot row is a later, explicit write).
 func (r *OrmBuilder) FirstOrNewRelation(parent any, relation string, attrs map[string]any, values map[string]any, dest any) error {
+	defer r.withZeroFor(attrs, values)()
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}
@@ -1058,6 +1059,7 @@ func (r *OrmBuilder) CreateOrFirstRelation(parent any, relation string, attrs ma
 //
 // RelationWriter.Make shell (contracts/database/orm/relation_writer.go:65) — reached through Query.Relation(parent, name); the flat Orm.Make form intentionally does not exist (relation_writer.go:9).
 func (r *OrmBuilder) MakeRelation(parent any, relation string, attrs map[string]any, dest any) error {
+	defer r.withZeroFor(attrs)()
 	if !isValidParent(parent) {
 		return errors.OrmRelationParentNotPointer.Args(parent)
 	}

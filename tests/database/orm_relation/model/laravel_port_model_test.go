@@ -1854,10 +1854,11 @@ func TestModel_NotTouchingModelWithUpdatedAtNull(t *testing.T) {
 	// is a model carrying no updated-at field, which IsIgnoringTouch reports as ignoring.
 	assert.True(t, databaseorm.IsIgnoringTouch(&modelPost{}))
 
-	// Behaviour probe (a recorded divergence): Touch reads the missing column and reports the
-	// named error where Laravel's touch() reports false.
-	_, err := cloneRelationQuery(t, query).Model(&modelPost{ID: 1}).Touch()
-	require.ErrorContains(t, err, "updated at")
+	// The touch it implies runs no statement: Builder::touch returns false before any query on a
+	// model without UPDATED_AT, and the instance touch writes nothing either (oracle v12.55.1,
+	// executed, /tmp/r15b/touch.php T7 `false`, T5 `true`, both with an empty query log). The Go
+	// signature spells that as a zero-row result and no error.
+	modelAssertTouchRunsNoStatement(t, query, &modelPost{ID: 1})
 }
 
 func TestModel_NotTouchingModelWithoutTimestamps(t *testing.T) {
@@ -1868,9 +1869,24 @@ func TestModel_NotTouchingModelWithoutTimestamps(t *testing.T) {
 	// without a timestamp field is that shape, reported by IsIgnoringTouch as ignoring.
 	assert.True(t, databaseorm.IsIgnoringTouch(&modelComment{}))
 
-	// Behaviour probe: Touch reports the missing column (the same recorded divergence).
-	_, err := cloneRelationQuery(t, query).Model(&modelComment{ID: 1}).Touch()
-	require.ErrorContains(t, err, "updated at")
+	// The touch it implies runs no statement (oracle v12.55.1, executed, /tmp/r15b/touch.php T8
+	// builder `false`, T6 instance `false`, both with an empty query log).
+	modelAssertTouchRunsNoStatement(t, query, &modelComment{ID: 1})
+}
+
+// modelAssertTouchRunsNoStatement touches model through a query-logged query and asserts the
+// touch ran nothing and failed nothing.
+func modelAssertTouchRunsNoStatement(t *testing.T, query contractsorm.Query, model any) {
+	t.Helper()
+
+	ctx := databasedb.EnableQueryLog(context.Background())
+	withContext, ok := cloneRelationQuery(t, query).(contractsorm.QueryWithContext)
+	require.True(t, ok, "the ORM query must support WithContext")
+	res, err := withContext.WithContext(ctx).Model(model).Touch()
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Zero(t, res.RowsAffected)
+	assert.Empty(t, databasedb.GetQueryLog(ctx), "a touch on a model without an updated-at column runs no statement")
 }
 
 func TestModel_GetOriginalCastsAttributes(t *testing.T) {

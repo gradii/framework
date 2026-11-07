@@ -650,7 +650,12 @@ func (r *OrmBuilder) qualifyColumn(column string) string {
 
 // applyPendingAttributes writes the recorded attributes onto a model about to be created, as
 // newModelInstance merges $pendingAttributes into the attributes it is given. The caller's own
-// values win: an attribute the model already carries a non-zero value for is left alone.
+// values win: an attribute the model already carries a non-zero value for is left alone, and so is
+// a zero the query's WithZero list names, the only way a struct can say it carries that attribute.
+// The Or* entry points name their map keys the same way (withZeroFor), so a false, 0 or null a
+// caller passes there survives the merge a later create() runs. Eloquent: array_merge($pending,
+// $attributes) and setForeignAttributesForCreate's array_key_exists; oracle v12.55.1, executed,
+// /tmp/r15b/pending.php P1-P4, P7, R1-R8, R10.
 func (r *OrmBuilder) applyPendingAttributes(dest any) error {
 	if len(r.conditions.pendingAttributes) == 0 || dest == nil {
 		return nil
@@ -694,7 +699,7 @@ func (r *OrmBuilder) applyPendingAttributes(dest any) error {
 		if !ok {
 			continue
 		}
-		if _, zero := field.ValueOf(r.ctx, reflected); !zero {
+		if _, zero := field.ValueOf(r.ctx, reflected); !zero || r.writesZero(schema, field.DBName) {
 			continue
 		}
 
@@ -808,7 +813,10 @@ func numericString(value any) (string, bool) {
 }
 
 // Touch sets the model's updated-at column, or the named column, to now on every matching row.
-// Mirrors Builder::touch: a model without an updated-at column touches nothing and reports it.
+// Mirrors Builder::touch: a model without an updated-at column runs no statement and returns false
+// (oracle v12.55.1, executed, /tmp/r15b/touch.php T1/T2), which this signature spells as a zero-row
+// result and no error. A query with no model at all has no Laravel touch to mirror
+// (DB::table('t')->touch() is a BadMethodCallException, T9) and reports the named error.
 //
 // On a query bound to a model — Model(m) — the touch also walks m's Touches owners once the row
 // is stamped: Eloquent's Model::touch saves the model, so its save path runs touchOwners, while
@@ -824,9 +832,12 @@ func (r *OrmBuilder) Touch(column ...string) (*contractsdb.Result, error) {
 		if !r.usesTimestamps(r.parentModel()) {
 			return &contractsdb.Result{}, nil
 		}
-		name = r.updatedAtColumn()
-		if name == "" {
+		schema := r.insertSchema()
+		if schema == nil {
 			return nil, errors.OrmQueryTimestampColumnNotFound.Args(modelName(r.parentModel()), "updated at")
+		}
+		if name = schemaUpdatedAtColumn(schema); name == "" {
+			return &contractsdb.Result{}, nil
 		}
 	}
 
