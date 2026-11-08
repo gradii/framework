@@ -1,12 +1,14 @@
 package gorm
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	contractsorm "github.com/gradii/framework/contracts/database/orm"
+	databaseorm "github.com/gradii/framework/database/orm"
 )
 
 // These pins cover three deferred-where regressions found in review of 2392d7ed. Each expectation is
@@ -132,4 +134,112 @@ func TestDeferredWhere_SharedPayloadKeepsPlaceholdersAndBindingsAligned(t *testi
 	}
 	assert.Equal(t, placeholders, len(bindings))
 	assert.Equal(t, []any{1, 1}, bindings)
+}
+
+// --- second review of 22aaa27d: the model is the closure's final one, grouping is decided on the
+// statement copy. Oracle: /Users/dog/.claude/jobs/013c27a0/tmp/r15e/oracle.php (v12.55.1, real sqlite).
+
+type dwcNode struct {
+	ID       uint
+	ParentID uint
+	Children []*dwcNode `gorm:"-"`
+	databaseorm.SoftDeletes
+}
+
+func (dwcNode) TableName() string { return "nodes" }
+
+func (dwcNode) Relations() map[string]contractsorm.Relation {
+	return map[string]contractsorm.Relation{"Children": contractsorm.HasMany{Related: &dwcNode{}, ForeignKey: "parent_id"}}
+}
+
+type dwcProjection struct {
+	ID    uint
+	Email string
+}
+
+func (dwcProjection) TableName() string { return "sd_users" }
+
+type dwcPlain struct{ ID uint }
+
+func (dwcPlain) TableName() string { return "plain_users" }
+
+// Oracle F1: SdUser::onlyTrashed() selects and updates with `"sd_users"."deleted_at" is not null`. A
+// reused Table query previewed into a plain projection first must not lose that predicate when a
+// scope adds OnlyTrashed: no decision may be made against the earlier read's destination.
+func TestDeferredWhere_EarlierDestinationDoesNotPruneOnlyTrashed(t *testing.T) {
+	q := compiledQuery(t, nil, Conditions{}).Table("sd_users")
+	_ = q.ToSql().Get(&[]dwcProjection{})
+	q = q.Scopes(func(q contractsorm.Query) contractsorm.Query { return q.OnlyTrashed() })
+
+	assert.Equal(t, `select * from "sd_users" where "sd_users"."deleted_at" is not null`, q.ToSql().Get(&[]scpSdUser{}))
+	assert.Equal(t, `update "sd_users" set "email" = ? where "sd_users"."deleted_at" is not null`, q.Model(&scpSdUser{}).ToSql().Update("email", "x"))
+}
+
+// Oracle F2: Node::whereHas('children', fn ($q) => $q->onlyTrashed()) filters the self-join alias. A
+// slice-shaped model on the callback query names the same table, so the alias is kept.
+func TestDeferredWhere_SliceModelKeepsTheSelfJoinAlias(t *testing.T) {
+	q := compiledQuery(t, &dwcNode{}, Conditions{}).WhereHas("Children", func(q contractsorm.Query) contractsorm.Query {
+		return q.Model(&[]dwcNode{}).OnlyTrashed()
+	})
+
+	statement, bindings := dwcCompile(t, q)
+	assert.Regexp(t, regexp.MustCompile(`^select \* from "nodes" where exists \(select \* from "nodes" as "laravel_reserved_\d+" where "nodes"\."id" = "laravel_reserved_\d+"\."parent_id" and "laravel_reserved_\d+"\."deleted_at" is not null\) and "nodes"\."deleted_at" is null$`), statement)
+	assert.Empty(t, bindings)
+}
+
+// The closure's model counts whenever the closure sets it, before or after its OnlyTrashed / Has call
+// (oracle B1c/B1b shapes).
+func TestDeferredWhere_ClosureModelSetAfterTheCall(t *testing.T) {
+	trashed := compiledQuery(t, nil, Conditions{}).Table("sd_users").Where(func(q contractsorm.Query) contractsorm.Query {
+		return q.OnlyTrashed().Model(&scpSdUser{})
+	})
+	statement, _ := dwcCompile(t, trashed)
+	assert.Equal(t, `select * from "sd_users" where ("sd_users"."deleted_at" is not null)`, statement)
+
+	has := compiledQuery(t, nil, Conditions{}).Table("sd_users").Where(func(q contractsorm.Query) contractsorm.Query {
+		return q.Has("Posts").Model(&scpSdUser{})
+	})
+	statement, _ = dwcCompile(t, has)
+	assert.Equal(t, `select * from "sd_users" where (exists (select * from "sd_posts" where "sd_users"."id" = "sd_posts"."sd_user_id" and "sd_posts"."deleted_at" is null))`, statement)
+}
+
+// Oracle F4 / F4b: where('id', 1) then a scope adding orWhere('id', 6) - with or without an empty
+// where closure first - groups as `"id" = ? or ("id" = ?)`. An inert OnlyTrashed in the scope, top
+// level or inside a closure, with the model known only from the read's destination, gives the same.
+func TestDeferredWhere_InertOnlyTrashedLateModelOrNested(t *testing.T) {
+	const want = `select * from "plain_users" where "id" = ? or ("id" = ?)`
+
+	late := compiledQuery(t, nil, Conditions{}).Table("plain_users").Where("id", 1).
+		Scopes(func(q contractsorm.Query) contractsorm.Query { return q.OnlyTrashed().OrWhere("id", 6) })
+	assert.Equal(t, want, late.ToSql().Get(&[]dwcPlain{}))
+
+	nested := compiledQuery(t, nil, Conditions{}).Table("plain_users").Where("id", 1).
+		Scopes(func(q contractsorm.Query) contractsorm.Query {
+			return q.Where(func(q contractsorm.Query) contractsorm.Query { return q.OnlyTrashed() }).OrWhere("id", 6)
+		})
+	assert.Equal(t, want, nested.ToSql().Get(&[]dwcPlain{}))
+
+	// The query object is not changed by compiling against a destination.
+	assert.Equal(t, want, late.ToSql().Get(&[]dwcPlain{}))
+}
+
+// Oracle F2c: Node::whereHas('children', fn ($q) => $q->where(fn ($q) => $q->onlyTrashed())) qualifies
+// the closure's predicate with the self-join alias - the closure's builder shares the related model,
+// whose table Laravel set to the alias - and so does a closure naming the related model as a slice.
+func TestDeferredWhere_ClosureInsideASelfRelationCallbackUsesTheAlias(t *testing.T) {
+	want := regexp.MustCompile(`^select \* from "nodes" where exists \(select \* from "nodes" as "(laravel_reserved_\d+)" where "nodes"\."id" = "laravel_reserved_\d+"\."parent_id" and \("laravel_reserved_\d+"\."deleted_at" is not null\) and "laravel_reserved_\d+"\."deleted_at" is null\) and "nodes"\."deleted_at" is null$`)
+
+	for name, closure := range map[string]func(contractsorm.Query) contractsorm.Query{
+		"no model":    func(q contractsorm.Query) contractsorm.Query { return q.OnlyTrashed() },
+		"slice model": func(q contractsorm.Query) contractsorm.Query { return q.Model(&[]dwcNode{}).OnlyTrashed() },
+	} {
+		t.Run(name, func(t *testing.T) {
+			q := compiledQuery(t, &dwcNode{}, Conditions{}).WhereHas("Children", func(q contractsorm.Query) contractsorm.Query {
+				return q.Where(closure)
+			})
+
+			statement, _ := dwcCompile(t, q)
+			assert.Regexp(t, want, statement)
+		})
+	}
 }

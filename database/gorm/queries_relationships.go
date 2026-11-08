@@ -741,7 +741,6 @@ func (r *OrmBuilder) compileAggregateSubquery(desc *relationDescriptor, sub sele
 // the end of the "where" bindings - the place Laravel's whereNotNull / addWhereExistsQuery write the
 // clause and its bindings at call time (see deferredWhere).
 func (r *OrmBuilder) deferWhere(boolean string, payload *deferredWhere) {
-	payload.model = r.conditions.model
 	state := r.query.State()
 	state.Wheres = append(state.Wheres, core.Where{Type: core.WhereDeferredType, Boolean: boolean, Value: payload})
 	_ = r.query.AddBinding(payload, "where")
@@ -796,9 +795,8 @@ func (r *OrmBuilder) resolveDeferredWheres(builder *querybuilder.Builder, scope 
 
 // resolveDeferredList renders the deferred entries of one where list, recursing into the nested
 // groups that hold any, and records each entry's rendered bindings under its marker. A nested group
-// renders against the same parent and alias - a where closure writes onto a query of the same model
-// - with its onlyTrashed qualified by the parent's own table, the way the closure's
-// newQueryWithoutRelationships qualifies it. Rendering errors inside a nested group are dropped with
+// renders against the enclosing scope unchanged - parent, alias and qualifier - as a where closure's
+// builder shares the enclosing builder's model. Rendering errors inside a nested group are dropped with
 // the group's scratch receiver, as the finished group's own query dropped them; the clause it could
 // not render is simply absent.
 func (r *OrmBuilder) resolveDeferredList(builder *querybuilder.Builder, wheres []core.Where, scope deferredWhereScope, rendered map[*deferredWhere]renderedDeferred) ([]core.Where, error) {
@@ -844,7 +842,12 @@ func (r *OrmBuilder) resolveDeferredList(builder *querybuilder.Builder, wheres [
 			}
 
 			sink := *r
-			groupScope := deferredWhereScope{parent: scope.parent, existenceAlias: scope.existenceAlias}
+			// A where closure's builder shares the enclosing builder's model instance, so its
+			// onlyTrashed is qualified exactly like the enclosing one - inside a self-relation's
+			// existence subquery that is the alias Laravel set on the model's table (oracle,
+			// illuminate/database v12.55.1, real sqlite, /Users/dog/.claude/jobs/013c27a0/tmp/r15e/oracle2.php
+			// F2c: `("laravel_reserved_0"."deleted_at" is not null)`).
+			groupScope := scope
 			groupWheres, err := sink.resolveDeferredList(group, group.State().Wheres, groupScope, rendered)
 			if err != nil {
 				return nil, err
@@ -856,6 +859,11 @@ func (r *OrmBuilder) resolveDeferredList(builder *querybuilder.Builder, wheres [
 			group.State().Wheres = groupWheres
 			group.State().Bindings["where"] = replaceDeferredMarkers(group.State().Bindings["where"], rendered)
 			where.Query = group
+			if _, scopeGroup := where.Value.(scopeSliceGroup); scopeGroup && len(group.State().Bindings["where"]) == 0 {
+				out = regroupScopeSlice(out, where, groupWheres)
+
+				continue
+			}
 			out = append(out, where)
 		default:
 			out = append(out, where)
@@ -872,32 +880,71 @@ type renderedDeferred struct {
 	bindings []any
 }
 
-// scopeFor is the scope the entry renders against: its own model's when the query it was called on
-// set one the enclosing scope lacks or differs from (Laravel renders the clause on the builder it is
-// called on), else the enclosing scope, whose qualifier and self-join alias then apply.
+// scopeFor is the scope the entry renders against. The enclosing scope applies - with its qualifier
+// and self-join alias - unless the entry carries a closure's own model (see deferredWhere.model) that
+// addresses a different table, or the enclosing scope has no model at all; then the entry renders
+// against its own model, as Laravel renders the clause on the builder it was called on. The tables
+// are compared rather than the Go types, so a slice destination (&[]Node{}) or another type mapped to
+// the same table keeps the enclosing alias.
 func (p *deferredWhere) scopeFor(scope deferredWhereScope) deferredWhereScope {
-	if p.model == nil || sameModelType(p.model, scope.parent) {
+	if p.model == nil {
+		return scope
+	}
+	if scope.parent != nil && sameTable(p.model, scope.parent) {
 		return scope
 	}
 
 	return deferredWhereScope{parent: p.model}
 }
 
-// sameModelType reports whether two models are of the same struct type, pointers resolved.
-func sameModelType(a, b any) bool {
-	if a == nil || b == nil {
+// sameTable reports whether two models resolve to the same table.
+func sameTable(a, b any) bool {
+	left, err := tableNameFor(a)
+	if err != nil || left == "" {
 		return false
 	}
+	right, err := tableNameFor(b)
 
-	ta, tb := reflect.TypeOf(a), reflect.TypeOf(b)
-	for ta.Kind() == reflect.Pointer {
-		ta = ta.Elem()
+	return err == nil && left == right
+}
+
+// stampClosureModel records a where closure's own model on the deferred entries of its where list
+// that carry none yet, nested groups included. Only called when the closure set the model itself.
+func stampClosureModel(wheres []core.Where, model any) {
+	for _, where := range wheres {
+		switch {
+		case where.Type == core.WhereDeferredType:
+			if payload, ok := where.Value.(*deferredWhere); ok && payload.model == nil {
+				payload.model = model
+			}
+		case where.Type == core.WhereNestedType && where.Query != nil:
+			if group, ok := where.Query.(*querybuilder.Builder); ok {
+				stampClosureModel(group.State().Wheres, model)
+			}
+		}
 	}
-	for tb.Kind() == reflect.Pointer {
-		tb = tb.Elem()
+}
+
+// scopeSliceGroup marks a nested where created by a scope regroup (groupWhereSliceForScopeIn) in the
+// where's Value, which the grammar does not read for a nested where. Laravel decides that group from
+// the clauses its slice actually wrote; a deferred entry that renders nothing (an onlyTrashed on a
+// model without the framework soft-delete type, an empty closure group) is only known when the
+// statement compiles, so the resolver re-decides a marked group on the statement's copy
+// (regroupScopeSlice).
+type scopeSliceGroup struct{}
+
+// regroupScopeSlice applies groupWhereSliceForScope's rule to a scope slice after its deferred entries
+// rendered: wrapped in one group, its boolean the slice's first, when the slice still holds an "or";
+// appended flat otherwise. A scope group keeps its bindings in the parent's list, so flattening it
+// moves no binding.
+func regroupScopeSlice(out []core.Where, where core.Where, slice []core.Where) []core.Where {
+	if !slices.ContainsFunc(slice, func(item core.Where) bool { return strings.Contains(item.Boolean, "or") }) {
+		return append(out, slice...)
 	}
 
-	return ta == tb
+	where.Boolean = strings.ReplaceAll(slice[0].Boolean, " not", "")
+
+	return append(out, where)
 }
 
 // replaceDeferredMarkers rebuilds a "where" binding list with every deferred entry's marker replaced,

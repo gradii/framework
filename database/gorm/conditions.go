@@ -216,10 +216,11 @@ type selectSub struct {
 // copy and replaces it, and its marker, in place - or removes both when nothing renders. The payload
 // is never changed after the call, so clones may share it.
 //
-// model is the model the query the call was made on had set explicitly (Model) at call time, nil
-// when it had none. Laravel writes the clause onto the builder it is called on, against that
-// builder's model, so an entry renders against its own model when the scope it lands in has none or
-// a different one - a where closure calling Model(&User{}).OnlyTrashed() under a Table-only query.
+// model is the model a where closure's own query ended with, recorded when the closure finishes
+// (addNestedWhereQuery), and only when the closure set it itself because the enclosing query had
+// none - a Table-only query whose closure calls Model(&User{}) before or after OnlyTrashed / Has. In
+// Laravel a where closure's builder always carries the enclosing builder's model; the Go form can
+// name it only inside the closure, and the clause then renders against it (scopeFor). nil otherwise.
 type deferredWhere struct {
 	onlyTrashed bool
 	relation    relationExistence

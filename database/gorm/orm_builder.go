@@ -3571,6 +3571,13 @@ func (r *OrmBuilder) addNestedWhereQuery(callback func(contractsorm.Query) contr
 		nested = returned
 	}
 
+	// Laravel's closure builder carries this query's model, so the closure's clauses render against
+	// it. A Table-only query has none, and the Go closure can then name one itself - before or after
+	// its OnlyTrashed / Has call; the entries it wrote render against that model (deferredWhere.model).
+	if r.conditions.model == nil && nested.conditions.model != nil {
+		stampClosureModel(nested.query.State().Wheres, nested.conditions.model)
+	}
+
 	// The child's eager loads merge the way Eloquent's where-closure branch array_merges
 	// getEagerLoads(): the later write wins by relation key regardless of constraint.
 	for _, entry := range nested.conditions.eagerLoad {
@@ -3889,59 +3896,11 @@ func (r *OrmBuilder) applyScope(apply func(contractsorm.Query) contractsorm.Quer
 	// G1, first measured in /Users/dog/.claude/jobs/013c27a0/tmp/r15-probes/r15-r14-mutants/probe4.out): a
 	// scope calling onlyTrashed() compiles `where "email" = ? and "sr_users"."deleted_at" is null and
 	// "sr_users"."deleted_at" is not null`.
-	// An onlyTrashed that will render nothing - the model has no framework soft-delete type - is
-	// absent from the slice Laravel regroups (its clause is written at call time, and a model without
-	// SoftDeletes writes none), so it must not decide the slice's connector: a scope running
-	// OnlyTrashed().OrWhere("id", 6) after Where("id", 1) groups as `"id" = ? or ("id" = ?)`, the
-	// shape of a scope adding orWhere alone (oracle, illuminate/database v12.55.1, real sqlite,
-	// /Users/dog/.claude/jobs/013c27a0/tmp/r15d/oracle.php B2ref).
-	query.dropInertOnlyTrashed(originalWhereCount)
-
 	if len(query.query.State().Wheres) > originalWhereCount {
 		query.addNewWheresWithinGroup(originalWhereCount)
 	}
 
 	return query
-}
-
-// dropInertOnlyTrashed removes, from the wheres at or after from, the onlyTrashed entries (and their
-// binding markers) whose model is known and has no framework soft-delete type, which therefore
-// render nothing. An entry whose model is not known yet is left for the compile-time resolver.
-func (r *OrmBuilder) dropInertOnlyTrashed(from int) {
-	state := r.query.State()
-	if from >= len(state.Wheres) {
-		return
-	}
-
-	inert := make(map[*deferredWhere]bool)
-	kept := append([]core.Where(nil), state.Wheres[:from]...)
-	for _, where := range state.Wheres[from:] {
-		if payload, ok := where.Value.(*deferredWhere); ok && where.Type == core.WhereDeferredType && payload.onlyTrashed {
-			model := payload.scopeFor(r.deferredWhereScope()).parent
-			if model != nil {
-				if _, soft := softDeleteColumn(model); !soft {
-					inert[payload] = true
-
-					continue
-				}
-			}
-		}
-		kept = append(kept, where)
-	}
-	if len(inert) == 0 {
-		return
-	}
-
-	bindings := make([]any, 0, len(state.Bindings["where"]))
-	for _, binding := range state.Bindings["where"] {
-		if marker, ok := binding.(*deferredWhere); ok && inert[marker] {
-			continue
-		}
-		bindings = append(bindings, binding)
-	}
-
-	state.Wheres = kept
-	state.Bindings["where"] = bindings
 }
 
 // addNewWheresWithinGroup mirrors Eloquent's Builder::addNewWheresWithinGroup: the wheres that were
@@ -3988,6 +3947,9 @@ func groupWhereSliceForScopeIn(builder *querybuilder.Builder, whereSlice []core.
 		Type:    core.WhereNestedType,
 		Query:   group,
 		Boolean: strings.ReplaceAll(whereSlice[0].Boolean, " not", ""),
+		// Marked so the compile-time resolver re-decides it once its deferred entries render
+		// (regroupScopeSlice): one that renders nothing must not keep the connector it decided.
+		Value: scopeSliceGroup{},
 	})
 }
 
