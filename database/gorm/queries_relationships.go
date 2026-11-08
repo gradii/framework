@@ -741,6 +741,7 @@ func (r *OrmBuilder) compileAggregateSubquery(desc *relationDescriptor, sub sele
 // the end of the "where" bindings - the place Laravel's whereNotNull / addWhereExistsQuery write the
 // clause and its bindings at call time (see deferredWhere).
 func (r *OrmBuilder) deferWhere(boolean string, payload *deferredWhere) {
+	payload.model = r.conditions.model
 	state := r.query.State()
 	state.Wheres = append(state.Wheres, core.Where{Type: core.WhereDeferredType, Boolean: boolean, Value: payload})
 	_ = r.query.AddBinding(payload, "where")
@@ -781,7 +782,7 @@ func (r *OrmBuilder) resolveDeferredWheres(builder *querybuilder.Builder, scope 
 		return nil
 	}
 
-	rendered := make(map[*deferredWhere][]any)
+	rendered := make(map[*deferredWhere]renderedDeferred)
 	wheres, err := r.resolveDeferredList(builder, state.Wheres, scope, rendered)
 	if err != nil {
 		return err
@@ -800,7 +801,7 @@ func (r *OrmBuilder) resolveDeferredWheres(builder *querybuilder.Builder, scope 
 // newQueryWithoutRelationships qualifies it. Rendering errors inside a nested group are dropped with
 // the group's scratch receiver, as the finished group's own query dropped them; the clause it could
 // not render is simply absent.
-func (r *OrmBuilder) resolveDeferredList(builder *querybuilder.Builder, wheres []core.Where, scope deferredWhereScope, rendered map[*deferredWhere][]any) ([]core.Where, error) {
+func (r *OrmBuilder) resolveDeferredList(builder *querybuilder.Builder, wheres []core.Where, scope deferredWhereScope, rendered map[*deferredWhere]renderedDeferred) ([]core.Where, error) {
 	out := make([]core.Where, 0, len(wheres))
 
 	for _, where := range wheres {
@@ -811,15 +812,29 @@ func (r *OrmBuilder) resolveDeferredList(builder *querybuilder.Builder, wheres [
 				continue
 			}
 
+			// One call renders once per statement, as Laravel runs a whereHas callback once at call
+			// time: an entry reached a second time - the same pre-built query nested by two where
+			// closures - reuses the first rendering, so its SQL and its bindings stay in step
+			// (oracle, illuminate/database v12.55.1, real sqlite,
+			// /Users/dog/.claude/jobs/013c27a0/tmp/r15d/oracle.php B3: both copies bind [1,1]).
+			if done, ok := rendered[payload]; ok {
+				out = append(out, done.wheres...)
+
+				continue
+			}
+
 			// The entry renders onto a scratch builder of the same table, so its wheres and bindings
 			// come back apart from the list being rebuilt.
 			scratch := builder.ForNestedWhere()
-			if err := r.renderDeferredWhere(scratch, payload, where.Boolean, scope); err != nil {
+			if err := r.renderDeferredWhere(scratch, payload, where.Boolean, payload.scopeFor(scope)); err != nil {
 				return nil, err
 			}
 
 			out = append(out, scratch.State().Wheres...)
-			rendered[payload] = append([]any(nil), scratch.State().Bindings["where"]...)
+			rendered[payload] = renderedDeferred{
+				wheres:   append([]core.Where(nil), scratch.State().Wheres...),
+				bindings: append([]any(nil), scratch.State().Bindings["where"]...),
+			}
 		case where.Type == core.WhereNestedType && where.Query != nil && containsDeferredWhere(where.Query.State().Wheres):
 			group, ok := where.Query.CloneForGrammar().(*querybuilder.Builder)
 			if !ok {
@@ -850,13 +865,48 @@ func (r *OrmBuilder) resolveDeferredList(builder *querybuilder.Builder, wheres [
 	return out, nil
 }
 
+// renderedDeferred is one deferred entry's rendering within a statement: the wheres it became and
+// their bindings.
+type renderedDeferred struct {
+	wheres   []core.Where
+	bindings []any
+}
+
+// scopeFor is the scope the entry renders against: its own model's when the query it was called on
+// set one the enclosing scope lacks or differs from (Laravel renders the clause on the builder it is
+// called on), else the enclosing scope, whose qualifier and self-join alias then apply.
+func (p *deferredWhere) scopeFor(scope deferredWhereScope) deferredWhereScope {
+	if p.model == nil || sameModelType(p.model, scope.parent) {
+		return scope
+	}
+
+	return deferredWhereScope{parent: p.model}
+}
+
+// sameModelType reports whether two models are of the same struct type, pointers resolved.
+func sameModelType(a, b any) bool {
+	if a == nil || b == nil {
+		return false
+	}
+
+	ta, tb := reflect.TypeOf(a), reflect.TypeOf(b)
+	for ta.Kind() == reflect.Pointer {
+		ta = ta.Elem()
+	}
+	for tb.Kind() == reflect.Pointer {
+		tb = tb.Elem()
+	}
+
+	return ta == tb
+}
+
 // replaceDeferredMarkers rebuilds a "where" binding list with every deferred entry's marker replaced,
 // in place, by the bindings the entry rendered (none when it rendered nothing).
-func replaceDeferredMarkers(bindings []any, rendered map[*deferredWhere][]any) []any {
+func replaceDeferredMarkers(bindings []any, rendered map[*deferredWhere]renderedDeferred) []any {
 	out := make([]any, 0, len(bindings))
 	for _, binding := range bindings {
 		if marker, ok := binding.(*deferredWhere); ok {
-			out = append(out, rendered[marker]...)
+			out = append(out, rendered[marker].bindings...)
 
 			continue
 		}

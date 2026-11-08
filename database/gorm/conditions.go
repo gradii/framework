@@ -215,9 +215,15 @@ type selectSub struct {
 // markers with the group's bindings. resolveDeferredWheres renders every entry on the statement's
 // copy and replaces it, and its marker, in place - or removes both when nothing renders. The payload
 // is never changed after the call, so clones may share it.
+//
+// model is the model the query the call was made on had set explicitly (Model) at call time, nil
+// when it had none. Laravel writes the clause onto the builder it is called on, against that
+// builder's model, so an entry renders against its own model when the scope it lands in has none or
+// a different one - a where closure calling Model(&User{}).OnlyTrashed() under a Table-only query.
 type deferredWhere struct {
 	onlyTrashed bool
 	relation    relationExistence
+	model       any
 }
 
 // relationExistence describes a deferred relationship existence/absence condition: the payload of a
