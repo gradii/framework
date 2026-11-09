@@ -1408,18 +1408,28 @@ func oneOfManyAlias(desc *relationDescriptor) string {
 // the relation's own group column and its havings, orders, limit, offset and distinct all render
 // there (oracle, illuminate/database v12.55.1, real sqlite, /Users/dog/.claude/jobs/013c27a0/tmp/ofm/review_clauses_probe.php
 // o1-o4). A nil constrained (OfMany given no closure) copies nothing.
+//
+// The closure's select expressions follow the subquery's aggregate and group columns, where
+// selectRaw / addSelect append them, and their bindings join the subquery's select bindings, which
+// compile ahead of its join, where and having bindings - so a having or order by can name the alias
+// the closure selected (oracle, /Users/dog/.claude/jobs/013c27a0/tmp/ofm/regression_select_probe.php:
+// `select max("p"."id") as "id_aggregate", "p"."u_id", count(*) + ? as candidate_count ... having
+// candidate_count > ?` binds [10, ..., 11]). The closure builder starts with no columns, so what it
+// holds is only what the closure selected; a Select there appends too, where Laravel's select()
+// would replace the aggregate columns and leave the join without its "<column>_aggregate".
 func copyOneOfManyClosureClauses(sub *querybuilder.Builder, constrained *OrmBuilder) {
 	if constrained == nil {
 		return
 	}
 
 	from, to := constrained.query.State(), sub.State()
+	to.Columns = append(to.Columns, from.Columns...)
 	to.Groups = append(to.Groups, from.Groups...)
 	to.Havings = append(to.Havings, from.Havings...)
 	to.Orders = append(to.Orders, from.Orders...)
 	to.Limit, to.Offset = from.Limit, from.Offset
 	to.Distinct, to.DistinctColumns = from.Distinct, from.DistinctColumns
-	for _, binding := range []string{"groupBy", "having", "order"} {
+	for _, binding := range []string{"select", "groupBy", "having", "order"} {
 		_ = sub.AddBinding(from.Bindings[binding], binding)
 	}
 }
@@ -1451,6 +1461,13 @@ func (r *OrmBuilder) oneOfManyConstraintQuery(desc *relationDescriptor, cfg *one
 	constrained = constrained.flushWheres()
 	if constrained.conditions.err != nil {
 		return nil, constrained.conditions.err
+	}
+	// The query builder records what it rejects - an illegal operator and value pair, a having
+	// against null - on itself rather than on the ORM conditions; Laravel throws for those when the
+	// closure runs, so every path that reads the relation fails (oracle,
+	// /Users/dog/.claude/jobs/013c27a0/tmp/ofm/regression_select_probe.php builder_error).
+	if err := constrained.query.Error(); err != nil {
+		return nil, err
 	}
 	if err := finishSubqueryScope(constrained, desc.RelatedTable, desc.RelatedModel); err != nil {
 		return nil, err

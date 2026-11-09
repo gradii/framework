@@ -28,6 +28,11 @@ func (ofmClosureRegressionUser) Relations() map[string]contractsorm.Relation {
 			},
 		}
 	}
+	countCandidates := func(q contractsorm.Query) contractsorm.Query {
+		return q.SelectRaw("count(*) + ? as candidate_count", 10).
+			Having("candidate_count > ?", 11).
+			OrderBy("candidate_count", "desc")
+	}
 
 	return map[string]contractsorm.Relation{
 		"Missing": hasOne(func(q contractsorm.Query) contractsorm.Query {
@@ -45,6 +50,22 @@ func (ofmClosureRegressionUser) Relations() map[string]contractsorm.Relation {
 		"ZeroLimit": hasOne(func(q contractsorm.Query) contractsorm.Query {
 			return q.Limit(0)
 		}),
+		"BuilderError": hasOne(func(q contractsorm.Query) contractsorm.Query {
+			return q.Having("p.id", ">", nil)
+		}),
+		"SelectHaving": hasOne(func(q contractsorm.Query) contractsorm.Query {
+			return q.SelectRaw("count(*) as candidate_count").Having("candidate_count > ?", 1)
+		}),
+		"SelectHavingBound": hasOne(countCandidates),
+		"SelectHavingMulti": contractsorm.HasOne{
+			Related: &ofmcPost{}, ForeignKey: "u_id",
+			OnQuery: func(q contractsorm.Query) contractsorm.Query {
+				return q.OfManyColumns([]contractsorm.OfManyColumn{
+					{Column: "published_at", Aggregate: "max"},
+					{Column: "id", Aggregate: "max"},
+				}, countCandidates)
+			},
+		},
 		"Through": contractsorm.HasOneThrough{
 			Related: &ofmClosureRegressionPrice{}, Through: &ofmClosureRegressionMiddle{},
 			FirstKey: "u_id", SecondKey: "mid_id", LocalKey: "id", SecondLocalKey: "id",
@@ -191,4 +212,74 @@ func TestOfManyClosureRegression_ThroughScopeRemoval(t *testing.T) {
 		`select "p".* from "p" inner join "mid" on "mid"."id" = "p"."mid_id" inner join (select max("p"."id") as "id_aggregate", min("p"."published_at") as "published_at_aggregate", "mid"."u_id" from "p" inner join "mid" on "mid"."id" = "p"."mid_id" inner join (select max("p"."published_at") as "published_at_aggregate", "mid"."u_id" from "p" inner join "mid" on "mid"."id" = "p"."mid_id" where "mid"."u_id" = ? and "p"."deleted_at" is null and "mid"."deleted_at" is null group by "mid"."u_id") as "through" on "through"."published_at_aggregate" = "p"."published_at" and "through"."u_id" = "mid"."u_id" where "p"."deleted_at" is null group by "mid"."u_id") as "through" on "through"."id_aggregate" = "p"."id" and "through"."published_at_aggregate" = "p"."published_at" and "through"."u_id" = "mid"."u_id" where "mid"."u_id" = ? and "p"."deleted_at" is null and "mid"."deleted_at" is null`,
 		[]any{uint(7), uint(7)},
 	)
+}
+
+// HAVING validation belongs to the underlying query builder. Its error must reach
+// the caller just like the ORM-level errors covered by ErrorPropagation above.
+func TestOfManyClosureRegression_QueryBuilderError(t *testing.T) {
+	for _, path := range []struct {
+		name  string
+		build func(contractsorm.Query) contractsorm.Query
+	}{
+		{"Plain", func(q contractsorm.Query) contractsorm.Query {
+			return q.Model(&ofmcPost{}).Having("p.id", ">", nil)
+		}},
+		{"Related", func(q contractsorm.Query) contractsorm.Query {
+			return q.Related(&ofmClosureRegressionUser{ID: 7}, "BuilderError")
+		}},
+		{"WhereHas", func(q contractsorm.Query) contractsorm.Query {
+			return q.WhereHas("BuilderError")
+		}},
+		{"WithCount", func(q contractsorm.Query) contractsorm.Query {
+			return q.WithCount("BuilderError")
+		}},
+		{"WithExists", func(q contractsorm.Query) contractsorm.Query {
+			return q.WithExists("BuilderError")
+		}},
+	} {
+		t.Run(path.name, func(t *testing.T) {
+			built, ok := ormBuilderOf(path.build(newRelQueryWith(t, &ofmClosureRegressionUser{})))
+			require.True(t, ok)
+
+			for attempt := range 2 {
+				statement, bindings, err := built.compileSelect()
+				require.Error(t, err, "compile %d accepted invalid HAVING: SQL=%s bindings=%v", attempt+1, statement, bindings)
+				assert.True(t, errors.Is(err, errors.QueryIllegalOperatorAndValue), "unexpected error: %v", err)
+				assert.Empty(t, statement)
+				assert.Empty(t, bindings)
+			}
+		})
+	}
+}
+
+func TestOfManyClosureRegression_SelectClauses(t *testing.T) {
+	// Laravel's closure appends these expressions to the aggregate's select list.
+	// The HAVING and ORDER BY aliases must resolve inside the same subquery, and
+	// select bindings precede join/where/having bindings at each aggregate level.
+	for _, test := range []struct {
+		relation string
+		sql      string
+		bindings []any
+	}{
+		{
+			relation: "SelectHaving",
+			sql:      `select "p".* from "p" inner join (select max("p"."id") as "id_aggregate", "p"."u_id", count(*) as candidate_count from "p" where "p"."u_id" = ? and "p"."u_id" is not null and "p"."deleted_at" is null group by "p"."u_id" having candidate_count > ?) as "select_having" on "select_having"."id_aggregate" = "p"."id" and "select_having"."u_id" = "p"."u_id" where "p"."u_id" = ? and "p"."u_id" is not null and "p"."deleted_at" is null`,
+			bindings: []any{uint(7), 1, uint(7)},
+		},
+		{
+			relation: "SelectHavingBound",
+			sql:      `select "p".* from "p" inner join (select max("p"."id") as "id_aggregate", "p"."u_id", count(*) + ? as candidate_count from "p" where "p"."u_id" = ? and "p"."u_id" is not null and "p"."deleted_at" is null group by "p"."u_id" having candidate_count > ? order by "candidate_count" desc) as "select_having_bound" on "select_having_bound"."id_aggregate" = "p"."id" and "select_having_bound"."u_id" = "p"."u_id" where "p"."u_id" = ? and "p"."u_id" is not null and "p"."deleted_at" is null`,
+			bindings: []any{10, uint(7), 11, uint(7)},
+		},
+		{
+			relation: "SelectHavingMulti",
+			sql:      `select "p".* from "p" inner join (select max("p"."id") as "id_aggregate", min("p"."published_at") as "published_at_aggregate", "p"."u_id", count(*) + ? as candidate_count from "p" inner join (select max("p"."published_at") as "published_at_aggregate", "p"."u_id", count(*) + ? as candidate_count from "p" where "p"."u_id" = ? and "p"."u_id" is not null and "p"."deleted_at" is null group by "p"."u_id" having candidate_count > ? order by "candidate_count" desc) as "select_having_multi" on "select_having_multi"."published_at_aggregate" = "p"."published_at" and "select_having_multi"."u_id" = "p"."u_id" where "p"."deleted_at" is null group by "p"."u_id" having candidate_count > ? order by "candidate_count" desc) as "select_having_multi" on "select_having_multi"."id_aggregate" = "p"."id" and "select_having_multi"."published_at_aggregate" = "p"."published_at" and "select_having_multi"."u_id" = "p"."u_id" where "p"."u_id" = ? and "p"."u_id" is not null and "p"."deleted_at" is null`,
+			bindings: []any{10, 10, uint(7), 11, 11, uint(7)},
+		},
+	} {
+		t.Run(test.relation, func(t *testing.T) {
+			built := ofmClosureRegressionRead(t, test.relation, &[]ofmcPost{})
+			assertOfmClosureRegressionSQL(t, built, test.sql, test.bindings)
+		})
+	}
 }

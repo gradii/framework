@@ -13,16 +13,20 @@ import (
 // These execution tests complement database/gorm/one_of_many_closure_regression_test.go.
 // Expected rows were checked against Illuminate Database v12.55.1 on SQLite.
 type ofmClosureRegressionUser struct {
-	ID            uint
-	MatchedCount  int64                     `gorm:"column:matched_count"`
-	MatchedExists bool                      `gorm:"column:matched_exists"`
-	Latest        *ofmClosureRegressionPost `gorm:"-"`
-	Missing       *ofmClosureRegressionPost `gorm:"-"`
-	Invalid       *ofmClosureRegressionPost `gorm:"-"`
-	Key           *ofmClosureRegressionPost `gorm:"-"`
-	Having        *ofmClosureRegressionPost `gorm:"-"`
-	ZeroLimit     *ofmClosureRegressionPost `gorm:"-"`
-	Through       *ofmClosureRegressionPost `gorm:"-"`
+	ID                uint
+	MatchedCount      int64                     `gorm:"column:matched_count"`
+	MatchedExists     bool                      `gorm:"column:matched_exists"`
+	Latest            *ofmClosureRegressionPost `gorm:"-"`
+	Missing           *ofmClosureRegressionPost `gorm:"-"`
+	Invalid           *ofmClosureRegressionPost `gorm:"-"`
+	Key               *ofmClosureRegressionPost `gorm:"-"`
+	Having            *ofmClosureRegressionPost `gorm:"-"`
+	ZeroLimit         *ofmClosureRegressionPost `gorm:"-"`
+	Through           *ofmClosureRegressionPost `gorm:"-"`
+	BuilderError      *ofmClosureRegressionPost `gorm:"-"`
+	SelectHaving      *ofmClosureRegressionPost `gorm:"-"`
+	SelectHavingBound *ofmClosureRegressionPost `gorm:"-"`
+	SelectHavingMulti *ofmClosureRegressionPost `gorm:"-"`
 }
 
 func (ofmClosureRegressionUser) TableName() string { return "u" }
@@ -35,6 +39,11 @@ func (ofmClosureRegressionUser) Relations() map[string]contractsorm.Relation {
 				return q.OfMany("id", "max", constraint)
 			},
 		}
+	}
+	countCandidates := func(q contractsorm.Query) contractsorm.Query {
+		return q.SelectRaw("count(*) + ? as candidate_count", 10).
+			Having("candidate_count > ?", 11).
+			OrderBy("candidate_count", "desc")
 	}
 
 	return map[string]contractsorm.Relation{
@@ -54,6 +63,22 @@ func (ofmClosureRegressionUser) Relations() map[string]contractsorm.Relation {
 		"ZeroLimit": hasOne(func(q contractsorm.Query) contractsorm.Query {
 			return q.Limit(0)
 		}),
+		"BuilderError": hasOne(func(q contractsorm.Query) contractsorm.Query {
+			return q.Having("p.id", ">", nil)
+		}),
+		"SelectHaving": hasOne(func(q contractsorm.Query) contractsorm.Query {
+			return q.SelectRaw("count(*) as candidate_count").Having("candidate_count > ?", 1)
+		}),
+		"SelectHavingBound": hasOne(countCandidates),
+		"SelectHavingMulti": contractsorm.HasOne{
+			Related: &ofmClosureRegressionPost{}, ForeignKey: "u_id",
+			OnQuery: func(q contractsorm.Query) contractsorm.Query {
+				return q.OfManyColumns([]contractsorm.OfManyColumn{
+					{Column: "published_at", Aggregate: "max"},
+					{Column: "id", Aggregate: "max"},
+				}, countCandidates)
+			},
+		},
 		"Through": contractsorm.HasOneThrough{
 			Related: &ofmClosureRegressionPost{}, Through: &ofmClosureRegressionMiddle{},
 			FirstKey: "u_id", SecondKey: "mid_id", LocalKey: "id", SecondLocalKey: "id",
@@ -269,4 +294,67 @@ func TestOfManyClosureRegression_ThroughScopeRemoval(t *testing.T) {
 	assertOfmClosureRegressionResults(t, query, "Through", func(user ofmClosureRegressionUser) *ofmClosureRegressionPost {
 		return user.Through
 	}, [2]uint{0, 3})
+}
+
+func TestOfManyClosureRegression_QueryBuilderError(t *testing.T) {
+	for _, path := range []struct {
+		name string
+		run  func(contractsorm.Query) error
+	}{
+		{"Plain", func(q contractsorm.Query) error {
+			var posts []ofmClosureRegressionPost
+			return q.Model(&ofmClosureRegressionPost{}).Having("p.id", ">", nil).Get(&posts)
+		}},
+		{"Related", func(q contractsorm.Query) error {
+			var posts []ofmClosureRegressionPost
+			return q.Related(&ofmClosureRegressionUser{ID: 1}, "BuilderError").Get(&posts)
+		}},
+		{"With", func(q contractsorm.Query) error {
+			var users []ofmClosureRegressionUser
+			return q.Model(&ofmClosureRegressionUser{}).With("BuilderError").Get(&users)
+		}},
+		{"WhereHas", func(q contractsorm.Query) error {
+			var users []ofmClosureRegressionUser
+			return q.Model(&ofmClosureRegressionUser{}).WhereHas("BuilderError").Get(&users)
+		}},
+		{"WithCount", func(q contractsorm.Query) error {
+			var users []ofmClosureRegressionUser
+			return q.Model(&ofmClosureRegressionUser{}).WithCount("BuilderError as matched_count").Get(&users)
+		}},
+		{"WithExists", func(q contractsorm.Query) error {
+			var users []ofmClosureRegressionUser
+			return q.Model(&ofmClosureRegressionUser{}).WithExists("BuilderError as matched_exists").Get(&users)
+		}},
+	} {
+		t.Run(path.name, func(t *testing.T) {
+			query := newOfmClosureRegressionQuery(t)
+			err := path.run(cloneRelationQuery(t, query))
+			require.Error(t, err, "invalid HAVING must fail instead of returning rows without the filter")
+			assert.True(t, errors.Is(err, errors.QueryIllegalOperatorAndValue), "unexpected error: %v", err)
+		})
+	}
+}
+
+func TestOfManyClosureRegression_SelectClauses(t *testing.T) {
+	for _, test := range []struct {
+		relation string
+		loaded   func(ofmClosureRegressionUser) *ofmClosureRegressionPost
+	}{
+		{"SelectHaving", func(user ofmClosureRegressionUser) *ofmClosureRegressionPost { return user.SelectHaving }},
+		{"SelectHavingBound", func(user ofmClosureRegressionUser) *ofmClosureRegressionPost { return user.SelectHavingBound }},
+		{"SelectHavingMulti", func(user ofmClosureRegressionUser) *ofmClosureRegressionPost { return user.SelectHavingMulti }},
+	} {
+		t.Run(test.relation, func(t *testing.T) {
+			query := newOfmClosureRegressionQuery(t)
+			result, err := query.Exec("delete from p where id = ?", 4)
+			require.NoError(t, err)
+			require.EqualValues(t, 1, result.RowsAffected)
+
+			// User 1 has two candidates sharing published_at; user 2 has one.
+			// candidate_count > 1 (or count(*) + 10 > 11) selects post 2 only.
+			// The expression and its bindings must reach every aggregate level;
+			// dropping just the HAVING would incorrectly include user 2 as well.
+			assertOfmClosureRegressionResults(t, query, test.relation, test.loaded, [2]uint{2, 0})
+		})
+	}
 }
