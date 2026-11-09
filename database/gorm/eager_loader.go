@@ -942,8 +942,9 @@ func (r *OrmBuilder) runRelatedQueryCompiled(child *OrmBuilder, desc *relationDe
 	}
 
 	// OfMany asks for one row per parent, which is a join against a grouped subquery. The relation's
-	// own scope ran first, so the constraints it wrote after OfMany — the Go form of Laravel's
-	// ofMany closure — are moved into that subquery as the join is built.
+	// own scope ran first; the closures it gave OfMany constrain that subquery, and the conditions
+	// it chained on the relation query stay on the outer read (oracle, /Users/dog/.claude/jobs/013c27a0/tmp/ofm/closure_probe.php s7
+	// EAGER).
 	joined := false
 	if cfg := child.conditions.oneOfMany; cfg != nil {
 		join, args, err := r.oneOfManyJoin(child, desc, cfg, nil, false)
@@ -965,7 +966,7 @@ func (r *OrmBuilder) runRelatedQueryCompiled(child *OrmBuilder, desc *relationDe
 	}
 
 	// A caller callback that installed OfMany itself (the With(...) form the contract documents)
-	// gets the same join; the marks OfMany recorded delimit its own follow-on constraints.
+	// gets the same join.
 	if !joined {
 		if cfg := child.conditions.oneOfMany; cfg != nil {
 			join, args, err := r.oneOfManyJoin(child, desc, cfg, nil, false)
@@ -1113,10 +1114,11 @@ func (r *OrmBuilder) runChunkedRelatedQueryCompiled(keys []any, desc *relationDe
 // The related model's key is appended as a MAX pair when the declaration omits it, so ties always
 // resolve to one row. The alias is the relation name in snake case ("_of_many" appended when it
 // equals the related table's name), matching Laravel's getDefaultOneOfManyJoinAlias, and each
-// aggregate column is "<column>_aggregate". Constraints the relation's own of-many chain wrote
-// after the configuration (Laravel's ofMany closure) are moved off builder and into every subquery,
-// and so is the eager loader's parent-key in-list — with the morph-type filter a morph relation
-// follows it with. Laravel's addEagerConstraints writes that in-list through getRelationQuery,
+// aggregate column is "<column>_aggregate". The constraint closures OfMany was given (Laravel's
+// ofMany closure) run against every subquery; nothing written on builder itself moves, before or
+// after OfMany, because Laravel leaves those conditions on the relation query. Only the eager
+// loader's parent-key in-list moves off builder and into the innermost subquery — with the
+// morph-type filter a morph relation follows it with. Laravel's addEagerConstraints writes that in-list through getRelationQuery,
 // which for a one-of-many relation is the innermost aggregate subquery, so the eager read carries
 // no constraint on the outer query. readPath asks for the relation constraints to be re-stated
 // inside the innermost subquery too (foreign key = parent, foreign key is not null; a through
@@ -1171,19 +1173,8 @@ func (r *OrmBuilder) oneOfManyJoin(builder *OrmBuilder, desc *relationDescriptor
 	columns := oneOfManyEffectiveColumns(desc, cfg)
 
 	// The eager loader's parent-key in-list (and a morph relation's type filter) was written when
-	// the child was built; pop it so the innermost subquery re-states it, and shift the marks
-	// OfMany recorded by the popped clauses.
-	eagerKeys, eagerMorph, poppedWheres, poppedBindings := builder.takeEagerOneOfManyConstraints(desc)
-	clauses := *cfg
-	clauses.whereMark -= poppedWheres
-	clauses.whereBindMark -= poppedBindings
-	if clauses.whereMark < 0 {
-		clauses.whereMark = 0
-	}
-	if clauses.whereBindMark < 0 {
-		clauses.whereBindMark = 0
-	}
-	movedWheres, movedWhereBindings, movedJoins, movedJoinBindings := builder.takeOneOfManyClauses(&clauses)
+	// the child was built; pop it so the innermost subquery re-states it.
+	eagerKeys, eagerMorph := builder.takeEagerOneOfManyConstraints(desc)
 
 	// Build the levels innermost first; every level is aliased with the relation name, the way
 	// Laravel's ofMany chains them.
@@ -1196,15 +1187,35 @@ func (r *OrmBuilder) oneOfManyJoin(builder *OrmBuilder, desc *relationDescriptor
 	for i, col := range columns {
 		sub := r.subqueryBuilder(desc.RelatedTable)
 
+		// ofMany runs its closure against each subquery it builds, so every level carries the
+		// closure's conditions (oracle, illuminate/database v12.55.1, real sqlite, /Users/dog/.claude/jobs/013c27a0/tmp/ofm/closure_probe.php
+		// s3: both levels of ofMany(['published_at' => 'max', 'id' => 'max'], fn) read `where "title"
+		// = ?`).
+		constrained, err := r.oneOfManyConstraintQuery(desc, cfg)
+		if err != nil {
+			return "", nil, err
+		}
+		var (
+			closureWheres       []core.Where
+			closureWhereBinds   []any
+			closureJoins        []core.Join
+			closureJoinBindings []any
+		)
+		if constrained != nil {
+			state := constrained.query.State()
+			closureWheres, closureWhereBinds = state.Wheres, state.Bindings["where"]
+			closureJoins, closureJoinBindings = state.Joins, state.Bindings["join"]
+		}
+
 		if i == 0 {
 			// The closure constraints run before the relation constraints, the order ofMany writes
 			// them in: the closure executes inside the loop and addConstraints runs at its end —
 			// where a through relation's through join is performed too.
-			for _, join := range movedJoins {
+			for _, join := range closureJoins {
 				sub.State().Joins = append(sub.State().Joins, join)
 			}
-			if len(movedJoinBindings) > 0 {
-				_ = sub.AddBinding(movedJoinBindings, "join")
+			if len(closureJoinBindings) > 0 {
+				_ = sub.AddBinding(closureJoinBindings, "join")
 			}
 			if throughJoin != "" {
 				sub.JoinRaw(throughJoin, nil, "inner")
@@ -1215,11 +1226,11 @@ func (r *OrmBuilder) oneOfManyJoin(builder *OrmBuilder, desc *relationDescriptor
 			if throughJoin != "" {
 				sub.JoinRaw(throughJoin, nil, "inner")
 			}
-			for _, join := range movedJoins {
+			for _, join := range closureJoins {
 				sub.State().Joins = append(sub.State().Joins, join)
 			}
-			if len(movedJoinBindings) > 0 {
-				_ = sub.AddBinding(movedJoinBindings, "join")
+			if len(closureJoinBindings) > 0 {
+				_ = sub.AddBinding(closureJoinBindings, "join")
 			}
 
 			on := make([]string, 0, len(levelCols)+len(joinTail))
@@ -1237,9 +1248,9 @@ func (r *OrmBuilder) oneOfManyJoin(builder *OrmBuilder, desc *relationDescriptor
 		selectCols = append(selectCols, groupCols...)
 		sub.SelectRaw(strings.Join(selectCols, ", "), nil)
 
-		if len(movedWheres) > 0 {
-			sub.State().Wheres = append(sub.State().Wheres, movedWheres...)
-			_ = sub.AddBinding(movedWhereBindings, "where")
+		if len(closureWheres) > 0 {
+			sub.State().Wheres = append(sub.State().Wheres, closureWheres...)
+			_ = sub.AddBinding(closureWhereBinds, "where")
 		}
 
 		if i == 0 {
@@ -1295,8 +1306,22 @@ func (r *OrmBuilder) oneOfManyJoin(builder *OrmBuilder, desc *relationDescriptor
 		// removal, so it carries no soft-delete predicate at all (oracle,
 		// /Users/dog/.claude/jobs/013c27a0/tmp/r14-probes/probe_ofmany.out E3) - applySubquerySoftDelete
 		// writes nothing for an onlyTrashed removal.
+		//
+		// A removal the constraint closure made on its subquery - withTrashed(), onlyTrashed(), a
+		// named scope removal - governs that subquery as well (oracle, /Users/dog/.claude/jobs/013c27a0/tmp/ofm/closure_probe.php s4, s5:
+		// ofMany(['id' => 'max'], fn ($q) => $q->withTrashed()) drops the aggregate's "is null"
+		// while the outer query keeps it).
 		removals := cfg.removals
-		r.applySubquerySoftDelete(sub, desc.RelatedTable, desc.RelatedModel, removals)
+		if constrained != nil {
+			removals = removals.merge(scopeRemovalsOf(constrained))
+		}
+		// Each predicate is a scope Laravel applies through callScope, which wraps the wheres before
+		// it in one group when they carry an "or" - a closure's orWhere, here (oracle,
+		// /Users/dog/.claude/jobs/013c27a0/tmp/ofm/closure_probe.php s2: `where ("title" = ? or "title" = ? and "p"."u_id" = ? and
+		// "p"."u_id" is not null) and "p"."deleted_at" is null`).
+		r.applySubqueryScopeGrouped(sub, func() {
+			r.applySubquerySoftDelete(sub, desc.RelatedTable, desc.RelatedModel, removals)
+		})
 		r.applyRelatedGlobalScopes(sub, desc.RelatedTable, desc.RelatedModel, removals)
 
 		// A soft-deletable through model's predicate reaches every aggregate level too, after the
@@ -1304,7 +1329,9 @@ func (r *OrmBuilder) oneOfManyJoin(builder *OrmBuilder, desc *relationDescriptor
 		// there the way performJoin's named scope filters the relation read (oracle,
 		// /tmp/r10/through_softdelete_probe.php N9/N10 - the through predicate sits in the
 		// aggregate subquery and on the outer query).
-		r.applySubquerySoftDelete(sub, desc.ThroughTable, desc.ThroughModel, subqueryScopeRemovals{})
+		r.applySubqueryScopeGrouped(sub, func() {
+			r.applySubquerySoftDelete(sub, desc.ThroughTable, desc.ThroughModel, subqueryScopeRemovals{})
+		})
 
 		sub.GroupByRaw(strings.Join(groupCols, ", "), nil)
 		levelSQL, levelArgs = sub.ToSelectSQL()
@@ -1318,6 +1345,17 @@ func (r *OrmBuilder) oneOfManyJoin(builder *OrmBuilder, desc *relationDescriptor
 	on = append(on, joinTail...)
 
 	return fmt.Sprintf("(%s) as %s on %s", levelSQL, r.ident(alias), strings.Join(on, " and ")), levelArgs, nil
+}
+
+// applySubqueryScopeGrouped runs apply - one scope's predicate written onto a subquery - the way
+// Eloquent's callScope does: when it added wheres, the wheres before them and the ones it added are
+// each wrapped in one nested group if they carry an "or" connector (addNewWheresWithinGroupIn).
+func (r *OrmBuilder) applySubqueryScopeGrouped(sub *querybuilder.Builder, apply func()) {
+	originalWhereCount := len(sub.State().Wheres)
+	apply()
+	if len(sub.State().Wheres) > originalWhereCount {
+		addNewWheresWithinGroupIn(sub, originalWhereCount)
+	}
 }
 
 // oneOfManyEffectiveColumns is the configuration's columns with the related model's key appended
@@ -1355,108 +1393,36 @@ func oneOfManyAlias(desc *relationDescriptor) string {
 	return alias
 }
 
-// takeOneOfManyClauses removes every clause added after OfMany was called and returns them, so the
-// join can move the relation's of-many closure constraints into the aggregate subquery. Laravel's
-// ofMany closure receives the subquery builder and writes to it directly; the Go formulation chains
-// the closure constraints after OfMany inside the relation's OnQuery, and the marks OfMany recorded
-// delimit them.
-//
-// A deferred where entry written after OfMany - an onlyTrashed, a whereHas, or a where closure
-// holding one - stays on the relation query with its bindings, after the clauses written before
-// OfMany: the chain after OfMany doubles as Laravel's relation-level calls chained after ofMany(),
-// which act on the relation query (latestOfMany()->onlyTrashed() writes its whereNotNull there,
-// oracle /Users/dog/.claude/jobs/013c27a0/tmp/r15b-probes/oracle.php O4, L2), and the aggregate
-// subquery renders no deferred entry.
-func (b *OrmBuilder) takeOneOfManyClauses(cfg *oneOfManyConfig) (wheres []core.Where, whereBindings []any, joins []core.Join, joinBindings []any) {
-	state := b.query.State()
-
-	if cfg.whereMark < len(state.Wheres) {
-		wheres = append([]core.Where(nil), state.Wheres[cfg.whereMark:]...)
-		state.Wheres = state.Wheres[:cfg.whereMark]
-	}
-	if cfg.whereBindMark < len(state.Bindings["where"]) {
-		whereBindings = append([]any(nil), state.Bindings["where"][cfg.whereBindMark:]...)
-		state.Bindings["where"] = state.Bindings["where"][:cfg.whereBindMark]
-	}
-	if containsDeferredWhere(wheres) {
-		var keptWheres []core.Where
-		var keptBindings []any
-		wheres, whereBindings, keptWheres, keptBindings = splitDeferredWheres(wheres, whereBindings)
-		state.Wheres = append(state.Wheres, keptWheres...)
-		state.Bindings["where"] = append(state.Bindings["where"], keptBindings...)
-	}
-	if cfg.joinMark < len(state.Joins) {
-		joins = append([]core.Join(nil), state.Joins[cfg.joinMark:]...)
-		state.Joins = state.Joins[:cfg.joinMark]
-	}
-	if cfg.joinBindMark < len(state.Bindings["join"]) {
-		joinBindings = append([]any(nil), state.Bindings["join"][cfg.joinBindMark:]...)
-		state.Bindings["join"] = state.Bindings["join"][:cfg.joinBindMark]
+// oneOfManyConstraintQuery runs the constraint closures OfMany was given against a fresh builder,
+// the Go stand-in for the aggregate subquery ofMany hands its closure, and returns that builder
+// with what they wrote rendered: a whereHas correlates to the related table and an onlyTrashed
+// writes the related model's "is not null" at its call position, as they would on Laravel's
+// subquery (oracle, illuminate/database v12.55.1, real sqlite, /Users/dog/.claude/jobs/013c27a0/tmp/ofm/closure_probe.php s5, s6). It
+// returns nil when OfMany was given no closure, and the error a closure's condition carried.
+func (r *OrmBuilder) oneOfManyConstraintQuery(desc *relationDescriptor, cfg *oneOfManyConfig) (*OrmBuilder, error) {
+	if len(cfg.constraints) == 0 {
+		return nil, nil
 	}
 
-	return wheres, whereBindings, joins, joinBindings
-}
-
-// splitDeferredWheres separates the wheres that hold a deferred entry - the entry itself, or a nested
-// group holding one - from the rest of a where slice, and their bindings from the slice's bindings.
-// Each where's bindings are contiguous in the slice's bindings, in where order: a deferred entry's is
-// its one marker, a nested group's the run its own binding list was copied in as, located by the
-// first marker it holds.
-func splitDeferredWheres(wheres []core.Where, bindings []any) (moved []core.Where, movedBindings []any, kept []core.Where, keptBindings []any) {
-	keep := make([]bool, len(bindings))
-
-	for _, where := range wheres {
-		switch {
-		case where.Type == core.WhereDeferredType:
-			if index := markerIndex(bindings, where.Value); index >= 0 {
-				keep[index] = true
-			}
-			kept = append(kept, where)
-		case where.Type == core.WhereNestedType && where.Query != nil && containsDeferredWhere(where.Query.State().Wheres):
-			group := where.Query.State().Bindings["where"]
-			for offset, binding := range group {
-				if _, ok := binding.(*deferredWhere); !ok {
-					continue
-				}
-				if start := markerIndex(bindings, binding) - offset; start >= 0 && start+len(group) <= len(bindings) {
-					for i := start; i < start+len(group); i++ {
-						keep[i] = true
-					}
-				}
-
-				break
-			}
-			kept = append(kept, where)
-		default:
-			moved = append(moved, where)
+	constrained := r.fresh()
+	for _, constraint := range cfg.constraints {
+		if constraint == nil {
+			continue
+		}
+		if returned, ok := constraint(constrained).(*OrmBuilder); ok {
+			constrained = returned
 		}
 	}
 
-	for i, binding := range bindings {
-		if keep[i] {
-			keptBindings = append(keptBindings, binding)
-		} else {
-			movedBindings = append(movedBindings, binding)
-		}
+	constrained = constrained.flushWheres()
+	if constrained.conditions.err != nil {
+		return nil, constrained.conditions.err
+	}
+	if err := finishSubqueryScope(constrained, desc.RelatedTable, desc.RelatedModel); err != nil {
+		return nil, err
 	}
 
-	return moved, movedBindings, kept, keptBindings
-}
-
-// markerIndex returns the position of a deferred entry's marker in a binding list, -1 when absent.
-func markerIndex(bindings []any, marker any) int {
-	target, ok := marker.(*deferredWhere)
-	if !ok {
-		return -1
-	}
-
-	for i, binding := range bindings {
-		if candidate, ok := binding.(*deferredWhere); ok && candidate == target {
-			return i
-		}
-	}
-
-	return -1
+	return constrained, nil
 }
 
 // takeEagerOneOfManyConstraints pops the constraints the eager loader wrote when it built the child
@@ -1465,36 +1431,35 @@ func markerIndex(bindings []any, marker any) int {
 // Laravel's addEagerConstraints writes through getRelationQuery. Only the loader's own leading
 // clauses are touched: the in-list must be the child's first where clause and name the column the
 // relation constrains — the related foreign key, or the through key for a through relation — and
-// every value must bind one-to-one (a subquery value list is left alone). The counts let the caller
-// shift the marks OfMany recorded.
-func (b *OrmBuilder) takeEagerOneOfManyConstraints(desc *relationDescriptor) (keys []any, morphType bool, poppedWheres, poppedBindings int) {
+// every value must bind one-to-one (a subquery value list is left alone).
+func (b *OrmBuilder) takeEagerOneOfManyConstraints(desc *relationDescriptor) (keys []any, morphType bool) {
 	var inListColumn string
 	switch desc.Kind {
 	case relKindHasOne, relKindMorphOne:
 		if len(desc.References) == 0 {
-			return nil, false, 0, 0
+			return nil, false
 		}
 		inListColumn = desc.RelatedTable + "." + desc.References[0].ForeignColumn
 	case relKindHasOneThrough:
 		inListColumn = desc.ThroughTable + "." + desc.FirstKey
 	default:
-		return nil, false, 0, 0
+		return nil, false
 	}
 
 	state := b.query.State()
 	if len(state.Wheres) == 0 {
-		return nil, false, 0, 0
+		return nil, false
 	}
 
 	first := state.Wheres[0]
 	if first.Type != core.WhereInType || fmt.Sprint(first.Column) != inListColumn {
-		return nil, false, 0, 0
+		return nil, false
 	}
 
 	bound := querybuilder.CleanBindings(first.Values)
 	if len(bound) != len(first.Values) {
 		// An expression in the list does not bind one-to-one; leave the child as it was built.
-		return nil, false, 0, 0
+		return nil, false
 	}
 
 	keys = append([]any(nil), first.Values...)
@@ -1504,7 +1469,6 @@ func (b *OrmBuilder) takeEagerOneOfManyConstraints(desc *relationDescriptor) (ke
 	} else {
 		state.Bindings["where"] = nil
 	}
-	poppedWheres, poppedBindings = 1, len(bound)
 
 	if desc.Kind == relKindMorphOne && len(state.Wheres) > 0 {
 		next := state.Wheres[0]
@@ -1514,13 +1478,11 @@ func (b *OrmBuilder) takeEagerOneOfManyConstraints(desc *relationDescriptor) (ke
 			if len(state.Bindings["where"]) > 0 {
 				state.Bindings["where"] = state.Bindings["where"][1:]
 			}
-			poppedWheres++
-			poppedBindings++
 			morphType = true
 		}
 	}
 
-	return keys, morphType, poppedWheres, poppedBindings
+	return keys, morphType
 }
 
 // allIntegerKeys reports whether every eager key is an integer kind — the Go stand-in for the

@@ -1676,9 +1676,10 @@ func (r *OrmBuilder) applyRelationScope(builder *querybuilder.Builder, callback 
 // table and model name the related side, as for applyRelationScope: an onlyTrashed the relation's
 // default query called writes the related model's "is not null" among its wheres at its call
 // position (Laravel's macro writes it on the relation query, and mergeConstraintsFrom carries it
-// with the relation's other wheres). It renders after the one-of-many join took the constraints
-// written after OfMany - which leaves the deferred entries on the relation query - so the predicate
-// stays on the existence query.
+// with the relation's other wheres). Every condition the relation query carries stays on the
+// existence query, before or after OfMany; only the closures OfMany was given constrain the
+// aggregate subquery (oracle, illuminate/database v12.55.1, real sqlite, /Users/dog/.claude/jobs/013c27a0/tmp/ofm/closure_probe.php s7
+// WHEREHAS).
 func (r *OrmBuilder) relationScopeQuery(desc *relationDescriptor, table string, model any) (*OrmBuilder, string, []any, error) {
 	if desc.OnQuery == nil {
 		return nil, "", nil, nil
@@ -1692,8 +1693,8 @@ func (r *OrmBuilder) relationScopeQuery(desc *relationDescriptor, table string, 
 	if scoped.conditions.oneOfMany != nil {
 		join, args, err := r.oneOfManyJoin(scoped, desc, scoped.conditions.oneOfMany, nil, false)
 		if err == nil && join != "" {
-			// Constraints written before OfMany stay on the existence query itself; the ones after
-			// it were moved into the aggregate subquery by the join builder.
+			// The relation query's own conditions stay on the existence query; the closures OfMany
+			// was given constrain the aggregate subquery the join builder rendered.
 			scoped = scoped.flushWheres()
 			if err := finishSubqueryScope(scoped, table, model); err != nil {
 				return nil, "", nil, err

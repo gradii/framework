@@ -285,12 +285,23 @@ type Query interface {
 	//	q.With("LatestImage", func(q orm.Query) orm.Query {
 	//	    return q.OfMany("created_at", "MAX")
 	//	})
-	OfMany(column, aggregate string) Query
+	//
+	// constraint is Laravel's ofMany closure: each one runs against every aggregate subquery,
+	// in order, so its conditions decide which row is the extreme one. A condition chained after
+	// OfMany stays on the relation query and filters the chosen row instead, as in Laravel:
+	//
+	//	q.OfMany("id", "MAX", func(sub orm.Query) orm.Query {
+	//	    return sub.Where("state", "published") // the latest published row
+	//	}).Where("state", "published")              // the latest row, if it is published
+	//
+	// Laravel takes the closure on the array form only; the string form taking it too is a Go
+	// convenience for a single column.
+	OfMany(column, aggregate string, constraint ...func(Query) Query) Query
 	// OfManyColumns configures the relation the way ofMany's ordered column map does, e.g.
 	// ofMany(['published_at' => 'max', 'id' => 'max']): the pairs are taken in order with each
 	// later pair breaking ties in the earlier ones, and the related model's key is appended with
-	// MAX when the columns omit it.
-	OfManyColumns(columns ...OfManyColumn) Query
+	// MAX when the columns omit it. constraint is ofMany's closure, as for OfMany.
+	OfManyColumns(columns []OfManyColumn, constraint ...func(Query) Query) Query
 	// LatestOfMany is shorthand for ofMany with every column aggregated "MAX" — Laravel's
 	// latestOfMany($column), which defaults to "id". The related model's key is appended as MAX
 	// when the columns omit it. Mirrors fedaco's latestOfMany().

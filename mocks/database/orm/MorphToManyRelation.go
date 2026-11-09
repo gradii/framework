@@ -4702,17 +4702,24 @@ func (_c *MorphToManyRelation_NewPivot_Call) RunAndReturn(run func(map[string]in
 	return _c
 }
 
-// OfMany provides a mock function with given fields: column, aggregate
-func (_m *MorphToManyRelation) OfMany(column string, aggregate string) orm.Query {
-	ret := _m.Called(column, aggregate)
+// OfMany provides a mock function with given fields: column, aggregate, constraint
+func (_m *MorphToManyRelation) OfMany(column string, aggregate string, constraint ...func(orm.Query) orm.Query) orm.Query {
+	_va := make([]interface{}, len(constraint))
+	for _i := range constraint {
+		_va[_i] = constraint[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, column, aggregate)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
 
 	if len(ret) == 0 {
 		panic("no return value specified for OfMany")
 	}
 
 	var r0 orm.Query
-	if rf, ok := ret.Get(0).(func(string, string) orm.Query); ok {
-		r0 = rf(column, aggregate)
+	if rf, ok := ret.Get(0).(func(string, string, ...func(orm.Query) orm.Query) orm.Query); ok {
+		r0 = rf(column, aggregate, constraint...)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(orm.Query)
@@ -4730,13 +4737,21 @@ type MorphToManyRelation_OfMany_Call struct {
 // OfMany is a helper method to define mock.On call
 //   - column string
 //   - aggregate string
-func (_e *MorphToManyRelation_Expecter) OfMany(column interface{}, aggregate interface{}) *MorphToManyRelation_OfMany_Call {
-	return &MorphToManyRelation_OfMany_Call{Call: _e.mock.On("OfMany", column, aggregate)}
+//   - constraint ...func(orm.Query) orm.Query
+func (_e *MorphToManyRelation_Expecter) OfMany(column interface{}, aggregate interface{}, constraint ...interface{}) *MorphToManyRelation_OfMany_Call {
+	return &MorphToManyRelation_OfMany_Call{Call: _e.mock.On("OfMany",
+		append([]interface{}{column, aggregate}, constraint...)...)}
 }
 
-func (_c *MorphToManyRelation_OfMany_Call) Run(run func(column string, aggregate string)) *MorphToManyRelation_OfMany_Call {
+func (_c *MorphToManyRelation_OfMany_Call) Run(run func(column string, aggregate string, constraint ...func(orm.Query) orm.Query)) *MorphToManyRelation_OfMany_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(string), args[1].(string))
+		variadicArgs := make([]func(orm.Query) orm.Query, len(args)-2)
+		for i, a := range args[2:] {
+			if a != nil {
+				variadicArgs[i] = a.(func(orm.Query) orm.Query)
+			}
+		}
+		run(args[0].(string), args[1].(string), variadicArgs...)
 	})
 	return _c
 }
@@ -4746,18 +4761,19 @@ func (_c *MorphToManyRelation_OfMany_Call) Return(_a0 orm.Query) *MorphToManyRel
 	return _c
 }
 
-func (_c *MorphToManyRelation_OfMany_Call) RunAndReturn(run func(string, string) orm.Query) *MorphToManyRelation_OfMany_Call {
+func (_c *MorphToManyRelation_OfMany_Call) RunAndReturn(run func(string, string, ...func(orm.Query) orm.Query) orm.Query) *MorphToManyRelation_OfMany_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// OfManyColumns provides a mock function with given fields: columns
-func (_m *MorphToManyRelation) OfManyColumns(columns ...orm.OfManyColumn) orm.Query {
-	_va := make([]interface{}, len(columns))
-	for _i := range columns {
-		_va[_i] = columns[_i]
+// OfManyColumns provides a mock function with given fields: columns, constraint
+func (_m *MorphToManyRelation) OfManyColumns(columns []orm.OfManyColumn, constraint ...func(orm.Query) orm.Query) orm.Query {
+	_va := make([]interface{}, len(constraint))
+	for _i := range constraint {
+		_va[_i] = constraint[_i]
 	}
 	var _ca []interface{}
+	_ca = append(_ca, columns)
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
 
@@ -4766,8 +4782,8 @@ func (_m *MorphToManyRelation) OfManyColumns(columns ...orm.OfManyColumn) orm.Qu
 	}
 
 	var r0 orm.Query
-	if rf, ok := ret.Get(0).(func(...orm.OfManyColumn) orm.Query); ok {
-		r0 = rf(columns...)
+	if rf, ok := ret.Get(0).(func([]orm.OfManyColumn, ...func(orm.Query) orm.Query) orm.Query); ok {
+		r0 = rf(columns, constraint...)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(orm.Query)
@@ -4783,21 +4799,22 @@ type MorphToManyRelation_OfManyColumns_Call struct {
 }
 
 // OfManyColumns is a helper method to define mock.On call
-//   - columns ...orm.OfManyColumn
-func (_e *MorphToManyRelation_Expecter) OfManyColumns(columns ...interface{}) *MorphToManyRelation_OfManyColumns_Call {
+//   - columns []orm.OfManyColumn
+//   - constraint ...func(orm.Query) orm.Query
+func (_e *MorphToManyRelation_Expecter) OfManyColumns(columns interface{}, constraint ...interface{}) *MorphToManyRelation_OfManyColumns_Call {
 	return &MorphToManyRelation_OfManyColumns_Call{Call: _e.mock.On("OfManyColumns",
-		append([]interface{}{}, columns...)...)}
+		append([]interface{}{columns}, constraint...)...)}
 }
 
-func (_c *MorphToManyRelation_OfManyColumns_Call) Run(run func(columns ...orm.OfManyColumn)) *MorphToManyRelation_OfManyColumns_Call {
+func (_c *MorphToManyRelation_OfManyColumns_Call) Run(run func(columns []orm.OfManyColumn, constraint ...func(orm.Query) orm.Query)) *MorphToManyRelation_OfManyColumns_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		variadicArgs := make([]orm.OfManyColumn, len(args)-0)
-		for i, a := range args[0:] {
+		variadicArgs := make([]func(orm.Query) orm.Query, len(args)-1)
+		for i, a := range args[1:] {
 			if a != nil {
-				variadicArgs[i] = a.(orm.OfManyColumn)
+				variadicArgs[i] = a.(func(orm.Query) orm.Query)
 			}
 		}
-		run(variadicArgs...)
+		run(args[0].([]orm.OfManyColumn), variadicArgs...)
 	})
 	return _c
 }
@@ -4807,7 +4824,7 @@ func (_c *MorphToManyRelation_OfManyColumns_Call) Return(_a0 orm.Query) *MorphTo
 	return _c
 }
 
-func (_c *MorphToManyRelation_OfManyColumns_Call) RunAndReturn(run func(...orm.OfManyColumn) orm.Query) *MorphToManyRelation_OfManyColumns_Call {
+func (_c *MorphToManyRelation_OfManyColumns_Call) RunAndReturn(run func([]orm.OfManyColumn, ...func(orm.Query) orm.Query) orm.Query) *MorphToManyRelation_OfManyColumns_Call {
 	_c.Call.Return(run)
 	return _c
 }

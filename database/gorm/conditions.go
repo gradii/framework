@@ -122,28 +122,23 @@ type oneOfManyColumn struct {
 }
 
 // oneOfManyConfig captures the ordered columns for OfMany / OfManyColumns / LatestOfMany /
-// OldestOfMany and the clause positions the query builder stood at when the configuration was
-// installed. Every path that reads a one-of-many relation consumes it — the relation read path
-// (Related), the eager loader and the existence subqueries behind WhereHas / WithCount / WithExists
-// — each rewriting the read into one nested aggregate subquery per declared column and an inner
-// join over the outermost, the way Laravel's ofMany installs them.
+// OldestOfMany and the constraint closures they were given. Every path that reads a one-of-many
+// relation consumes it — the relation read path (Related), the eager loader and the existence
+// subqueries behind WhereHas / WithCount / WithExists — each rewriting the read into one nested
+// aggregate subquery per declared column and an inner join over the outermost, the way Laravel's
+// ofMany installs them.
 //
 // keyAggregate is the aggregate the related model's key takes when the declared columns omit it:
 // the string form of OfMany appends the key with its own aggregate, the ordered forms with "MAX",
 // exactly as Laravel's ofMany does.
 //
-// The mark fields delimit the constraints the relation's own of-many chain wrote after the
-// configuration — the Go form of Laravel's ofMany closure, which writes to the aggregate subquery.
-// oneOfManyJoin moves everything after the marks into every subquery and leaves the earlier
-// constraints (the relation's key constraint) on the outer query.
+// constraints is Laravel's ofMany closure: oneOfManyJoin runs it against every aggregate subquery
+// it builds. Nothing written on the relation query moves into the subquery, before or after
+// OfMany: those conditions belong to the relation query, as in Laravel.
 type oneOfManyConfig struct {
 	columns      []oneOfManyColumn
 	keyAggregate string
-
-	whereMark     int
-	joinMark      int
-	whereBindMark int
-	joinBindMark  int
+	constraints  []func(contractsorm.Query) contractsorm.Query
 
 	// removals is the scope-removal state the relation query carried when OfMany was called.
 	// Laravel's newOneOfManySubQuery builds the aggregate from withoutGlobalScopes(
@@ -292,6 +287,7 @@ func (c Conditions) clone() Conditions {
 	if c.oneOfMany != nil {
 		oneOfMany := *c.oneOfMany
 		oneOfMany.columns = append([]oneOfManyColumn(nil), c.oneOfMany.columns...)
+		oneOfMany.constraints = append([]func(contractsorm.Query) contractsorm.Query(nil), c.oneOfMany.constraints...)
 		out.oneOfMany = &oneOfMany
 	}
 	if c.throughRead != nil {

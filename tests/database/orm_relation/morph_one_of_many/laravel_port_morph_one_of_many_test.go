@@ -81,7 +81,7 @@ func (morphOneOfManyProduct) Relations() map[string]contractsorm.Relation {
 		"CurrentFooState": contractsorm.MorphOne{
 			Related: &morphOneOfManyState{}, Name: "stateful",
 			OnQuery: func(q contractsorm.Query) contractsorm.Query {
-				return q.OfMany("id", "MAX").Where("type", "foo")
+				return q.OfMany("id", "MAX", func(sub contractsorm.Query) contractsorm.Query { return sub.Where("type", "foo") })
 			},
 		},
 	}

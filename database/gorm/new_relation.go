@@ -186,7 +186,7 @@ func (r *OrmBuilder) chaperoneResultModel(state *inverseChaperoneState, model re
 // applyOneOfManyToReadPath installs the one-of-many join on the relation read path, mirroring
 // HasOne / MorphOne / HasOneThrough's ofMany: the aggregate subquery carries the relation
 // constraints (foreign key = parent, foreign key is not null; a through relation's through key =
-// parent instead) plus anything the relation's own of-many chain wrote, the outer query re-states
+// parent instead) plus the closures OfMany was given, the outer query re-states
 // the relation constraints, and the select is pruned to the related table so the aggregate column
 // cannot scan into the model. Everything the caller chains afterwards — WhereKey, Count, Exists —
 // sees the joined read.

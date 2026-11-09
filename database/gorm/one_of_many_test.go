@@ -175,7 +175,9 @@ func TestEagerOfManyJoin_ClosureConstraintLeadsInList(t *testing.T) {
 			ForeignTable:  "rel_states",
 			ForeignColumn: "user_id",
 		}},
-		OnQuery: func(q contractsorm.Query) contractsorm.Query { return q.OfMany("", "").Where("type", "foo") },
+		OnQuery: func(q contractsorm.Query) contractsorm.Query {
+			return q.OfMany("", "", func(sub contractsorm.Query) contractsorm.Query { return sub.Where("type", "foo") })
+		},
 	}
 
 	statement, bindings := renderEagerOfManySQL(t, desc, []any{uint(1), uint(2)})
@@ -300,10 +302,10 @@ func TestQuery_OfManyShortcuts(t *testing.T) {
 	two := q.LatestOfMany("published_at", "id").(*OrmBuilder)
 	assert.Equal(t, []oneOfManyColumn{{column: "published_at", aggregate: "MAX"}, {column: "id", aggregate: "MAX"}}, two.conditions.oneOfMany.columns)
 
-	three := q.OfManyColumns(
-		contractsorm.OfManyColumn{Column: "updated_at", Aggregate: "max"},
-		contractsorm.OfManyColumn{Column: "created_at", Aggregate: "max"},
-	).(*OrmBuilder)
+	three := q.OfManyColumns([]contractsorm.OfManyColumn{
+		{Column: "updated_at", Aggregate: "max"},
+		{Column: "created_at", Aggregate: "max"},
+	}).(*OrmBuilder)
 	assert.Equal(t, []oneOfManyColumn{{column: "updated_at", aggregate: "max"}, {column: "created_at", aggregate: "max"}}, three.conditions.oneOfMany.columns)
 	assert.Equal(t, "MAX", three.conditions.oneOfMany.keyAggregate)
 }
@@ -324,10 +326,10 @@ func TestOfMany_InvalidAggregate_Error(t *testing.T) {
 
 	// OfManyColumns validates every pair in declared order, so the first offending aggregate is
 	// the one the message names.
-	multi := newRelQueryWith(t, &relUser{}).OfManyColumns(
-		contractsorm.OfManyColumn{Column: "id", Aggregate: "MAX"},
-		contractsorm.OfManyColumn{Column: "published_at", Aggregate: "avg"},
-	).(*OrmBuilder)
+	multi := newRelQueryWith(t, &relUser{}).OfManyColumns([]contractsorm.OfManyColumn{
+		{Column: "id", Aggregate: "MAX"},
+		{Column: "published_at", Aggregate: "avg"},
+	}).(*OrmBuilder)
 	assert.True(t, errors.Is(multi.conditions.err, errors.OrmRelationInvalidOfManyAggregate))
 	assert.ErrorContains(t, multi.conditions.err, "Invalid aggregate [avg] used within ofMany relation. Available aggregates: MIN, MAX")
 	assert.Nil(t, multi.conditions.oneOfMany)
@@ -368,7 +370,9 @@ func (oomUser) Relations() map[string]contractsorm.Relation {
 		},
 		"FooState": contractsorm.HasOne{
 			Related: &oomState{}, ForeignKey: "user_id",
-			OnQuery: func(q contractsorm.Query) contractsorm.Query { return q.OfMany("", "").Where("type", "foo") },
+			OnQuery: func(q contractsorm.Query) contractsorm.Query {
+				return q.OfMany("", "", func(sub contractsorm.Query) contractsorm.Query { return sub.Where("type", "foo") })
+			},
 		},
 	}
 }
@@ -586,7 +590,9 @@ func TestOneOfManyJoin_HasOne_MultipleAggregates_SQL(t *testing.T) {
 	desc := oomPriceDescriptor("Price")
 
 	sql := renderOneOfManyColumnsSQL(t, desc, func(q contractsorm.Query) contractsorm.Query {
-		return q.OfMany("published_at", "max").Where("published_at", "<", "2026-10-31 00:00:00")
+		return q.OfMany("published_at", "max", func(sub contractsorm.Query) contractsorm.Query {
+			return sub.Where("published_at", "<", "2026-10-31 00:00:00")
+		})
 	})
 
 	assert.Equal(t, `select "prices".* from "prices" inner join (select max("prices"."id") as "id_aggregate", min("prices"."published_at") as "published_at_aggregate", "prices"."user_id" from "prices" inner join (select max("prices"."published_at") as "published_at_aggregate", "prices"."user_id" from "prices" where "published_at" < ? group by "prices"."user_id") as "price" on "price"."published_at_aggregate" = "prices"."published_at" and "price"."user_id" = "prices"."user_id" where "published_at" < ? group by "prices"."user_id") as "price" on "price"."id_aggregate" = "prices"."id" and "price"."published_at_aggregate" = "prices"."published_at" and "price"."user_id" = "prices"."user_id"`, sql)
@@ -612,10 +618,10 @@ func TestOneOfManyJoin_HasOne_ThreeLevels_SQL(t *testing.T) {
 	desc := oomStateDescriptor("LatestUpdatedLatestCreatedState")
 
 	sql := renderOneOfManyColumnsSQL(t, desc, func(q contractsorm.Query) contractsorm.Query {
-		return q.OfManyColumns(
-			contractsorm.OfManyColumn{Column: "updated_at", Aggregate: "max"},
-			contractsorm.OfManyColumn{Column: "created_at", Aggregate: "max"},
-		)
+		return q.OfManyColumns([]contractsorm.OfManyColumn{
+			{Column: "updated_at", Aggregate: "max"},
+			{Column: "created_at", Aggregate: "max"},
+		})
 	})
 
 	assert.Equal(t, `select "states".* from "states" inner join (select MAX("states"."id") as "id_aggregate", min("states"."created_at") as "created_at_aggregate", min("states"."updated_at") as "updated_at_aggregate", "states"."user_id" from "states" inner join (select max("states"."created_at") as "created_at_aggregate", min("states"."updated_at") as "updated_at_aggregate", "states"."user_id" from "states" inner join (select max("states"."updated_at") as "updated_at_aggregate", "states"."user_id" from "states" group by "states"."user_id") as "latest_updated_latest_created_state" on "latest_updated_latest_created_state"."updated_at_aggregate" = "states"."updated_at" and "latest_updated_latest_created_state"."user_id" = "states"."user_id" group by "states"."user_id") as "latest_updated_latest_created_state" on "latest_updated_latest_created_state"."created_at_aggregate" = "states"."created_at" and "latest_updated_latest_created_state"."updated_at_aggregate" = "states"."updated_at" and "latest_updated_latest_created_state"."user_id" = "states"."user_id" group by "states"."user_id") as "latest_updated_latest_created_state" on "latest_updated_latest_created_state"."id_aggregate" = "states"."id" and "latest_updated_latest_created_state"."created_at_aggregate" = "states"."created_at" and "latest_updated_latest_created_state"."updated_at_aggregate" = "states"."updated_at" and "latest_updated_latest_created_state"."user_id" = "states"."user_id"`, sql)
@@ -641,10 +647,10 @@ func TestOneOfManyJoin_HasOne_OldestOfManyMultiColumn_SQL(t *testing.T) {
 func TestEagerOfManyJoin_HasOne_MultipleAggregates_InListInsideSubQuery(t *testing.T) {
 	desc := oomPriceDescriptor("LatestTwo")
 	desc.OnQuery = func(q contractsorm.Query) contractsorm.Query {
-		return q.OfManyColumns(
-			contractsorm.OfManyColumn{Column: "published_at", Aggregate: "MAX"},
-			contractsorm.OfManyColumn{Column: "id", Aggregate: "MAX"},
-		)
+		return q.OfManyColumns([]contractsorm.OfManyColumn{
+			{Column: "published_at", Aggregate: "MAX"},
+			{Column: "id", Aggregate: "MAX"},
+		})
 	}
 
 	statement, bindings := renderEagerOfManySQL(t, desc, []any{uint(1), uint(2)})
@@ -672,7 +678,9 @@ func (oomThroughUser) Relations() map[string]contractsorm.Relation {
 		"Price": contractsorm.HasOneThrough{
 			Related: &oomThroughPrice{}, Through: &oomThroughIntermediate{},
 			OnQuery: func(q contractsorm.Query) contractsorm.Query {
-				return q.OfMany("published_at", "max").Where("published_at", "<", "2026-10-31 00:00:00")
+				return q.OfMany("published_at", "max", func(sub contractsorm.Query) contractsorm.Query {
+					return sub.Where("published_at", "<", "2026-10-31 00:00:00")
+				})
 			},
 		},
 	}
@@ -796,7 +804,9 @@ func TestEagerThroughOfMany_MultiAggregate_SQL(t *testing.T) {
 		LocalKey:       "id",
 		SecondLocalKey: "id",
 		OnQuery: func(q contractsorm.Query) contractsorm.Query {
-			return q.OfMany("published_at", "max").Where("published_at", "<", "2026-10-31 00:00:00")
+			return q.OfMany("published_at", "max", func(sub contractsorm.Query) contractsorm.Query {
+				return sub.Where("published_at", "<", "2026-10-31 00:00:00")
+			})
 		},
 	}
 

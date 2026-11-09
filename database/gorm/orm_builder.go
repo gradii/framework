@@ -1725,21 +1725,28 @@ func (r *OrmBuilder) Take(limit int) contractsorm.Query {
 // extreme key. Column and aggregate default to "id" / "MAX". Only MIN and MAX are accepted,
 // case-insensitively, exactly as Laravel's ofMany requires; any other aggregate makes the relation
 // query report errors.OrmRelationInvalidOfManyAggregate when it is compiled.
-func (r *OrmBuilder) OfMany(column, aggregate string) contractsorm.Query {
+//
+// constraint is Laravel's ofMany closure: it runs against every aggregate subquery, so its
+// conditions choose the extreme row, while a condition chained after OfMany stays on the relation
+// query and filters the chosen row (oracle, illuminate/database v12.55.1, real sqlite,
+// /Users/dog/.claude/jobs/013c27a0/tmp/ofm/closure_probe.php s1, s7). Laravel accepts the closure on the array form only; taking it on
+// the string form too is the Go convenience for a single column.
+func (r *OrmBuilder) OfMany(column, aggregate string, constraint ...func(contractsorm.Query) contractsorm.Query) contractsorm.Query {
 	if column == "" {
 		column = "id"
 	}
 	if aggregate == "" {
 		aggregate = "MAX"
 	}
-	return r.setOneOfMany([]oneOfManyColumn{{column: column, aggregate: aggregate}}, aggregate)
+	return r.setOneOfMany([]oneOfManyColumn{{column: column, aggregate: aggregate}}, aggregate, constraint)
 }
 
 // OfManyColumns configures the relation the way ofMany's ordered column map does, e.g.
 // ofMany(['published_at' => 'max', 'id' => 'max']): the pairs are taken in order with each later
 // pair breaking ties in the earlier ones, and the related model's key is appended with MAX when
 // the columns omit it. Every pair's aggregate must be MIN or MAX, as Laravel's ofMany requires.
-func (r *OrmBuilder) OfManyColumns(columns ...contractsorm.OfManyColumn) contractsorm.Query {
+// constraint is ofMany's closure, as for OfMany.
+func (r *OrmBuilder) OfManyColumns(columns []contractsorm.OfManyColumn, constraint ...func(contractsorm.Query) contractsorm.Query) contractsorm.Query {
 	cols := make([]oneOfManyColumn, 0, len(columns))
 	for _, col := range columns {
 		aggregate := col.Aggregate
@@ -1748,7 +1755,7 @@ func (r *OrmBuilder) OfManyColumns(columns ...contractsorm.OfManyColumn) contrac
 		}
 		cols = append(cols, oneOfManyColumn{column: col.Column, aggregate: aggregate})
 	}
-	return r.setOneOfMany(cols, "MAX")
+	return r.setOneOfMany(cols, "MAX", constraint)
 }
 
 // LatestOfMany is shorthand for ofMany with every column aggregated "MAX" — Laravel's
@@ -1762,7 +1769,7 @@ func (r *OrmBuilder) LatestOfMany(column ...string) contractsorm.Query {
 	for _, col := range column {
 		columns = append(columns, contractsorm.OfManyColumn{Column: col, Aggregate: "MAX"})
 	}
-	return r.OfManyColumns(columns...)
+	return r.OfManyColumns(columns)
 }
 
 // OldestOfMany is shorthand for ofMany with every column aggregated "MIN" — Laravel's
@@ -1776,17 +1783,17 @@ func (r *OrmBuilder) OldestOfMany(column ...string) contractsorm.Query {
 	for _, col := range column {
 		columns = append(columns, contractsorm.OfManyColumn{Column: col, Aggregate: "MIN"})
 	}
-	return r.OfManyColumns(columns...)
+	return r.OfManyColumns(columns)
 }
 
-// setOneOfMany records a one-of-many configuration and the clause positions the builder stood at,
-// so every path that reads the relation can rewrite the read into the aggregate join.
+// setOneOfMany records a one-of-many configuration and its constraint closures, so every path that
+// reads the relation can rewrite the read into the aggregate join.
 //
 // Laravel's ofMany accepts only MIN and MAX (case-insensitively) and reports the first offending
 // aggregate; the error is carried on the query, like every condition the ORM cannot accept, and it
 // surfaces when the relation's statement is compiled. The message is Laravel's, verbatim (oracle:
 // ofMany('id', 'count') throws InvalidArgumentException).
-func (r *OrmBuilder) setOneOfMany(columns []oneOfManyColumn, keyAggregate string) contractsorm.Query {
+func (r *OrmBuilder) setOneOfMany(columns []oneOfManyColumn, keyAggregate string, constraints []func(contractsorm.Query) contractsorm.Query) contractsorm.Query {
 	for _, column := range columns {
 		if !strings.EqualFold(column.aggregate, "min") && !strings.EqualFold(column.aggregate, "max") {
 			// Laravel throws before any configuration is installed, so a rejected aggregate never
@@ -1800,15 +1807,11 @@ func (r *OrmBuilder) setOneOfMany(columns []oneOfManyColumn, keyAggregate string
 		}
 	}
 
-	state := r.query.State()
 	conditions := r.conditions
 	conditions.oneOfMany = &oneOfManyConfig{
-		columns:       columns,
-		keyAggregate:  keyAggregate,
-		whereMark:     len(state.Wheres),
-		joinMark:      len(state.Joins),
-		whereBindMark: len(state.Bindings["where"]),
-		joinBindMark:  len(state.Bindings["join"]),
+		columns:      columns,
+		keyAggregate: keyAggregate,
+		constraints:  append([]func(contractsorm.Query) contractsorm.Query(nil), constraints...),
 		// The removals are taken now, as newOneOfManySubQuery takes removedScopes() when ofMany
 		// runs: only the ones written before OfMany reach the aggregate (oracle, illuminate/database
 		// v12.55.1, real sqlite, /Users/dog/.claude/jobs/013c27a0/tmp/r15b-probes/oracle.php O1-O5, O7, L1-L3 and

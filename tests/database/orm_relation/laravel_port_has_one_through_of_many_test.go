@@ -110,9 +110,9 @@ func (hasOneThroughOfManyUser) Relations() map[string]contractsorm.Relation {
 		"LatestLoginWithFooState": contractsorm.HasOneThrough{
 			Related: &hasOneThroughOfManyLogin{}, Through: &hasOneThroughOfManyIntermediate{},
 			OnQuery: func(q contractsorm.Query) contractsorm.Query {
-				return q.OfMany("id", "MAX").
-					Join("states ON states.intermediate_id = logins.intermediate_id").
-					Where("states.type", "foo")
+				return q.OfMany("id", "MAX", func(sub contractsorm.Query) contractsorm.Query {
+					return sub.Join("states ON states.intermediate_id = logins.intermediate_id").Where("states.type", "foo")
+				})
 			},
 		},
 		// states(): through($this->intermediates())->has(fn ($i) => $i->states()) — the nested through
@@ -121,13 +121,15 @@ func (hasOneThroughOfManyUser) Relations() map[string]contractsorm.Relation {
 		// foo_state(): ofMany([id => max], where type=foo) — the empty aggregate set defaults to id MAX.
 		"FooState": contractsorm.HasOneThrough{
 			Related: &hasOneThroughOfManyState{}, Through: &hasOneThroughOfManyIntermediate{},
-			OnQuery: func(q contractsorm.Query) contractsorm.Query { return q.OfMany("", "").Where("states.type", "foo") },
+			OnQuery: func(q contractsorm.Query) contractsorm.Query {
+				return q.OfMany("", "", func(sub contractsorm.Query) contractsorm.Query { return sub.Where("states.type", "foo") })
+			},
 		},
 		// last_updated_foo_state(): ofMany(['updated_at' => 'max', 'id' => 'max'], where type=foo).
 		"LastUpdatedFooState": contractsorm.HasOneThrough{
 			Related: &hasOneThroughOfManyState{}, Through: &hasOneThroughOfManyIntermediate{},
 			OnQuery: func(q contractsorm.Query) contractsorm.Query {
-				return q.OfMany("updated_at", "MAX").Where("states.type", "foo")
+				return q.OfMany("updated_at", "MAX", func(sub contractsorm.Query) contractsorm.Query { return sub.Where("states.type", "foo") })
 			},
 		},
 		// prices(): throughIntermediates()->hasPrices().
@@ -137,7 +139,7 @@ func (hasOneThroughOfManyUser) Relations() map[string]contractsorm.Relation {
 		"Price": contractsorm.HasOneThrough{
 			Related: &hasOneThroughOfManyPrice{}, Through: &hasOneThroughOfManyIntermediate{},
 			OnQuery: func(q contractsorm.Query) contractsorm.Query {
-				return q.OfMany("published_at", "MAX").Where("published_at", "<", time.Now())
+				return q.OfMany("published_at", "MAX", func(sub contractsorm.Query) contractsorm.Query { return sub.Where("published_at", "<", time.Now()) })
 			},
 		},
 		// price_without_key_in_aggregates(): ofMany(['published_at' => 'MAX']) — Laravel adds the
@@ -155,7 +157,7 @@ func (hasOneThroughOfManyUser) Relations() map[string]contractsorm.Relation {
 		"PriceWithoutGlobalScope": contractsorm.HasOneThrough{
 			Related: &hasOneThroughOfManyPrice{}, Through: &hasOneThroughOfManyIntermediate{},
 			OnQuery: func(q contractsorm.Query) contractsorm.Query {
-				return q.WithoutGlobalScopes().OfMany("published_at", "max").Where("published_at", "<", time.Now())
+				return q.WithoutGlobalScopes().OfMany("published_at", "max", func(sub contractsorm.Query) contractsorm.Query { return sub.Where("published_at", "<", time.Now()) })
 			},
 		},
 		// latest_updated_latest_created_state(): ofMany(['updated_at' => 'max', 'created_at' => 'max']) —
@@ -163,10 +165,10 @@ func (hasOneThroughOfManyUser) Relations() map[string]contractsorm.Relation {
 		"LatestUpdatedLatestCreatedState": contractsorm.HasOneThrough{
 			Related: &hasOneThroughOfManyState{}, Through: &hasOneThroughOfManyIntermediate{},
 			OnQuery: func(q contractsorm.Query) contractsorm.Query {
-				return q.OfManyColumns(
-					contractsorm.OfManyColumn{Column: "updated_at", Aggregate: "max"},
-					contractsorm.OfManyColumn{Column: "created_at", Aggregate: "max"},
-				)
+				return q.OfManyColumns([]contractsorm.OfManyColumn{
+					{Column: "updated_at", Aggregate: "max"},
+					{Column: "created_at", Aggregate: "max"},
+				})
 			},
 		},
 	}
