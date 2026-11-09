@@ -94,8 +94,8 @@ func (hasOneOfManyUser) Relations() map[string]contractsorm.Relation {
 		"LatestLoginWithFooState": contractsorm.HasOne{
 			Related: &hasOneOfManyLogin{}, ForeignKey: "user_id",
 			OnQuery: func(q contractsorm.Query) contractsorm.Query {
-				return q.OfMany("id", "MAX", func(sub contractsorm.Query) contractsorm.Query {
-					return sub.Join("states ON states.user_id = logins.user_id").Where("states.type", "foo")
+				return q.OfManyColumns([]contractsorm.OfManyColumn{{Column: "id", Aggregate: "max"}}, func(sub contractsorm.Query) contractsorm.Query {
+					return sub.Join("states", "states.user_id", "=", "logins.user_id").Where("states.type", "foo")
 				})
 			},
 		},
@@ -104,30 +104,31 @@ func (hasOneOfManyUser) Relations() map[string]contractsorm.Relation {
 		"FooState": contractsorm.HasOne{
 			Related: &hasOneOfManyState{}, ForeignKey: "user_id",
 			OnQuery: func(q contractsorm.Query) contractsorm.Query {
-				return q.OfMany("", "", func(sub contractsorm.Query) contractsorm.Query { return sub.Where("type", "foo") })
+				return q.OfManyColumns(nil, func(sub contractsorm.Query) contractsorm.Query { return sub.Where("type", "foo") })
 			},
 		},
 		// last_updated_foo_state(): ofMany(['updated_at' => 'max', 'id' => 'max'], where type=foo).
 		"LastUpdatedFooState": contractsorm.HasOne{
 			Related: &hasOneOfManyState{}, ForeignKey: "user_id",
 			OnQuery: func(q contractsorm.Query) contractsorm.Query {
-				return q.OfMany("updated_at", "MAX", func(sub contractsorm.Query) contractsorm.Query { return sub.Where("type", "foo") })
+				return q.OfManyColumns([]contractsorm.OfManyColumn{{Column: "updated_at", Aggregate: "max"}, {Column: "id", Aggregate: "max"}}, func(sub contractsorm.Query) contractsorm.Query { return sub.Where("type", "foo") })
 			},
 		},
 		"Prices": contractsorm.HasMany{Related: &hasOneOfManyPrice{}, ForeignKey: "user_id"},
-		// price(): ofMany(['published_at' => 'max', 'id' => 'max'], where published_at < now());
-		// the string form adds the key with the same aggregate.
+		// price(): ofMany(['published_at' => 'max', 'id' => 'max'], where published_at < now()).
 		"Price": contractsorm.HasOne{
 			Related: &hasOneOfManyPrice{}, ForeignKey: "user_id",
 			OnQuery: func(q contractsorm.Query) contractsorm.Query {
-				return q.OfMany("published_at", "MAX", func(sub contractsorm.Query) contractsorm.Query { return sub.Where("published_at", "<", time.Now()) })
+				return q.OfManyColumns([]contractsorm.OfManyColumn{{Column: "published_at", Aggregate: "max"}, {Column: "id", Aggregate: "max"}}, func(sub contractsorm.Query) contractsorm.Query { return sub.Where("published_at", "<", time.Now()) })
 			},
 		},
 		// price_without_key_in_aggregates(): ofMany(['published_at' => 'MAX']) — Laravel adds the
 		// key (id MAX) when the aggregate set omits it.
 		"PriceWithoutKeyInAggregates": contractsorm.HasOne{
 			Related: &hasOneOfManyPrice{}, ForeignKey: "user_id",
-			OnQuery: func(q contractsorm.Query) contractsorm.Query { return q.OfMany("published_at", "MAX") },
+			OnQuery: func(q contractsorm.Query) contractsorm.Query {
+				return q.OfManyColumns([]contractsorm.OfManyColumn{{Column: "published_at", Aggregate: "MAX"}})
+			},
 		},
 		// price_with_shortcut(): latestOfMany(['published_at', 'id']).
 		"PriceWithShortcut": contractsorm.HasOne{
@@ -138,7 +139,7 @@ func (hasOneOfManyUser) Relations() map[string]contractsorm.Relation {
 		"PriceWithoutGlobalScope": contractsorm.HasOne{
 			Related: &hasOneOfManyPrice{}, ForeignKey: "user_id",
 			OnQuery: func(q contractsorm.Query) contractsorm.Query {
-				return q.WithoutGlobalScopes().OfMany("published_at", "max", func(sub contractsorm.Query) contractsorm.Query { return sub.Where("published_at", "<", time.Now()) })
+				return q.WithoutGlobalScopes().OfManyColumns([]contractsorm.OfManyColumn{{Column: "published_at", Aggregate: "max"}, {Column: "id", Aggregate: "max"}}, func(sub contractsorm.Query) contractsorm.Query { return sub.Where("published_at", "<", time.Now()) })
 			},
 		},
 		// latest_updated_latest_created_state(): ofMany(['updated_at' => 'max', 'created_at' => 'max']) —
@@ -668,8 +669,8 @@ func TestHasOneOfMany_JoinConstraints(t *testing.T) {
 	baz := hasOneOfManyState{Type: "bar", State: "baz"}
 	require.NoError(t, cloneRelationQuery(t, query).Relation(&user, "States").Create(&baz))
 
-	// Laravel re-reads the user (first()) and lazy-loads foo_state; the relation's of-many chain
-	// restricts the aggregate subquery to type = foo first, so the newest foo state wins over the
+	// Laravel re-reads the user (first()) and lazy-loads foo_state; the closure the relation gives
+	// OfMany restricts the aggregate subquery to type = foo first, so the newest foo state wins over the
 	// newer bar one. The Go form of the lazy load is Query.Related.
 	found := hasOneOfManyState{}
 	require.NoError(t, cloneRelationQuery(t, query).Related(&user, "FooState").First(&found))

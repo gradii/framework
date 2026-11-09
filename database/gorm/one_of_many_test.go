@@ -28,8 +28,8 @@ import (
 // outer query carries no constraint — every expected string is the oracle's for the same read.
 
 // renderOfManySQL runs the same steps the eager loader takes for an OfMany condition — register the
-// condition on the child (OfMany records the marks its follow-on constraints are delimited by),
-// build the join fragment, queue it with the "inner" keyword, and compile the statement — so the
+// condition on the child (OfMany records the columns and its constraint closures), build the join
+// fragment, queue it with the "inner" keyword, and compile the statement — so the
 // rendered SQL covers the JoinRaw prefixing the eager path relies on.
 func renderOfManySQL(t *testing.T, desc *relationDescriptor, column, aggregate string) string {
 	t.Helper()
@@ -160,8 +160,8 @@ func TestEagerOfManyJoin_MorphOne_InListInsideSubQuery(t *testing.T) {
 }
 
 // TestEagerOfManyJoin_ClosureConstraintLeadsInList pins the order inside the aggregate subquery
-// when the relation's own scope adds a constraint: the scope's clause (the Go form of Laravel's
-// ofMany closure) comes first, then the in-list. Oracle, sqlite: for keys 1, 2 the subquery reads
+// when OfMany is given a closure: the closure's clause (Laravel's ofMany closure) comes first, then
+// the in-list. Oracle, sqlite: for keys 1, 2 the subquery reads
 // where "type" = ? and "rel_states"."user_id" in (1, 2) group by "rel_states"."user_id".
 func TestEagerOfManyJoin_ClosureConstraintLeadsInList(t *testing.T) {
 	desc := &relationDescriptor{
@@ -345,7 +345,7 @@ func TestOfMany_InvalidAggregate_Error(t *testing.T) {
 // --- relation read path ----------------------------------------------------------------------
 
 // oomUser mirrors the ported corpus fixtures: a LatestLogin HasOne whose OnQuery installs OfMany, a
-// FirstLogin shortcut with MIN, and a FooState whose of-many chain adds a where — the Go form of
+// FirstLogin shortcut with MIN, and a FooState whose OfMany is given a closure adding a where —
 // Laravel's ofMany closure, which restricts the aggregate subquery before the aggregate is taken.
 type oomUser struct {
 	ID          uint
@@ -415,9 +415,9 @@ func TestRelated_OneOfMany_ShortcutReadPathSQL(t *testing.T) {
 }
 
 // TestRelated_OneOfMany_ClosureConstraintInSubQuery pins the of-many closure case: the where the
-// relation's own chain adds after OfMany is the Go form of Laravel's ofMany closure and belongs
-// inside the aggregate subquery, before the relation's foreign-key constraints — the oracle prints
-// exactly this statement.
+// closure passed to OfMany writes is Laravel's ofMany closure and lands inside the aggregate
+// subquery, before the relation's foreign-key constraints — the oracle prints exactly this
+// statement. A where chained after OfMany would stay on the outer query instead.
 func TestRelated_OneOfMany_ClosureConstraintInSubQuery(t *testing.T) {
 	q := newRelQueryWith(t, &oomUser{})
 	rel := q.Related(&oomUser{ID: 7}, "FooState")

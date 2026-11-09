@@ -478,9 +478,9 @@ func (deferredOfManyOwner) Relations() map[string]contractsorm.Relation {
 	}
 }
 
-// TestDeferredWhere_ClosureAfterOfManyStaysOnTheRelationQuery pins the one-of-many split over a where
-// closure holding a deferred entry: the closure written after OfMany is Laravel's where chained after
-// latestOfMany(), so the group - its onlyTrashed and its binding with it - stays on the relation
+// TestDeferredWhere_ClosureAfterOfManyStaysOnTheRelationQuery pins that a where closure holding a
+// deferred entry, chained after OfMany, stays on the relation query: it is Laravel's where chained
+// after latestOfMany(), so the group - its onlyTrashed and its binding with it - stays on the relation
 // query, and the aggregate subquery keeps the related model's full scopes. The port names the join
 // alias after the relation (the documented alias gap); every other byte is the oracle's.
 //
