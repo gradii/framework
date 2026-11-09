@@ -1692,7 +1692,12 @@ func (r *OrmBuilder) relationScopeQuery(desc *relationDescriptor, table string, 
 
 	if scoped.conditions.oneOfMany != nil {
 		join, args, err := r.oneOfManyJoin(scoped, desc, scoped.conditions.oneOfMany, nil, false)
-		if err == nil && join != "" {
+		if err != nil {
+			// A failing ofMany closure must fail the statement: falling through would run the plain
+			// existence check over every related row.
+			return nil, "", nil, err
+		}
+		if join != "" {
 			// The relation query's own conditions stay on the existence query; the closures OfMany
 			// was given constrain the aggregate subquery the join builder rendered.
 			scoped = scoped.flushWheres()

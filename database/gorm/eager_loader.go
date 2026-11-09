@@ -1329,11 +1329,21 @@ func (r *OrmBuilder) oneOfManyJoin(builder *OrmBuilder, desc *relationDescriptor
 		// there the way performJoin's named scope filters the relation read (oracle,
 		// /tmp/r10/through_softdelete_probe.php N9/N10 - the through predicate sits in the
 		// aggregate subquery and on the outer query).
+		//
+		// Only a level above the innermost answers to the closure's removal of that scope:
+		// addOneOfManySubQueryConstraints registers it there before the closure runs, while the
+		// innermost level's addConstraints registers it again after the closure, so it stays
+		// (oracle, /Users/dog/.claude/jobs/013c27a0/tmp/ofm/review_through_probe.php t3, t4).
+		var throughRemovals subqueryScopeRemovals
+		if i > 0 {
+			throughRemovals = scopeRemovalsOf(constrained)
+		}
 		r.applySubqueryScopeGrouped(sub, func() {
-			r.applySubquerySoftDelete(sub, desc.ThroughTable, desc.ThroughModel, subqueryScopeRemovals{})
+			r.applySubqueryThroughSoftDelete(sub, desc.ThroughTable, desc.ThroughModel, throughRemovals)
 		})
 
 		sub.GroupByRaw(strings.Join(groupCols, ", "), nil)
+		copyOneOfManyClosureClauses(sub, constrained)
 		levelSQL, levelArgs = sub.ToSelectSQL()
 		levelCols = append([]string{col.column}, levelCols...)
 	}
@@ -1393,6 +1403,27 @@ func oneOfManyAlias(desc *relationDescriptor) string {
 	return alias
 }
 
+// copyOneOfManyClosureClauses moves what an ofMany closure wrote besides wheres and joins onto an
+// aggregate subquery: Laravel runs the closure on the subquery itself, so its extra group-bys follow
+// the relation's own group column and its havings, orders, limit, offset and distinct all render
+// there (oracle, illuminate/database v12.55.1, real sqlite, /Users/dog/.claude/jobs/013c27a0/tmp/ofm/review_clauses_probe.php
+// o1-o4). A nil constrained (OfMany given no closure) copies nothing.
+func copyOneOfManyClosureClauses(sub *querybuilder.Builder, constrained *OrmBuilder) {
+	if constrained == nil {
+		return
+	}
+
+	from, to := constrained.query.State(), sub.State()
+	to.Groups = append(to.Groups, from.Groups...)
+	to.Havings = append(to.Havings, from.Havings...)
+	to.Orders = append(to.Orders, from.Orders...)
+	to.Limit, to.Offset = from.Limit, from.Offset
+	to.Distinct, to.DistinctColumns = from.Distinct, from.DistinctColumns
+	for _, binding := range []string{"groupBy", "having", "order"} {
+		_ = sub.AddBinding(from.Bindings[binding], binding)
+	}
+}
+
 // oneOfManyConstraintQuery runs the constraint closures OfMany was given against a fresh builder,
 // the Go stand-in for the aggregate subquery ofMany hands its closure, and returns that builder
 // with what they wrote rendered: a whereHas correlates to the related table and an onlyTrashed
@@ -1404,7 +1435,10 @@ func (r *OrmBuilder) oneOfManyConstraintQuery(desc *relationDescriptor, cfg *one
 		return nil, nil
 	}
 
+	// ofMany hands its closure an Eloquent builder on the related model, so a call that needs the
+	// model when it runs - whereKey, whereKeyNot - resolves against that model.
 	constrained := r.fresh()
+	constrained.conditions.model = desc.RelatedModel
 	for _, constraint := range cfg.constraints {
 		if constraint == nil {
 			continue
