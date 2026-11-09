@@ -240,7 +240,9 @@ func TestThroughSoftDelete_PluckValueExistsKeepTheThroughPredicate(t *testing.T)
 }
 
 // TestThroughSoftDelete_ExistsKeepsTheThroughPredicate pins exists() through the recording driver:
-// it executes a statement, so the assertion is on the statement the read really ran (oracle P3).
+// it executes a statement, so the assertion is on the statement the read really ran - Laravel's
+// compileExists over the through read, both predicates kept (oracle P3; the statement itself from
+// illuminate/database v12.55.1, /Users/dog/.claude/jobs/013c27a0/tmp/ofa/exists_probe.php "through").
 func TestThroughSoftDelete_ExistsKeepsTheThroughPredicate(t *testing.T) {
 	q, recorder := newRecordingRelQuery(t, &tsdCountry{})
 	rel, ok := ormBuilderOf(q.Related(&tsdCountry{ID: 1}, "Posts"))
@@ -250,7 +252,7 @@ func TestThroughSoftDelete_ExistsKeepsTheThroughPredicate(t *testing.T) {
 	_, err := rel.Exists()
 	require.NoError(t, err)
 
-	assert.Equal(t, `select * from "tsd_posts" inner join "tsd_users" on "tsd_users"."id" = "tsd_posts"."user_id" where "tsd_users"."country_id" = ? and "tsd_posts"."deleted_at" is null and "tsd_users"."deleted_at" is null limit 1`, recorder.last(t).sql)
+	assert.Equal(t, `select exists(select * from "tsd_posts" inner join "tsd_users" on "tsd_users"."id" = "tsd_posts"."user_id" where "tsd_users"."country_id" = ? and "tsd_posts"."deleted_at" is null and "tsd_users"."deleted_at" is null) as "exists"`, recorder.last(t).sql)
 }
 
 // TestThroughSoftDelete_WithTrashedParentsDropsTheThroughPredicate pins the eager through-side

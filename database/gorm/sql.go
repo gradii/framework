@@ -53,6 +53,32 @@ func (r *OrmBuilder) compileSelect() (string, []any, error) {
 	return sql, bindings, nil
 }
 
+// compileExists renders the query as Laravel's exists() statement: the grammar's compileExists over
+// the select, which is `select exists(<select>) as "exists"` for most dialects and SQL Server's own
+// `select top 1 1 [exists] ...`. exists() is forwarded to the base query builder, so neither relation
+// read wears its select rewrite here - the through read keeps the builder's own select list rather
+// than the laravel_through_key alias, and the pivot read drops its alias list (oracle: exists() on a
+// through relation compiles `select exists(select * from "tsd_posts" inner join "tsd_users" ...) as
+// "exists"`). The statement is compiled from newBuilder's copy, so the query itself is left as it was.
+// A raw statement is used as given.
+func (r *OrmBuilder) compileExists() (string, []any, error) {
+	if raw := r.conditions.raw; raw != nil {
+		return fmt.Sprint(raw.query), raw.args, nil
+	}
+
+	builder, err := r.newBuilder()
+	if err != nil {
+		return "", nil, err
+	}
+
+	sql, bindings := builder.ToExistsSQL()
+	if err := builder.Error(); err != nil {
+		return "", nil, err
+	}
+
+	return sql, bindings, nil
+}
+
 // compileFirst renders the query as the single-row select First uses: the model's primary key
 // orders it when the caller asked for no order, and one row is returned.
 func (r *OrmBuilder) compileFirst() (string, []any, error) {

@@ -1066,21 +1066,15 @@ func (r *OrmBuilder) Exec(statement string, values ...any) (*contractsdb.Result,
 	return query.execStatement(statement, values)
 }
 
+// Exists reports whether the query matches any row, mirroring Query\Builder::exists: the statement
+// is the grammar's compileExists over the query - `select exists(<select>) as "exists"`, SQL Server's
+// `select top 1 1 [exists] ...` - compiled from a copy, so the query keeps its own limit, offset and
+// select list for whatever runs next (oracle, illuminate/database v12.55.1, real sqlite, MySQL 9.7,
+// PostgreSQL 18.3: `$q->exists(); $q->get()` still reads every row).
 func (r *OrmBuilder) Exists() (bool, error) {
 	query := r.addGlobalScopes().buildConditions()
 
-	// The statement selects rows and is limited to one, rather than selecting the literal 1: a
-	// literal would be wrapped as an identifier, which some dialects reject.
-	query.query.Limit(1)
-
-	// exists() is forwarded to the Eloquent builder in Laravel, so neither relation read wears its
-	// select rewrite: the through read keeps the builder's own select list rather than the
-	// laravel_through_key alias, and the pivot read drops its alias list the same way (oracle:
-	// exists() on a many-to-many relation compiles `select exists(select * from "users" inner join
-	// "friends" ...)`).
-	query = query.withoutThroughReadSelect().withoutPivotReadSelect()
-
-	statement, bindings, err := query.compileSelect()
+	statement, bindings, err := query.compileExists()
 	if err != nil {
 		return false, err
 	}
@@ -1091,7 +1085,22 @@ func (r *OrmBuilder) Exists() (bool, error) {
 	}
 	defer errors.Ignore(rows.Close)
 
-	return rows.Next(), nil
+	// SQL Server's form returns no row when nothing matches; the others return one row whose exists
+	// column is the answer, as Laravel reads `(bool) $results['exists']`.
+	if !rows.Next() {
+		return false, rows.Err()
+	}
+	// A raw statement runs as the caller wrote it, so a returned row is the match.
+	if query.conditions.raw != nil {
+		return true, nil
+	}
+
+	var exists bool
+	if err := rows.Scan(&exists); err != nil {
+		return false, err
+	}
+
+	return exists, nil
 }
 
 func (r *OrmBuilder) Find(dest any, conds ...any) error {
