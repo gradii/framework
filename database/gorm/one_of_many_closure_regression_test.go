@@ -33,6 +33,15 @@ func (ofmClosureRegressionUser) Relations() map[string]contractsorm.Relation {
 			Having("candidate_count > ?", 11).
 			OrderBy("candidate_count", "desc")
 	}
+	countFilteredComments := func(q contractsorm.Query) contractsorm.Query {
+		return q.SelectRaw("? as closure_marker", 9).
+			WithCount(contractsorm.RelationCount{
+				Name: "Cms", Alias: "filtered_count",
+				Callback: func(comments contractsorm.Query) contractsorm.Query {
+					return comments.Where("cm.id", ">", 10)
+				},
+			}).Having("filtered_count > ?", 0)
+	}
 
 	return map[string]contractsorm.Relation{
 		"Missing": hasOne(func(q contractsorm.Query) contractsorm.Query {
@@ -66,6 +75,25 @@ func (ofmClosureRegressionUser) Relations() map[string]contractsorm.Relation {
 				}, countCandidates)
 			},
 		},
+		"DeferredCount": hasOne(func(q contractsorm.Query) contractsorm.Query {
+			return q.WithCount("Cms").Having("cms_count > ?", 0)
+		}),
+		"DeferredExists": hasOne(func(q contractsorm.Query) contractsorm.Query {
+			return q.WithExists("Cms").Having("cms_exists = ?", true)
+		}),
+		"DeferredBoundCount": hasOne(countFilteredComments),
+		"DeferredMultiCount": contractsorm.HasOne{
+			Related: &ofmcPost{}, ForeignKey: "u_id",
+			OnQuery: func(q contractsorm.Query) contractsorm.Query {
+				return q.OfManyColumns([]contractsorm.OfManyColumn{
+					{Column: "published_at", Aggregate: "max"},
+					{Column: "id", Aggregate: "max"},
+				}, countFilteredComments)
+			},
+		},
+		"DeferredMissing": hasOne(func(q contractsorm.Query) contractsorm.Query {
+			return q.WithCount("MissingRelation")
+		}),
 		"Through": contractsorm.HasOneThrough{
 			Related: &ofmClosureRegressionPrice{}, Through: &ofmClosureRegressionMiddle{},
 			FirstKey: "u_id", SecondKey: "mid_id", LocalKey: "id", SecondLocalKey: "id",
@@ -280,6 +308,83 @@ func TestOfManyClosureRegression_SelectClauses(t *testing.T) {
 		t.Run(test.relation, func(t *testing.T) {
 			built := ofmClosureRegressionRead(t, test.relation, &[]ofmcPost{})
 			assertOfmClosureRegressionSQL(t, built, test.sql, test.bindings)
+		})
+	}
+}
+
+func TestOfManyClosureRegression_DeferredSelectAggregates(t *testing.T) {
+	// WithCount/WithExists are deferred ORM select expressions. They must join the
+	// aggregate's existing columns without injecting a second p.* selection. These
+	// statements and bindings match Illuminate Database v12.55.1 on SQLite.
+	for _, test := range []struct {
+		relation string
+		sql      string
+		bindings []any
+	}{
+		{
+			relation: "DeferredCount",
+			sql:      `select "p".* from "p" inner join (select max("p"."id") as "id_aggregate", "p"."u_id", (select count(*) from "cm" where "p"."id" = "cm"."p_id") as "cms_count" from "p" where "p"."u_id" = ? and "p"."u_id" is not null and "p"."deleted_at" is null group by "p"."u_id" having cms_count > ?) as "deferred_count" on "deferred_count"."id_aggregate" = "p"."id" and "deferred_count"."u_id" = "p"."u_id" where "p"."u_id" = ? and "p"."u_id" is not null and "p"."deleted_at" is null`,
+			bindings: []any{uint(7), 0, uint(7)},
+		},
+		{
+			relation: "DeferredExists",
+			sql:      `select "p".* from "p" inner join (select max("p"."id") as "id_aggregate", "p"."u_id", exists(select * from "cm" where "p"."id" = "cm"."p_id") as "cms_exists" from "p" where "p"."u_id" = ? and "p"."u_id" is not null and "p"."deleted_at" is null group by "p"."u_id" having cms_exists = ?) as "deferred_exists" on "deferred_exists"."id_aggregate" = "p"."id" and "deferred_exists"."u_id" = "p"."u_id" where "p"."u_id" = ? and "p"."u_id" is not null and "p"."deleted_at" is null`,
+			bindings: []any{uint(7), true, uint(7)},
+		},
+		{
+			// Keep a pre-existing SelectRaw and bind the count callback's predicate
+			// before the aggregate's where/having and the outer relation's key.
+			relation: "DeferredBoundCount",
+			sql:      `select "p".* from "p" inner join (select max("p"."id") as "id_aggregate", "p"."u_id", ? as closure_marker, (select count(*) from "cm" where "p"."id" = "cm"."p_id" and "cm"."id" > ?) as "filtered_count" from "p" where "p"."u_id" = ? and "p"."u_id" is not null and "p"."deleted_at" is null group by "p"."u_id" having filtered_count > ?) as "deferred_bound_count" on "deferred_bound_count"."id_aggregate" = "p"."id" and "deferred_bound_count"."u_id" = "p"."u_id" where "p"."u_id" = ? and "p"."u_id" is not null and "p"."deleted_at" is null`,
+			bindings: []any{9, 10, uint(7), 0, uint(7)},
+		},
+		{
+			// Both aggregate levels need their own correlated count and bindings.
+			relation: "DeferredMultiCount",
+			sql:      `select "p".* from "p" inner join (select max("p"."id") as "id_aggregate", min("p"."published_at") as "published_at_aggregate", "p"."u_id", ? as closure_marker, (select count(*) from "cm" where "p"."id" = "cm"."p_id" and "cm"."id" > ?) as "filtered_count" from "p" inner join (select max("p"."published_at") as "published_at_aggregate", "p"."u_id", ? as closure_marker, (select count(*) from "cm" where "p"."id" = "cm"."p_id" and "cm"."id" > ?) as "filtered_count" from "p" where "p"."u_id" = ? and "p"."u_id" is not null and "p"."deleted_at" is null group by "p"."u_id" having filtered_count > ?) as "deferred_multi_count" on "deferred_multi_count"."published_at_aggregate" = "p"."published_at" and "deferred_multi_count"."u_id" = "p"."u_id" where "p"."deleted_at" is null group by "p"."u_id" having filtered_count > ?) as "deferred_multi_count" on "deferred_multi_count"."id_aggregate" = "p"."id" and "deferred_multi_count"."published_at_aggregate" = "p"."published_at" and "deferred_multi_count"."u_id" = "p"."u_id" where "p"."u_id" = ? and "p"."u_id" is not null and "p"."deleted_at" is null`,
+			bindings: []any{9, 10, 9, 10, uint(7), 0, 0, uint(7)},
+		},
+	} {
+		t.Run(test.relation, func(t *testing.T) {
+			built := ofmClosureRegressionRead(t, test.relation, &[]ofmcPost{})
+			assertOfmClosureRegressionSQL(t, built, test.sql, test.bindings)
+		})
+	}
+}
+
+func TestOfManyClosureRegression_DeferredSelectErrors(t *testing.T) {
+	for _, path := range []struct {
+		name  string
+		build func(contractsorm.Query) contractsorm.Query
+	}{
+		{"Plain", func(q contractsorm.Query) contractsorm.Query {
+			return q.Model(&ofmcPost{}).WithCount("MissingRelation")
+		}},
+		{"Related", func(q contractsorm.Query) contractsorm.Query {
+			return q.Related(&ofmClosureRegressionUser{ID: 7}, "DeferredMissing")
+		}},
+		{"WhereHas", func(q contractsorm.Query) contractsorm.Query {
+			return q.WhereHas("DeferredMissing")
+		}},
+		{"WithCount", func(q contractsorm.Query) contractsorm.Query {
+			return q.WithCount("DeferredMissing")
+		}},
+		{"WithExists", func(q contractsorm.Query) contractsorm.Query {
+			return q.WithExists("DeferredMissing")
+		}},
+	} {
+		t.Run(path.name, func(t *testing.T) {
+			built, ok := ormBuilderOf(path.build(newRelQueryWith(t, &ofmClosureRegressionUser{})))
+			require.True(t, ok)
+
+			for attempt := range 2 {
+				statement, bindings, err := built.compileSelect()
+				require.Error(t, err, "compile %d ignored a missing relation in WithCount: SQL=%s bindings=%v", attempt+1, statement, bindings)
+				assert.True(t, errors.Is(err, errors.OrmRelationNotFound), "unexpected error: %v", err)
+				assert.ErrorContains(t, err, "MissingRelation")
+				assert.Empty(t, statement)
+				assert.Empty(t, bindings)
+			}
 		})
 	}
 }

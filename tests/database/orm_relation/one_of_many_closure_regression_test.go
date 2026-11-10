@@ -13,20 +13,25 @@ import (
 // These execution tests complement database/gorm/one_of_many_closure_regression_test.go.
 // Expected rows were checked against Illuminate Database v12.55.1 on SQLite.
 type ofmClosureRegressionUser struct {
-	ID                uint
-	MatchedCount      int64                     `gorm:"column:matched_count"`
-	MatchedExists     bool                      `gorm:"column:matched_exists"`
-	Latest            *ofmClosureRegressionPost `gorm:"-"`
-	Missing           *ofmClosureRegressionPost `gorm:"-"`
-	Invalid           *ofmClosureRegressionPost `gorm:"-"`
-	Key               *ofmClosureRegressionPost `gorm:"-"`
-	Having            *ofmClosureRegressionPost `gorm:"-"`
-	ZeroLimit         *ofmClosureRegressionPost `gorm:"-"`
-	Through           *ofmClosureRegressionPost `gorm:"-"`
-	BuilderError      *ofmClosureRegressionPost `gorm:"-"`
-	SelectHaving      *ofmClosureRegressionPost `gorm:"-"`
-	SelectHavingBound *ofmClosureRegressionPost `gorm:"-"`
-	SelectHavingMulti *ofmClosureRegressionPost `gorm:"-"`
+	ID                 uint
+	MatchedCount       int64                     `gorm:"column:matched_count"`
+	MatchedExists      bool                      `gorm:"column:matched_exists"`
+	Latest             *ofmClosureRegressionPost `gorm:"-"`
+	Missing            *ofmClosureRegressionPost `gorm:"-"`
+	Invalid            *ofmClosureRegressionPost `gorm:"-"`
+	Key                *ofmClosureRegressionPost `gorm:"-"`
+	Having             *ofmClosureRegressionPost `gorm:"-"`
+	ZeroLimit          *ofmClosureRegressionPost `gorm:"-"`
+	Through            *ofmClosureRegressionPost `gorm:"-"`
+	BuilderError       *ofmClosureRegressionPost `gorm:"-"`
+	SelectHaving       *ofmClosureRegressionPost `gorm:"-"`
+	SelectHavingBound  *ofmClosureRegressionPost `gorm:"-"`
+	SelectHavingMulti  *ofmClosureRegressionPost `gorm:"-"`
+	DeferredCount      *ofmClosureRegressionPost `gorm:"-"`
+	DeferredExists     *ofmClosureRegressionPost `gorm:"-"`
+	DeferredBoundCount *ofmClosureRegressionPost `gorm:"-"`
+	DeferredMultiCount *ofmClosureRegressionPost `gorm:"-"`
+	DeferredMissing    *ofmClosureRegressionPost `gorm:"-"`
 }
 
 func (ofmClosureRegressionUser) TableName() string { return "u" }
@@ -44,6 +49,15 @@ func (ofmClosureRegressionUser) Relations() map[string]contractsorm.Relation {
 		return q.SelectRaw("count(*) + ? as candidate_count", 10).
 			Having("candidate_count > ?", 11).
 			OrderBy("candidate_count", "desc")
+	}
+	countFilteredComments := func(q contractsorm.Query) contractsorm.Query {
+		return q.SelectRaw("? as closure_marker", 9).
+			WithCount(contractsorm.RelationCount{
+				Name: "Cms", Alias: "filtered_count",
+				Callback: func(comments contractsorm.Query) contractsorm.Query {
+					return comments.Where("cm.id", ">", 10)
+				},
+			}).Having("filtered_count > ?", 0)
 	}
 
 	return map[string]contractsorm.Relation{
@@ -79,6 +93,25 @@ func (ofmClosureRegressionUser) Relations() map[string]contractsorm.Relation {
 				}, countCandidates)
 			},
 		},
+		"DeferredCount": hasOne(func(q contractsorm.Query) contractsorm.Query {
+			return q.WithCount("Cms").Having("cms_count > ?", 0)
+		}),
+		"DeferredExists": hasOne(func(q contractsorm.Query) contractsorm.Query {
+			return q.WithExists("Cms").Having("cms_exists = ?", true)
+		}),
+		"DeferredBoundCount": hasOne(countFilteredComments),
+		"DeferredMultiCount": contractsorm.HasOne{
+			Related: &ofmClosureRegressionPost{}, ForeignKey: "u_id",
+			OnQuery: func(q contractsorm.Query) contractsorm.Query {
+				return q.OfManyColumns([]contractsorm.OfManyColumn{
+					{Column: "published_at", Aggregate: "max"},
+					{Column: "id", Aggregate: "max"},
+				}, countFilteredComments)
+			},
+		},
+		"DeferredMissing": hasOne(func(q contractsorm.Query) contractsorm.Query {
+			return q.WithCount("MissingRelation")
+		}),
 		"Through": contractsorm.HasOneThrough{
 			Related: &ofmClosureRegressionPost{}, Through: &ofmClosureRegressionMiddle{},
 			FirstKey: "u_id", SecondKey: "mid_id", LocalKey: "id", SecondLocalKey: "id",
@@ -105,8 +138,17 @@ type ofmClosureRegressionPost struct {
 func (ofmClosureRegressionPost) TableName() string { return "p" }
 
 func (ofmClosureRegressionPost) Relations() map[string]contractsorm.Relation {
-	return map[string]contractsorm.Relation{}
+	return map[string]contractsorm.Relation{
+		"Cms": contractsorm.HasMany{Related: &ofmClosureRegressionComment{}, ForeignKey: "p_id"},
+	}
 }
+
+type ofmClosureRegressionComment struct {
+	ID  uint
+	PID uint `gorm:"column:p_id"`
+}
+
+func (ofmClosureRegressionComment) TableName() string { return "cm" }
 
 type ofmClosureRegressionMiddle struct {
 	ID  uint
@@ -355,6 +397,78 @@ func TestOfManyClosureRegression_SelectClauses(t *testing.T) {
 			// The expression and its bindings must reach every aggregate level;
 			// dropping just the HAVING would incorrectly include user 2 as well.
 			assertOfmClosureRegressionResults(t, query, test.relation, test.loaded, [2]uint{2, 0})
+		})
+	}
+}
+
+func newOfmClosureDeferredSelectQuery(t *testing.T) contractsorm.Query {
+	t.Helper()
+
+	query := newOfmClosureRegressionQuery(t)
+	runRelationSchema(t, query,
+		`create table cm (id integer primary key, p_id integer not null)`,
+		`insert into cm (id, p_id) values (11, 1), (12, 2), (1, 3)`,
+	)
+
+	return query
+}
+
+func TestOfManyClosureRegression_DeferredSelectAggregates(t *testing.T) {
+	for _, test := range []struct {
+		relation string
+		loaded   func(ofmClosureRegressionUser) *ofmClosureRegressionPost
+	}{
+		{"DeferredCount", func(user ofmClosureRegressionUser) *ofmClosureRegressionPost { return user.DeferredCount }},
+		{"DeferredExists", func(user ofmClosureRegressionUser) *ofmClosureRegressionPost { return user.DeferredExists }},
+		{"DeferredBoundCount", func(user ofmClosureRegressionUser) *ofmClosureRegressionPost { return user.DeferredBoundCount }},
+		{"DeferredMultiCount", func(user ofmClosureRegressionUser) *ofmClosureRegressionPost { return user.DeferredMultiCount }},
+	} {
+		t.Run(test.relation, func(t *testing.T) {
+			query := newOfmClosureDeferredSelectQuery(t)
+			// Both tied candidates for user 1 have a comment with id > 10. User 2's
+			// latest post has none, although its older post has a comment. Laravel's
+			// grouped query therefore keeps post 2 and excludes user 2 on every path.
+			assertOfmClosureRegressionResults(t, query, test.relation, test.loaded, [2]uint{2, 0})
+		})
+	}
+}
+
+func TestOfManyClosureRegression_DeferredSelectErrors(t *testing.T) {
+	for _, path := range []struct {
+		name string
+		run  func(contractsorm.Query) error
+	}{
+		{"Plain", func(q contractsorm.Query) error {
+			var posts []ofmClosureRegressionPost
+			return q.Model(&ofmClosureRegressionPost{}).WithCount("MissingRelation").Get(&posts)
+		}},
+		{"Related", func(q contractsorm.Query) error {
+			var posts []ofmClosureRegressionPost
+			return q.Related(&ofmClosureRegressionUser{ID: 1}, "DeferredMissing").Get(&posts)
+		}},
+		{"With", func(q contractsorm.Query) error {
+			var users []ofmClosureRegressionUser
+			return q.Model(&ofmClosureRegressionUser{}).With("DeferredMissing").Get(&users)
+		}},
+		{"WhereHas", func(q contractsorm.Query) error {
+			var users []ofmClosureRegressionUser
+			return q.Model(&ofmClosureRegressionUser{}).WhereHas("DeferredMissing").Get(&users)
+		}},
+		{"WithCount", func(q contractsorm.Query) error {
+			var users []ofmClosureRegressionUser
+			return q.Model(&ofmClosureRegressionUser{}).WithCount("DeferredMissing as matched_count").Get(&users)
+		}},
+		{"WithExists", func(q contractsorm.Query) error {
+			var users []ofmClosureRegressionUser
+			return q.Model(&ofmClosureRegressionUser{}).WithExists("DeferredMissing as matched_exists").Get(&users)
+		}},
+	} {
+		t.Run(path.name, func(t *testing.T) {
+			query := newOfmClosureDeferredSelectQuery(t)
+			err := path.run(cloneRelationQuery(t, query))
+			require.Error(t, err, "WithCount inside OfMany must resolve its relation instead of silently discarding the select")
+			assert.True(t, errors.Is(err, errors.OrmRelationNotFound), "unexpected error: %v", err)
+			assert.ErrorContains(t, err, "MissingRelation")
 		})
 	}
 }

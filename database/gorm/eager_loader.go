@@ -1344,6 +1344,19 @@ func (r *OrmBuilder) oneOfManyJoin(builder *OrmBuilder, desc *relationDescriptor
 
 		sub.GroupByRaw(strings.Join(groupCols, ", "), nil)
 		copyOneOfManyClosureClauses(sub, constrained)
+
+		// withCount / withExists in the closure are the ORM's deferred select expressions: Laravel
+		// adds each correlated subselect to the aggregate subquery when the closure runs, after the
+		// columns already selected there and with its bindings among the select bindings, so the
+		// closure's having can name its alias. They render against the related model the closure's
+		// builder carries, once per level, and a relation that cannot be resolved fails the read
+		// (oracle, illuminate/database v12.55.1, real sqlite,
+		// /Users/dog/.claude/jobs/013c27a0/tmp/ofm/deferred_select_probe.php -> deferred_select_probe.out).
+		if constrained != nil {
+			if err := constrained.applySelectSubAggregates(sub); err != nil {
+				return "", nil, err
+			}
+		}
 		levelSQL, levelArgs = sub.ToSelectSQL()
 		levelCols = append([]string{col.column}, levelCols...)
 	}
