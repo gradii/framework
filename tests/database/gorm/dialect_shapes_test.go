@@ -202,9 +202,11 @@ func TestEagerLimitOnLegacyMySQLPartitionsByTheAliasedColumn(t *testing.T) {
 	recorder.returnRows("from `lg_tusers`", []string{"country_id", "id"}, []driver.Value{int64(1), int64(1)}, []driver.Value{int64(2), int64(2)})
 	limitTwo := func(q contractsorm.Query) contractsorm.Query { return q.Limit(2) }
 
+	// Each read starts from its own copy, the way Orm.Query() hands one out: a read leaves the
+	// query's With entries in place, so a shared query would carry Roles into the country read.
 	query := mysqlQueryOnVersion(t, "5.7.44", pool)
-	require.NoError(t, query.Model(&lgUser{}).OrderBy("id").With("Roles", limitTwo).Get(&[]lgUser{}))
-	require.NoError(t, query.Model(&lgCountry{}).OrderBy("id").With("Posts", limitTwo).Get(&[]lgCountry{}))
+	require.NoError(t, query.Clone().Model(&lgUser{}).OrderBy("id").With("Roles", limitTwo).Get(&[]lgUser{}))
+	require.NoError(t, query.Clone().Model(&lgCountry{}).OrderBy("id").With("Posts", limitTwo).Get(&[]lgCountry{}))
 
 	// Oracle E1: the pivot read partitions by the aliased pivot column, pivot_user_id.
 	roles := statementContaining(t, recorder, "from `lg_roles`")
@@ -261,7 +263,7 @@ func TestEagerLimitOnLegacyMySQLRunsOnARealServer(t *testing.T) {
 	query := mysqlQueryOnVersion(t, "5.7.44", pool)
 
 	var users []lgUser
-	require.NoError(t, query.Model(&lgUser{}).OrderBy("id").With("Roles", limitTwo).Get(&users))
+	require.NoError(t, query.Clone().Model(&lgUser{}).OrderBy("id").With("Roles", limitTwo).Get(&users))
 	require.Len(t, users, 2)
 	for _, user := range users {
 		ids := []uint{}
@@ -272,7 +274,7 @@ func TestEagerLimitOnLegacyMySQLRunsOnARealServer(t *testing.T) {
 	}
 
 	var countries []lgCountry
-	require.NoError(t, query.Model(&lgCountry{}).OrderBy("id").With("Posts", limitTwo).Get(&countries))
+	require.NoError(t, query.Clone().Model(&lgCountry{}).OrderBy("id").With("Posts", limitTwo).Get(&countries))
 	require.Len(t, countries, 2)
 	want := map[uint][]string{1: {"p1", "p2"}, 2: {"q1", "q2"}}
 	for _, country := range countries {

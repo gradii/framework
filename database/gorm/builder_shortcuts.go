@@ -586,9 +586,12 @@ func (r *OrmBuilder) FindMany(dest any, ids []any, columns ...any) error {
 		return nil
 	}
 
-	query, ok := r.WhereKey(ids).(*OrmBuilder)
+	// The key list goes on a copy, so the query is left as it was; dest names the model the keys
+	// belong to when the query carries none (Find(&users, ids) on a bare query).
+	scoped := r.clone().dest(dest).WhereKey(ids)
+	query, ok := scoped.(*OrmBuilder)
 	if !ok {
-		return errors.OrmQueryInvalidModel.Args(fmt.Sprintf("%T", r.WhereKey(ids)))
+		return errors.OrmQueryInvalidModel.Args(fmt.Sprintf("%T", scoped))
 	}
 
 	return query.Get(dest, columns...)

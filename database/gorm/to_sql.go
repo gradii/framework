@@ -18,10 +18,12 @@ type ToSql struct {
 	raw   bool
 }
 
+// NewToSql previews query. The preview compiles from a copy, so rendering a statement - First's
+// order and limit, Find's key condition - never changes the query it describes.
 func NewToSql(query *OrmBuilder, log log.Log, raw bool) *ToSql {
 	return &ToSql{
 		log:   log,
-		query: query,
+		query: query.clone(),
 		raw:   raw,
 	}
 }

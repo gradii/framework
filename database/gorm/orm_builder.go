@@ -1104,7 +1104,9 @@ func (r *OrmBuilder) Exists() (bool, error) {
 }
 
 func (r *OrmBuilder) Find(dest any, conds ...any) error {
-	query := r.dest(dest).addGlobalScopes().buildConditions()
+	// A read compiles from a copy, so the query keeps none of the read's own clauses - its key
+	// condition, order or limit - for whatever runs on it next.
+	query := r.clone().dest(dest).addGlobalScopes().buildConditions()
 
 	if err := filterFindConditions(conds...); err != nil {
 		return err
@@ -1238,7 +1240,9 @@ func (r *OrmBuilder) FindOrFail(dest any, conds ...any) error {
 		return r.findOrFailKeyList(dest, conds[0])
 	}
 
-	query := r.dest(dest).addGlobalScopes().buildConditions()
+	// A read compiles from a copy, so the query keeps none of the read's own clauses - its key
+	// condition, order or limit - for whatever runs on it next.
+	query := r.clone().dest(dest).addGlobalScopes().buildConditions()
 
 	if err := filterFindConditions(conds...); err != nil {
 		return err
@@ -1287,7 +1291,9 @@ func (r *OrmBuilder) FindOr(dest any, id any, callback func() error) error {
 		return r.findOrKeyList(dest, id, callback)
 	}
 
-	query := r.dest(dest).addGlobalScopes().buildConditions()
+	// A read compiles from a copy, so the query keeps none of the read's own clauses - its key
+	// condition, order or limit - for whatever runs on it next.
+	query := r.clone().dest(dest).addGlobalScopes().buildConditions()
 
 	if err := filterFindConditions(id); err != nil {
 		return err
@@ -1363,7 +1369,9 @@ func (r *OrmBuilder) readKeyList(dest any, keys []any) (bool, error) {
 		return true, nil
 	}
 
-	query := r.dest(dest).addGlobalScopes().buildConditions()
+	// A read compiles from a copy, so the query keeps none of the read's own clauses - its key
+	// condition, order or limit - for whatever runs on it next.
+	query := r.clone().dest(dest).addGlobalScopes().buildConditions()
 
 	scoped := query.WhereKey(keys)
 	listQuery, ok := scoped.(*OrmBuilder)
@@ -1445,7 +1453,9 @@ func (r *OrmBuilder) First(dest any) error {
 // retrieved hook when it was. A statement that matched nothing is not an error: First reads it as an
 // empty destination, while the callers that care ask for the flag.
 func (r *OrmBuilder) firstRow(dest any) (bool, error) {
-	query := r.dest(dest).addGlobalScopes().buildConditions()
+	// A read compiles from a copy, so the query keeps none of the read's own clauses - its key
+	// condition, order or limit - for whatever runs on it next.
+	query := r.clone().dest(dest).addGlobalScopes().buildConditions()
 
 	statement, bindings, err := query.compileFirst()
 	if err != nil {
@@ -1556,7 +1566,9 @@ func (r *OrmBuilder) ValueOrFail(column string, dest any) error {
 // attributes (WithAttributes), the pending ones merging underneath the way newModelInstance()
 // merges them, and nothing is written.
 func (r *OrmBuilder) FirstOrNew(dest any, attributes any, values ...any) error {
-	_, err := r.firstOrInit(dest, attributes, values, nil)
+	// firstOrNew only reads: its lookup condition is written on a copy, so the query is left as it
+	// was.
+	_, err := r.clone().firstOrInit(dest, attributes, values, nil)
 
 	return err
 }
@@ -2137,7 +2149,7 @@ func (r *OrmBuilder) Paginate(page, limit int, dest any, total *int64) error {
 			err   error
 		)
 		if r.query.State().From == nil && r.conditions.model == nil {
-			count, err = r.Model(dest).GetCountForPagination()
+			count, err = r.clone().Model(dest).GetCountForPagination()
 		} else {
 			count, err = r.GetCountForPagination()
 		}
@@ -2157,7 +2169,8 @@ func (r *OrmBuilder) Paginate(page, limit int, dest any, total *int64) error {
 		return emptyPaginatedDest(dest)
 	}
 
-	return r.Offset(offset).Limit(limit).Find(dest)
+	// The page's offset and limit go on a copy, so the query keeps neither.
+	return r.clone().Offset(offset).Limit(limit).Find(dest)
 }
 
 // emptyPaginatedDest clears a slice destination when the count is zero, mirroring Laravel's paginate(), which
@@ -2209,7 +2222,7 @@ func (r *OrmBuilder) SimplePaginate(page, limit int, dest any) (bool, error) {
 		return false, errors.DatabaseUnsupportedType.Args(fmt.Sprintf("%T", dest), "pointer to slice")
 	}
 
-	if err := r.Offset((page - 1) * limit).Limit(limit + 1).Find(dest); err != nil {
+	if err := r.clone().Offset((page - 1) * limit).Limit(limit + 1).Find(dest); err != nil {
 		return false, err
 	}
 
