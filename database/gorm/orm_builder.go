@@ -27,7 +27,6 @@ import (
 	"github.com/gradii/framework/database/utils"
 	"github.com/gradii/framework/errors"
 	"github.com/gradii/framework/support/carbon"
-	"github.com/gradii/framework/support/deep"
 	"github.com/gradii/framework/support/str"
 	"github.com/spf13/cast"
 )
@@ -3486,7 +3485,7 @@ func (r *OrmBuilder) usesTimestamps(model any) bool {
 	return !ok || aware.UsesTimestamps()
 }
 
-// WithoutGlobalScopes removes the named global scopes; called with no names it removes every scope.
+// WithoutGlobalScopes removes the named scopes; called with no names it removes every scope.
 //
 // Inherent Go limitation: a variadic call cannot distinguish no arguments from an empty slice, so
 // WithoutGlobalScopes() and a call spreading an empty list behave alike here and remove all scopes.
@@ -3494,15 +3493,123 @@ func (r *OrmBuilder) usesTimestamps(model any) bool {
 // withoutGlobalScopes([]) removes none (oracle against illuminate/database v12.55.1: the empty
 // array leaves every scope applied). The empty-slice shape is not expressible through this
 // signature.
+//
+// RemoveScope is the builder-local form of the same intent and the one callers should reach for: a
+// bare WithoutGlobalScopes() records the "*" wildcard, which no scope can be mounted under, while
+// RemoveScope names the scope it drops. The wildcard is what the framework's own no-scope operations
+// use (fresh reads, RawUpdate, Touch); it goes away with the rest of the model-declared global-scope
+// API in favour of naming the built-in scopes.
 func (r *OrmBuilder) WithoutGlobalScopes(names ...string) contractsorm.Query {
 	conditions := r.conditions
 
 	if len(names) == 0 {
 		names = []string{"*"}
 	}
-	conditions.withoutGlobalScopes = append(conditions.withoutGlobalScopes, names...)
+	conditions.removedScopes = append(conditions.removedScopes, names...)
 
 	return r.setConditions(conditions)
+}
+
+// ApplyScope mounts a named scope on this query — Laravel's withGlobalScope($name, $scope) — and
+// returns the query. The scope runs when a statement is prepared from the query, not at call time
+// (Scopes() is the immediate form), on the copy the statement compiles from, in mount order, after
+// the built-in soft-delete predicates. Mounting a name again replaces its callback and keeps its
+// position; a mount after RemoveScope is a fresh mount, appended at the end, and clears that name's
+// removal record. A nil callback mounts nothing.
+//
+// The name is the caller's own key: it is what RemoveScope addresses, and it is deliberately
+// independent of the model — a scope mounted here belongs to this builder, so a query built
+// elsewhere never inherits it, and Clone() copies the mount rather than sharing it.
+func (r *OrmBuilder) ApplyScope(name string, scope func(contractsorm.Query) contractsorm.Query) contractsorm.Query {
+	if scope == nil {
+		return r
+	}
+
+	conditions := r.conditions
+	conditions.scopes = setMountedScope(conditions.scopes, name, scope)
+	conditions.removedScopes = dropScopeName(conditions.removedScopes, name)
+
+	return r.setConditions(conditions)
+}
+
+// RemoveScope removes the scope mounted under name from this query and records the removal, so the
+// scopes the framework mounts by itself — the built-in soft-delete predicates, mounted per model
+// when the statement is prepared — are dropped too. Laravel's withoutGlobalScope($name) has the same
+// two effects: it unsets $builder->scopes[$name] and the removal is what a later applyScopes step
+// consults.
+//
+// The removal is recorded even when nothing is mounted under that name yet (remove before the model
+// resolves), and it is not undone by anything but a new ApplyScope for the same name. Clauses a
+// scope already wrote are not rewritten: a removal takes effect from the point it is expressed, not
+// retroactively (OnlyTrashed's "is not null", for one, stays).
+func (r *OrmBuilder) RemoveScope(name string) contractsorm.Query {
+	conditions := r.conditions
+	conditions.scopes = removeMountedScope(conditions.scopes, name)
+	if !slices.Contains(conditions.removedScopes, name) {
+		conditions.removedScopes = append(conditions.removedScopes, name)
+	}
+
+	return r.setConditions(conditions)
+}
+
+// mountsScopeName reports whether scopes mounts a scope under name — a registration under one of the
+// built-in names, the caller's own or a model's, which takes the place of the scope the framework
+// would otherwise mount itself.
+func mountsScopeName(scopes []mountedScope, name string) bool {
+	for _, mounted := range scopes {
+		if mounted.name == name {
+			return true
+		}
+	}
+
+	return false
+}
+
+// setMountedScope mounts scope under name, replacing the callback of an existing entry in place so
+// the mount order is stable: a name keeps the position it was first mounted at.
+func setMountedScope(scopes []mountedScope, name string, scope func(contractsorm.Query) contractsorm.Query) []mountedScope {
+	mounted := make([]mountedScope, len(scopes))
+	copy(mounted, scopes)
+
+	for i, entry := range mounted {
+		if entry.name == name {
+			mounted[i] = mountedScope{name: name, scope: scope}
+
+			return mounted
+		}
+	}
+
+	return append(mounted, mountedScope{name: name, scope: scope})
+}
+
+// removeMountedScope drops the entry mounted under name, if any, and leaves the order of the rest
+// alone.
+func removeMountedScope(scopes []mountedScope, name string) []mountedScope {
+	mounted := make([]mountedScope, 0, len(scopes))
+	for _, entry := range scopes {
+		if entry.name == name {
+			continue
+		}
+
+		mounted = append(mounted, entry)
+	}
+
+	return mounted
+}
+
+// dropScopeName removes name from a removal list, which is what a fresh mount does: ApplyScope after
+// RemoveScope is a mount, not a removal that outlives it.
+func dropScopeName(names []string, name string) []string {
+	kept := make([]string, 0, len(names))
+	for _, existing := range names {
+		if existing == name {
+			continue
+		}
+
+		kept = append(kept, existing)
+	}
+
+	return kept
 }
 
 func (r *OrmBuilder) WithTrashed() contractsorm.Query {
@@ -3532,7 +3639,7 @@ func (r *OrmBuilder) addGlobalScopes() *OrmBuilder {
 		return r
 	}
 
-	if slices.Contains(r.conditions.withoutGlobalScopes, "*") {
+	if slices.Contains(r.conditions.removedScopes, "*") {
 		return r
 	}
 
@@ -3561,25 +3668,28 @@ func (r *OrmBuilder) addGlobalScopes() *OrmBuilder {
 		return r
 	}
 
-	var globalScopes []func(contractsorm.Query) contractsorm.Query
+	mounted := make([]mountedScope, 0, len(modelGlobalScopes))
 
 	// The scopes keep the order the model declared them — Laravel's registration order, the order
-	// its boot() added its scopes in — and removal names them by their identity.
+	// its boot() added its scopes in. Each travels under the name the model gave it, which is what
+	// RemoveScope and WithoutGlobalScopes address it by: a removal already recorded is skipped here,
+	// and withScopesApplied skips it again for a removal recorded after the queue was filled (the
+	// remove-before-resolve rule would otherwise only hold for one of the two orders).
 	for _, globalScope := range modelGlobalScopes {
-		if slices.Contains(r.conditions.withoutGlobalScopes, globalScope.Name) {
+		if slices.Contains(r.conditions.removedScopes, globalScope.Name) {
 			continue
 		}
 
-		globalScopes = append(globalScopes, globalScope.Scope)
+		mounted = append(mounted, mountedScope{name: globalScope.Name, scope: globalScope.Scope})
 	}
 
 	// Global scopes are deferred the way Laravel defers them: withGlobalScope() registers the scope
 	// and applyScopes() applies it when a statement compiles, which is where withScopesApplied folds
 	// it in. The caller's own Scopes() call applies immediately instead (Builder::scopes), so the
-	// queue it fills is only ever the model's global scopes.
+	// entries queued here are the model's global scopes and the caller's ApplyScope mounts.
 	query := r.clone()
 	conditions := query.conditions
-	conditions.scopes = deep.Append(conditions.scopes, globalScopes...)
+	conditions.scopes = append(conditions.scopes, mounted...)
 
 	return query.setConditions(conditions)
 }
@@ -3809,10 +3919,10 @@ func (r *OrmBuilder) deleted(dest any) error {
 	return err
 }
 
-// withScopesApplied runs the scopes the query still carries queued and returns a query carrying what
-// they added, with the queue cleared so applying them is not repeated. Only a model's global scopes
-// are deferred this way — addGlobalScopes queues them the way withGlobalScope() registers them —
-// because Laravel applies them at statement time (Builder::applyScopes, run by get()/toSql()); the
+// withScopesApplied runs the scopes the query carries and returns a query carrying what they added,
+// the built-in soft-delete predicate included — Laravel's applyScopes, which every statement runs
+// before it compiles. The scopes are the ones a model registered (addGlobalScopes queues them the
+// way withGlobalScope() registers them) and the ones the caller mounted with ApplyScope; the
 // caller's own Scopes() call is the immediate path (Builder::scopes) and never queues.
 //
 // Each scope starts from what the previous ones produced, which is how GORM chained them onto one
@@ -3821,11 +3931,14 @@ func (r *OrmBuilder) withScopesApplied() *OrmBuilder {
 	// Laravel's applyScopes() starts from "clone $this" and applies the scopes to the copy, so the
 	// receiver keeps its own scope list and a second compile from the same query does not append the
 	// scope's clauses a second time. This is the one place a clone is required rather than optional:
-	// the queued scopes are the model's, not the query's, and they are applied per compiled
-	// statement.
+	// the queued scopes are applied per compiled statement.
 	query := r.clone()
 	scopes := query.conditions.scopes
-	query.conditions.scopes = nil
+	// The list stays on the copy: it is what mountsScopeName reads to answer whether one of the
+	// built-in names was registered by hand, and the copy's own compiles must see the same answer.
+	// Applying them twice is prevented by the flag, not by emptying the list.
+	applying := !query.conditions.scopesApplied
+	query.conditions.scopesApplied = true
 
 	// Anything already queued lands on the builder before the scopes run, and each scope's clauses
 	// land before the next one's: the builder holds the single ordered where list, and a scope starts
@@ -3843,21 +3956,31 @@ func (r *OrmBuilder) withScopesApplied() *OrmBuilder {
 			query.conditions.err = err
 		}
 
-		if !query.scopesRemoveSoftDeletingScope(scopes) {
+		// A caller who mounts a scope under the built-in soft-delete name says what that name means
+		// for this query, so the predicate the framework would have mounted is skipped and the mount
+		// is what runs — withGlobalScope(SoftDeletingScope::class, ...) replaces the model's
+		// registration by key in Laravel the same way.
+		if !query.scopesRemoveSoftDeletingScope(scopes) && !mountsScopeName(scopes, contractsorm.SoftDeletingScope) {
 			if err := query.applySoftDelete(query.query); err != nil {
 				query.conditions.err = err
 			}
 		}
 	}
 
-	for _, apply := range scopes {
-		query = query.applyScope(apply)
-	}
+	if applying {
+		for _, mounted := range scopes {
+			// A scope removed before the statement was prepared, or by an earlier scope in this run,
+			// is skipped: a scope that removes another one decides that it does not run, which is
+			// Laravel's applyScopes skipping every scope withoutGlobalScope already removed.
+			if query.scopeRemoved(mounted.name) {
+				continue
+			}
 
-	// The scopes are now part of the query's clauses; mark the copy so a later addGlobalScopes on
-	// it does not queue the model's scopes a second time (get($columns) runs its Find from this
-	// copy).
-	if len(scopes) > 0 {
+			query = query.applyScope(mounted.scope)
+		}
+
+		// A scope that handed back a query of its own — rather than the query it was given — carries
+		// conditions of its own, so the applied marker is set again on what the chain ended with.
 		query.conditions.scopesApplied = true
 	}
 
@@ -3875,21 +3998,25 @@ func (r *OrmBuilder) withScopesApplied() *OrmBuilder {
 // scope before bootSoftDeletes runs (the corpus's GlobalScopeCanBeRemovedByOtherGlobalScope). The
 // port always applies the predicate first, so the queued scopes are dry-run on a throwaway copy to
 // learn whether any of them removes it; the dry run's clauses are discarded.
-func (r *OrmBuilder) scopesRemoveSoftDeletingScope(scopes []func(contractsorm.Query) contractsorm.Query) bool {
+func (r *OrmBuilder) scopesRemoveSoftDeletingScope(scopes []mountedScope) bool {
 	if len(scopes) == 0 || !r.usesFrameworkSoftDelete() {
 		return false
 	}
 
 	probe := r.clone()
-	for _, apply := range scopes {
-		probe = probe.applyScope(apply)
+	for _, mounted := range scopes {
+		if probe.scopeRemoved(mounted.name) {
+			continue
+		}
+
+		probe = probe.applyScope(mounted.scope)
 	}
 
 	if probe.conditions.onlyTrashed {
 		return false
 	}
 
-	return probe.conditions.withTrashed || probe.globalScopeRemoved(contractsorm.SoftDeletingScope)
+	return probe.conditions.withTrashed || probe.scopeRemoved(contractsorm.SoftDeletingScope)
 }
 
 // applyScope runs one scope the way Eloquent's Builder::callScope does: the wheres on the query
@@ -3905,9 +4032,11 @@ func (r *OrmBuilder) applyScope(apply func(contractsorm.Query) contractsorm.Quer
 		return r
 	}
 
-	// A scope may hand back a query that still carries queued scopes; the statement compiles from
-	// the returned query, so they must not run a second time there.
-	scoped.conditions.scopes = nil
+	// The mounts stay on the returned query: what the scope added are clauses now, and the entries
+	// are what mountsScopeName reads when a later step (the through predicate) asks whether one of
+	// the built-in names was registered by hand. withScopesApplied marks the query it returns as
+	// applied, which is what keeps the entries from running a second time there; the immediate
+	// Scopes() path must NOT mark them, since the caller's mounts still have to run at compile time.
 
 	query := scoped.flushWheres()
 

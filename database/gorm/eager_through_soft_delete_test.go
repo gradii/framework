@@ -313,3 +313,24 @@ func TestThroughSoftDelete_NonEagerWithTrashedParents(t *testing.T) {
 
 	assert.Equal(t, `select "tsd_posts".*, "tsd_users"."country_id" as "laravel_through_key" from "tsd_posts" inner join "tsd_users" on "tsd_users"."id" = "tsd_posts"."user_id" where "tsd_users"."country_id" = ? and "tsd_posts"."deleted_at" is null`, sql)
 }
+
+// TestThroughSoftDelete_MountedScopeReplacesTheThroughPredicate pins the built-in through name from
+// the mounting side: a scope mounted under it takes the place of the through predicate, the way a
+// mount under SoftDeletingScope replaces the related model's predicate
+// (TestApplyScope_ReplacesTheBuiltInSoftDeleteScope). Laravel's performJoin registers that predicate
+// under the literal name "SoftDeletableHasManyThrough", so a registration under the same key is what
+// applies there.
+func TestThroughSoftDelete_MountedScopeReplacesTheThroughPredicate(t *testing.T) {
+	q := newRelQueryWith(t, &tsdCountry{})
+	desc, err := relations.ResolveRelation(&tsdCountry{}, "Posts")
+	require.NoError(t, err)
+
+	built := q.newThroughQuery(&tsdCountry{ID: 1}, desc).(*OrmBuilder)
+	statement, bindings, err := built.ApplyScope(contractsorm.SoftDeletableHasManyThrough, func(query contractsorm.Query) contractsorm.Query {
+		return query.Where("tsd_users.email", "like", "kept%")
+	}).(*OrmBuilder).compileSelect()
+	require.NoError(t, err)
+
+	assert.Equal(t, `select "tsd_posts".*, "tsd_users"."country_id" as "laravel_through_key" from "tsd_posts" inner join "tsd_users" on "tsd_users"."id" = "tsd_posts"."user_id" where "tsd_users"."country_id" = ? and "tsd_posts"."deleted_at" is null and "tsd_users"."email" like ?`, statement)
+	assert.Equal(t, []any{uint(1), "kept%"}, bindings)
+}

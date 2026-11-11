@@ -60,7 +60,7 @@ func TestAddGlobalScopes(t *testing.T) {
 			setupQuery: func() *OrmBuilder {
 				conditions := Conditions{}
 				conditions.model = &ModelWithGlobalScopes{}
-				conditions.withoutGlobalScopes = []string{"*"}
+				conditions.removedScopes = []string{"*"}
 				query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
 				return query
 			},
@@ -72,7 +72,7 @@ func TestAddGlobalScopes(t *testing.T) {
 			setupQuery: func() *OrmBuilder {
 				conditions := Conditions{}
 				conditions.model = &ModelWithGlobalScopes{}
-				conditions.withoutGlobalScopes = []string{"active"}
+				conditions.removedScopes = []string{"active"}
 				query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
 				return query
 			},
@@ -127,7 +127,7 @@ func TestAddGlobalScopes(t *testing.T) {
 			setupQuery: func() *OrmBuilder {
 				conditions := Conditions{}
 				conditions.model = &ModelWithGlobalScopes{}
-				conditions.withoutGlobalScopes = []string{"active", "verified"}
+				conditions.removedScopes = []string{"active", "verified"}
 				query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
 				return query
 			},

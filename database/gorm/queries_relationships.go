@@ -1424,7 +1424,7 @@ func scopeRemovalsOf(scoped *OrmBuilder) subqueryScopeRemovals {
 	}
 
 	return subqueryScopeRemovals{
-		names:       append([]string(nil), scoped.conditions.withoutGlobalScopes...),
+		names:       append([]string(nil), scoped.conditions.removedScopes...),
 		withTrashed: scoped.conditions.withTrashed,
 		onlyTrashed: scoped.conditions.onlyTrashed,
 	}

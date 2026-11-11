@@ -42,10 +42,14 @@ type Conditions struct {
 	// withZero names the columns a struct write carries even when the field holds its zero value;
 	// "*" names every column. See OrmBuilder.WithZero.
 	withZero []string
-	// scopes carries the scopes addGlobalScopes queued from the model — the Go form of Laravel's
-	// withGlobalScope() registration, applied when the statement compiles (withScopesApplied). The
-	// caller's own Scopes() call applies immediately (Builder::scopes) and never lands here.
-	scopes []func(contractsorm.Query) contractsorm.Query
+	// scopes carries the scopes mounted on this builder, in mount order: ApplyScope mounts a
+	// caller's scope under a name of its own, and a model's registered global scopes queue here when
+	// a statement is prepared (addGlobalScopes) — the two shapes Laravel's withGlobalScope()
+	// registration has. The name is the scope's identity: mounting it again replaces the callback in
+	// place and RemoveScope drops it. They run when the statement compiles (withScopesApplied), after
+	// the built-in soft-delete predicates. The caller's own Scopes() call applies immediately
+	// (Builder::scopes) and never lands here.
+	scopes []mountedScope
 	// scopesApplied marks a query whose queued scopes have already been folded in by
 	// withScopesApplied. Eloquent applies a builder's scopes once per terminal call
 	// (applyScopes), and the reads that apply them before the onceWithColumns decision — pluck,
@@ -64,7 +68,12 @@ type Conditions struct {
 	oneOfMany              *oneOfManyConfig
 	useWritePdo            bool
 	withoutEvents          bool
-	withoutGlobalScopes    []string
+	// removedScopes records the scope removals the builder was asked for, in call order: RemoveScope
+	// and WithoutGlobalScopes, whose bare call records the "*" wildcard for every scope. A removal is
+	// recorded even when nothing is mounted under that name yet, so a removal expressed before the
+	// statement is prepared still governs the automatic mounts — the built-in soft-delete predicates
+	// — and the scopes a later step queues.
+	removedScopes []string
 	// withoutTimestamps counts the active WithoutTimestamps scopes: automatic created_at / updated_at
 	// stamping is withheld while positive, so nested scopes keep the suspension active and each scope
 	// restores exactly its own — Eloquent's $ignoreTimestampsOn list, kept as a depth because the Go
@@ -262,6 +271,15 @@ func selectStringColumns(selectItems []any) []string {
 	return columns
 }
 
+// mountedScope is one scope mounted on a builder: the name identifies it — RemoveScope and
+// WithoutGlobalScopes take the same name — and the callback constrains every query the scope is
+// applied to. It is the Go form of Laravel's withGlobalScope($name, $scope) entry in
+// $builder->scopes, kept as an ordered list so the mount order is the application order.
+type mountedScope struct {
+	name  string
+	scope func(contractsorm.Query) contractsorm.Query
+}
+
 // clone returns a copy that can be changed without affecting the original: every slice is copied
 // and every pointer points at its own value.
 func (c Conditions) clone() Conditions {
@@ -269,10 +287,10 @@ func (c Conditions) clone() Conditions {
 
 	out.omit = append([]string(nil), c.omit...)
 	out.withZero = append([]string(nil), c.withZero...)
-	out.scopes = append([]func(contractsorm.Query) contractsorm.Query(nil), c.scopes...)
+	out.scopes = append([]mountedScope(nil), c.scopes...)
 	out.selectSubs = append([]selectSub(nil), c.selectSubs...)
 	out.eagerLoad = append([]eagerLoadEntry(nil), c.eagerLoad...)
-	out.withoutGlobalScopes = append([]string(nil), c.withoutGlobalScopes...)
+	out.removedScopes = append([]string(nil), c.removedScopes...)
 	if c.pendingAttributes != nil {
 		out.pendingAttributes = make(map[string]any, len(c.pendingAttributes))
 		for key, value := range c.pendingAttributes {

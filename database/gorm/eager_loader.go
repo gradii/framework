@@ -699,7 +699,7 @@ func (r *OrmBuilder) runMany2ManyQueryCompiled(child *OrmBuilder, desc *relation
 	// related model's user scopes must still queue - and applySoftDelete drops the predicate through
 	// its named-removal gate. The related model's user-defined global scopes are queued on top of it
 	// too (addGlobalScopes; see runRelatedQueryCompiled for the full note).
-	if desc.RelatedModel != nil && !slices.Contains(child.conditions.withoutGlobalScopes, "*") {
+	if desc.RelatedModel != nil && !slices.Contains(child.conditions.removedScopes, "*") {
 		child = child.Model(desc.RelatedModel).(*OrmBuilder)
 		child = child.addGlobalScopes()
 	}
@@ -1018,7 +1018,7 @@ func (r *OrmBuilder) runRelatedQueryCompiled(child *OrmBuilder, desc *relationDe
 	// every other compiled read. addGlobalScopes drops the scopes WithoutGlobalScopes() names; the
 	// outer check already handled the all-removed ("*") case. The built-in soft-delete predicate is
 	// applied by applySoftDelete.
-	if desc.RelatedModel != nil && !slices.Contains(child.conditions.withoutGlobalScopes, "*") {
+	if desc.RelatedModel != nil && !slices.Contains(child.conditions.removedScopes, "*") {
 		child = child.Model(desc.RelatedModel).(*OrmBuilder)
 		child = child.addGlobalScopes()
 	}

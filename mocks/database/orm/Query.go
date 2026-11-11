@@ -26,6 +26,55 @@ func (_m *Query) EXPECT() *Query_Expecter {
 	return &Query_Expecter{mock: &_m.Mock}
 }
 
+// ApplyScope provides a mock function with given fields: name, scope
+func (_m *Query) ApplyScope(name string, scope func(orm.Query) orm.Query) orm.Query {
+	ret := _m.Called(name, scope)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ApplyScope")
+	}
+
+	var r0 orm.Query
+	if rf, ok := ret.Get(0).(func(string, func(orm.Query) orm.Query) orm.Query); ok {
+		r0 = rf(name, scope)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(orm.Query)
+		}
+	}
+
+	return r0
+}
+
+// Query_ApplyScope_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ApplyScope'
+type Query_ApplyScope_Call struct {
+	*mock.Call
+}
+
+// ApplyScope is a helper method to define mock.On call
+//   - name string
+//   - scope func(orm.Query) orm.Query
+func (_e *Query_Expecter) ApplyScope(name interface{}, scope interface{}) *Query_ApplyScope_Call {
+	return &Query_ApplyScope_Call{Call: _e.mock.On("ApplyScope", name, scope)}
+}
+
+func (_c *Query_ApplyScope_Call) Run(run func(name string, scope func(orm.Query) orm.Query)) *Query_ApplyScope_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string), args[1].(func(orm.Query) orm.Query))
+	})
+	return _c
+}
+
+func (_c *Query_ApplyScope_Call) Return(_a0 orm.Query) *Query_ApplyScope_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Query_ApplyScope_Call) RunAndReturn(run func(string, func(orm.Query) orm.Query) orm.Query) *Query_ApplyScope_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Avg provides a mock function with given fields: column, dest
 func (_m *Query) Avg(column string, dest interface{}) error {
 	ret := _m.Called(column, dest)
@@ -5813,6 +5862,54 @@ func (_c *Query_Relation_Call) Return(_a0 orm.RelationWriter) *Query_Relation_Ca
 }
 
 func (_c *Query_Relation_Call) RunAndReturn(run func(interface{}, string) orm.RelationWriter) *Query_Relation_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// RemoveScope provides a mock function with given fields: name
+func (_m *Query) RemoveScope(name string) orm.Query {
+	ret := _m.Called(name)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RemoveScope")
+	}
+
+	var r0 orm.Query
+	if rf, ok := ret.Get(0).(func(string) orm.Query); ok {
+		r0 = rf(name)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(orm.Query)
+		}
+	}
+
+	return r0
+}
+
+// Query_RemoveScope_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RemoveScope'
+type Query_RemoveScope_Call struct {
+	*mock.Call
+}
+
+// RemoveScope is a helper method to define mock.On call
+//   - name string
+func (_e *Query_Expecter) RemoveScope(name interface{}) *Query_RemoveScope_Call {
+	return &Query_RemoveScope_Call{Call: _e.mock.On("RemoveScope", name)}
+}
+
+func (_c *Query_RemoveScope_Call) Run(run func(name string)) *Query_RemoveScope_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *Query_RemoveScope_Call) Return(_a0 orm.Query) *Query_RemoveScope_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Query_RemoveScope_Call) RunAndReturn(run func(string) orm.Query) *Query_RemoveScope_Call {
 	_c.Call.Return(run)
 	return _c
 }

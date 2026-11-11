@@ -542,7 +542,34 @@ type Query interface {
 	// WithoutEvents disables event firing for the query.
 	WithoutEvents() Query
 	// WithoutGlobalScopes disables all global scopes for the query.
+	//
+	// RemoveScope(name) is the builder-local form of the same intent and the one callers should
+	// reach for. WithoutGlobalScopes belongs to the model-declared global-scope API and goes away
+	// with it (see .claude/plans/remove-custom-global-scopes.md); the framework's own no-scope
+	// operations still use it until they are migrated.
 	WithoutGlobalScopes(names ...string) Query
+	// ApplyScope mounts a named scope on this query — Laravel's withGlobalScope($name, $scope) — and
+	// returns the query. The scope runs when a statement is prepared from the query, not at call
+	// time (Scopes() is the immediate form), on the copy that statement compiles from, in mount
+	// order, after the built-in soft-delete predicates. Mounting the same name again replaces its
+	// callback and keeps its position; a mount after RemoveScope is a fresh mount, appended at the
+	// end, and clears that name's removal record. A nil callback mounts nothing.
+	//
+	// The scope belongs to this query alone: a query built elsewhere never inherits it, and Clone()
+	// copies the mount rather than sharing it.
+	ApplyScope(name string, scope func(Query) Query) Query
+	// RemoveScope removes the scope mounted under name from this query and records the removal, so
+	// the scopes the framework mounts by itself — the built-in soft-delete predicates, mounted per
+	// model when the statement is prepared — are dropped too. Laravel's withoutGlobalScope($name)
+	// has the same two effects.
+	//
+	// The removal is recorded even when nothing is mounted under that name yet (so it governs a
+	// mount that happens later), and only a new ApplyScope for the same name clears it. Clauses a
+	// scope already wrote are not rewritten: the removal applies from the point it is expressed, so
+	// OnlyTrashed's "is not null" stays when the soft-delete scope is removed afterwards.
+	//
+	// The built-in scopes answer to the names in contracts/database/orm/scope.go.
+	RemoveScope(name string) Query
 	// Without removes the given relations from the eager-load list set by With.
 	// Mirrors fedaco's without().
 	Without(relations ...string) Query

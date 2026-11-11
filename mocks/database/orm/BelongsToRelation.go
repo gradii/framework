@@ -26,6 +26,55 @@ func (_m *BelongsToRelation) EXPECT() *BelongsToRelation_Expecter {
 	return &BelongsToRelation_Expecter{mock: &_m.Mock}
 }
 
+// ApplyScope provides a mock function with given fields: name, scope
+func (_m *BelongsToRelation) ApplyScope(name string, scope func(orm.Query) orm.Query) orm.Query {
+	ret := _m.Called(name, scope)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ApplyScope")
+	}
+
+	var r0 orm.Query
+	if rf, ok := ret.Get(0).(func(string, func(orm.Query) orm.Query) orm.Query); ok {
+		r0 = rf(name, scope)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(orm.Query)
+		}
+	}
+
+	return r0
+}
+
+// BelongsToRelation_ApplyScope_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ApplyScope'
+type BelongsToRelation_ApplyScope_Call struct {
+	*mock.Call
+}
+
+// ApplyScope is a helper method to define mock.On call
+//   - name string
+//   - scope func(orm.Query) orm.Query
+func (_e *BelongsToRelation_Expecter) ApplyScope(name interface{}, scope interface{}) *BelongsToRelation_ApplyScope_Call {
+	return &BelongsToRelation_ApplyScope_Call{Call: _e.mock.On("ApplyScope", name, scope)}
+}
+
+func (_c *BelongsToRelation_ApplyScope_Call) Run(run func(name string, scope func(orm.Query) orm.Query)) *BelongsToRelation_ApplyScope_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string), args[1].(func(orm.Query) orm.Query))
+	})
+	return _c
+}
+
+func (_c *BelongsToRelation_ApplyScope_Call) Return(_a0 orm.Query) *BelongsToRelation_ApplyScope_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *BelongsToRelation_ApplyScope_Call) RunAndReturn(run func(string, func(orm.Query) orm.Query) orm.Query) *BelongsToRelation_ApplyScope_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Associate provides a mock function with given fields: owner
 func (_m *BelongsToRelation) Associate(owner interface{}) error {
 	ret := _m.Called(owner)
@@ -6601,6 +6650,54 @@ func (_c *BelongsToRelation_Relation_Call) Return(_a0 orm.RelationWriter) *Belon
 }
 
 func (_c *BelongsToRelation_Relation_Call) RunAndReturn(run func(interface{}, string) orm.RelationWriter) *BelongsToRelation_Relation_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// RemoveScope provides a mock function with given fields: name
+func (_m *BelongsToRelation) RemoveScope(name string) orm.Query {
+	ret := _m.Called(name)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RemoveScope")
+	}
+
+	var r0 orm.Query
+	if rf, ok := ret.Get(0).(func(string) orm.Query); ok {
+		r0 = rf(name)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(orm.Query)
+		}
+	}
+
+	return r0
+}
+
+// BelongsToRelation_RemoveScope_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RemoveScope'
+type BelongsToRelation_RemoveScope_Call struct {
+	*mock.Call
+}
+
+// RemoveScope is a helper method to define mock.On call
+//   - name string
+func (_e *BelongsToRelation_Expecter) RemoveScope(name interface{}) *BelongsToRelation_RemoveScope_Call {
+	return &BelongsToRelation_RemoveScope_Call{Call: _e.mock.On("RemoveScope", name)}
+}
+
+func (_c *BelongsToRelation_RemoveScope_Call) Run(run func(name string)) *BelongsToRelation_RemoveScope_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *BelongsToRelation_RemoveScope_Call) Return(_a0 orm.Query) *BelongsToRelation_RemoveScope_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *BelongsToRelation_RemoveScope_Call) RunAndReturn(run func(string) orm.Query) *BelongsToRelation_RemoveScope_Call {
 	_c.Call.Return(run)
 	return _c
 }

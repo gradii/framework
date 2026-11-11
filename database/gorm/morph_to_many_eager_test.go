@@ -56,7 +56,7 @@ func TestLoadMorphToMany_ReadsAreCompiled(t *testing.T) {
 		assert.Nil(t, child.conditions.model)
 		assert.Nil(t, child.conditions.dest)
 		assert.False(t, child.conditions.withTrashed)
-		assert.Empty(t, child.conditions.withoutGlobalScopes)
+		assert.Empty(t, child.conditions.removedScopes)
 		assert.Empty(t, child.conditions.scopes)
 		assert.Len(t, child.query.State().Wheres, 2)
 		assert.Len(t, child.query.Selects(), 2)

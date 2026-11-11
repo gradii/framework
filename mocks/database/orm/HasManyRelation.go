@@ -26,6 +26,55 @@ func (_m *HasManyRelation) EXPECT() *HasManyRelation_Expecter {
 	return &HasManyRelation_Expecter{mock: &_m.Mock}
 }
 
+// ApplyScope provides a mock function with given fields: name, scope
+func (_m *HasManyRelation) ApplyScope(name string, scope func(orm.Query) orm.Query) orm.Query {
+	ret := _m.Called(name, scope)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ApplyScope")
+	}
+
+	var r0 orm.Query
+	if rf, ok := ret.Get(0).(func(string, func(orm.Query) orm.Query) orm.Query); ok {
+		r0 = rf(name, scope)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(orm.Query)
+		}
+	}
+
+	return r0
+}
+
+// HasManyRelation_ApplyScope_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ApplyScope'
+type HasManyRelation_ApplyScope_Call struct {
+	*mock.Call
+}
+
+// ApplyScope is a helper method to define mock.On call
+//   - name string
+//   - scope func(orm.Query) orm.Query
+func (_e *HasManyRelation_Expecter) ApplyScope(name interface{}, scope interface{}) *HasManyRelation_ApplyScope_Call {
+	return &HasManyRelation_ApplyScope_Call{Call: _e.mock.On("ApplyScope", name, scope)}
+}
+
+func (_c *HasManyRelation_ApplyScope_Call) Run(run func(name string, scope func(orm.Query) orm.Query)) *HasManyRelation_ApplyScope_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string), args[1].(func(orm.Query) orm.Query))
+	})
+	return _c
+}
+
+func (_c *HasManyRelation_ApplyScope_Call) Return(_a0 orm.Query) *HasManyRelation_ApplyScope_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *HasManyRelation_ApplyScope_Call) RunAndReturn(run func(string, func(orm.Query) orm.Query) orm.Query) *HasManyRelation_ApplyScope_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Avg provides a mock function with given fields: column, dest
 func (_m *HasManyRelation) Avg(column string, dest interface{}) error {
 	ret := _m.Called(column, dest)
@@ -6881,6 +6930,54 @@ func (_c *HasManyRelation_Relation_Call) Return(_a0 orm.RelationWriter) *HasMany
 }
 
 func (_c *HasManyRelation_Relation_Call) RunAndReturn(run func(interface{}, string) orm.RelationWriter) *HasManyRelation_Relation_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// RemoveScope provides a mock function with given fields: name
+func (_m *HasManyRelation) RemoveScope(name string) orm.Query {
+	ret := _m.Called(name)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RemoveScope")
+	}
+
+	var r0 orm.Query
+	if rf, ok := ret.Get(0).(func(string) orm.Query); ok {
+		r0 = rf(name)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(orm.Query)
+		}
+	}
+
+	return r0
+}
+
+// HasManyRelation_RemoveScope_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RemoveScope'
+type HasManyRelation_RemoveScope_Call struct {
+	*mock.Call
+}
+
+// RemoveScope is a helper method to define mock.On call
+//   - name string
+func (_e *HasManyRelation_Expecter) RemoveScope(name interface{}) *HasManyRelation_RemoveScope_Call {
+	return &HasManyRelation_RemoveScope_Call{Call: _e.mock.On("RemoveScope", name)}
+}
+
+func (_c *HasManyRelation_RemoveScope_Call) Run(run func(name string)) *HasManyRelation_RemoveScope_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *HasManyRelation_RemoveScope_Call) Return(_a0 orm.Query) *HasManyRelation_RemoveScope_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *HasManyRelation_RemoveScope_Call) RunAndReturn(run func(string) orm.Query) *HasManyRelation_RemoveScope_Call {
 	_c.Call.Return(run)
 	return _c
 }

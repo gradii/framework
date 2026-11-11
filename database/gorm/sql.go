@@ -298,12 +298,12 @@ func existsSelectExpression(driver, subquery, alias string) string {
 // statement: table, the deferred where entries (relation-existence subqueries, onlyTrashed
 // predicates), soft-delete predicate, and select-subs.
 func (r *OrmBuilder) newBuilder() (*querybuilder.Builder, error) {
-	// A queued scope is one of the model's global scopes, folded in by addGlobalScopes: Laravel
-	// registers global scopes with withGlobalScope() and applies them when the statement compiles
-	// (applyScopes), and this is that compile-time application. The caller's own Scopes() call
-	// applied immediately (Builder::scopes) and left nothing queued. The scopes mutate the query,
-	// so they run first.
-	if len(r.conditions.scopes) > 0 || !r.conditions.softDeleteScopeApplied {
+	// A scope is one a model registered (queued by addGlobalScopes) or one the caller mounted, and
+	// the built-in soft-delete predicate is part of the same step: Laravel registers scopes with
+	// withGlobalScope() and applies them when the statement compiles (applyScopes), which is what
+	// this is. The caller's own Scopes() call applied immediately (Builder::scopes) and left nothing
+	// to do here. The scopes mutate the query, so they run first, on their own copy.
+	if !r.conditions.scopesApplied {
 		scoped := r.withScopesApplied()
 		if scoped.conditions.err != nil {
 			return nil, scoped.conditions.err
@@ -391,7 +391,7 @@ func (r *OrmBuilder) applySoftDelete(builder *querybuilder.Builder) error {
 	// The default predicate is the named scope's: a removal of that name (or of every scope) drops
 	// it. OnlyTrashed's "is not null" is the whereNotNull onlyTrashed adds after removing the scope,
 	// so it is kept even when the name is removed.
-	if !r.conditions.onlyTrashed && r.globalScopeRemoved(contractsorm.SoftDeletingScope) {
+	if !r.conditions.onlyTrashed && r.scopeRemoved(contractsorm.SoftDeletingScope) {
 		return nil
 	}
 
@@ -415,16 +415,16 @@ func (r *OrmBuilder) applySoftDelete(builder *querybuilder.Builder) error {
 	return nil
 }
 
-// globalScopeRemoved reports whether the query removed the named global scope - Laravel's
-// withoutGlobalScope($name), which unsets $builder->scopes[$name] - or every scope at once: the
-// port's "*" wildcard records WithoutGlobalScopes() with no names, the shape Laravel's
-// withoutGlobalScopes(null) has when it removes array_keys($this->scopes). It is the single gate the
-// two built-in soft-delete predicates consult, so both answer to the names Laravel registers them
-// under (contractsorm.SoftDeletingScope, contractsorm.SoftDeletableHasManyThrough) in addition to
-// the all-scope "*".
-func (r *OrmBuilder) globalScopeRemoved(name string) bool {
-	return slices.Contains(r.conditions.withoutGlobalScopes, "*") ||
-		slices.Contains(r.conditions.withoutGlobalScopes, name)
+// scopeRemoved reports whether the query removed the named scope - Laravel's
+// withoutGlobalScope($name), which unsets $builder->scopes[$name], or the port's RemoveScope(name) -
+// or every scope at once: the "*" wildcard records WithoutGlobalScopes() with no names, the shape
+// Laravel's withoutGlobalScopes(null) has when it removes array_keys($this->scopes). It is the
+// single gate the two built-in soft-delete predicates consult, so both answer to the names Laravel
+// registers them under (contractsorm.SoftDeletingScope, contractsorm.SoftDeletableHasManyThrough) in
+// addition to the all-scope "*".
+func (r *OrmBuilder) scopeRemoved(name string) bool {
+	return slices.Contains(r.conditions.removedScopes, "*") ||
+		slices.Contains(r.conditions.removedScopes, name)
 }
 
 // appendSoftDeletePredicate writes the model's soft-delete predicate onto a compiled builder through
@@ -479,7 +479,9 @@ func (r *OrmBuilder) applyThroughSoftDelete(builder *querybuilder.Builder) {
 		return
 	}
 
-	if r.globalScopeRemoved(contractsorm.SoftDeletableHasManyThrough) {
+	// As for the model's own predicate: a mount under the through soft-delete name replaces the
+	// predicate the framework would add for the relation's through model.
+	if r.scopeRemoved(contractsorm.SoftDeletableHasManyThrough) || mountsScopeName(r.conditions.scopes, contractsorm.SoftDeletableHasManyThrough) {
 		return
 	}
 
