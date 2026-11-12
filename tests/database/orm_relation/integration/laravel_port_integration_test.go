@@ -238,11 +238,11 @@ type integrationSoftUser struct {
 
 func (integrationSoftUser) TableName() string { return "soft_deleted_users" }
 
-func (integrationSoftUser) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{
-		{Name: "removeSoftDeletes", Scope: func(q contractsorm.Query) contractsorm.Query { return q.WithTrashed() }},
-	}
-}
+// integrationSoftUser carries the framework soft delete alone: the corpus's model registered a
+// global scope that removed the soft-delete scope (making every read see trashed rows). A scope
+// belongs to the builder that runs it now, and a scope mounted on the builder runs after the
+// predicate is written, so the removal is the caller's to express — the test below removes the
+// soft-delete scope on the query it reads with (Laravel's withoutGlobalScope(SoftDeletingScope)).
 
 // integrationScopeUser ports EloquentTestUserWithGlobalScope: its global scope declares
 // with('posts'), and Laravel's applyScopes hands the scoped builder — scope-added eager loads
@@ -261,10 +261,11 @@ func (integrationScopeUser) Relations() map[string]contractsorm.Relation {
 	}
 }
 
-func (integrationScopeUser) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{
-		{Name: "with_posts", Scope: func(query contractsorm.Query) contractsorm.Query { return query.With("Posts") }},
-	}
+// integrationScopeUserWithPosts is the scope EloquentTestUserWithGlobalScope registered: a scope
+// that queues an eager load. The test mounts it on the query it reads with, so the eager load it
+// adds reaches the read the way the corpus's applyScopes let it.
+func integrationScopeUserWithPosts(query contractsorm.Query) contractsorm.Query {
+	return query.With("Posts")
 }
 
 // --- touching fixtures ---------------------------------------------------------
@@ -430,12 +431,10 @@ type integrationOmittingUser struct {
 
 func (integrationOmittingUser) TableName() string { return "users" }
 
-func (integrationOmittingUser) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{
-		{Name: "omit_taylor", Scope: func(q contractsorm.Query) contractsorm.Query {
-			return q.Where("email", "!=", "taylorotwell@gmail.com")
-		}},
-	}
+// integrationOmittingUserScope is the scope EloquentOmittingGlobalScopeUser registered: it omits the
+// taylorotwell row. The test mounts it on the scoped read it runs.
+func integrationOmittingUserScope(q contractsorm.Query) contractsorm.Query {
+	return q.Where("email", "!=", "taylorotwell@gmail.com")
 }
 
 // integrationTag ports EloquentTestTag; its declared Pivot struct is the Go form of the MorphPivot
@@ -2824,7 +2823,8 @@ func TestIntegration_RelationsArePreloadedInGlobalScope(t *testing.T) {
 	// relation (assertCount(1, $result->getRelations())): the scope's with('posts') merged into the
 	// builder's eager loads, and the read that runs applies them.
 	result := integrationScopeUser{}
-	require.NoError(t, cloneRelationQuery(t, query).Model(&integrationScopeUser{}).First(&result))
+	require.NoError(t, cloneRelationQuery(t, query).Model(&integrationScopeUser{}).
+		ApplyScope("with_posts", integrationScopeUserWithPosts).First(&result))
 	require.Len(t, result.Posts, 1)
 	assert.Equal(t, "My Post", result.Posts[0].Name)
 }
@@ -2838,7 +2838,8 @@ func TestIntegration_ModelIgnoredByGlobalScopeCanBeRefreshed(t *testing.T) {
 
 	// The model's global scope hides the row from a scoped read...
 	hidden := integrationOmittingUser{}
-	require.NoError(t, cloneRelationQuery(t, query).Model(&integrationOmittingUser{}).Where("id", 1).First(&hidden))
+	require.NoError(t, cloneRelationQuery(t, query).Model(&integrationOmittingUser{}).
+		ApplyScope("omit_taylor", integrationOmittingUserScope).Where("id", 1).First(&hidden))
 	assert.Zero(t, hidden.ID)
 
 	// ...and fresh() -- the scope-skipping read -- is what bypasses it:
@@ -2849,7 +2850,14 @@ func TestIntegration_ModelIgnoredByGlobalScopeCanBeRefreshed(t *testing.T) {
 	assert.Equal(t, "taylorotwell@gmail.com", fresh.Email)
 }
 
-func TestIntegration_GlobalScopeCanBeRemovedByOtherGlobalScope(t *testing.T) {
+// TestIntegration_TheSoftDeleteScopeCanBeRemovedFromARead ports the corpus's
+// GlobalScopeCanBeRemovedByOtherGlobalScope: EloquentTestUserWithGlobalScope (in that test's shape)
+// registered a scope that removed the soft-delete filter, so find() read the deleted row back. A
+// mounted scope runs after the soft-delete predicate is written and cannot lift it — that is what
+// Laravel's own registration order does too (oracle,
+// /Users/dog/.claude/jobs/013c27a0/tmp/phaseb/trial_execution_probe.php) — so the removal is
+// expressed where the builder is, with RemoveScope, and find() reads the row back just the same.
+func TestIntegration_TheSoftDeleteScopeCanBeRemovedFromARead(t *testing.T) {
 	query := newRelationQuery(t)
 	integrationSchema(t, query)
 
@@ -2859,10 +2867,15 @@ func TestIntegration_GlobalScopeCanBeRemovedByOtherGlobalScope(t *testing.T) {
 	_, err := cloneRelationQuery(t, query).Delete(&user)
 	require.NoError(t, err)
 
-	// The model's scope removes the soft-deleting filter (see the model comment), so find() reads
-	// the deleted row back.
+	// A plain read hides the deleted row...
+	hidden := integrationSoftUser{}
+	require.NoError(t, cloneRelationQuery(t, query).Model(&integrationSoftUser{}).Where("id", user.ID).First(&hidden))
+	assert.Zero(t, hidden.ID)
+
+	// ...and the removal lets the read find it.
 	found := integrationSoftUser{}
-	require.NoError(t, cloneRelationQuery(t, query).Model(&integrationSoftUser{}).Where("id", user.ID).First(&found))
+	require.NoError(t, cloneRelationQuery(t, query).Model(&integrationSoftUser{}).
+		RemoveScope(contractsorm.SoftDeletingScope).Where("id", user.ID).First(&found))
 	assert.NotZero(t, found.ID)
 }
 

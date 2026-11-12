@@ -86,14 +86,12 @@ type belongsToManyExpressionTag struct {
 
 func (belongsToManyExpressionTag) TableName() string { return "tags" }
 
-// belongsToManyExpressionTagScopes is the Go stand-in for the corpus's
-// Tag::addGlobalScope('default', ...): Go cannot attach a scope to a type after it is declared, so
-// the tag model reads its global scopes from this package variable and the tests install — and
-// clear — the throwing scope around the relation read. Nil by default, i.e. no scopes.
-var belongsToManyExpressionTagScopes []contractsorm.GlobalScope
-
-func (belongsToManyExpressionTag) GlobalScopes() []contractsorm.GlobalScope {
-	return belongsToManyExpressionTagScopes
+// belongsToManyExpressionTagDefaultScope is the Go stand-in for the corpus's
+// Tag::addGlobalScope('default', static fn () => throw ...): a scope that throws, mounted by the
+// tests on the relation query (ApplyScope) — the builder-local form of the model-declared scope the
+// port dropped. Mounting it is what makes a read blow up, so a test that removes it reads through.
+func belongsToManyExpressionTagDefaultScope(contractsorm.Query) contractsorm.Query {
+	panic("Default global scope.")
 }
 
 // --- schema and seeding ------------------------------------------------------
@@ -206,13 +204,8 @@ func TestBelongsToManyExpression_GlobalScopesAreAppliedToBelongsToManyRelation(t
 
 	post := belongsToManyExpressionFirstPost(t, query)
 
-	// Laravel: Tag::addGlobalScope('default', static fn () => throw ...). Go cannot add a scope to a
-	// declared type, so the test installs the throwing scope on the model's package variable instead.
-	belongsToManyExpressionTagScopes = []contractsorm.GlobalScope{
-		{Name: "default", Scope: func(contractsorm.Query) contractsorm.Query { panic("Default global scope.") }},
-	}
-	t.Cleanup(func() { belongsToManyExpressionTagScopes = nil })
-
+	// Laravel: Tag::addGlobalScope('default', static fn () => throw ...) on the model. The port
+	// mounts the same scope on the relation query — a scope belongs to the builder that runs it.
 	// Laravel: expectExceptionMessage('Default global scope.') around $post->tags()->get(); the Go
 	// scope throws by panicking, so the read is run under recover and the recovered value must be
 	// the scope's message.
@@ -222,10 +215,11 @@ func TestBelongsToManyExpression_GlobalScopesAreAppliedToBelongsToManyRelation(t
 	)
 	func() {
 		defer func() { recovered = recover() }()
-		_ = cloneRelationQuery(t, query).Related(&post, "Tags").Get(&tags)
+		_ = cloneRelationQuery(t, query).Related(&post, "Tags").
+			ApplyScope("default", belongsToManyExpressionTagDefaultScope).Get(&tags)
 	}()
 
-	require.NotNil(t, recovered, "the tag model's global scope must run when the relation is read")
+	require.NotNil(t, recovered, "the relation's mounted scope must run when the relation is read")
 	assert.Equal(t, "Default global scope.", recovered)
 }
 
@@ -236,14 +230,11 @@ func TestBelongsToManyExpression_GlobalScopesCanBeRemovedFromBelongsToManyRelati
 
 	post := belongsToManyExpressionFirstPost(t, query)
 
-	// The same installing scope as above: without the removal it would throw, and the assertion is
-	// that withoutGlobalScopes() lets the read through.
-	belongsToManyExpressionTagScopes = []contractsorm.GlobalScope{
-		{Name: "default", Scope: func(contractsorm.Query) contractsorm.Query { panic("Default global scope.") }},
-	}
-	t.Cleanup(func() { belongsToManyExpressionTagScopes = nil })
-
+	// The same mounted scope as above: without the removal it would throw, and the assertion is that
+	// RemoveScope lets the read through.
 	var tags []belongsToManyExpressionTag
-	require.NoError(t, cloneRelationQuery(t, query).Related(&post, "Tags").WithoutGlobalScopes().Get(&tags))
+	require.NoError(t, cloneRelationQuery(t, query).Related(&post, "Tags").
+		ApplyScope("default", belongsToManyExpressionTagDefaultScope).
+		RemoveScope("default").Get(&tags))
 	assert.NotEmpty(t, tags)
 }

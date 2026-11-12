@@ -2517,7 +2517,10 @@ func (s *QueryTestSuite) TestGet() {
 	}
 }
 
-func (s *QueryTestSuite) TestGlobalScopes() {
+// TestAppliedScopes is the matrix the model-declared-scope matrix used to be: every read and write
+// path a query offers must fold in the scopes mounted on it (AppliedScopes) — the builder-local form
+// of the scopes the GlobalScope model used to declare, whose registration the port dropped.
+func (s *QueryTestSuite) TestAppliedScopes() {
 	prepareData := func(query contractsorm.Query) {
 		globalScope := GlobalScope{Name: "name_scope", Avatar: "avatar_scope"}
 		s.Nil(query.Create(&globalScope))
@@ -2534,7 +2537,7 @@ func (s *QueryTestSuite) TestGlobalScopes() {
 				query.CreateTable(TestTableGlobalScopes)
 				prepareData(query.Query())
 
-				count, err := query.Query().Model(&GlobalScope{}).Count()
+				count, err := AppliedScopes(query.Query().Model(&GlobalScope{})).Count()
 				s.Nil(err)
 				s.Equal(int64(1), count)
 			})
@@ -2544,7 +2547,7 @@ func (s *QueryTestSuite) TestGlobalScopes() {
 				prepareData(query.Query())
 
 				count := 0
-				for cursor := range query.Query().Model(&GlobalScope{}).Cursor() {
+				for cursor := range AppliedScopes(query.Query().Model(&GlobalScope{})).Cursor() {
 					count++
 					var globalScope GlobalScope
 					s.Nil(cursor.Scan(&globalScope))
@@ -2558,12 +2561,12 @@ func (s *QueryTestSuite) TestGlobalScopes() {
 				query.CreateTable(TestTableGlobalScopes)
 				prepareData(query.Query())
 
-				res, err := query.Query().Model(&GlobalScope{}).Delete()
+				res, err := AppliedScopes(query.Query().Model(&GlobalScope{})).Delete()
 				s.Nil(err)
 				s.Equal(int64(1), res.RowsAffected)
 
 				var globalScopes []GlobalScope
-				s.Nil(query.Query().Get(&globalScopes))
+				s.Nil(AppliedScopes(query.Query()).Get(&globalScopes))
 				s.Equal(0, len(globalScopes))
 			})
 
@@ -2571,12 +2574,12 @@ func (s *QueryTestSuite) TestGlobalScopes() {
 				query.CreateTable(TestTableGlobalScopes)
 				prepareData(query.Query())
 
-				res, err := query.Query().Exec("delete from global_scopes")
+				res, err := AppliedScopes(query.Query()).Exec("delete from global_scopes")
 				s.Nil(err)
 				s.Equal(int64(2), res.RowsAffected)
 
 				var globalScopes []GlobalScope
-				s.Nil(query.Query().Get(&globalScopes))
+				s.Nil(AppliedScopes(query.Query()).Get(&globalScopes))
 				s.Equal(0, len(globalScopes))
 			})
 
@@ -2584,15 +2587,15 @@ func (s *QueryTestSuite) TestGlobalScopes() {
 				query.CreateTable(TestTableGlobalScopes)
 				prepareData(query.Query())
 
-				exists, err := query.Query().Model(&GlobalScope{}).Exists()
+				exists, err := AppliedScopes(query.Query().Model(&GlobalScope{})).Exists()
 				s.Nil(err)
 				s.True(exists)
 
-				res, err := query.Query().Model(&GlobalScope{}).Delete()
+				res, err := AppliedScopes(query.Query().Model(&GlobalScope{})).Delete()
 				s.Nil(err)
 				s.Equal(int64(1), res.RowsAffected)
 
-				exists, err = query.Query().Model(&GlobalScope{}).Exists()
+				exists, err = AppliedScopes(query.Query().Model(&GlobalScope{})).Exists()
 				s.Nil(err)
 				s.False(exists)
 			})
@@ -2602,7 +2605,7 @@ func (s *QueryTestSuite) TestGlobalScopes() {
 				prepareData(query.Query())
 
 				var globalScope GlobalScope
-				s.Nil(query.Query().Find(&globalScope))
+				s.Nil(AppliedScopes(query.Query()).Find(&globalScope))
 				s.True(globalScope.ID > 0)
 				s.Equal("name_scope", globalScope.Name)
 			})
@@ -2612,12 +2615,12 @@ func (s *QueryTestSuite) TestGlobalScopes() {
 				prepareData(query.Query())
 
 				var globalScope GlobalScope
-				s.Nil(query.Query().FindOrFail(&globalScope))
+				s.Nil(AppliedScopes(query.Query()).FindOrFail(&globalScope))
 				s.True(globalScope.ID > 0)
 				s.Equal("name_scope", globalScope.Name)
 
 				var globalScope1 GlobalScope
-				s.EqualError(query.Query().Where("avatar", "avatar_scope1").FindOrFail(&globalScope1), errors.OrmRecordNotFound.Error())
+				s.EqualError(AppliedScopes(query.Query()).Where("avatar", "avatar_scope1").FindOrFail(&globalScope1), errors.OrmRecordNotFound.Error())
 				s.Equal(uint(0), globalScope1.ID)
 			})
 
@@ -2626,7 +2629,7 @@ func (s *QueryTestSuite) TestGlobalScopes() {
 				prepareData(query.Query())
 
 				var globalScope GlobalScope
-				s.Nil(query.Query().First(&globalScope))
+				s.Nil(AppliedScopes(query.Query()).First(&globalScope))
 				s.True(globalScope.ID > 0)
 				s.Equal("name_scope", globalScope.Name)
 			})
@@ -2636,7 +2639,7 @@ func (s *QueryTestSuite) TestGlobalScopes() {
 				prepareData(query.Query())
 
 				var globalScope GlobalScope
-				s.Nil(query.Query().FirstOr(&globalScope, func() error {
+				s.Nil(AppliedScopes(query.Query()).FirstOr(&globalScope, func() error {
 					return errors.OrmRecordNotFound
 				}))
 				s.True(globalScope.ID > 0)
@@ -2648,7 +2651,7 @@ func (s *QueryTestSuite) TestGlobalScopes() {
 				prepareData(query.Query())
 
 				var globalScope GlobalScope
-				s.Nil(query.Query().FirstOrCreate(&globalScope, User{Name: "name_scope"}))
+				s.Nil(AppliedScopes(query.Query()).FirstOrCreate(&globalScope, User{Name: "name_scope"}))
 				s.True(globalScope.ID > 0)
 				s.Equal("name_scope", globalScope.Name)
 			})
@@ -2658,7 +2661,7 @@ func (s *QueryTestSuite) TestGlobalScopes() {
 				prepareData(query.Query())
 
 				var globalScope GlobalScope
-				s.Nil(query.Query().FirstOrFail(&globalScope))
+				s.Nil(AppliedScopes(query.Query()).FirstOrFail(&globalScope))
 				s.True(globalScope.ID > 0)
 				s.Equal("name_scope", globalScope.Name)
 			})
@@ -2668,7 +2671,7 @@ func (s *QueryTestSuite) TestGlobalScopes() {
 				prepareData(query.Query())
 
 				var globalScope GlobalScope
-				s.Nil(query.Query().FirstOrNew(&globalScope, User{Name: "name_scope"}))
+				s.Nil(AppliedScopes(query.Query()).FirstOrNew(&globalScope, User{Name: "name_scope"}))
 				s.True(globalScope.ID > 0)
 				s.Equal("name_scope", globalScope.Name)
 			})
@@ -2677,12 +2680,12 @@ func (s *QueryTestSuite) TestGlobalScopes() {
 				query.CreateTable(TestTableGlobalScopes)
 				prepareData(query.Query())
 
-				res, err := query.Query().Model(&GlobalScope{}).ForceDelete()
+				res, err := AppliedScopes(query.Query().Model(&GlobalScope{})).ForceDelete()
 				s.Nil(err)
 				s.Equal(int64(1), res.RowsAffected)
 
 				var globalScopes []GlobalScope
-				s.Nil(query.Query().Get(&globalScopes))
+				s.Nil(AppliedScopes(query.Query()).Get(&globalScopes))
 				s.Equal(0, len(globalScopes))
 			})
 
@@ -2691,7 +2694,7 @@ func (s *QueryTestSuite) TestGlobalScopes() {
 				prepareData(query.Query())
 
 				var globalScopes []GlobalScope
-				s.Nil(query.Query().Get(&globalScopes))
+				s.Nil(AppliedScopes(query.Query()).Get(&globalScopes))
 				s.Require().Equal(1, len(globalScopes))
 				s.True(globalScopes[0].ID > 0)
 				s.Equal("name_scope", globalScopes[0].Name)
@@ -2705,7 +2708,7 @@ func (s *QueryTestSuite) TestGlobalScopes() {
 					globalScopes []GlobalScope
 					total        int64
 				)
-				s.Nil(query.Query().Paginate(1, 2, &globalScopes, &total))
+				s.Nil(AppliedScopes(query.Query()).Paginate(1, 2, &globalScopes, &total))
 				s.Require().Equal(1, len(globalScopes))
 				s.True(globalScopes[0].ID > 0)
 				s.Equal("name_scope", globalScopes[0].Name)
@@ -2717,7 +2720,7 @@ func (s *QueryTestSuite) TestGlobalScopes() {
 				prepareData(query.Query())
 
 				var names []string
-				s.Nil(query.Query().Model(&GlobalScope{}).Pluck("name", &names))
+				s.Nil(AppliedScopes(query.Query().Model(&GlobalScope{})).Pluck("name", &names))
 				s.Require().Equal(1, len(names))
 				s.Equal("name_scope", names[0])
 			})
@@ -2726,19 +2729,19 @@ func (s *QueryTestSuite) TestGlobalScopes() {
 				query.CreateTable(TestTableGlobalScopes)
 				prepareData(query.Query())
 
-				res, err := query.Query().Model(&GlobalScope{}).Delete()
+				res, err := AppliedScopes(query.Query().Model(&GlobalScope{})).Delete()
 				s.Nil(err)
 				s.Equal(int64(1), res.RowsAffected)
 
 				var globalScopes []GlobalScope
-				s.Nil(query.Query().Get(&globalScopes))
+				s.Nil(AppliedScopes(query.Query()).Get(&globalScopes))
 				s.Equal(0, len(globalScopes))
 
-				res, err = query.Query().Model(&GlobalScope{}).WithTrashed().Restore()
+				res, err = AppliedScopes(query.Query().Model(&GlobalScope{})).WithTrashed().Restore()
 				s.Nil(err)
 				s.Equal(int64(1), res.RowsAffected)
 
-				s.Nil(query.Query().Get(&globalScopes))
+				s.Nil(AppliedScopes(query.Query()).Get(&globalScopes))
 				s.Require().Equal(1, len(globalScopes))
 				s.True(globalScopes[0].ID > 0)
 				s.Equal("name_scope", globalScopes[0].Name)
@@ -2749,12 +2752,12 @@ func (s *QueryTestSuite) TestGlobalScopes() {
 				prepareData(query.Query())
 
 				globalScope := GlobalScope{Name: "name_scope", Avatar: "avatar_scope"}
-				s.Nil(query.Query().Save(&globalScope))
+				s.Nil(AppliedScopes(query.Query()).Save(&globalScope))
 				s.True(globalScope.ID > 0)
 				s.Equal("name_scope", globalScope.Name)
 
 				var globalScopes []GlobalScope
-				s.Nil(query.Query().Get(&globalScopes))
+				s.Nil(AppliedScopes(query.Query()).Get(&globalScopes))
 				s.Require().Equal(2, len(globalScopes))
 				s.True(globalScopes[0].ID > 0)
 				s.Equal("name_scope", globalScopes[0].Name)
@@ -2764,12 +2767,12 @@ func (s *QueryTestSuite) TestGlobalScopes() {
 				s.Equal("avatar_scope", globalScopes[1].Avatar)
 
 				globalScope.Avatar = "avatar_scope1"
-				s.Nil(query.Query().Save(&globalScope))
+				s.Nil(AppliedScopes(query.Query()).Save(&globalScope))
 				s.True(globalScope.ID > 0)
 				s.Equal("avatar_scope1", globalScope.Avatar)
 
 				var globalScopes1 []GlobalScope
-				s.Nil(query.Query().Get(&globalScopes1))
+				s.Nil(AppliedScopes(query.Query()).Get(&globalScopes1))
 				s.Require().Equal(1, len(globalScopes1))
 				s.True(globalScopes1[0].ID > 0)
 				s.Equal("name_scope", globalScopes1[0].Name)
@@ -2781,7 +2784,7 @@ func (s *QueryTestSuite) TestGlobalScopes() {
 				prepareData(query.Query())
 
 				var globalScopes []GlobalScope
-				s.Nil(query.Query().Raw("SELECT id, name, avatar, created_at, updated_at, deleted_at FROM global_scopes").Scan(&globalScopes))
+				s.Nil(AppliedScopes(query.Query()).Raw("SELECT id, name, avatar, created_at, updated_at, deleted_at FROM global_scopes").Scan(&globalScopes))
 				s.Require().Equal(2, len(globalScopes))
 				s.True(globalScopes[0].ID > 0)
 				s.Equal("name_scope", globalScopes[0].Name)
@@ -2796,12 +2799,12 @@ func (s *QueryTestSuite) TestGlobalScopes() {
 				prepareData(query.Query())
 
 				var globalScope GlobalScope
-				s.Nil(query.Query().First(&globalScope))
+				s.Nil(AppliedScopes(query.Query()).First(&globalScope))
 				s.True(globalScope.ID > 0)
 				s.Equal("name_scope", globalScope.Name)
 
 				var sum int64
-				err := query.Query().Model(&GlobalScope{}).Sum("id", &sum)
+				err := AppliedScopes(query.Query().Model(&GlobalScope{})).Sum("id", &sum)
 				s.Nil(err)
 				s.Equal(globalScope.ID, uint(sum))
 			})
@@ -2810,12 +2813,12 @@ func (s *QueryTestSuite) TestGlobalScopes() {
 				query.CreateTable(TestTableGlobalScopes)
 				prepareData(query.Query())
 
-				res, err := query.Query().Model(&GlobalScope{}).Update("avatar", "avatar_scope1")
+				res, err := AppliedScopes(query.Query().Model(&GlobalScope{})).Update("avatar", "avatar_scope1")
 				s.Nil(err)
 				s.Equal(int64(1), res.RowsAffected)
 
 				var globalScopes []GlobalScope
-				s.Nil(query.Query().Get(&globalScopes))
+				s.Nil(AppliedScopes(query.Query()).Get(&globalScopes))
 				s.Equal(0, len(globalScopes))
 			})
 
@@ -2824,12 +2827,12 @@ func (s *QueryTestSuite) TestGlobalScopes() {
 				prepareData(query.Query())
 
 				var globalScope GlobalScope
-				s.Nil(query.Query().UpdateOrCreate(&globalScope, GlobalScope{Avatar: "avatar_scope"}, GlobalScope{Avatar: "avatar_scope1"}))
+				s.Nil(AppliedScopes(query.Query()).UpdateOrCreate(&globalScope, GlobalScope{Avatar: "avatar_scope"}, GlobalScope{Avatar: "avatar_scope1"}))
 				s.True(globalScope.ID > 0)
 				s.Equal("avatar_scope1", globalScope.Avatar)
 
 				var globalScopes []GlobalScope
-				s.Nil(query.Query().Get(&globalScopes))
+				s.Nil(AppliedScopes(query.Query()).Get(&globalScopes))
 				s.Equal(0, len(globalScopes))
 			})
 		})
@@ -4673,7 +4676,10 @@ func (s *QueryTestSuite) TestWithoutEvents() {
 	}
 }
 
-func (s *QueryTestSuite) TestWithoutGlobalScopes() {
+// TestRemovedScopes pins the removal API against the scopes a query carries: the "*"-style call
+// drops every one of them, a named call drops exactly its own — the builder-local form of the shape
+// the model-declared version pinned.
+func (s *QueryTestSuite) TestRemovedScopes() {
 	prepareData := func(query contractsorm.Query) {
 		globalScope := GlobalScope{Name: "name_scope", Avatar: "avatar_scope"}
 		s.Nil(query.Create(&globalScope))
@@ -4690,13 +4696,13 @@ func (s *QueryTestSuite) TestWithoutGlobalScopes() {
 			prepareData(query.Query())
 
 			var globalScopes []GlobalScope
-			s.Nil(query.Query().WithoutGlobalScopes().Find(&globalScopes))
+			s.Nil(AppliedScopes(query.Query()).RemoveScope("avatar").RemoveScope("name").Find(&globalScopes))
 			s.Require().Len(globalScopes, 2)
 			s.True(globalScopes[0].ID > 0)
 			s.Equal("avatar_scope", globalScopes[0].Avatar)
 			s.Equal("avatar_scope1", globalScopes[1].Avatar)
 
-			s.Nil(query.Query().WithoutGlobalScopes("name").Find(&globalScopes))
+			s.Nil(AppliedScopes(query.Query()).RemoveScope("name").Find(&globalScopes))
 			s.Require().Len(globalScopes, 1)
 			s.True(globalScopes[0].ID > 0)
 			s.Equal("avatar_scope", globalScopes[0].Avatar)

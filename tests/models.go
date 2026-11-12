@@ -631,16 +631,17 @@ type GlobalScope struct {
 
 func (GlobalScope) TableName() string { return "global_scopes" }
 
-func (r *GlobalScope) GlobalScopes() []contractsorm.GlobalScope {
-	// Declared in the order the global-scope pins read: avatar first, then name.
-	return []contractsorm.GlobalScope{
-		{Name: "avatar", Scope: func(query contractsorm.Query) contractsorm.Query {
+// AppliedScopes mounts the two scopes the GlobalScope model used to declare — "avatar" then "name",
+// the order the scope pins read them — on the query. Scopes mount on the builder now (ApplyScope),
+// so a pin that used to rely on the model's registration mounts them here instead.
+func AppliedScopes(query contractsorm.Query) contractsorm.Query {
+	return query.
+		ApplyScope("avatar", func(query contractsorm.Query) contractsorm.Query {
 			return query.Where("avatar", "avatar_scope")
-		}},
-		{Name: "name", Scope: func(query contractsorm.Query) contractsorm.Query {
+		}).
+		ApplyScope("name", func(query contractsorm.Query) contractsorm.Query {
 			return query.Where("name", "name_scope")
-		}},
-	}
+		})
 }
 
 // UuidEntity model for testing UUID columns

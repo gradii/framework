@@ -59,26 +59,26 @@ func (s *ToSqlTestSuite) TestCount() {
 	s.Equal("select count(\"name\") as aggregate from \"users\" where \"id\" = 1 and \"users\".\"deleted_at\" is null", toSql.Count())
 
 	// global scopes
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("select count(*) as aggregate from \"global_scopes\" where \"id\" = $1 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = $2 and \"name\" = $3", toSql.Count())
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, true)
 	s.Equal("select count(*) as aggregate from \"global_scopes\" where \"id\" = 1 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = 'avatar_scope' and \"name\" = 'name_scope'", toSql.Count())
 
 	// Without global scopes. Removing every scope drops the model's SoftDeletingScope too, so the
 	// soft-delete predicate is gone - Laravel's withoutGlobalScopes() removes every registered scope
 	// (oracle, illuminate/database v12.55.1, /tmp/r12/scope_removal_probe.php §B: `select * from
 	// "sr_users"`). A removal of only a named user scope keeps it - the "name" block below.
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("select count(*) as aggregate from \"global_scopes\" where \"id\" = $1", toSql.Count())
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, true)
 	s.Equal("select count(*) as aggregate from \"global_scopes\" where \"id\" = 1", toSql.Count())
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("select count(*) as aggregate from \"global_scopes\" where \"id\" = $1 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = $2", toSql.Count())
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, true)
 	s.Equal("select count(*) as aggregate from \"global_scopes\" where \"id\" = 1 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = 'avatar_scope'", toSql.Count())
 }
 
@@ -133,11 +133,11 @@ func (s *ToSqlTestSuite) TestDelete() {
 	s.Equal("delete from \"roles\" where \"id\" = 1", toSql.Delete(&Role{}))
 
 	// global scopes
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, false)
 	sql = toSql.Delete(&GlobalScope{})
 	s.Equal("update \"global_scopes\" set \"deleted_at\" = $1, \"updated_at\" = $2 where \"id\" = $3 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = $4 and \"name\" = $5", sql)
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, true)
 	sql = toSql.Delete(&GlobalScope{})
 	s.Contains(sql, "update \"global_scopes\" set \"deleted_at\" = '")
 	s.Contains(sql, "where \"id\" = 1")
@@ -149,20 +149,20 @@ func (s *ToSqlTestSuite) TestDelete() {
 	// with every scope removed there is no `deleted_at is null` left (oracle: a mass delete on a
 	// SoftDeletes model is an update whose where has no predicate once withoutGlobalScopes() ran -
 	// /tmp/r12/scope_removal_probe4.php §D1).
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, false)
 	sql = toSql.Delete(&GlobalScope{})
 	s.Equal("update \"global_scopes\" set \"deleted_at\" = $1, \"updated_at\" = $2 where \"id\" = $3", sql)
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, true)
 	sql = toSql.Delete(&GlobalScope{})
 	s.Contains(sql, "update \"global_scopes\" set \"deleted_at\" = '")
 	s.Contains(sql, "' where \"id\" = 1")
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, false)
 	sql = toSql.Delete(&GlobalScope{})
 	s.Equal("update \"global_scopes\" set \"deleted_at\" = $1, \"updated_at\" = $2 where \"id\" = $3 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = $4", sql)
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, true)
 	sql = toSql.Delete(&GlobalScope{})
 	s.Contains(sql, "update \"global_scopes\" set \"deleted_at\" = '")
 	s.Contains(sql, "' where \"id\" = 1 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = 'avatar_scope'")
@@ -184,23 +184,23 @@ func (s *ToSqlTestSuite) TestFind() {
 	s.Equal("select * from \"users\" where \"users\".\"id\" = 1 and \"users\".\"deleted_at\" is null limit 1", toSql.Find(&User{}, 1))
 
 	// global scopes
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("select * from \"global_scopes\" where \"id\" = $1 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = $2 and \"name\" = $3", toSql.Find(&GlobalScope{}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, true)
 	s.Equal("select * from \"global_scopes\" where \"id\" = 1 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = 'avatar_scope' and \"name\" = 'name_scope'", toSql.Find(&GlobalScope{}))
 
 	// Without global scopes
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("select * from \"global_scopes\" where \"id\" = $1", toSql.Find(&GlobalScope{}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, true)
 	s.Equal("select * from \"global_scopes\" where \"id\" = 1", toSql.Find(&GlobalScope{}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("select * from \"global_scopes\" where \"id\" = $1 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = $2", toSql.Find(&GlobalScope{}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, true)
 	s.Equal("select * from \"global_scopes\" where \"id\" = 1 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = 'avatar_scope'", toSql.Find(&GlobalScope{}))
 }
 
@@ -212,23 +212,23 @@ func (s *ToSqlTestSuite) TestFirst() {
 	s.Equal("select * from \"users\" where \"id\" = 1 and \"users\".\"deleted_at\" is null order by \"users\".\"id\" limit 1", toSql.First(&User{}))
 
 	// global scopes
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("select * from \"global_scopes\" where \"id\" = $1 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = $2 and \"name\" = $3 order by \"global_scopes\".\"id\" limit 1", toSql.First(&GlobalScope{}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, true)
 	s.Equal("select * from \"global_scopes\" where \"id\" = 1 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = 'avatar_scope' and \"name\" = 'name_scope' order by \"global_scopes\".\"id\" limit 1", toSql.First(&GlobalScope{}))
 
 	// Without global scopes
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("select * from \"global_scopes\" where \"id\" = $1 order by \"global_scopes\".\"id\" limit 1", toSql.First(&GlobalScope{}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, true)
 	s.Equal("select * from \"global_scopes\" where \"id\" = 1 order by \"global_scopes\".\"id\" limit 1", toSql.First(&GlobalScope{}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("select * from \"global_scopes\" where \"id\" = $1 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = $2 order by \"global_scopes\".\"id\" limit 1", toSql.First(&GlobalScope{}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, true)
 	s.Equal("select * from \"global_scopes\" where \"id\" = 1 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = 'avatar_scope' order by \"global_scopes\".\"id\" limit 1", toSql.First(&GlobalScope{}))
 }
 
@@ -246,23 +246,23 @@ func (s *ToSqlTestSuite) TestForceDelete() {
 	s.Equal("delete from \"roles\" where \"id\" = 1", toSql.ForceDelete(&Role{}))
 
 	// global scopes
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("delete from \"global_scopes\" where \"id\" = $1 and \"avatar\" = $2 and \"name\" = $3", toSql.ForceDelete(&GlobalScope{}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, true)
 	s.Equal("delete from \"global_scopes\" where \"id\" = 1 and \"avatar\" = 'avatar_scope' and \"name\" = 'name_scope'", toSql.ForceDelete(&GlobalScope{}))
 
 	// Without global scopes
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("delete from \"global_scopes\" where \"id\" = $1", toSql.ForceDelete(&GlobalScope{}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, true)
 	s.Equal("delete from \"global_scopes\" where \"id\" = 1", toSql.ForceDelete(&GlobalScope{}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("delete from \"global_scopes\" where \"id\" = $1 and \"avatar\" = $2", toSql.ForceDelete(&GlobalScope{}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, true)
 	s.Equal("delete from \"global_scopes\" where \"id\" = 1 and \"avatar\" = 'avatar_scope'", toSql.ForceDelete(&GlobalScope{}))
 }
 
@@ -274,23 +274,23 @@ func (s *ToSqlTestSuite) TestGet() {
 	s.Equal("select * from \"users\" where \"id\" = 1 and \"users\".\"deleted_at\" is null", toSql.Get([]User{}))
 
 	// global scopes
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("select * from \"global_scopes\" where \"id\" = $1 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = $2 and \"name\" = $3", toSql.Get([]GlobalScope{}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, true)
 	s.Equal("select * from \"global_scopes\" where \"id\" = 1 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = 'avatar_scope' and \"name\" = 'name_scope'", toSql.Get([]GlobalScope{}))
 
 	// Without global scopes
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("select * from \"global_scopes\" where \"id\" = $1", toSql.Get([]GlobalScope{}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, true)
 	s.Equal("select * from \"global_scopes\" where \"id\" = 1", toSql.Get([]GlobalScope{}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("select * from \"global_scopes\" where \"id\" = $1 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = $2", toSql.Get([]GlobalScope{}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, true)
 	s.Equal("select * from \"global_scopes\" where \"id\" = 1 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = 'avatar_scope'", toSql.Get([]GlobalScope{}))
 }
 
@@ -311,23 +311,23 @@ func (s *ToSqlTestSuite) TestPluck() {
 	s.Equal("select \"id\" from \"users\" where \"id\" = 1 and \"users\".\"deleted_at\" is null", toSql.Pluck("id", User{}))
 
 	// global scopes
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("select \"id\" from \"global_scopes\" where \"id\" = $1 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = $2 and \"name\" = $3", toSql.Pluck("id", GlobalScope{}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, true)
 	s.Equal("select \"id\" from \"global_scopes\" where \"id\" = 1 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = 'avatar_scope' and \"name\" = 'name_scope'", toSql.Pluck("id", GlobalScope{}))
 
 	// Without global scopes
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("select \"id\" from \"global_scopes\" where \"id\" = $1", toSql.Pluck("id", GlobalScope{}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, true)
 	s.Equal("select \"id\" from \"global_scopes\" where \"id\" = 1", toSql.Pluck("id", GlobalScope{}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("select \"id\" from \"global_scopes\" where \"id\" = $1 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = $2", toSql.Pluck("id", GlobalScope{}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, true)
 	s.Equal("select \"id\" from \"global_scopes\" where \"id\" = 1 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = 'avatar_scope'", toSql.Pluck("id", GlobalScope{}))
 }
 
@@ -353,50 +353,50 @@ func (s *ToSqlTestSuite) TestSave() {
 	s.Regexp(`^update "users" set "name" = 'to_sql_save', "updated_at" = '[^']+' where "users"\."deleted_at" is null and "id" = 2$`, sql)
 
 	// global scopes
-	toSql = gorm.NewToSql(s.testQuery.Query().(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query()).(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("insert into \"global_scopes\" (\"created_at\", \"updated_at\") values ($1, $2) returning \"id\"", toSql.Save(&GlobalScope{}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query()).(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("update \"global_scopes\" set \"updated_at\" = $1 where \"global_scopes\".\"deleted_at\" is null and \"avatar\" = $2 and \"name\" = $3 and \"id\" = $4", toSql.Save(&GlobalScope{Model: Model{ID: 2}}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query()).(*gorm.OrmBuilder), s.mockLog, true)
 	sql = toSql.Save(&GlobalScope{Name: "to_sql_save", Avatar: "avatar"})
 	s.Contains(sql, "insert into \"global_scopes\" (\"avatar\", \"created_at\", \"name\", \"updated_at\") values (")
 	s.Contains(sql, "'to_sql_save',")
 
-	toSql = gorm.NewToSql(s.testQuery.Query().(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query()).(*gorm.OrmBuilder), s.mockLog, true)
 	sql = toSql.Save(&GlobalScope{Model: Model{ID: 2}, Name: "to_sql_save", Avatar: "avatar"})
 	s.Regexp(`^update "global_scopes" set "avatar" = 'avatar', "name" = 'to_sql_save', "updated_at" = '[^']+' where "global_scopes"\."deleted_at" is null and "avatar" = 'avatar_scope' and "name" = 'name_scope' and "id" = 2$`, sql)
 
 	// Without global scopes
-	toSql = gorm.NewToSql(s.testQuery.Query().WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query()).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("insert into \"global_scopes\" (\"created_at\", \"updated_at\") values ($1, $2) returning \"id\"", toSql.Save(&GlobalScope{}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query()).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("update \"global_scopes\" set \"updated_at\" = $1 where \"id\" = $2", toSql.Save(&GlobalScope{Model: Model{ID: 2}}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query()).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, true)
 	sql = toSql.Save(&GlobalScope{Name: "to_sql_save", Avatar: "avatar"})
 	s.Contains(sql, "insert into \"global_scopes\" (\"avatar\", \"created_at\", \"name\", \"updated_at\") values (")
 	s.Contains(sql, "'to_sql_save',")
 
-	toSql = gorm.NewToSql(s.testQuery.Query().WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query()).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, true)
 	sql = toSql.Save(&GlobalScope{Model: Model{ID: 2}, Name: "to_sql_save", Avatar: "avatar"})
 	s.Contains(sql, "update \"global_scopes\" set \"avatar\" = 'avatar', \"name\" = 'to_sql_save'")
 	s.Regexp(`"name" = 'to_sql_save', "updated_at" = '\d{4}-\d{2}-\d{2}[^']+' where "id" = 2`, sql)
 
-	toSql = gorm.NewToSql(s.testQuery.Query().WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query()).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("insert into \"global_scopes\" (\"created_at\", \"updated_at\") values ($1, $2) returning \"id\"", toSql.Save(&GlobalScope{}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query()).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("update \"global_scopes\" set \"updated_at\" = $1 where \"global_scopes\".\"deleted_at\" is null and \"avatar\" = $2 and \"id\" = $3", toSql.Save(&GlobalScope{Model: Model{ID: 2}}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query()).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, true)
 	sql = toSql.Save(&GlobalScope{Name: "to_sql_save", Avatar: "avatar"})
 	s.Contains(sql, "insert into \"global_scopes\" (\"avatar\", \"created_at\", \"name\", \"updated_at\") values (")
 	s.Contains(sql, "'to_sql_save',")
 
-	toSql = gorm.NewToSql(s.testQuery.Query().WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query()).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, true)
 	sql = toSql.Save(&GlobalScope{Model: Model{ID: 2}, Name: "to_sql_save", Avatar: "avatar"})
 	s.Contains(sql, "update \"global_scopes\" set \"avatar\" = 'avatar', \"name\" = 'to_sql_save'")
 	s.Regexp(`"name" = 'to_sql_save', "updated_at" = '\d{4}-\d{2}-\d{2}[^']+' where "global_scopes"\."deleted_at" is null and "avatar" = 'avatar_scope' and "id" = 2`, sql)
@@ -410,23 +410,23 @@ func (s *ToSqlTestSuite) TestSum() {
 	s.Equal("select sum(\"id\") as aggregate from \"users\" where \"id\" = 1 and \"users\".\"deleted_at\" is null", toSql.Sum("id", User{}))
 
 	// global scopes
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("select sum(\"id\") as aggregate from \"global_scopes\" where \"id\" = $1 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = $2 and \"name\" = $3", toSql.Sum("id", GlobalScope{}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, true)
 	s.Equal("select sum(\"id\") as aggregate from \"global_scopes\" where \"id\" = 1 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = 'avatar_scope' and \"name\" = 'name_scope'", toSql.Sum("id", GlobalScope{}))
 
 	// Without global scopes
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("select sum(\"id\") as aggregate from \"global_scopes\" where \"id\" = $1", toSql.Sum("id", GlobalScope{}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, true)
 	s.Equal("select sum(\"id\") as aggregate from \"global_scopes\" where \"id\" = 1", toSql.Sum("id", GlobalScope{}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("select sum(\"id\") as aggregate from \"global_scopes\" where \"id\" = $1 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = $2", toSql.Sum("id", GlobalScope{}))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, true)
 	s.Equal("select sum(\"id\") as aggregate from \"global_scopes\" where \"id\" = 1 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = 'avatar_scope'", toSql.Sum("id", GlobalScope{}))
 }
 
@@ -470,27 +470,27 @@ func (s *ToSqlTestSuite) TestUpdate() {
 	s.Contains(sql, "' where \"id\" = 1 and \"users\".\"deleted_at\" is null")
 
 	// global scopes
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("update \"global_scopes\" set \"name\" = $1, \"updated_at\" = $2 where \"id\" = $3 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = $4 and \"name\" = $5", toSql.Update("name", "goravel"))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).(*gorm.OrmBuilder), s.mockLog, true)
 	sql = toSql.Update("name", "goravel")
 	s.Contains(sql, "update \"global_scopes\" set \"name\" = 'goravel', \"updated_at\" = ")
 	s.Contains(sql, "' where \"id\" = 1 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = 'avatar_scope' and \"name\" = 'name_scope'")
 
 	// Without global scopes
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("update \"global_scopes\" set \"name\" = $1, \"updated_at\" = $2 where \"id\" = $3", toSql.Update("name", "goravel"))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes().(*gorm.OrmBuilder), s.mockLog, true)
 	sql = toSql.Update("name", "goravel")
 	s.Contains(sql, "update \"global_scopes\" set \"name\" = 'goravel', \"updated_at\" = ")
 	s.Contains(sql, "' where \"id\" = 1")
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, false)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, false)
 	s.Equal("update \"global_scopes\" set \"name\" = $1, \"updated_at\" = $2 where \"id\" = $3 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = $4", toSql.Update("name", "goravel"))
 
-	toSql = gorm.NewToSql(s.testQuery.Query().Model(&GlobalScope{}).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, true)
+	toSql = gorm.NewToSql(AppliedScopes(s.testQuery.Query().Model(&GlobalScope{})).Where("id", 1).WithoutGlobalScopes("name").(*gorm.OrmBuilder), s.mockLog, true)
 	sql = toSql.Update("name", "goravel")
 	s.Contains(sql, "update \"global_scopes\" set \"name\" = 'goravel', \"updated_at\" = ")
 	s.Contains(sql, "' where \"id\" = 1 and \"global_scopes\".\"deleted_at\" is null and \"avatar\" = 'avatar_scope'")

@@ -13,17 +13,19 @@ package global_scopes
 //
 // # Scope mapping
 //
-// Laravel registers global scopes through boot() / attributes — addGlobalScope(instance),
-// addGlobalScope(ActiveScope::class), #[ScopedBy], a trait's #[ScopedBy], addGlobalScopes([...])
-// with a named entry and a bare closure, and addGlobalScope(closure) — and the Go ORM declares all
-// of them in one place: the model's GlobalScopes() []contractsorm.GlobalScope, in declaration order.
-// An entry's Name is the scope's identity, so the corpus's removals map directly:
+// Laravel registers global scopes on the model — boot() / attributes / addGlobalScopes([...]) — and
+// the port used to declare all of them in one place, the model's GlobalScopes(). That mechanism is
+// gone: a scope is mounted on the builder that runs it, with ApplyScope(name, fn), and removed with
+// RemoveScope(name). Every test below therefore mounts the scopes its corpus model registered, at the
+// query it builds; the name is the scope's identity, so the corpus's removals map directly:
 // withoutGlobalScope(ActiveScope::class) and withoutGlobalScope('active_scope') become
-// WithoutGlobalScopes("ActiveScope") and WithoutGlobalScopes("active_scope"). Each registration
-// shape keeps its own model type, so every test observes a different declaration. #[ScopedBy] has
-// no Go equivalent, so the two attribute models assert what the attribute asserted — the scope
-// applies — declared directly on the model, and, for the trait case, inherited through an embedded
-// type (Go's stand-in for a trait; the ORM resolves the promoted GlobalScopes()).
+// RemoveScope("ActiveScope") and RemoveScope("active_scope"). What each test asserts — the pinned
+// statement and the rows it returns — is unchanged.
+//
+// The registration SHAPES the corpus exercises no longer exist in Go and their tests are gone with
+// them: addGlobalScope(ActiveScope::class) (the class-string form), #[ScopedBy] on the model, a
+// #[ScopedBy] inherited from a trait, and addGlobalScopes([...]) array registration. What survives of
+// each is the mount itself, which the closure test pins.
 //
 // One Go-side shape differs from Laravel and is spelled out at its test:
 //
@@ -31,9 +33,9 @@ package global_scopes
 //     Laravel's withoutGlobalScopes()); there is no withoutGlobalScopesExcept, so the
 //     except-specified test passes the other scope's key instead, which removes exactly that scope.
 //
-// A model's scopes apply in the order GlobalScopes() declares them — the declared slice is the
-// registration order Laravel's boot() gives a model, and the nesting tests below observe it
-// (or_scope is declared before active_scope, as the child boot() registered it before the parent's).
+// The mounted scopes apply in mount order — the order the corpus's boot() registered them, and the
+// nesting tests below observe it (or_scope is mounted before active_scope, as the child boot()
+// registered it before the parent's).
 //
 // # Oracle
 //
@@ -94,60 +96,6 @@ func (globalScopesTestModel) GlobalScopes() []contractsorm.GlobalScope {
 	}
 }
 
-// globalScopesClassNameModel ports EloquentClassNameGlobalScopesTestModel, whose boot() registers
-// addGlobalScope(ActiveScope::class). Go has one registration shape, so the class-string form maps
-// to the same named entry.
-type globalScopesClassNameModel struct {
-	ID     uint64 `gorm:"column:id;primaryKey;autoIncrement"`
-	Active int    `gorm:"column:active"`
-}
-
-func (globalScopesClassNameModel) TableName() string { return "table" }
-
-func (globalScopesClassNameModel) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{
-		{Name: "ActiveScope", Scope: func(query contractsorm.Query) contractsorm.Query { return query.Where("active", 1) }},
-	}
-}
-
-// globalScopesAttributeModel ports EloquentGlobalScopeInAttributeTestModel, which carries
-// #[ScopedBy(ActiveScope::class)]. Go has no attributes, so the model declares the scope directly:
-// the GlobalScopes() map is the declaration the attribute stood for.
-type globalScopesAttributeModel struct {
-	ID     uint64 `gorm:"column:id;primaryKey;autoIncrement"`
-	Active int    `gorm:"column:active"`
-}
-
-func (globalScopesAttributeModel) TableName() string { return "table" }
-
-func (globalScopesAttributeModel) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{
-		{Name: "ActiveScope", Scope: func(query contractsorm.Query) contractsorm.Query { return query.Where("active", 1) }},
-	}
-}
-
-// globalScopesActiveScopeTrait ports EloquentGlobalScopeInInheritedAttributeTestTrait, whose
-// #[ScopedBy] Laravel resolves from the using model's traits. In Go the trait's declaration lives
-// on an embedded type and is promoted to the model — the inherited attribute's counterpart.
-type globalScopesActiveScopeTrait struct{}
-
-func (globalScopesActiveScopeTrait) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{
-		{Name: "ActiveScope", Scope: func(query contractsorm.Query) contractsorm.Query { return query.Where("active", 1) }},
-	}
-}
-
-// globalScopesInheritedAttributeModel ports EloquentGlobalScopeInInheritedAttributeTestModel: the
-// scope declaration arrives through the embedded trait type, not from the model itself.
-type globalScopesInheritedAttributeModel struct {
-	globalScopesActiveScopeTrait
-
-	ID     uint64 `gorm:"column:id;primaryKey;autoIncrement"`
-	Active int    `gorm:"column:active"`
-}
-
-func (globalScopesInheritedAttributeModel) TableName() string { return "table" }
-
 // globalScopesClosureModel ports EloquentClosureGlobalScopesTestModel: a bare closure scope that
 // orders by name (Laravel keys it by closure identity; here it is named "order_by_name") and the
 // named 'active_scope' that filters active = 1. The corpus's two local scopes, approved() and
@@ -165,11 +113,23 @@ type globalScopesClosureModel struct {
 
 func (globalScopesClosureModel) TableName() string { return "table" }
 
-func (globalScopesClosureModel) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{
-		{Name: "order_by_name", Scope: func(query contractsorm.Query) contractsorm.Query { return query.OrderBy("name") }},
-		{Name: "active_scope", Scope: func(query contractsorm.Query) contractsorm.Query { return query.Where("active", 1) }},
-	}
+// globalScopesClosureScopes mounts the two scopes EloquentClosureGlobalScopesTestModel registered —
+// the bare orderBy-name closure, then 'active_scope' — on the query the test builds.
+func globalScopesClosureScopes(query contractsorm.Query) contractsorm.Query {
+	return query.
+		ApplyScope("order_by_name", func(query contractsorm.Query) contractsorm.Query { return query.OrderBy("name") }).
+		ApplyScope("active_scope", func(query contractsorm.Query) contractsorm.Query { return query.Where("active", 1) })
+}
+
+// globalScopesActiveScope is the scope the corpus registers as ActiveScope on its own model (and as
+// 'active_scope' through the closure/array registrations).
+func globalScopesActiveScope(query contractsorm.Query) contractsorm.Query {
+	return query.Where("active", 1)
+}
+
+// globalScopesOrderByName is the bare orderBy('name') closure scope.
+func globalScopesOrderByName(query contractsorm.Query) contractsorm.Query {
+	return query.OrderBy("name")
 }
 
 // ScopeApproved ports EloquentClosureGlobalScopesTestModel::scopeApproved.
@@ -181,23 +141,6 @@ func (globalScopesClosureModel) ScopeApproved(query contractsorm.Query) contract
 // an orWhere.
 func (globalScopesClosureModel) ScopeOrApproved(query contractsorm.Query) contractsorm.Query {
 	return query.OrWhere("approved", 1).OrWhere("should_approve", 0)
-}
-
-// globalScopesArrayModel ports EloquentGlobalScopesArrayTestModel, whose addGlobalScopes([...]) has
-// a named entry ('active_scope' => new ActiveScope) and a bare closure (orderBy name).
-type globalScopesArrayModel struct {
-	ID     uint64 `gorm:"column:id;primaryKey;autoIncrement"`
-	Active int    `gorm:"column:active"`
-	Name   string `gorm:"column:name"`
-}
-
-func (globalScopesArrayModel) TableName() string { return "table" }
-
-func (globalScopesArrayModel) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{
-		{Name: "active_scope", Scope: func(query contractsorm.Query) contractsorm.Query { return query.Where("active", 1) }},
-		{Name: "order_by_name", Scope: func(query contractsorm.Query) contractsorm.Query { return query.OrderBy("name") }},
-	}
 }
 
 // globalScopesWithOrModel ports EloquentClosureGlobalScopesWithOrTestModel: 'or_scope' and the
@@ -215,15 +158,19 @@ type globalScopesWithOrModel struct {
 
 func (globalScopesWithOrModel) TableName() string { return "table" }
 
-func (globalScopesWithOrModel) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{
-		{Name: "or_scope", Scope: func(query contractsorm.Query) contractsorm.Query {
+// globalScopesOrScopes mounts the four scopes EloquentClosureGlobalScopesWithOrTestModel registered,
+// in registration order: 'or_scope' and the select closure (registered on the child), then
+// order_by_name and active_scope (the parent's).
+func globalScopesOrScopes(query contractsorm.Query) contractsorm.Query {
+	return query.
+		ApplyScope("or_scope", func(query contractsorm.Query) contractsorm.Query {
 			return query.Where("email", "taylor@gmail.com").OrWhere("email", "someone@else.com")
-		}},
-		{Name: "select_email_password", Scope: func(query contractsorm.Query) contractsorm.Query { return query.Select("email", "password") }},
-		{Name: "order_by_name", Scope: func(query contractsorm.Query) contractsorm.Query { return query.OrderBy("name") }},
-		{Name: "active_scope", Scope: func(query contractsorm.Query) contractsorm.Query { return query.Where("active", 1) }},
-	}
+		}).
+		ApplyScope("select_email_password", func(query contractsorm.Query) contractsorm.Query {
+			return query.Select("email", "password")
+		}).
+		ApplyScope("order_by_name", globalScopesOrderByName).
+		ApplyScope("active_scope", globalScopesActiveScope)
 }
 
 // globalScopesWithRelationModel ports EloquentGlobalScopesWithRelationModel: table2, the closure
@@ -238,11 +185,12 @@ type globalScopesWithRelationModel struct {
 
 func (globalScopesWithRelationModel) TableName() string { return "table2" }
 
-func (globalScopesWithRelationModel) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{
-		{Name: "order_by_name", Scope: func(query contractsorm.Query) contractsorm.Query { return query.OrderBy("name") }},
-		{Name: "active_scope", Scope: func(query contractsorm.Query) contractsorm.Query { return query.Where("active", 1) }},
-	}
+// globalScopesRelationScopes mounts the two scopes EloquentGlobalScopesWithRelationModel registered:
+// order_by_name, then active_scope.
+func globalScopesRelationScopes(query contractsorm.Query) contractsorm.Query {
+	return query.
+		ApplyScope("order_by_name", globalScopesOrderByName).
+		ApplyScope("active_scope", globalScopesActiveScope)
 }
 
 func (globalScopesWithRelationModel) Relations() map[string]contractsorm.Relation {
@@ -348,12 +296,16 @@ func TestGlobalScopes_GlobalScopeIsApplied(t *testing.T) {
 	model := globalScopesTestModel{}
 
 	// Laravel: $model->newQuery() pins
-	//   select * from "table" where "active" = ?  (bindings [1], oracle).
-	assert.Equal(t, `select * from "table" where "active" = ?`, cloneRelationQuery(t, query).Model(&model).ToSql().Get(&model))
+	//   select * from "table" where "active" = ?  (bindings [1], oracle). The scope the model
+	// registered as ActiveScope is mounted here, where the model declared it before.
+	scoped := func(q contractsorm.Query) contractsorm.Query {
+		return q.ApplyScope("ActiveScope", globalScopesActiveScope)
+	}
+	assert.Equal(t, `select * from "table" where "active" = ?`, scoped(cloneRelationQuery(t, query).Model(&model)).ToSql().Get(&model))
 
 	// The active = 1 binding selects the two active rows — the seeded active = 0 row stays out.
 	got := []globalScopesTestModel{}
-	require.NoError(t, cloneRelationQuery(t, query).Model(&globalScopesTestModel{}).Get(&got))
+	require.NoError(t, scoped(cloneRelationQuery(t, query).Model(&globalScopesTestModel{})).Get(&got))
 	require.Len(t, got, 2)
 	for _, row := range got {
 		assert.Equal(t, 1, row.Active)
@@ -369,72 +321,15 @@ func TestGlobalScopes_GlobalScopeCanBeRemoved(t *testing.T) {
 	//   select * from "table"  (bindings [], oracle). In Go the scope's identity is its
 	//GlobalScopes() name, so the class is removed by the name "ActiveScope".
 	unscoped := globalScopesTestModel{}
-	assert.Equal(t, `select * from "table"`, cloneRelationQuery(t, query).Model(&unscoped).WithoutGlobalScopes("ActiveScope").ToSql().Get(&unscoped))
+	scoped := func(q contractsorm.Query) contractsorm.Query {
+		return q.ApplyScope("ActiveScope", globalScopesActiveScope).RemoveScope("ActiveScope")
+	}
+	assert.Equal(t, `select * from "table"`, scoped(cloneRelationQuery(t, query).Model(&unscoped)).ToSql().Get(&unscoped))
 
 	// With the scope gone every seeded row is visible again.
 	got := []globalScopesTestModel{}
-	require.NoError(t, cloneRelationQuery(t, query).Model(&globalScopesTestModel{}).WithoutGlobalScopes("ActiveScope").Get(&got))
+	require.NoError(t, scoped(cloneRelationQuery(t, query).Model(&globalScopesTestModel{})).Get(&got))
 	assert.Len(t, got, 3)
-}
-
-func TestGlobalScopes_ClassNameGlobalScopeIsApplied(t *testing.T) {
-	query := newRelationQuery(t)
-	globalScopesSchema(t, query)
-	globalScopesSeedRows(t, query)
-
-	model := globalScopesClassNameModel{}
-
-	// Laravel: EloquentClassNameGlobalScopesTestModel::addGlobalScope(ActiveScope::class) pins
-	//   select * from "table" where "active" = ?  (bindings [1], oracle).
-	assert.Equal(t, `select * from "table" where "active" = ?`, cloneRelationQuery(t, query).Model(&model).ToSql().Get(&model))
-
-	got := []globalScopesClassNameModel{}
-	require.NoError(t, cloneRelationQuery(t, query).Model(&globalScopesClassNameModel{}).Get(&got))
-	require.Len(t, got, 2)
-	for _, row := range got {
-		assert.Equal(t, 1, row.Active)
-	}
-}
-
-func TestGlobalScopes_GlobalScopeInAttributeIsApplied(t *testing.T) {
-	query := newRelationQuery(t)
-	globalScopesSchema(t, query)
-	globalScopesSeedRows(t, query)
-
-	model := globalScopesAttributeModel{}
-
-	// Laravel: #[ScopedBy(ActiveScope::class)] on the model pins
-	//   select * from "table" where "active" = ?  (bindings [1], oracle). Go has no attributes, so
-	// the model carries the same declaration as a GlobalScopes() entry; the observable is identical.
-	assert.Equal(t, `select * from "table" where "active" = ?`, cloneRelationQuery(t, query).Model(&model).ToSql().Get(&model))
-
-	got := []globalScopesAttributeModel{}
-	require.NoError(t, cloneRelationQuery(t, query).Model(&globalScopesAttributeModel{}).Get(&got))
-	require.Len(t, got, 2)
-	for _, row := range got {
-		assert.Equal(t, 1, row.Active)
-	}
-}
-
-func TestGlobalScopes_GlobalScopeInInheritedAttributeIsApplied(t *testing.T) {
-	query := newRelationQuery(t)
-	globalScopesSchema(t, query)
-	globalScopesSeedRows(t, query)
-
-	model := globalScopesInheritedAttributeModel{}
-
-	// Laravel: #[ScopedBy(ActiveScope::class)] on the trait the model uses — Laravel resolves the
-	// attribute from the class's traits — pins
-	//   select * from "table" where "active" = ?  (bindings [1], oracle). The Go counterpart is the
-	// embedded trait type's promoted GlobalScopes(), which the ORM resolves like the model's own.
-	assert.Equal(t, `select * from "table" where "active" = ?`, cloneRelationQuery(t, query).Model(&model).ToSql().Get(&model))
-
-	got := []globalScopesInheritedAttributeModel{}
-	require.NoError(t, cloneRelationQuery(t, query).Model(&globalScopesInheritedAttributeModel{}).Get(&got))
-	require.Len(t, got, 2)
-	for _, row := range got {
-		assert.Equal(t, 1, row.Active)
-	}
 }
 
 func TestGlobalScopes_ClosureGlobalScopeIsApplied(t *testing.T) {
@@ -446,33 +341,14 @@ func TestGlobalScopes_ClosureGlobalScopeIsApplied(t *testing.T) {
 
 	// Laravel: newQuery() with the orderBy-name closure and 'active_scope' pins
 	//   select * from "table" where "active" = ? order by "name" asc  (bindings [1], oracle).
-	assert.Equal(t, `select * from "table" where "active" = ? order by "name" asc`, cloneRelationQuery(t, query).Model(&model).ToSql().Get(&model))
+	scoped := func(q contractsorm.Query) contractsorm.Query { return globalScopesClosureScopes(q) }
+	assert.Equal(t, `select * from "table" where "active" = ? order by "name" asc`, scoped(cloneRelationQuery(t, query).Model(&model)).ToSql().Get(&model))
 
 	// The read proves both scopes: only the active rows return, ordered by name — "a, c", not the
 	// insertion order "a, b, c".
 	got := []globalScopesClosureModel{}
-	require.NoError(t, cloneRelationQuery(t, query).Model(&globalScopesClosureModel{}).Get(&got))
+	require.NoError(t, scoped(cloneRelationQuery(t, query).Model(&globalScopesClosureModel{})).Get(&got))
 	assert.Equal(t, []string{"a", "c"}, globalScopesNames(got))
-}
-
-func TestGlobalScopes_GlobalScopesCanBeRegisteredViaArray(t *testing.T) {
-	query := newRelationQuery(t)
-	globalScopesSchema(t, query)
-	globalScopesSeedRows(t, query)
-
-	model := globalScopesArrayModel{}
-
-	// Laravel: addGlobalScopes(['active_scope' => new ActiveScope, fn => orderBy('name')]) pins
-	//   select * from "table" where "active" = ? order by "name" asc  (bindings [1], oracle).
-	assert.Equal(t, `select * from "table" where "active" = ? order by "name" asc`, cloneRelationQuery(t, query).Model(&model).ToSql().Get(&model))
-
-	got := []globalScopesArrayModel{}
-	require.NoError(t, cloneRelationQuery(t, query).Model(&globalScopesArrayModel{}).Get(&got))
-	require.Len(t, got, 2)
-	for _, row := range got {
-		assert.Equal(t, 1, row.Active)
-	}
-	assert.Equal(t, []string{"a", "c"}, globalScopesNamesFromArray(got))
 }
 
 func TestGlobalScopes_ClosureGlobalScopeCanBeRemoved(t *testing.T) {
@@ -484,11 +360,14 @@ func TestGlobalScopes_ClosureGlobalScopeCanBeRemoved(t *testing.T) {
 	//   select * from "table" order by "name" asc  (bindings [], oracle) — the named scope is
 	// removed by its name while the closure scope stays.
 	unscoped := globalScopesClosureModel{}
-	assert.Equal(t, `select * from "table" order by "name" asc`, cloneRelationQuery(t, query).Model(&unscoped).WithoutGlobalScopes("active_scope").ToSql().Get(&unscoped))
+	scoped := func(q contractsorm.Query) contractsorm.Query {
+		return globalScopesClosureScopes(q).RemoveScope("active_scope")
+	}
+	assert.Equal(t, `select * from "table" order by "name" asc`, scoped(cloneRelationQuery(t, query).Model(&unscoped)).ToSql().Get(&unscoped))
 
 	// Every row returns now; the order-by scope still sorts them.
 	got := []globalScopesClosureModel{}
-	require.NoError(t, cloneRelationQuery(t, query).Model(&globalScopesClosureModel{}).WithoutGlobalScopes("active_scope").Get(&got))
+	require.NoError(t, scoped(cloneRelationQuery(t, query).Model(&globalScopesClosureModel{})).Get(&got))
 	assert.Equal(t, []string{"a", "b", "c"}, globalScopesNames(got))
 }
 
@@ -498,7 +377,7 @@ func TestGlobalScopes_GlobalScopeCanBeRemovedAfterTheQueryIsExecuted(t *testing.
 	globalScopesSeedRows(t, query)
 
 	model := globalScopesClosureModel{}
-	q := cloneRelationQuery(t, query).Model(&model)
+	q := globalScopesClosureScopes(cloneRelationQuery(t, query).Model(&model))
 
 	// Laravel: $query->toSql() before the removal pins
 	//   select * from "table" where "active" = ? order by "name" asc  (bindings [1], oracle).
@@ -506,9 +385,9 @@ func TestGlobalScopes_GlobalScopeCanBeRemovedAfterTheQueryIsExecuted(t *testing.
 
 	// Laravel: $query->withoutGlobalScope('active_scope'); $query->toSql() again pins
 	//   select * from "table" order by "name" asc  (bindings [], oracle) — removing from a builder
-	// whose toSql() already ran still changes the next statement. In Go WithoutGlobalScopes hands
-	// back the builder carrying the removal.
-	q = q.WithoutGlobalScopes("active_scope")
+	// whose toSql() already ran still changes the next statement. In Go RemoveScope hands back the
+	// builder carrying the removal.
+	q = q.RemoveScope("active_scope")
 	assert.Equal(t, `select * from "table" order by "name" asc`, q.ToSql().Get(&globalScopesClosureModel{}))
 
 	got := []globalScopesClosureModel{}
@@ -523,19 +402,22 @@ func TestGlobalScopes_AllGlobalScopesCanBeRemoved(t *testing.T) {
 
 	// Laravel: $model->newQuery()->withoutGlobalScopes() pins
 	//   select * from "table"  (bindings [], oracle).
+	unscoped := func(q contractsorm.Query) contractsorm.Query {
+		return globalScopesClosureScopes(q).RemoveScope("order_by_name").RemoveScope("active_scope")
+	}
 	instanceModel := globalScopesClosureModel{}
-	assert.Equal(t, `select * from "table"`, cloneRelationQuery(t, query).Model(&instanceModel).WithoutGlobalScopes().ToSql().Get(&instanceModel))
+	assert.Equal(t, `select * from "table"`, unscoped(cloneRelationQuery(t, query).Model(&instanceModel)).ToSql().Get(&instanceModel))
 
 	// Laravel: EloquentClosureGlobalScopesTestModel::withoutGlobalScopes() pins the same string. The
 	// static call funnels through Model::__callStatic into newQuery()->withoutGlobalScopes(); with
 	// no static forwarder in Go, both corpus assertions are spelled the same way here.
 	staticModel := globalScopesClosureModel{}
-	assert.Equal(t, `select * from "table"`, cloneRelationQuery(t, query).Model(&staticModel).WithoutGlobalScopes().ToSql().Get(&staticModel))
+	assert.Equal(t, `select * from "table"`, unscoped(cloneRelationQuery(t, query).Model(&staticModel)).ToSql().Get(&staticModel))
 
 	// With every scope removed the read returns all three rows and nothing orders them, so the
 	// assertion is on the set.
 	got := []globalScopesClosureModel{}
-	require.NoError(t, cloneRelationQuery(t, query).Model(&globalScopesClosureModel{}).WithoutGlobalScopes().Get(&got))
+	require.NoError(t, unscoped(cloneRelationQuery(t, query).Model(&globalScopesClosureModel{})).Get(&got))
 	assert.ElementsMatch(t, []string{"a", "b", "c"}, globalScopesNames(got))
 }
 
@@ -548,17 +430,20 @@ func TestGlobalScopes_AllGlobalScopesCanBeRemovedExceptSpecified(t *testing.T) {
 	//   select * from "table" where "active" = ?  (bindings [1], oracle): the order-by scope is
 	// removed, the named one stays. The Go builder has no Except form — WithoutGlobalScopes removes
 	// the names it is given — so the port removes the other scope's key, which is the same removal.
+	scoped := func(q contractsorm.Query) contractsorm.Query {
+		return globalScopesClosureScopes(q).RemoveScope("order_by_name")
+	}
 	instanceModel := globalScopesClosureModel{}
-	assert.Equal(t, `select * from "table" where "active" = ?`, cloneRelationQuery(t, query).Model(&instanceModel).WithoutGlobalScopes("order_by_name").ToSql().Get(&instanceModel))
+	assert.Equal(t, `select * from "table" where "active" = ?`, scoped(cloneRelationQuery(t, query).Model(&instanceModel)).ToSql().Get(&instanceModel))
 
 	// Laravel: EloquentClosureGlobalScopesTestModel::withoutGlobalScopesExcept(['active_scope'])
 	// pins the same string.
 	staticModel := globalScopesClosureModel{}
-	assert.Equal(t, `select * from "table" where "active" = ?`, cloneRelationQuery(t, query).Model(&staticModel).WithoutGlobalScopes("order_by_name").ToSql().Get(&staticModel))
+	assert.Equal(t, `select * from "table" where "active" = ?`, scoped(cloneRelationQuery(t, query).Model(&staticModel)).ToSql().Get(&staticModel))
 
 	// The surviving scope filters; with the order-by scope removed the read asserts the set.
 	got := []globalScopesClosureModel{}
-	require.NoError(t, cloneRelationQuery(t, query).Model(&globalScopesClosureModel{}).WithoutGlobalScopes("order_by_name").Get(&got))
+	require.NoError(t, scoped(cloneRelationQuery(t, query).Model(&globalScopesClosureModel{})).Get(&got))
 	assert.ElementsMatch(t, []string{"a", "c"}, globalScopesNames(got))
 }
 
@@ -576,23 +461,23 @@ func TestGlobalScopes_GlobalScopesWithOrWhereConditionsAreNested(t *testing.T) {
 	//   select "email", "password" from "table" where ("col1" = ? or "col2" = ?)
 	//   and ("email" = ? or "email" = ?) and "active" = ? order by "name" asc
 	//   (bindings ['val1', 'val2', 'taylor@gmail.com', 'someone@else.com', 1], oracle).
-	scoped := cloneRelationQuery(t, query).Model(&model)
+	scoped := globalScopesOrScopes(cloneRelationQuery(t, query).Model(&model))
 	assert.Equal(t, `select "email", "password" from "table" where ("email" = ? or "email" = ?) and "active" = ? order by "name" asc`, scoped.ToSql().Get(&model))
 
-	// The read proves the scopes applied in boot() order — or_scope before active_scope — and
+	// The read proves the scopes applied in mount order — or_scope before active_scope — and
 	// nested: only the active rows whose email the or_scope matches return, in name order "a, b, c".
 	got := []globalScopesWithOrModel{}
-	require.NoError(t, cloneRelationQuery(t, query).Model(&globalScopesWithOrModel{}).Get(&got))
+	require.NoError(t, globalScopesOrScopes(cloneRelationQuery(t, query).Model(&globalScopesWithOrModel{})).Get(&got))
 	assert.Equal(t, []string{"taylor@gmail.com", "someone@else.com", "taylor@gmail.com"}, globalScopesOrEmails(got))
 
-	chained := cloneRelationQuery(t, query).Model(&model).Where("col1", "val1").OrWhere("col2", "val2")
+	chained := globalScopesOrScopes(cloneRelationQuery(t, query).Model(&model)).Where("col1", "val1").OrWhere("col2", "val2")
 	assert.Equal(t, `select "email", "password" from "table" where ("col1" = ? or "col2" = ?) and ("email" = ? or "email" = ?) and "active" = ? order by "name" asc`, chained.ToSql().Get(&model))
 
 	// The caller's or-chain became its own nested group ahead of the email group, so the read is
 	// the intersection: "a" and "b" carry a matching col1/col2, while "c" (no matching column) and
 	// the inactive "d" stay out.
 	got = nil
-	require.NoError(t, cloneRelationQuery(t, query).Model(&globalScopesWithOrModel{}).Where("col1", "val1").OrWhere("col2", "val2").Get(&got))
+	require.NoError(t, globalScopesOrScopes(cloneRelationQuery(t, query).Model(&globalScopesWithOrModel{})).Where("col1", "val1").OrWhere("col2", "val2").Get(&got))
 	assert.Equal(t, []string{"taylor@gmail.com", "someone@else.com"}, globalScopesOrEmails(got))
 }
 
@@ -602,6 +487,8 @@ func TestGlobalScopes_RegularScopesWithOrWhereConditionsAreNested(t *testing.T) 
 	globalScopesApprovedSeedRows(t, query)
 
 	// Laravel: withoutGlobalScopes()->where('foo', 'foo')->orWhere('bar', 'bar')->approved() pins
+	// (the port has no automatic scopes to remove here: a scope is mounted only if the caller mounts
+	// it, so the wildcard call stays as the corpus shape and removes nothing)
 	//   select * from "table" where ("foo" = ? or "bar" = ?) and ("approved" = ? or "should_approve" = ?)
 	//   (bindings ['foo', 'bar', 1, 0], oracle): Eloquent's callScope groups the pre-existing
 	// or-chain and the scope's own or-chain into separate nested wheres.
@@ -621,6 +508,7 @@ func TestGlobalScopes_ScopesStartingWithOrBooleanArePreserved(t *testing.T) {
 	globalScopesApprovedSeedRows(t, query)
 
 	// Laravel: withoutGlobalScopes()->where('foo', 'foo')->orWhere('bar', 'bar')->orApproved() pins
+	// (as above: nothing automatic is mounted, so the wildcard call removes nothing)
 	//   select * from "table" where ("foo" = ? or "bar" = ?) or ("approved" = ? or "should_approve" = ?)
 	//   (bindings ['foo', 'bar', 1, 0], oracle): the scope's leading orWhere is preserved as the
 	// nested group's boolean.
@@ -648,13 +536,14 @@ func TestGlobalScopes_HasQueryWhereBothModelsHaveGlobalScopes(t *testing.T) {
 	//   (bindings ['bar', 1, 'baz', 1], oracle): the related subquery carries the related model's
 	// ActiveScope, the whole exists clause leads the parent's wheres - the position the has() call
 	// recorded - and the parent's global scopes trail them.
-	assert.Equal(t, `select * from "table2" where exists (select * from "table" where "table2"."id" = "table"."related_id" and "foo" = ? and "active" = ?) and "bar" = ? and "active" = ? order by "name" asc`, cloneRelationQuery(t, query).Model(&model).Has("Related").Where("bar", "baz").ToSql().Get(&model))
+	scoped := func(q contractsorm.Query) contractsorm.Query { return globalScopesRelationScopes(q) }
+	assert.Equal(t, `select * from "table2" where exists (select * from "table" where "table2"."id" = "table"."related_id" and "foo" = ? and "active" = ?) and "bar" = ? and "active" = ? order by "name" asc`, scoped(cloneRelationQuery(t, query).Model(&model)).Has("Related").Where("bar", "baz").ToSql().Get(&model))
 
 	// The read proves the three nested predicates at once: of the four seeded table2 rows, only the
 	// two that are active, carry bar = "baz", and have a related row with foo = "bar" and active = 1
 	// return, ordered by the parent scope's name - "a", "c", not the insertion order.
 	got := []globalScopesWithRelationModel{}
-	require.NoError(t, cloneRelationQuery(t, query).Model(&globalScopesWithRelationModel{}).Has("Related").Where("bar", "baz").Get(&got))
+	require.NoError(t, scoped(cloneRelationQuery(t, query).Model(&globalScopesWithRelationModel{})).Has("Related").Where("bar", "baz").Get(&got))
 	require.Len(t, got, 2)
 	assert.Equal(t, []string{"a", "c"}, globalScopesRelationNames(got))
 }
@@ -706,16 +595,6 @@ func globalScopesSeedRelationRows(t *testing.T, query contractsorm.Query) {
 
 // globalScopesRelationNames collects the names of the relation-model rows.
 func globalScopesRelationNames(rows []globalScopesWithRelationModel) []string {
-	names := make([]string, 0, len(rows))
-	for _, row := range rows {
-		names = append(names, row.Name)
-	}
-
-	return names
-}
-
-// globalScopesNamesFromArray collects the names of the array-model rows.
-func globalScopesNamesFromArray(rows []globalScopesArrayModel) []string {
 	names := make([]string, 0, len(rows))
 	for _, row := range rows {
 		names = append(names, row.Name)
