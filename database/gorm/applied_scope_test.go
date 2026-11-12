@@ -124,7 +124,7 @@ func TestRemoveScope_GovernsAScopeMountedLater(t *testing.T) {
 	query, ok := compiledQuery(t, &namedScopeSoftUser{}, Conditions{}).RemoveScope("nsu_scope").(*OrmBuilder)
 	require.True(t, ok)
 
-	statement, bindings, err := query.addGlobalScopes().compileSelect()
+	statement, bindings, err := query.compileSelect()
 	require.NoError(t, err)
 
 	assert.NotContains(t, statement, `"name" = ?`)

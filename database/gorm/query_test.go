@@ -25,208 +25,6 @@ import (
 	"github.com/gradii/framework/support/carbon"
 )
 
-func TestAddGlobalScopes(t *testing.T) {
-
-	tests := []struct {
-		name                  string
-		setupQuery            func() *OrmBuilder
-		expectedScopesApplied bool
-		expectedScopesCount   int
-	}{
-		{
-			name: "should apply global scopes when model implements ModelWithGlobalScopes",
-			setupQuery: func() *OrmBuilder {
-				conditions := Conditions{}
-				conditions.model = &ModelWithGlobalScopes{}
-				query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
-				return query
-			},
-			expectedScopesApplied: true,
-			expectedScopesCount:   2, // active and verified scopes
-		},
-		{
-			name: "should not apply global scopes when model does not implement ModelWithGlobalScopes",
-			setupQuery: func() *OrmBuilder {
-				conditions := Conditions{}
-				conditions.model = &ModelWithoutGlobalScopes{}
-				query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
-				return query
-			},
-			expectedScopesApplied: false,
-			expectedScopesCount:   0,
-		},
-		{
-			name: "should not apply global scopes when withoutGlobalScopes contains '*'",
-			setupQuery: func() *OrmBuilder {
-				conditions := Conditions{}
-				conditions.model = &ModelWithGlobalScopes{}
-				conditions.removedScopes = []string{"*"}
-				query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
-				return query
-			},
-			expectedScopesApplied: false,
-			expectedScopesCount:   0,
-		},
-		{
-			name: "should exclude specific scope when in withoutGlobalScopes",
-			setupQuery: func() *OrmBuilder {
-				conditions := Conditions{}
-				conditions.model = &ModelWithGlobalScopes{}
-				conditions.removedScopes = []string{"active"}
-				query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
-				return query
-			},
-			expectedScopesApplied: true,
-			expectedScopesCount:   1, // only verified scope
-		},
-		{
-			name: "should not apply scopes when model is nil",
-			setupQuery: func() *OrmBuilder {
-				conditions := Conditions{}
-				query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
-				return query
-			},
-			expectedScopesApplied: false,
-			expectedScopesCount:   0,
-		},
-		{
-			name: "should use dest when model is nil but dest is set",
-			setupQuery: func() *OrmBuilder {
-				conditions := Conditions{}
-				conditions.dest = &ModelWithGlobalScopes{}
-				query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
-				return query
-			},
-			expectedScopesApplied: true,
-			expectedScopesCount:   2, // active and verified scopes
-		},
-		{
-			name: "should not apply scopes when model has empty GlobalScopes list",
-			setupQuery: func() *OrmBuilder {
-				conditions := Conditions{}
-				conditions.model = &ModelWithEmptyGlobalScopes{}
-				query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
-				return query
-			},
-			expectedScopesApplied: false,
-			expectedScopesCount:   0,
-		},
-		{
-			name: "should apply scopes in declaration order",
-			setupQuery: func() *OrmBuilder {
-				conditions := Conditions{}
-				conditions.model = &ModelWithGlobalScopes{}
-				query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
-				return query
-			},
-			expectedScopesApplied: true,
-			expectedScopesCount:   2, // Scopes applied in declaration order: active, verified
-		},
-		{
-			name: "should exclude multiple scopes when multiple names in withoutGlobalScopes",
-			setupQuery: func() *OrmBuilder {
-				conditions := Conditions{}
-				conditions.model = &ModelWithGlobalScopes{}
-				conditions.removedScopes = []string{"active", "verified"}
-				query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
-				return query
-			},
-			expectedScopesApplied: false,
-			expectedScopesCount:   0, // both scopes excluded
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			query := tt.setupQuery()
-			result := query.addGlobalScopes()
-
-			assert.NotNil(t, result)
-
-			// Check if scopes were applied by examining the scopes list
-			if tt.expectedScopesApplied {
-				assert.GreaterOrEqual(t, len(result.conditions.scopes), tt.expectedScopesCount)
-			} else {
-				assert.Equal(t, tt.expectedScopesCount, len(result.conditions.scopes))
-			}
-		})
-	}
-}
-
-func TestAddGlobalScopesWithPointerTypes(t *testing.T) {
-
-	tests := []struct {
-		name     string
-		model    any
-		expected bool
-	}{
-		{
-			name:     "should work with pointer to model",
-			model:    &ModelWithGlobalScopes{},
-			expected: true,
-		},
-		{
-			name:     "should work with value type model",
-			model:    ModelWithGlobalScopes{},
-			expected: true,
-		},
-		{
-			name:     "should work with pointer to pointer",
-			model:    func() any { m := &ModelWithGlobalScopes{}; return &m }(),
-			expected: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			conditions := Conditions{}
-			conditions.model = tt.model
-			query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
-
-			result := query.addGlobalScopes()
-
-			assert.NotNil(t, result)
-			if tt.expected {
-				assert.GreaterOrEqual(t, len(result.conditions.scopes), 2)
-			}
-		})
-	}
-}
-
-func TestAddGlobalScopesWithSliceAndArray(t *testing.T) {
-
-	tests := []struct {
-		name  string
-		model any
-	}{
-		{
-			name:  "should handle slice of models",
-			model: []ModelWithGlobalScopes{},
-		},
-		{
-			name:  "should handle pointer to slice of models",
-			model: &[]ModelWithGlobalScopes{},
-		},
-		{
-			name:  "should handle array of models",
-			model: [2]ModelWithGlobalScopes{},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			conditions := Conditions{}
-			conditions.model = tt.model
-			query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{}, nil, nil, nil, nil, nil, &conditions, nil)
-
-			result := query.addGlobalScopes()
-
-			// Should handle slice/array types and extract the element type
-			assert.NotNil(t, result)
-		})
-	}
-}
-
 // basicWhereColumns reads the (column, value) pairs off a builder's where list, so the pins below
 // observe the single ordered list the statement compiles from.
 func basicWhereColumns(t *testing.T, query *OrmBuilder) []contractsdriver.Where {
@@ -1100,38 +898,14 @@ type ComplexModel struct {
 	} `json:"nested"`
 }
 
-// Test models for addGlobalScopes
-type ModelWithoutGlobalScopes struct {
+// scopedStatementModel is the table the scope pins in scope_test.go compile against. It declares no
+// scopes of its own: a scope mounts on the builder (ApplyScope).
+type scopedStatementModel struct {
 	ID   uint
 	Name string
 }
 
-type ModelWithGlobalScopes struct {
-	ID   uint
-	Name string
-}
-
-func (ModelWithGlobalScopes) TableName() string { return "model_with_global_scopes" }
-
-func (m *ModelWithGlobalScopes) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{
-		{Name: "active", Scope: func(query contractsorm.Query) contractsorm.Query {
-			return query.Where("active", true)
-		}},
-		{Name: "verified", Scope: func(query contractsorm.Query) contractsorm.Query {
-			return query.Where("verified", true)
-		}},
-	}
-}
-
-type ModelWithEmptyGlobalScopes struct {
-	ID   uint
-	Name string
-}
-
-func (m *ModelWithEmptyGlobalScopes) GlobalScopes() []contractsorm.GlobalScope {
-	return nil
-}
+func (scopedStatementModel) TableName() string { return "model_with_global_scopes" }
 
 // getColumnsUser is the fixture for TestBasicSelectWithGetColumns: a bare model whose table is
 // "users", so the transient-columns SQL is exactly the one Laravel's corpus asserts.
@@ -1279,7 +1053,7 @@ func (discardQueryLogger) Trace(context.Context, *carbon.Carbon, string, int64, 
 // name; scope select('name') + get(['email']) compiles `select "name" from "users"`).
 func TestGetColumnsKeepsAScopeProvidedSelectMatchesTheOracle(t *testing.T) {
 	t.Run("selectRaw scope", func(t *testing.T) {
-		query, recorder := newRecordingRelQuery(t, &pluckScopeRawUser{})
+		query, recorder := scopedRecorderQuery(t, &pluckScopeRawUser{}, "sel", pluckSelectRawScope)
 		recorder.returnRows(`from "users"`, []string{"name"},
 			[]driver.Value{"Taylor"},
 			[]driver.Value{"Abigail"})
@@ -1293,13 +1067,13 @@ func TestGetColumnsKeepsAScopeProvidedSelectMatchesTheOracle(t *testing.T) {
 		// The receiver keeps its own state: nothing was installed on it, and the scope still
 		// applies to a statement compiled from it.
 		assert.Empty(t, query.query.Selects())
-		statement, _, err := query.addGlobalScopes().compileSelect()
+		statement, _, err := query.compileSelect()
 		require.NoError(t, err)
 		assert.Equal(t, `select name from "users"`, statement)
 	})
 
 	t.Run("select scope", func(t *testing.T) {
-		query, recorder := newRecordingRelQuery(t, &pluckScopeSelectUser{})
+		query, recorder := scopedRecorderQuery(t, &pluckScopeSelectUser{}, "sel", pluckSelectScope)
 		recorder.returnRows(`from "users"`, []string{"name"}, []driver.Value{"Taylor"})
 
 		users := []pluckScopeSelectUser{}

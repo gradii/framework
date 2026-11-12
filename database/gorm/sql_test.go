@@ -125,7 +125,7 @@ func TestCompileSelect_NestedCallbackIsGrouped(t *testing.T) {
 			return child.Where("name", "John")
 		}).(*OrmBuilder)
 
-	query = query.dest(&[]relUser{}).addGlobalScopes().buildConditions()
+	query = query.dest(&[]relUser{}).buildConditions()
 
 	sql, bindings, err := query.compileSelect()
 	assert.NoError(t, err)

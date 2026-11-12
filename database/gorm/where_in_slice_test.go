@@ -23,7 +23,7 @@ import (
 func compileInClause(t *testing.T, q *OrmBuilder) (string, []any) {
 	t.Helper()
 
-	sql, bindings, err := q.dest(&[]map[string]any{}).addGlobalScopes().compileSelect()
+	sql, bindings, err := q.dest(&[]map[string]any{}).compileSelect()
 	require.NoError(t, err)
 
 	return sql, bindings

@@ -17,33 +17,33 @@ import (
 // onlyTrashed / has clause at call time, onto the builder it is called on, against that builder's
 // model; the port defers rendering to compile time and must give the same result.
 
-// dwcPlainOnlyTrashedOr is a model without the framework soft-delete type whose global scope calls
-// OnlyTrashed() (a no-op for it) and then OrWhere.
+// dwcOnlyTrashedOr is the "x" scope the B2ref pin mounts on the builder: a no-op OnlyTrashed() for
+// a model without the framework soft-delete type, then OrWhere. It used to be declared
+// GlobalScopes(); scopes mount on the builder with ApplyScope now.
+func dwcOnlyTrashedOr(q contractsorm.Query) contractsorm.Query {
+	return q.OnlyTrashed().OrWhere("id", 6)
+}
+
+// dwcPlainTrashedOr is the same scope without the no-op OnlyTrashed: the reference shape.
+func dwcPlainTrashedOr(q contractsorm.Query) contractsorm.Query {
+	return q.OrWhere("id", 6)
+}
+
+// dwcPlainOnlyTrashedOr is the model the inert-scope pin compiles over, with dwcOnlyTrashedOr
+// mounted at the test's query-construction site.
 type dwcPlainOnlyTrashedOr struct{ ID uint }
 
 func (dwcPlainOnlyTrashedOr) TableName() string { return "plain_users" }
 
-func (dwcPlainOnlyTrashedOr) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{{Name: "x", Scope: func(q contractsorm.Query) contractsorm.Query {
-		return q.OnlyTrashed().OrWhere("id", 6)
-	}}}
-}
-
-// dwcPlainOr is the same scope without the no-op OnlyTrashed: the reference shape.
+// dwcPlainOr is the same model with the no-op-free dwcPlainTrashedOr mounted: the reference shape.
 type dwcPlainOr struct{ ID uint }
 
 func (dwcPlainOr) TableName() string { return "plain_users" }
 
-func (dwcPlainOr) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{{Name: "x", Scope: func(q contractsorm.Query) contractsorm.Query {
-		return q.OrWhere("id", 6)
-	}}}
-}
-
 func dwcCompile(t *testing.T, q contractsorm.Query) (string, []any) {
 	t.Helper()
 
-	statement, bindings, err := q.(*OrmBuilder).addGlobalScopes().compileSelect()
+	statement, bindings, err := q.(*OrmBuilder).compileSelect()
 	require.NoError(t, err)
 
 	return statement, bindings
@@ -77,11 +77,13 @@ func TestDeferredWhere_ClosureModelRendersHas(t *testing.T) {
 // ?)`. Laravel has no onlyTrashed on a model without SoftDeletes; the port treats it as a no-op, so a
 // scope calling it before the orWhere must group exactly like the scope without it.
 func TestDeferredWhere_InertOnlyTrashedDoesNotDecideTheScopeConnector(t *testing.T) {
-	reference, referenceBindings := dwcCompile(t, compiledQuery(t, &dwcPlainOr{}, Conditions{}).Where("id", 1))
+	reference, referenceBindings := dwcCompile(t, compiledQuery(t, &dwcPlainOr{}, Conditions{}).
+		ApplyScope("x", dwcPlainTrashedOr).(*OrmBuilder).Where("id", 1))
 	require.Equal(t, `select * from "plain_users" where "id" = ? or ("id" = ?)`, reference)
 	require.Equal(t, []any{1, 6}, referenceBindings)
 
-	statement, bindings := dwcCompile(t, compiledQuery(t, &dwcPlainOnlyTrashedOr{}, Conditions{}).Where("id", 1))
+	statement, bindings := dwcCompile(t, compiledQuery(t, &dwcPlainOnlyTrashedOr{}, Conditions{}).
+		ApplyScope("x", dwcOnlyTrashedOr).(*OrmBuilder).Where("id", 1))
 	assert.Equal(t, reference, statement)
 	assert.Equal(t, referenceBindings, bindings)
 }

@@ -50,7 +50,7 @@ func (subqueryScopeOwner) Relations() map[string]contractsorm.Relation {
 func subquerySelectSQL(t *testing.T, q *OrmBuilder, dest any) string {
 	t.Helper()
 
-	sql, _, err := q.dest(dest).addGlobalScopes().compileSelect()
+	sql, _, err := q.dest(dest).compileSelect()
 	require.NoError(t, err)
 
 	return sql
@@ -300,12 +300,22 @@ func TestOneOfManyAggregate_CarriesRelatedUserScopes(t *testing.T) {
 func TestOneOfManyAggregate_LazyReadCarriesRelatedUserScopes(t *testing.T) {
 	q := newRelQueryWith(t, &relDeepMid{})
 	rel := q.Related(&relLatestOwner{ID: 1}, "LatestMid")
+	// The outer read wears the scope the caller mounts on the relation query — the builder-local form
+	// of the model-declared scope that used to reach it; the aggregate keeps the related model's
+	// declared scope, which the subquery paths replay (applyRelatedGlobalScopes) until the
+	// related-model form goes away with the rest of the model-declared API.
+	built, ok := ormBuilderOf(rel)
+	require.True(t, ok)
+	built.ApplyScope("active", func(query contractsorm.Query) contractsorm.Query { return query.Where("active", 1) })
 	sql := newRelationSQL(t, rel, &[]relDeepMid{})
 	assert.Contains(t, sql, `from "rel_deep_mids" where "rel_deep_mids"."owner_id" = ? and "rel_deep_mids"."owner_id" is not null and "rel_deep_mids"."deleted_at" is null and "active" = ? group by "rel_deep_mids"."owner_id"`)
 	assert.True(t, strings.HasSuffix(sql, `where "rel_deep_mids"."owner_id" = ? and "rel_deep_mids"."owner_id" is not null and "rel_deep_mids"."deleted_at" is null and "active" = ?`), sql)
 
 	q2 := newRelQueryWith(t, &relDeepMid{})
 	rel2 := q2.Related(&relLatestOwnerRm{ID: 1}, "LatestMid")
+	built2, ok := ormBuilderOf(rel2)
+	require.True(t, ok)
+	built2.ApplyScope("active", func(query contractsorm.Query) contractsorm.Query { return query.Where("active", 1) })
 	sql2 := newRelationSQL(t, rel2, &[]relDeepMid{})
 	assert.Contains(t, sql2, `from "rel_deep_mids" where "rel_deep_mids"."owner_id" = ? and "rel_deep_mids"."owner_id" is not null and "rel_deep_mids"."deleted_at" is null group by "rel_deep_mids"."owner_id"`)
 }

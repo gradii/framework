@@ -82,7 +82,7 @@ func TestCapture_RelationSQL(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected *OrmBuilder, got %T", q)
 		}
-		stmt, _, cerr := gq.dest(dest).addGlobalScopes().compileSelect()
+		stmt, _, cerr := gq.dest(dest).compileSelect()
 		if cerr != nil {
 			if _, err := fmt.Fprintf(f, "[%s] ERROR: %v\n\n", c.name, cerr); err != nil {
 				t.Fatal(err)

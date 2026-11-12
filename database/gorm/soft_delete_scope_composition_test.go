@@ -51,11 +51,9 @@ type scpSrUser struct {
 
 func (scpSrUser) TableName() string { return "sr_users" }
 
-func (scpSrUser) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{
-		{Name: "active", Scope: func(q contractsorm.Query) contractsorm.Query { return q.Where("active", 1) }},
-	}
-}
+// scpActiveScope is the "active" scope the soft-delete composition fixtures used to declare; the
+// builders below mount it (ApplyScope), which is where a scope lives now.
+func scpActiveScope(q contractsorm.Query) contractsorm.Query { return q.Where("active", 1) }
 
 type scpSoUser struct {
 	ID     uint
@@ -66,18 +64,15 @@ type scpSoUser struct {
 
 func (scpSoUser) TableName() string { return "so_users" }
 
-func (scpSoUser) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{
-		{Name: "region", Scope: func(q contractsorm.Query) contractsorm.Query {
-			return q.Where("region", "x").OrWhere("region", "y")
-		}},
-	}
+// scpRegionScope is the "region" or-chain scope the fixture used to declare.
+func scpRegionScope(q contractsorm.Query) contractsorm.Query {
+	return q.Where("region", "x").OrWhere("region", "y")
 }
 
 func scpSelect(t *testing.T, q contractsorm.Query) (string, []any) {
 	t.Helper()
 
-	statement, bindings, err := q.(*OrmBuilder).addGlobalScopes().compileSelect()
+	statement, bindings, err := q.(*OrmBuilder).compileSelect()
 	require.NoError(t, err)
 
 	return statement, bindings
@@ -85,8 +80,12 @@ func scpSelect(t *testing.T, q contractsorm.Query) (string, []any) {
 
 func TestSoftDeleteScopeComposition_Select(t *testing.T) {
 	sd := func() *OrmBuilder { return compiledQuery(t, &scpSdUser{}, Conditions{}) }
-	sr := func() *OrmBuilder { return compiledQuery(t, &scpSrUser{}, Conditions{}) }
-	so := func() *OrmBuilder { return compiledQuery(t, &scpSoUser{}, Conditions{}) }
+	sr := func() *OrmBuilder {
+		return compiledQuery(t, &scpSrUser{}, Conditions{}).ApplyScope("active", scpActiveScope).(*OrmBuilder)
+	}
+	so := func() *OrmBuilder {
+		return compiledQuery(t, &scpSoUser{}, Conditions{}).ApplyScope("region", scpRegionScope).(*OrmBuilder)
+	}
 
 	cases := []struct {
 		name     string
@@ -183,10 +182,6 @@ type scpSrPostsUser struct {
 
 func (scpSrPostsUser) TableName() string { return "sr_users" }
 
-func (scpSrPostsUser) GlobalScopes() []contractsorm.GlobalScope {
-	return scpSrUser{}.GlobalScopes()
-}
-
 func (scpSrPostsUser) Relations() map[string]contractsorm.Relation {
 	return map[string]contractsorm.Relation{
 		"Posts": contractsorm.HasMany{Related: &scpSrPost{}, ForeignKey: "sr_user_id"},
@@ -203,12 +198,8 @@ type scpSr2User struct {
 
 func (scpSr2User) TableName() string { return "sr_users" }
 
-func (scpSr2User) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{
-		{Name: "active", Scope: func(q contractsorm.Query) contractsorm.Query { return q.Where("active", 1) }},
-		{Name: "mail", Scope: func(q contractsorm.Query) contractsorm.Query { return q.WhereNotNull("email") }},
-	}
-}
+// scpMailScope is the second scope the two-scope fixture used to declare.
+func scpMailScope(q contractsorm.Query) contractsorm.Query { return q.WhereNotNull("email") }
 
 // TestSoftDeleteScopeComposition_OrderAndOnlyTrashedPosition pins the two facets the round-14
 // composition mutants target: the default predicate is applied before every user scope (not after
@@ -223,9 +214,17 @@ func (scpSr2User) GlobalScopes() []contractsorm.GlobalScope {
 // parent where+onlyTrashed, probe6.out); labels quoted next to each case.
 func TestSoftDeleteScopeComposition_OrderAndOnlyTrashedPosition(t *testing.T) {
 	sd := func() *OrmBuilder { return compiledQuery(t, &scpSdUser{}, Conditions{}) }
-	sr := func() *OrmBuilder { return compiledQuery(t, &scpSrUser{}, Conditions{}) }
-	srp := func() *OrmBuilder { return compiledQuery(t, &scpSrPostsUser{}, Conditions{}) }
-	sr2 := func() *OrmBuilder { return compiledQuery(t, &scpSr2User{}, Conditions{}) }
+	sr := func() *OrmBuilder {
+		return compiledQuery(t, &scpSrUser{}, Conditions{}).ApplyScope("active", scpActiveScope).(*OrmBuilder)
+	}
+	srp := func() *OrmBuilder {
+		return compiledQuery(t, &scpSrPostsUser{}, Conditions{}).ApplyScope("active", scpActiveScope).(*OrmBuilder)
+	}
+	sr2 := func() *OrmBuilder {
+		return compiledQuery(t, &scpSr2User{}, Conditions{}).
+			ApplyScope("active", scpActiveScope).
+			ApplyScope("mail", scpMailScope).(*OrmBuilder)
+	}
 
 	sdExists := `exists (select * from "sd_posts" where "sd_users"."id" = "sd_posts"."sd_user_id" and "sd_posts"."deleted_at" is null)`
 	srExists := `exists (select * from "sr_posts" where "sr_users"."id" = "sr_posts"."sr_user_id" and "sr_posts"."deleted_at" is null)`

@@ -286,7 +286,7 @@ func (r *OrmBuilder) singleColumnFirstQuery(column string) *OrmBuilder {
 	query := r.withoutThroughReadSelect().withoutPivotReadSelect()
 	query.query.Limit(1)
 
-	scoped := query.addGlobalScopes().withScopesApplied().buildConditions()
+	scoped := query.withScopesApplied().buildConditions()
 
 	if scoped.query.Selects() == nil && len(scoped.conditions.selectSubs) == 0 {
 		scoped.query.SetSelects([]any{column})
@@ -369,7 +369,7 @@ func (r *OrmBuilder) Pluck(column string, dest any, key ...string) error {
 	// pluck('email') compiles `select name from "users"` and yields [null,null]; scope
 	// select('name') + pluck('email') compiles `select "name" from "users"` and yields [null,null];
 	// a keyed pluck('email','id') keeps the same scope-written list and folds {"":null}).
-	query := r.addGlobalScopes().withScopesApplied().buildConditions()
+	query := r.withScopesApplied().buildConditions()
 
 	destValue := reflect.ValueOf(dest)
 	if destValue.Kind() != reflect.Pointer || destValue.IsNil() {
@@ -851,7 +851,7 @@ func (r *OrmBuilder) Touch(column ...string) (*contractsdb.Result, error) {
 // exist. Mirrors Builder::upsert on a model: timestamps are added to every row, the created-at
 // column is never in the update list, and the updated-at column always is.
 func (r *OrmBuilder) Upsert(values any, uniqueBy []string, update ...any) (*contractsdb.Result, error) {
-	query := r.addGlobalScopes().buildConditions()
+	query := r.buildConditions()
 
 	records, err := query.insertRecords(values)
 	if err != nil {

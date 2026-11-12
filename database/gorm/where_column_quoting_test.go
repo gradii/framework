@@ -109,7 +109,7 @@ func TestOrderBy_AcceptsEitherDirection(t *testing.T) {
 func TestOrderBy_RejectsACustomDirection(t *testing.T) {
 	q := inQuery(t).OrderBy("id", "asc; DROP TABLE users --").(*OrmBuilder)
 
-	_, _, err := q.dest(&[]map[string]any{}).addGlobalScopes().compileSelect()
+	_, _, err := q.dest(&[]map[string]any{}).compileSelect()
 	assert.ErrorIs(t, err, errors.QueryOrderDirectionInvalid)
 
 	raw := inQuery(t).OrderByRaw("id DESC NULLS LAST").(*OrmBuilder)

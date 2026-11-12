@@ -288,10 +288,10 @@ func TestToSql_CreateEmptyAttributesOnIncrementingModel(t *testing.T) {
 func TestToSql_PluckKeepsAScopeProvidedSelectListMatchesTheOracle(t *testing.T) {
 	log := mockslog.NewLog(t)
 
-	rawUser := compiledQuery(t, &pluckScopeRawUser{}, Conditions{})
+	rawUser := scopedCompiledQuery(t, &pluckScopeRawUser{}, "sel", pluckSelectRawScope)
 	assert.Equal(t, `select name from "users"`, NewToSql(rawUser, log, false).Pluck("users.email", pluckScopeRawUser{}))
 
-	selectUser := compiledQuery(t, &pluckScopeSelectUser{}, Conditions{})
+	selectUser := scopedCompiledQuery(t, &pluckScopeSelectUser{}, "sel", pluckSelectScope)
 	assert.Equal(t, `select "name" from "users"`, NewToSql(selectUser, log, false).Pluck("users.email", pluckScopeSelectUser{}))
 
 	// The receiver keeps its own state: a second preview compiles the scope's list again, and the

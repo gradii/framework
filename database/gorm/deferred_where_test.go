@@ -23,8 +23,10 @@ import (
 // from, a clone is independent of it, ToSql and the executed statement agree, and an entry that
 // renders nothing leaves the bindings aligned.
 
-// deferredScopeUser carries a user global scope whose where closure calls whereHas, the shape
-// oracle D1 compiles (/tmp/r15c-probes/scope_deferred.php).
+// deferredScopeUser is the model behind the "hasPosts" scope (deferredHasPostsScope), whose where
+// closure calls whereHas — the shape oracle D1 compiles (/tmp/r15c-probes/scope_deferred.php). The
+// scope used to be declared GlobalScopes(); scopes mount on the builder with ApplyScope now, so the
+// test mounts it at its query-construction site.
 type deferredScopeUser struct {
 	ID     uint
 	Email  string
@@ -41,18 +43,15 @@ func (deferredScopeUser) Relations() map[string]contractsorm.Relation {
 	}
 }
 
-func (deferredScopeUser) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{
-		{Name: "hasPosts", Scope: func(q contractsorm.Query) contractsorm.Query {
-			return q.Where("active", 1).Where(func(q2 contractsorm.Query) contractsorm.Query {
-				return q2.Where("id", 2).WhereHas("Posts", func(p contractsorm.Query) contractsorm.Query { return p.Where("id", 3) })
-			}).Where("id", 4)
-		}},
-	}
+// deferredHasPostsScope is the "hasPosts" scope the D1 case mounts on the builder.
+func deferredHasPostsScope(q contractsorm.Query) contractsorm.Query {
+	return q.Where("active", 1).Where(func(q2 contractsorm.Query) contractsorm.Query {
+		return q2.Where("id", 2).WhereHas("Posts", func(p contractsorm.Query) contractsorm.Query { return p.Where("id", 3) })
+	}).Where("id", 4)
 }
 
-// deferredTrashedScopeUser carries a user global scope whose where closure calls onlyTrashed (oracle
-// D2).
+// deferredTrashedScopeUser is the model behind the "closureTrashed" scope
+// (deferredClosureTrashedScope), whose where closure calls onlyTrashed (oracle D2).
 type deferredTrashedScopeUser struct {
 	ID    uint
 	Email string
@@ -61,12 +60,9 @@ type deferredTrashedScopeUser struct {
 
 func (deferredTrashedScopeUser) TableName() string { return "sd_users" }
 
-func (deferredTrashedScopeUser) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{
-		{Name: "closureTrashed", Scope: func(q contractsorm.Query) contractsorm.Query {
-			return q.Where(func(q2 contractsorm.Query) contractsorm.Query { return q2.Where("id", 2).OnlyTrashed() }).Where("id", 4)
-		}},
-	}
+// deferredClosureTrashedScope is the "closureTrashed" scope the D2 case mounts on the builder.
+func deferredClosureTrashedScope(q contractsorm.Query) contractsorm.Query {
+	return q.Where(func(q2 contractsorm.Query) contractsorm.Query { return q2.Where("id", 2).OnlyTrashed() }).Where("id", 4)
 }
 
 // deferredRichQuery builds a query carrying every kind of deferred entry: a whereHas with a
@@ -98,7 +94,7 @@ const deferredRichWhere = `"id" = ? and exists (select * from "sd_posts" where "
 func compileDeferred(t *testing.T, query *OrmBuilder) (string, []any) {
 	t.Helper()
 
-	statement, bindings, err := query.addGlobalScopes().compileSelect()
+	statement, bindings, err := query.compileSelect()
 	require.NoError(t, err)
 
 	return statement, bindings
@@ -123,7 +119,7 @@ func TestDeferredWhere_CompilingTwiceRendersTheSameStatement(t *testing.T) {
 	assert.Equal(t, firstBindings, secondBindings)
 
 	// A count compiled from the same query renders the same where clause.
-	countSQL, countBindings, err := query.addGlobalScopes().compileAggregate("count", []any{"*"})
+	countSQL, countBindings, err := query.compileAggregate("count", []any{"*"})
 	require.NoError(t, err)
 	assert.Equal(t, `select count(*) as aggregate from "sd_users" where `+deferredRichWhere, countSQL)
 	assert.Equal(t, firstBindings, countBindings)
@@ -191,7 +187,7 @@ func TestDeferredWhere_TheSameQueryCompilesAgainstEachDestination(t *testing.T) 
 		WhereHas("Posts", func(p contractsorm.Query) contractsorm.Query { return p.Where("id", 2) }).
 		Where(func(q contractsorm.Query) contractsorm.Query { return q.OnlyTrashed() }).(*OrmBuilder)
 	compile := func(dest any) (string, []any) {
-		statement, bindings, err := query.dest(dest).addGlobalScopes().compileSelect()
+		statement, bindings, err := query.dest(dest).compileSelect()
 		require.NoError(t, err)
 
 		return statement, bindings
@@ -205,7 +201,7 @@ func TestDeferredWhere_TheSameQueryCompilesAgainstEachDestination(t *testing.T) 
 	assert.Equal(t, `select * from "alt_users" where "id" = ? and exists (select * from "sd_posts" where "alt_users"."id" = "sd_posts"."alt_user_id" and "id" = ? and "sd_posts"."deleted_at" is null) and ("alt_users"."deleted_at" is not null) and "alt_users"."deleted_at" is null`, statement)
 	assert.Equal(t, []any{1, 2}, bindings)
 
-	_, _, err := query.dest(&[]relUser{}).addGlobalScopes().compileSelect()
+	_, _, err := query.dest(&[]relUser{}).compileSelect()
 	assert.Error(t, err, "rel_users has no Posts relation, so its render fails instead of reusing an earlier render")
 
 	statement, _ = compile(&[]scpSdUser{})
@@ -287,9 +283,10 @@ func TestDeferredWhere_OnlyTrashedOnANonSoftDeleteModelKeepsBindingsAligned(t *t
 }
 
 // TestDeferredWhere_EntryInsideAClosureInsideAUserScope pins a deferred entry two levels down: a
-// user global scope's where closure calling whereHas (oracle D1) or onlyTrashed (oracle D2). The
-// scope applies after SoftDeletingScope, so the "is null" precedes the scope's wheres, and the
-// closure's clause renders inside the closure's group at its call position.
+// scope's where closure calling whereHas (oracle D1) or onlyTrashed (oracle D2), the scope mounted
+// on the builder with ApplyScope — the mount deferredScopeUser / deferredTrashedScopeUser used to
+// declare. The scope applies after SoftDeletingScope, so the "is null" precedes the scope's wheres,
+// and the closure's clause renders inside the closure's group at its call position.
 //
 // Oracle (illuminate/database v12.55.1, real sqlite, /tmp/r15c-probes/scope_deferred.php ->
 // scope_deferred.out):
@@ -297,25 +294,33 @@ func TestDeferredWhere_OnlyTrashedOnANonSoftDeleteModelKeepsBindingsAligned(t *t
 //	D1|select * from "sd_users" where "email" = ? and "sd_users"."deleted_at" is null and "active" = ? and ("id" = ? and exists (select * from "sd_posts" where "sd_users"."id" = "sd_posts"."sd_user_id" and "id" = ? and "sd_posts"."deleted_at" is null)) and "id" = ?|["a",1,2,3,4]
 //	D2|select * from "sd_users" where "email" = ? and "sd_users"."deleted_at" is null and ("id" = ? and "sd_users"."deleted_at" is not null) and "id" = ?|["a",2,4]
 func TestDeferredWhere_EntryInsideAClosureInsideAUserScope(t *testing.T) {
+	d1 := func() *OrmBuilder {
+		return compiledQuery(t, &deferredScopeUser{}, Conditions{}).ApplyScope("hasPosts", deferredHasPostsScope).(*OrmBuilder)
+	}
+	d2 := func() *OrmBuilder {
+		return compiledQuery(t, &deferredTrashedScopeUser{}, Conditions{}).ApplyScope("closureTrashed", deferredClosureTrashedScope).(*OrmBuilder)
+	}
+
 	runScrCases(t, []scrCase{
-		{"D1 closure whereHas inside a user scope", compiledQuery(t, &deferredScopeUser{}, Conditions{}).Where("email", "a"),
+		{"D1 closure whereHas inside a user scope", d1().Where("email", "a"),
 			`select * from "sd_users" where "email" = ? and "sd_users"."deleted_at" is null and "active" = ? and ("id" = ? and exists (select * from "sd_posts" where "sd_users"."id" = "sd_posts"."sd_user_id" and "id" = ? and "sd_posts"."deleted_at" is null)) and "id" = ?`,
 			[]any{"a", 1, 2, 3, 4}},
-		{"D2 closure onlyTrashed inside a user scope", compiledQuery(t, &deferredTrashedScopeUser{}, Conditions{}).Where("email", "a"),
+		{"D2 closure onlyTrashed inside a user scope", d2().Where("email", "a"),
 			`select * from "sd_users" where "email" = ? and "sd_users"."deleted_at" is null and ("id" = ? and "sd_users"."deleted_at" is not null) and "id" = ?`,
 			[]any{"a", 2, 4}},
 	})
 
 	// The scoped query compiles the same statement twice.
-	query := compiledQuery(t, &deferredScopeUser{}, Conditions{}).Where("email", "a").(*OrmBuilder)
+	query := d1().Where("email", "a").(*OrmBuilder)
 	first, firstBindings := compileDeferred(t, query)
 	second, secondBindings := compileDeferred(t, query)
 	assert.Equal(t, first, second)
 	assert.Equal(t, firstBindings, secondBindings)
 }
 
-// deferredOrHasScopeUser carries a user global scope whose or-chain ends in orWhereHas (oracle E1,
-// E2, /tmp/r15c-probes/scope_edges.php).
+// deferredOrHasScopeUser is the model behind the "activeOrPosts" scope (deferredActiveOrPostsScope),
+// whose or-chain ends in orWhereHas (oracle E1, E2, /tmp/r15c-probes/scope_edges.php). The scope
+// used to be declared GlobalScopes(); the test mounts it on the builder with ApplyScope now.
 type deferredOrHasScopeUser struct {
 	ID     uint
 	Email  string
@@ -332,12 +337,9 @@ func (deferredOrHasScopeUser) Relations() map[string]contractsorm.Relation {
 	}
 }
 
-func (deferredOrHasScopeUser) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{
-		{Name: "activeOrPosts", Scope: func(q contractsorm.Query) contractsorm.Query {
-			return q.Where("active", 1).OrWhereHas("Posts")
-		}},
-	}
+// deferredActiveOrPostsScope is the "activeOrPosts" scope the E1/E2 cases mount on the builder.
+func deferredActiveOrPostsScope(q contractsorm.Query) contractsorm.Query {
+	return q.Where("active", 1).OrWhereHas("Posts")
 }
 
 // deferredComment, deferredScopedPost and deferredRelScopeUser model a related model whose own
@@ -384,8 +386,8 @@ func (deferredRelScopeUser) Relations() map[string]contractsorm.Relation {
 	}
 }
 
-// TestDeferredWhere_ScopeExistenceRendersInTheScopesSlice pins an existence clause a global scope
-// writes: it is part of the scope's slice where Laravel's callScope regroups it, so a user scope's
+// TestDeferredWhere_ScopeExistenceRendersInTheScopesSlice pins an existence clause a scope writes:
+// it is part of the scope's slice where Laravel's callScope regroups it, so a mounted scope's
 // or-chain ending in orWhereHas becomes one group (E1, E2), and a related model's scope calling
 // whereHas renders inside the existence / count subquery, correlated to the related table (E3, E4).
 //
@@ -397,11 +399,13 @@ func (deferredRelScopeUser) Relations() map[string]contractsorm.Relation {
 //	E3|select * from "sd_users" where exists (select * from "sd_posts" where "sd_users"."id" = "sd_posts"."sd_user_id" and "sd_posts"."deleted_at" is null and exists (select * from "sd_comments" where "sd_posts"."id" = "sd_comments"."sd_post_id")) and "sd_users"."deleted_at" is null|[]
 //	E4|select "sd_users".*, (select count(*) from "sd_posts" where "sd_users"."id" = "sd_posts"."sd_user_id" and "sd_posts"."deleted_at" is null and exists (select * from "sd_comments" where "sd_posts"."id" = "sd_comments"."sd_post_id")) as "posts_count" from "sd_users" where "sd_users"."deleted_at" is null|[]
 func TestDeferredWhere_ScopeExistenceRendersInTheScopesSlice(t *testing.T) {
-	orHas := func() *OrmBuilder { return compiledQuery(t, &deferredOrHasScopeUser{}, Conditions{}) }
+	orHas := func() *OrmBuilder {
+		return compiledQuery(t, &deferredOrHasScopeUser{}, Conditions{}).ApplyScope("activeOrPosts", deferredActiveOrPostsScope).(*OrmBuilder)
+	}
 	relScope := func() *OrmBuilder { return compiledQuery(t, &deferredRelScopeUser{}, Conditions{}) }
 
 	runScrCases(t, []scrCase{
-		{"E1 user scope where then orWhereHas", orHas().Where("email", "a"),
+		{"E1 scope where then orWhereHas", orHas().Where("email", "a"),
 			`select * from "sd_users" where "email" = ? and "sd_users"."deleted_at" is null and ("active" = ? or exists (select * from "sd_posts" where "sd_users"."id" = "sd_posts"."sd_user_id" and "sd_posts"."deleted_at" is null))`,
 			[]any{"a", 1}},
 		{"E2 the same under a caller or-chain", orHas().Where("email", "a").OrWhere("email", "b"),
@@ -416,8 +420,10 @@ func TestDeferredWhere_ScopeExistenceRendersInTheScopesSlice(t *testing.T) {
 	})
 }
 
-// deferredPlainTrashedScopeUser is a model without the framework's soft-delete type whose user
-// global scope calls onlyTrashed and nothing else.
+// deferredPlainTrashedScopeUser is a model without the framework's soft-delete type behind the
+// "trashedOnly" scope (deferredTrashedOnlyScope), which calls onlyTrashed and nothing else. The
+// scope used to be declared GlobalScopes(); the guard test mounts it on the builder with ApplyScope
+// now.
 type deferredPlainTrashedScopeUser struct {
 	ID   uint
 	Name string
@@ -425,11 +431,8 @@ type deferredPlainTrashedScopeUser struct {
 
 func (deferredPlainTrashedScopeUser) TableName() string { return "rel_users" }
 
-func (deferredPlainTrashedScopeUser) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{
-		{Name: "trashedOnly", Scope: func(q contractsorm.Query) contractsorm.Query { return q.OnlyTrashed() }},
-	}
-}
+// deferredTrashedOnlyScope is the "trashedOnly" scope the guard test mounts on the builder.
+func deferredTrashedOnlyScope(q contractsorm.Query) contractsorm.Query { return q.OnlyTrashed() }
 
 // TestDeferredWhere_MassWriteGuardCountsWhatRenders pins the mass-update / delete guard over deferred
 // entries: an update or delete constrained only by a whereHas carries the rendered exists and runs,
@@ -452,10 +455,10 @@ func TestDeferredWhere_MassWriteGuardCountsWhatRenders(t *testing.T) {
 	_, _, err = compiledQuery(t, &relUser{}, Conditions{}).OnlyTrashed().(*OrmBuilder).compileDelete()
 	assert.ErrorIs(t, err, errors.OrmMissingWhereClause)
 
-	_, _, err = compiledQuery(t, &deferredPlainTrashedScopeUser{}, Conditions{}).addGlobalScopes().compileUpdate(map[string]any{"name": "x"})
+	_, _, err = compiledQuery(t, &deferredPlainTrashedScopeUser{}, Conditions{}).ApplyScope("trashedOnly", deferredTrashedOnlyScope).(*OrmBuilder).compileUpdate(map[string]any{"name": "x"})
 	assert.ErrorIs(t, err, errors.OrmMissingWhereClause)
 
-	_, _, err = compiledQuery(t, &deferredPlainTrashedScopeUser{}, Conditions{}).addGlobalScopes().compileDelete()
+	_, _, err = compiledQuery(t, &deferredPlainTrashedScopeUser{}, Conditions{}).ApplyScope("trashedOnly", deferredTrashedOnlyScope).(*OrmBuilder).compileDelete()
 	assert.ErrorIs(t, err, errors.OrmMissingWhereClause)
 }
 

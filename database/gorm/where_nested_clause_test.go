@@ -20,7 +20,7 @@ func TestWhere_ClosureNestsAndMergesEagerLoads(t *testing.T) {
 			return nested.Where("id", 1).With("Books")
 		}).(*OrmBuilder)
 
-	query = query.dest(&[]relUser{}).addGlobalScopes().buildConditions()
+	query = query.dest(&[]relUser{}).buildConditions()
 
 	sql, bindings, err := query.compileSelect()
 	require.NoError(t, err)
@@ -37,7 +37,7 @@ func TestWhere_ClosureWithoutWheresLeavesNoGroup(t *testing.T) {
 	query := newRelQueryWith(t, &relUser{}).
 		Where(func(nested contractsorm.Query) contractsorm.Query { return nested.With("Books") }).(*OrmBuilder)
 
-	query = query.dest(&[]relUser{}).addGlobalScopes().buildConditions()
+	query = query.dest(&[]relUser{}).buildConditions()
 
 	sql, bindings, err := query.compileSelect()
 	require.NoError(t, err)
@@ -55,7 +55,7 @@ func TestWhere_ClosureRunsAtCallTime(t *testing.T) {
 
 		return nested.Where("id", 1)
 	}).(*OrmBuilder)
-	query = query.dest(&[]relUser{}).addGlobalScopes().buildConditions()
+	query = query.dest(&[]relUser{}).buildConditions()
 
 	require.Equal(t, 1, calls)
 
@@ -74,7 +74,7 @@ func TestOrWhere_ClosureGroupKeepsTheOrConnector(t *testing.T) {
 		OrWhere(func(nested contractsorm.Query) contractsorm.Query {
 			return nested.Where("name", "John")
 		}).(*OrmBuilder)
-	query = query.dest(&[]relUser{}).addGlobalScopes().buildConditions()
+	query = query.dest(&[]relUser{}).buildConditions()
 
 	sql, bindings, err := query.compileSelect()
 	require.NoError(t, err)

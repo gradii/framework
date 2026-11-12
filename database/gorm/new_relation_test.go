@@ -22,7 +22,7 @@ func newRelationSQL(t *testing.T, q contractsorm.Query, dest any) string {
 	if !ok {
 		t.Fatalf("expected *gorm.Query, got %T", q)
 	}
-	stmt, _, err := gq.dest(dest).addGlobalScopes().compileSelect()
+	stmt, _, err := gq.dest(dest).compileSelect()
 	require.NoError(t, err)
 
 	return stmt

@@ -622,7 +622,7 @@ func TestValueKeepsASelectionTheReadFoundMatchesTheOracle(t *testing.T) {
 // `select "name" from "users" limit 1`).
 func TestValueScopeProvidedSelectListMatchesTheOracle(t *testing.T) {
 	t.Run("selectRaw scope", func(t *testing.T) {
-		query, recorder := newRecordingRelQuery(t, &pluckScopeRawUser{})
+		query, recorder := scopedRecorderQuery(t, &pluckScopeRawUser{}, "sel", pluckSelectRawScope)
 		recorder.returnRows(`select name from "users"`, []string{"name"}, []driver.Value{"Taylor"})
 
 		email := "unchanged"
@@ -633,7 +633,7 @@ func TestValueScopeProvidedSelectListMatchesTheOracle(t *testing.T) {
 	})
 
 	t.Run("select scope", func(t *testing.T) {
-		query, recorder := newRecordingRelQuery(t, &pluckScopeSelectUser{})
+		query, recorder := scopedRecorderQuery(t, &pluckScopeSelectUser{}, "sel", pluckSelectScope)
 		recorder.returnRows(`select "name" from "users"`, []string{"name"}, []driver.Value{"Taylor"})
 
 		email := "unchanged"
@@ -691,7 +691,7 @@ func TestValueSelectSubsAreAnInstalledSelectListMatchesTheOracle(t *testing.T) {
 
 func TestValueScopeProvidedLimitMatchesTheOracle(t *testing.T) {
 	t.Run("a scope limit overrides the one-row limit", func(t *testing.T) {
-		query, recorder := newRecordingRelQuery(t, &pluckScopeLimitUser{})
+		query, recorder := scopedRecorderQuery(t, &pluckScopeLimitUser{}, "sel", pluckLimitScope)
 		recorder.returnRows(`from "users"`, []string{"name"}, []driver.Value{"Taylor"})
 
 		email := "unchanged"
@@ -708,7 +708,7 @@ func TestValueScopeProvidedLimitMatchesTheOracle(t *testing.T) {
 	})
 
 	t.Run("a limit(0) scope reads no row", func(t *testing.T) {
-		query, recorder := newRecordingRelQuery(t, &pluckScopeZeroLimitUser{})
+		query, recorder := scopedRecorderQuery(t, &pluckScopeZeroLimitUser{}, "zero", pluckZeroLimitScope)
 
 		email := "unchanged"
 		require.NoError(t, query.Value("users.email", &email))

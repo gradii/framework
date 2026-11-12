@@ -16,8 +16,9 @@ import (
 // against sqlite), the pivot form matched on the AsPivot/MorphPivot key columns, the not-stored
 // short-circuit, firstOrFail's model-not-found report, and refresh()'s reload of loaded relations.
 
-// prScopedUser hides taylorotwell@gmail.com behind a global scope, so a fresh read that bypasses
-// scopes can be told apart from a scoped read.
+// prScopedUser is the model of the scoped read: the "hide_taylor" scope it used to declare is
+// mounted on the builder with ApplyScope now, so a fresh read that bypasses scopes can be told
+// apart from a scoped read.
 type prScopedUser struct {
 	ID    uint   `gorm:"column:id;primaryKey"`
 	Email string `gorm:"column:email"`
@@ -25,12 +26,10 @@ type prScopedUser struct {
 
 func (prScopedUser) TableName() string { return "pr_users" }
 
-func (prScopedUser) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{
-		{Name: "hide_taylor", Scope: func(query contractsorm.Query) contractsorm.Query {
-			return query.Where("email", "!=", "taylorotwell@gmail.com")
-		}},
-	}
+// prHideTaylor is the "hide_taylor" scope the test mounts on the builder, the shape the model used
+// to declare.
+func prHideTaylor(query contractsorm.Query) contractsorm.Query {
+	return query.Where("email", "!=", "taylorotwell@gmail.com")
 }
 
 // prTagPivot is the morph pivot form: MorphPivot::setKeysForSelectQuery pins the morph type first,
@@ -57,11 +56,12 @@ func (prKeyless) TableName() string { return "pr_keyless" }
 
 func TestFresh_ReadsBackByKeyWithoutGlobalScopes(t *testing.T) {
 	q, recorder := newRecordingRelQuery(t, &prScopedUser{})
+	q = q.ApplyScope("hide_taylor", prHideTaylor).(*OrmBuilder)
 	recorder.returnRows(`from "pr_users"`, []string{"id", "email"},
 		[]driver.Value{int64(1), "taylorotwell@gmail.com"})
 
 	// Sanity: a scoped read carries the scope's predicate... in the compiled statement.
-	scoped := newRelQueryWith(t, &prScopedUser{})
+	scoped := newRelQueryWith(t, &prScopedUser{}).ApplyScope("hide_taylor", prHideTaylor).(*OrmBuilder)
 	scopedSQL := newRelationSQL(t, scoped.Model(&prScopedUser{}), &prScopedUser{})
 	assert.Contains(t, scopedSQL, "email")
 

@@ -94,12 +94,12 @@ func TestWithMergePrecedence_PlainAfterConstrainedDropsTheConstraint(t *testing.
 	require.Len(t, users[0].Books, 2, "the relation loads unconstrained")
 }
 
-// A global scope's plain with() is a later write too. Oracle: the scope's with('posts') after
+// A mounted scope's plain with() is a later write too. Oracle: the scope's with('posts') after
 // with('posts', cb) loads {A,B}.
-func TestWithMergePrecedence_GlobalScopePlainWithReplacesOuterConstraint(t *testing.T) {
-	q := compiledQuery(t, &modelWithEagerLoadGlobalScope{}, Conditions{}).
-		With("related", constrainedBooks("Go")).(*OrmBuilder)
-	q = q.addGlobalScopes()
+func TestWithMergePrecedence_ScopePlainWithReplacesOuterConstraint(t *testing.T) {
+	q := compiledQuery(t, &eagerLoadScopeModel{}, Conditions{}).
+		With("related", constrainedBooks("Go")).
+		ApplyScope("with_related", withRelatedScope).(*OrmBuilder)
 
 	_, _, err := q.compileSelect()
 	require.NoError(t, err)

@@ -56,7 +56,7 @@ func TestValueOrFailReportsTheModelNotFoundErrorOnAMiss(t *testing.T) {
 // returns "taylorotwell@gmail.com").
 func TestValueOrFailKeepsASelectionTheReadFoundMatchesTheOracle(t *testing.T) {
 	t.Run("selectRaw scope", func(t *testing.T) {
-		query, recorder := newRecordingRelQuery(t, &pluckScopeRawUser{})
+		query, recorder := scopedRecorderQuery(t, &pluckScopeRawUser{}, "sel", pluckSelectRawScope)
 		recorder.returnRows(`select name from "users"`, []string{"name"}, []driver.Value{"Taylor"})
 
 		email := "unchanged"
@@ -98,7 +98,7 @@ func TestValueOrFailKeepsASelectionTheReadFoundMatchesTheOracle(t *testing.T) {
 // `select "users"."email" from "users" limit 0` and throws ModelNotFoundException).
 func TestValueOrFailScopeProvidedLimitMatchesTheOracle(t *testing.T) {
 	t.Run("a scope limit overrides the one-row limit", func(t *testing.T) {
-		query, recorder := newRecordingRelQuery(t, &pluckScopeLimitUser{})
+		query, recorder := scopedRecorderQuery(t, &pluckScopeLimitUser{}, "sel", pluckLimitScope)
 		recorder.returnRows(`from "users"`, []string{"name"}, []driver.Value{"Taylor"})
 
 		var name string
@@ -109,7 +109,7 @@ func TestValueOrFailScopeProvidedLimitMatchesTheOracle(t *testing.T) {
 	})
 
 	t.Run("a limit(0) scope reports the model-not-found error", func(t *testing.T) {
-		query, recorder := newRecordingRelQuery(t, &pluckScopeZeroLimitUser{})
+		query, recorder := scopedRecorderQuery(t, &pluckScopeZeroLimitUser{}, "zero", pluckZeroLimitScope)
 
 		email := "unchanged"
 		err := query.ValueOrFail("users.email", &email)

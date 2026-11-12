@@ -101,7 +101,7 @@ func ofmcRead(t *testing.T, relation string) (string, []any) {
 	built, ok := ormBuilderOf(q.Related(&ofmcUser{ID: 1}, relation))
 	require.True(t, ok)
 
-	statement, bindings, err := built.dest(&[]ofmcPost{}).addGlobalScopes().compileSelect()
+	statement, bindings, err := built.dest(&[]ofmcPost{}).compileSelect()
 	require.NoError(t, err)
 
 	return statement, bindings
@@ -157,9 +157,9 @@ func TestOfManyClosure_RelationReadCompilesTwice(t *testing.T) {
 	require.True(t, ok)
 	built = built.dest(&[]ofmcPost{})
 
-	first, firstBindings, err := built.addGlobalScopes().compileSelect()
+	first, firstBindings, err := built.compileSelect()
 	require.NoError(t, err)
-	second, secondBindings, err := built.addGlobalScopes().compileSelect()
+	second, secondBindings, err := built.compileSelect()
 	require.NoError(t, err)
 
 	assert.Equal(t, first, second)
@@ -243,7 +243,7 @@ func ofmcEager(t *testing.T, relation string) (string, []any) {
 	child.query.JoinRaw(join, args, "inner")
 	child.query.SelectRaw(q.ident(desc.RelatedTable, "*"), nil)
 
-	statement, bindings, err := child.addGlobalScopes().compileSelect()
+	statement, bindings, err := child.compileSelect()
 	require.NoError(t, err)
 
 	return statement, bindings

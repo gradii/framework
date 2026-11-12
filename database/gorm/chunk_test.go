@@ -421,10 +421,12 @@ func TestLazyByIdWalksTheKeyset(t *testing.T) {
 
 // --- global scopes ---------------------------------------------------------------------------
 
-// chunkScopedUser carries a global scope so the walk's scope folding is pinned: Eloquent applies
-// the model's global scopes inside every page read (chunk -> get -> applyScopes). Oracle
-// (illuminate/database v12.55.1, sqlite, model with a `where active = 1` scope): a plain read
-// compiles `select * from "users" where "active" = ?`; chunk(2) adds the scope before the order
+// chunkScopedUser is the model the scoped walk compiles over: its scope used to be declared
+// GlobalScopes(); it now mounts on the builder with ApplyScope (newChunkScopedQuery), so the walk's
+// scope folding is pinned the same way. Eloquent applies the mounted scopes inside every page read
+// (chunk -> get -> applyScopes). Oracle (illuminate/database v12.55.1, sqlite, model with a
+// `where active = 1` scope): a plain read compiles `select * from "users" where "active" = ?`;
+// chunk(2) adds the scope before the order
 // (`... where "active" = ? order by "users"."id" asc limit 2 offset 0`); chunkById(2) appends it
 // after the keyset guard (`where "id" is not null and "active" = ? order by "id" asc limit 2`,
 // page two `where "id" > ? and "active" = ?`).
@@ -435,14 +437,8 @@ type chunkScopedUser struct {
 
 func (chunkScopedUser) TableName() string { return "chunk_users" }
 
-func (chunkScopedUser) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{{
-		Name:  "PlainEmail",
-		Scope: func(query contractsorm.Query) contractsorm.Query { return query.Where("email", "plain") },
-	}}
-}
-
-// newChunkScopedQuery is newChunkQuery over chunkScopedUser.
+// newChunkScopedQuery is newChunkQuery over chunkScopedUser, with the "PlainEmail" scope mounted on
+// the builder — the mount the model used to declare — before any page read runs.
 func newChunkScopedQuery(t *testing.T) (*OrmBuilder, *chunkStubDriver) {
 	t.Helper()
 
@@ -452,12 +448,16 @@ func newChunkScopedQuery(t *testing.T) (*OrmBuilder, *chunkStubDriver) {
 
 	conditions := Conditions{model: &chunkScopedUser{}}
 
-	return newDialectQuery(context.Background(), nil, contractsdatabase.Config{Driver: "mysql"}, sqlDB, nil, nil, nil, nil, &conditions, nil, mysqlTestComponents()), stub
+	query := newDialectQuery(context.Background(), nil, contractsdatabase.Config{Driver: "mysql"}, sqlDB, nil, nil, nil, nil, &conditions, nil, mysqlTestComponents())
+
+	return query.ApplyScope("PlainEmail", func(query contractsorm.Query) contractsorm.Query {
+		return query.Where("email", "plain")
+	}).(*OrmBuilder), stub
 }
 
-// TestChunkAppliesTheModelsGlobalScopes pins the model's global scope on every chunked read: the
-// scope's where and binding land on every page, the keyset guard first and the scope after it.
-func TestChunkAppliesTheModelsGlobalScopes(t *testing.T) {
+// TestChunkAppliesMountedScopes pins the mounted scope on every chunked read: the scope's where and
+// binding land on every page, the keyset guard first and the scope after it.
+func TestChunkAppliesMountedScopes(t *testing.T) {
 	scopedRow := func(id int64) []driver.Value { return []driver.Value{id, "plain"} }
 
 	t.Run("Chunk", func(t *testing.T) {

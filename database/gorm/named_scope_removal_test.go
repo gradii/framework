@@ -29,8 +29,10 @@ import (
 // "sr_users"."deleted_at" is not null and "email" = ?`; and withoutGlobalScope(SoftDeletingScope)
 // plus onlyTrashed() keeps the `is not null`.
 
-// namedScopeSoftUser declares the framework's soft-delete field and one named user global scope, so
-// a removal must be shown to drop exactly one of them.
+// namedScopeSoftUser declares the framework's soft-delete field and one named user scope, so
+// a removal must be shown to drop exactly one of them. The "nsu_scope" scope used to be declared
+// GlobalScopes(); scopes mount on the builder with ApplyScope now, so the tests mount
+// namedScopeUserScope under the same name themselves (namedScopeQuery, or the relation's OnQuery).
 type namedScopeSoftUser struct {
 	ID     uint
 	UserID uint
@@ -41,10 +43,15 @@ type namedScopeSoftUser struct {
 
 func (namedScopeSoftUser) TableName() string { return "nsu_users" }
 
-func (namedScopeSoftUser) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{
-		{Name: "nsu_scope", Scope: func(q contractsorm.Query) contractsorm.Query { return q.Where("name", "x") }},
-	}
+// namedScopeUserScope is the "nsu_scope" user scope the removal pins mount on the builder.
+func namedScopeUserScope(q contractsorm.Query) contractsorm.Query { return q.Where("name", "x") }
+
+// namedScopeQuery is compiledQuery over namedScopeSoftUser with "nsu_scope" mounted on the builder
+// — the mount the model used to declare — so every removal gate is exercised.
+func namedScopeQuery(t *testing.T) *OrmBuilder {
+	t.Helper()
+
+	return compiledQuery(t, &namedScopeSoftUser{}, Conditions{}).ApplyScope("nsu_scope", namedScopeUserScope).(*OrmBuilder)
 }
 
 // namedScopeSQL compiles the model's read after folding in its global scopes, the way a normal read
@@ -52,7 +59,7 @@ func (namedScopeSoftUser) GlobalScopes() []contractsorm.GlobalScope {
 func namedScopeSQL(t *testing.T, q *OrmBuilder) (string, []any) {
 	t.Helper()
 
-	statement, bindings, err := q.addGlobalScopes().compileSelect()
+	statement, bindings, err := q.compileSelect()
 	require.NoError(t, err)
 
 	return statement, bindings
@@ -62,13 +69,13 @@ func namedScopeSQL(t *testing.T, q *OrmBuilder) (string, []any) {
 // predicate and a user scope side by side.
 func TestSoftDeleteNamedScope_RemovalByNameAndWildcard(t *testing.T) {
 	t.Run("default keeps both", func(t *testing.T) {
-		statement, _ := namedScopeSQL(t, compiledQuery(t, &namedScopeSoftUser{}, Conditions{}))
+		statement, _ := namedScopeSQL(t, namedScopeQuery(t))
 		// Oracle /tmp/r14si/probe.out N1: SoftDeletingScope registers first, so it applies first.
 		assert.Equal(t, `select * from "nsu_users" where "nsu_users"."deleted_at" is null and "name" = ?`, statement)
 	})
 
 	t.Run("removing the SoftDeletingScope name drops only the predicate", func(t *testing.T) {
-		q := compiledQuery(t, &namedScopeSoftUser{}, Conditions{}).
+		q := namedScopeQuery(t).
 			WithoutGlobalScopes(contractsorm.SoftDeletingScope).(*OrmBuilder)
 
 		statement, _ := namedScopeSQL(t, q)
@@ -76,7 +83,7 @@ func TestSoftDeleteNamedScope_RemovalByNameAndWildcard(t *testing.T) {
 	})
 
 	t.Run("the literal Laravel key removes it too", func(t *testing.T) {
-		q := compiledQuery(t, &namedScopeSoftUser{}, Conditions{}).
+		q := namedScopeQuery(t).
 			WithoutGlobalScopes("Illuminate\\Database\\Eloquent\\SoftDeletingScope").(*OrmBuilder)
 
 		statement, _ := namedScopeSQL(t, q)
@@ -84,7 +91,7 @@ func TestSoftDeleteNamedScope_RemovalByNameAndWildcard(t *testing.T) {
 	})
 
 	t.Run("removing a user scope keeps the predicate", func(t *testing.T) {
-		q := compiledQuery(t, &namedScopeSoftUser{}, Conditions{}).
+		q := namedScopeQuery(t).
 			WithoutGlobalScopes("nsu_scope").(*OrmBuilder)
 
 		statement, _ := namedScopeSQL(t, q)
@@ -92,14 +99,14 @@ func TestSoftDeleteNamedScope_RemovalByNameAndWildcard(t *testing.T) {
 	})
 
 	t.Run("withoutGlobalScopes() drops both", func(t *testing.T) {
-		q := compiledQuery(t, &namedScopeSoftUser{}, Conditions{}).WithoutGlobalScopes().(*OrmBuilder)
+		q := namedScopeQuery(t).WithoutGlobalScopes().(*OrmBuilder)
 
 		statement, _ := namedScopeSQL(t, q)
 		assert.Equal(t, `select * from "nsu_users"`, statement)
 	})
 
 	t.Run("onlyTrashed renders is not null", func(t *testing.T) {
-		q := compiledQuery(t, &namedScopeSoftUser{}, Conditions{}).OnlyTrashed().(*OrmBuilder)
+		q := namedScopeQuery(t).OnlyTrashed().(*OrmBuilder)
 
 		statement, _ := namedScopeSQL(t, q)
 		// Oracle /tmp/r14si/probe.out N2/N3: onlyTrashed writes its predicate at call time, before
@@ -108,7 +115,7 @@ func TestSoftDeleteNamedScope_RemovalByNameAndWildcard(t *testing.T) {
 	})
 
 	t.Run("named removal plus onlyTrashed keeps is not null", func(t *testing.T) {
-		q := compiledQuery(t, &namedScopeSoftUser{}, Conditions{}).
+		q := namedScopeQuery(t).
 			WithoutGlobalScopes(contractsorm.SoftDeletingScope).(*OrmBuilder).OnlyTrashed().(*OrmBuilder)
 
 		statement, _ := namedScopeSQL(t, q)
@@ -139,14 +146,15 @@ func (namedScopeEagerUser) TableName() string { return "nsu_users" }
 
 func (namedScopeEagerUser) Relations() map[string]contractsorm.Relation {
 	return map[string]contractsorm.Relation{
-		"Posts": contractsorm.HasMany{Related: &namedScopeSoftUser{}, ForeignKey: "user_id"},
+		"Posts": contractsorm.HasMany{Related: &namedScopeSoftUser{}, ForeignKey: "user_id",
+			OnQuery: func(q contractsorm.Query) contractsorm.Query { return q.ApplyScope("nsu_scope", namedScopeUserScope) }},
 	}
 }
 
-// TestSoftDeleteNamedScope_EagerKeepsUserScopes pins the eager path's named removal: the related
-// model is still bound (so its user global scopes queue) and only the soft-delete predicate is
-// dropped — the split the eager runner's binding gate keeps by skipping the related-model bind only
-// for the all-scope "*", never for a single name. Oracle (illuminate/database v12.55.1, real sqlite,
+// TestSoftDeleteNamedScope_EagerKeepsUserScopes pins the eager path's named removal: the relation's
+// own mount survives (it reaches the eager child) and only the soft-delete predicate is dropped — the
+// split the eager runner's binding gate keeps by skipping the related-model bind only for the
+// all-scope "*", never for a single name. Oracle (illuminate/database v12.55.1, real sqlite,
 // /tmp/r12/scope_removal_probe2.php §F9): the eager read drops `deleted_at is null`; §F4 shows a
 // named related removal leaves the through predicate, and §E shows withTrashedParents keeps it —
 // each removal reaches exactly its own scope.

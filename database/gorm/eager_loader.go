@@ -701,7 +701,6 @@ func (r *OrmBuilder) runMany2ManyQueryCompiled(child *OrmBuilder, desc *relation
 	// too (addGlobalScopes; see runRelatedQueryCompiled for the full note).
 	if desc.RelatedModel != nil && !slices.Contains(child.conditions.removedScopes, "*") {
 		child = child.Model(desc.RelatedModel).(*OrmBuilder)
-		child = child.addGlobalScopes()
 	}
 
 	// The related key survives column pruning, so the model still hydrates its own identity.
@@ -1020,7 +1019,6 @@ func (r *OrmBuilder) runRelatedQueryCompiled(child *OrmBuilder, desc *relationDe
 	// applied by applySoftDelete.
 	if desc.RelatedModel != nil && !slices.Contains(child.conditions.removedScopes, "*") {
 		child = child.Model(desc.RelatedModel).(*OrmBuilder)
-		child = child.addGlobalScopes()
 	}
 
 	if len(entry.Columns) > 0 {

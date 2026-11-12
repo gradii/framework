@@ -61,9 +61,9 @@ func (r *ToSql) Delete(dests ...any) string {
 
 	if len(dests) > 0 {
 		dest = dests[0]
-		query = r.query.dest(dest).addGlobalScopes().buildConditions()
+		query = r.query.dest(dest).buildConditions()
 	} else {
-		query = r.query.addGlobalScopes().buildConditions()
+		query = r.query.buildConditions()
 	}
 
 	// A soft-delete model is not removed: the statement the ORM runs is the update that stamps the
@@ -85,7 +85,7 @@ func (r *ToSql) Delete(dests ...any) string {
 }
 
 func (r *ToSql) Find(dest any, conds ...any) string {
-	query := r.query.dest(dest).addGlobalScopes().buildConditions()
+	query := r.query.dest(dest).buildConditions()
 	query = query.withFindConditions(conds)
 
 	statement, bindings, err := query.compileFind(conds)
@@ -94,7 +94,7 @@ func (r *ToSql) Find(dest any, conds ...any) string {
 }
 
 func (r *ToSql) First(dest any) string {
-	query := r.query.dest(dest).addGlobalScopes().buildConditions()
+	query := r.query.dest(dest).buildConditions()
 
 	statement, bindings, err := query.compileFirst()
 
@@ -109,9 +109,9 @@ func (r *ToSql) ForceDelete(dests ...any) string {
 
 	if len(dests) > 0 {
 		dest = dests[0]
-		query = r.query.dest(dest).WithTrashed().(*OrmBuilder).addGlobalScopes().buildConditions()
+		query = r.query.dest(dest).WithTrashed().(*OrmBuilder).buildConditions()
 	} else {
-		query = r.query.WithTrashed().(*OrmBuilder).addGlobalScopes().buildConditions()
+		query = r.query.WithTrashed().(*OrmBuilder).buildConditions()
 	}
 
 	statement, bindings, err := query.compileDelete()
@@ -133,7 +133,7 @@ func (r *ToSql) Pluck(column string, dest any) string {
 	// the columns when the decision runs, so the preview reports `select name from "users"` for a
 	// selectRaw('name') scope and `select "name" from "users"` for a select('name') scope (oracle,
 	// illuminate/database v12.55.1, executed against sqlite).
-	query := r.query.dest(dest).addGlobalScopes().withScopesApplied().buildConditions()
+	query := r.query.dest(dest).withScopesApplied().buildConditions()
 
 	// Builder::pluck installs the column through onceWithColumns, which writes the select list
 	// only when the query carries none: a select list the caller pre-set survives, a queued
@@ -180,7 +180,7 @@ func (r *ToSql) Save(dest any) string {
 
 	// A model that carries a key is updated by that key, with the columns Save writes (see
 	// saveAssignments): the statement Save runs.
-	query := r.query.dest(dest).addGlobalScopes().buildConditions()
+	query := r.query.dest(dest).buildConditions()
 
 	assignments, err := query.saveAssignments(dest)
 	if err != nil {
@@ -199,7 +199,7 @@ func (r *ToSql) Save(dest any) string {
 func (r *ToSql) Sum(column string, dest any) string {
 	// dest names the model the summed column belongs to, exactly as it does when the ORM runs Sum
 	// through the model: without it the aggregate compiles with no FROM clause.
-	query := r.query.dest(dest).addGlobalScopes().buildConditions()
+	query := r.query.dest(dest).buildConditions()
 
 	statement, bindings, err := query.compileAggregate("sum", []any{column})
 
@@ -211,7 +211,7 @@ func (r *ToSql) Update(column any, value ...any) string {
 		return ""
 	}
 
-	query := r.query.addGlobalScopes().buildConditions()
+	query := r.query.buildConditions()
 
 	values := column
 	if name, ok := column.(string); ok && len(value) > 0 {

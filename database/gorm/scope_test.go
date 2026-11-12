@@ -11,17 +11,25 @@ import (
 	"github.com/gradii/framework/errors"
 )
 
-// TestCompileSelect_AppliesGlobalScopes pins that a model's global scopes reach the compiled
+// statementScopes mounts the two scopes the pins in this file compile against — "active" then
+// "verified", in that order — the way the model that used to declare them did. Scopes mount on the
+// builder (ApplyScope) rather than on a model, so the pins keep asserting the same statements.
+func statementScopes(query contractsorm.Query) *OrmBuilder {
+	return query.
+		ApplyScope("active", func(q contractsorm.Query) contractsorm.Query { return q.Where("active", true) }).
+		ApplyScope("verified", func(q contractsorm.Query) contractsorm.Query { return q.Where("verified", true) }).(*OrmBuilder)
+}
+
+// TestCompileSelect_AppliesMountedScopes pins that the scopes a query carries reach the compiled
 // statement. They used to be attached only to the statement GORM was given, which the compiled path
-// does not read, so a scoped model would have queried every row.
-func TestCompileSelect_AppliesGlobalScopes(t *testing.T) {
-	query := compiledQuery(t, &ModelWithGlobalScopes{}, Conditions{}).addGlobalScopes()
+// does not read, so a scoped query would have read every row.
+func TestCompileSelect_AppliesMountedScopes(t *testing.T) {
+	query := statementScopes(compiledQuery(t, &scopedStatementModel{}, Conditions{}))
 
 	statement, bindings, err := query.compileSelect()
 	require.NoError(t, err)
 
-	// The scopes apply in declaration order — the order the model's GlobalScopes() lists them — so
-	// the statement reads the same each time.
+	// The scopes apply in mount order, so the statement reads the same each time.
 	assert.Contains(t, statement, `"active" = ?`)
 	assert.Contains(t, statement, `"verified" = ?`)
 	assert.Equal(t, []any{true, true}, bindings)
@@ -48,28 +56,28 @@ func TestCompileSelect_AppliesUserScopes(t *testing.T) {
 	assert.Equal(t, []any{1, "scoped"}, bindings)
 }
 
-// TestCompileSelect_SkipsExcludedGlobalScopes pins that WithoutGlobalScopes still decides which scopes
-// apply, now that the compiled statement is the one that runs.
-func TestCompileSelect_SkipsExcludedGlobalScopes(t *testing.T) {
-	excluded, ok := compiledQuery(t, &ModelWithGlobalScopes{}, Conditions{}).
-		WithoutGlobalScopes("active").(*OrmBuilder)
+// TestCompileSelect_SkipsARemovedScope pins that a removal decides which scopes apply, now that the
+// compiled statement is the one that runs.
+func TestCompileSelect_SkipsARemovedScope(t *testing.T) {
+	excluded, ok := statementScopes(compiledQuery(t, &scopedStatementModel{}, Conditions{})).
+		RemoveScope("active").(*OrmBuilder)
 	require.True(t, ok)
 
-	statement, _, err := excluded.addGlobalScopes().compileSelect()
+	statement, _, err := excluded.compileSelect()
 	require.NoError(t, err)
 
 	assert.NotContains(t, statement, `"active" = ?`)
 	assert.Contains(t, statement, `"verified" = ?`)
 }
 
-// TestCompileDelete_AppliesGlobalScopes pins that a model's global scopes are folded in before the
-// missing-where guard, so a scoped delete is compiled rather than refused.
+// TestCompileDelete_AppliesMountedScopes pins that the scopes a query carries are folded in before
+// the missing-where guard, so a scoped delete is compiled rather than refused.
 //
 // The guard used to read the query's own conditions only, while the scope's where landed on a copy
-// built inside newBuilder, so Model(&Scoped{}).Delete() returned errors.OrmMissingWhereClause even
-// though the statement it would have run was constrained by the scope.
-func TestCompileDelete_AppliesGlobalScopes(t *testing.T) {
-	query := compiledQuery(t, &ModelWithGlobalScopes{}, Conditions{}).addGlobalScopes()
+// built inside newBuilder, so a scoped Delete() returned errors.OrmMissingWhereClause even though the
+// statement it would have run was constrained by the scope.
+func TestCompileDelete_AppliesMountedScopes(t *testing.T) {
+	query := statementScopes(compiledQuery(t, &scopedStatementModel{}, Conditions{}))
 
 	statement, bindings, err := query.compileDelete()
 	require.NoError(t, err)
@@ -80,10 +88,10 @@ func TestCompileDelete_AppliesGlobalScopes(t *testing.T) {
 	assert.Equal(t, []any{true, true}, bindings)
 }
 
-// TestCompileUpdate_AppliesGlobalScopes pins the same for an update, which is the other statement the
-// guard refuses when nothing names the rows.
-func TestCompileUpdate_AppliesGlobalScopes(t *testing.T) {
-	query := compiledQuery(t, &ModelWithGlobalScopes{}, Conditions{}).addGlobalScopes()
+// TestCompileUpdate_AppliesMountedScopes pins the same for an update, which is the other statement
+// the guard refuses when nothing names the rows.
+func TestCompileUpdate_AppliesMountedScopes(t *testing.T) {
+	query := statementScopes(compiledQuery(t, &scopedStatementModel{}, Conditions{}))
 
 	statement, bindings, err := query.compileUpdate(map[string]any{"name": "x"})
 	require.NoError(t, err)
@@ -106,25 +114,24 @@ func TestCompileDelete_ScopeWithoutWhereStillRefused(t *testing.T) {
 	assert.ErrorIs(t, err, errors.OrmMissingWhereClause)
 }
 
-// modelWithOrderedGlobalScopes declares its scopes with the later name first, so the compiled where
-// order shows whether the ORM kept the declaration order or sorted the names.
-type modelWithOrderedGlobalScopes struct {
+// orderedScopes mounts its scopes with the later name first, so the compiled where order shows
+// whether the ORM kept the mount order or sorted the names.
+type orderedScopeModel struct {
 	ID uint
 }
 
-func (modelWithOrderedGlobalScopes) TableName() string { return "model_with_ordered_global_scopes" }
+func (orderedScopeModel) TableName() string { return "model_with_ordered_global_scopes" }
 
-func (modelWithOrderedGlobalScopes) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{
-		{Name: "z_scope", Scope: func(query contractsorm.Query) contractsorm.Query { return query.Where("z_col", 1) }},
-		{Name: "a_scope", Scope: func(query contractsorm.Query) contractsorm.Query { return query.Where("a_col", 2) }},
-	}
+func orderedScopes(query contractsorm.Query) *OrmBuilder {
+	return query.
+		ApplyScope("z_scope", func(q contractsorm.Query) contractsorm.Query { return q.Where("z_col", 1) }).
+		ApplyScope("a_scope", func(q contractsorm.Query) contractsorm.Query { return q.Where("a_col", 2) }).(*OrmBuilder)
 }
 
-// TestCompileSelect_AppliesGlobalScopesInDeclarationOrder pins that a model's scopes apply in the
-// order GlobalScopes() declares them — Laravel's registration order — rather than in name order.
-func TestCompileSelect_AppliesGlobalScopesInDeclarationOrder(t *testing.T) {
-	query := compiledQuery(t, &modelWithOrderedGlobalScopes{}, Conditions{}).addGlobalScopes()
+// TestCompileSelect_AppliesMountedScopesInMountOrder pins that scopes apply in the order they were
+// mounted — Laravel's registration order — rather than in name order.
+func TestCompileSelect_AppliesMountedScopesInMountOrder(t *testing.T) {
+	query := orderedScopes(compiledQuery(t, &orderedScopeModel{}, Conditions{}))
 
 	statement, bindings, err := query.compileSelect()
 	require.NoError(t, err)
@@ -133,11 +140,11 @@ func TestCompileSelect_AppliesGlobalScopesInDeclarationOrder(t *testing.T) {
 	assert.Equal(t, []any{1, 2}, bindings)
 
 	// Removal still names the scope by its identity.
-	excluded, ok := compiledQuery(t, &modelWithOrderedGlobalScopes{}, Conditions{}).
-		WithoutGlobalScopes("z_scope").(*OrmBuilder)
+	excluded, ok := orderedScopes(compiledQuery(t, &orderedScopeModel{}, Conditions{})).
+		RemoveScope("z_scope").(*OrmBuilder)
 	require.True(t, ok)
 
-	statement, bindings, err = excluded.addGlobalScopes().compileSelect()
+	statement, bindings, err = excluded.compileSelect()
 	require.NoError(t, err)
 
 	assert.Contains(t, statement, `where "a_col" = ?`)
@@ -239,28 +246,30 @@ func TestCompileSelect_ScopesLeadingOrAppliesImmediately(t *testing.T) {
 	assert.Equal(t, []any{1, 0, 1}, bindings)
 }
 
-// scopeOrderContrastModel carries a model global scope whose or-chain must stay deferred — the
-// contrast to the immediate Scopes() above. Its table matches the oracle probe's model so the
-// pinned statement byte-matches.
+// scopeOrderContrastModel is the table the deferred-orX pin compiles against: its table matches the
+// oracle probe's model so the pinned statement byte-matches.
 type scopeOrderContrastModel struct {
 	ID uint
 }
 
 func (scopeOrderContrastModel) TableName() string { return "rel_users" }
 
-func (scopeOrderContrastModel) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{
-		{Name: "or_x", Scope: func(query contractsorm.Query) contractsorm.Query { return query.Where("x", 1).OrWhere("y", 2) }},
-	}
+// orXScope is the or-chain the deferred pin mounts: a mounted scope applies when the statement
+// compiles (applyScopes), so it lands after every where the caller wrote — the contrast to the
+// immediate Scopes() above.
+func orXScope(query contractsorm.Query) contractsorm.Query {
+	return query.Where("x", 1).OrWhere("y", 2)
 }
 
-// TestCompileSelect_GlobalScopesStayDeferred pins the contrast the local-scope fix must keep: a
-// model's global scope is registered the way withGlobalScope() registers it and applied when the
-// statement compiles (applyScopes), so it lands after every where the caller wrote — the shape the
-// oracle records for a deferred scope. Oracle (/tmp/scope_order_repin.php): where('c', 1) plus a
-// registered orX global scope -> where "c" = ? and ("x" = ? or "y" = ?).
-func TestCompileSelect_GlobalScopesStayDeferred(t *testing.T) {
-	query := compiledQuery(t, &scopeOrderContrastModel{}, Conditions{}).Where("c", 1).(*OrmBuilder).addGlobalScopes()
+// TestCompileSelect_MountedScopesStayDeferred pins the contrast the local-scope fix must keep: a
+// mounted scope is registered the way withGlobalScope() registers it and applied when the statement
+// compiles (applyScopes), so it lands after every where the caller wrote — the shape the oracle
+// records for a deferred scope. Oracle (/tmp/scope_order_repin.php): where('c', 1) plus a registered
+// orX global scope -> where "c" = ? and ("x" = ? or "y" = ?).
+func TestCompileSelect_MountedScopesStayDeferred(t *testing.T) {
+	query := compiledQuery(t, &scopeOrderContrastModel{}, Conditions{}).
+		Where("c", 1).
+		ApplyScope("or_x", orXScope).(*OrmBuilder)
 
 	statement, bindings, err := query.compileSelect()
 	require.NoError(t, err)
@@ -269,25 +278,23 @@ func TestCompileSelect_GlobalScopesStayDeferred(t *testing.T) {
 	assert.Equal(t, []any{1, 1, 2}, bindings)
 }
 
-// modelWithEagerLoadGlobalScope declares a global scope whose with() must reach the query the
-// statement is compiled from: the read's eager-load pass runs from that query, not from a copy.
-type modelWithEagerLoadGlobalScope struct {
+// withRelatedScope is a scope whose with() must reach the query the statement is compiled from: the
+// read's eager-load pass runs from that query, not from a copy.
+func withRelatedScope(query contractsorm.Query) contractsorm.Query { return query.With("related") }
+
+// eagerLoadScopeModel is the table the scope-added eager-load pin compiles against.
+type eagerLoadScopeModel struct {
 	ID uint
 }
 
-func (modelWithEagerLoadGlobalScope) TableName() string { return "model_with_eager_load_global_scope" }
-
-func (modelWithEagerLoadGlobalScope) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{
-		{Name: "with_related", Scope: func(query contractsorm.Query) contractsorm.Query { return query.With("related") }},
-	}
-}
+func (eagerLoadScopeModel) TableName() string { return "model_with_eager_load_global_scope" }
 
 // TestCompileSelect_FoldsScopeEagerLoadsBack pins that a scope's with() lands on the compiled query:
 // Laravel's applyScopes returns the scoped builder, and get()/first() run their eager-load pass from
 // it, so the scope-added loads must survive the compile.
 func TestCompileSelect_FoldsScopeEagerLoadsBack(t *testing.T) {
-	query := compiledQuery(t, &modelWithEagerLoadGlobalScope{}, Conditions{}).addGlobalScopes()
+	query := compiledQuery(t, &eagerLoadScopeModel{}, Conditions{}).
+		ApplyScope("with_related", withRelatedScope).(*OrmBuilder)
 
 	_, _, err := query.compileSelect()
 	require.NoError(t, err)

@@ -99,7 +99,7 @@ func TestRelated_MorphTo_LazyGet_PointerMorphPairResolves(t *testing.T) {
 	// statement the unwrapped key, not the pointer or the wrapper.
 	relBuilder, ok := ormBuilderOf(rel)
 	require.True(t, ok)
-	statement, bindings, err := relBuilder.dest(&morphParentLikePost{}).addGlobalScopes().compileSelect()
+	statement, bindings, err := relBuilder.dest(&morphParentLikePost{}).compileSelect()
 	require.NoError(t, err)
 	assert.Contains(t, statement, `from "morph_parent_like_posts"`)
 	assert.Equal(t, []any{"42"}, bindings)
@@ -160,7 +160,7 @@ func TestRelated_MorphTo_LazyGet_ValueWrapperMorphPairResolves(t *testing.T) {
 
 	relBuilder, ok := ormBuilderOf(q.Related(parent, "Imageable"))
 	require.True(t, ok)
-	statement, bindings, err := relBuilder.dest(&morphParentLikePost{}).addGlobalScopes().compileSelect()
+	statement, bindings, err := relBuilder.dest(&morphParentLikePost{}).compileSelect()
 	require.NoError(t, err)
 	assert.Contains(t, statement, `from "morph_parent_like_posts"`)
 	assert.Equal(t, []any{"42"}, bindings)

@@ -37,11 +37,8 @@ type scrSrUserTrashedScope struct {
 
 func (scrSrUserTrashedScope) TableName() string { return "sr_users" }
 
-func (scrSrUserTrashedScope) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{
-		{Name: "trashedOnly", Scope: func(q contractsorm.Query) contractsorm.Query { return q.OnlyTrashed() }},
-	}
-}
+// scrTrashedOnlyScope is the "trashedOnly" scope the trashed fixtures used to declare.
+func scrTrashedOnlyScope(q contractsorm.Query) contractsorm.Query { return q.OnlyTrashed() }
 
 type scrSrUserTrashedMidScope struct {
 	ID    uint
@@ -51,12 +48,9 @@ type scrSrUserTrashedMidScope struct {
 
 func (scrSrUserTrashedMidScope) TableName() string { return "sr_users" }
 
-func (scrSrUserTrashedMidScope) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{
-		{Name: "activeTrashed", Scope: func(q contractsorm.Query) contractsorm.Query {
-			return q.Where("active", 1).OnlyTrashed().Where("id", 9)
-		}},
-	}
+// scrActiveTrashedScope is the "activeTrashed" scope the mid fixture used to declare.
+func scrActiveTrashedScope(q contractsorm.Query) contractsorm.Query {
+	return q.Where("active", 1).OnlyTrashed().Where("id", 9)
 }
 
 type scrSrUserTrashedOrScope struct {
@@ -67,12 +61,9 @@ type scrSrUserTrashedOrScope struct {
 
 func (scrSrUserTrashedOrScope) TableName() string { return "sr_users" }
 
-func (scrSrUserTrashedOrScope) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{
-		{Name: "orTrashed", Scope: func(q contractsorm.Query) contractsorm.Query {
-			return q.Where("active", 1).OrWhere("active", 2).OnlyTrashed()
-		}},
-	}
+// scrOrTrashedScope is the "orTrashed" scope the or fixture used to declare.
+func scrOrTrashedScope(q contractsorm.Query) contractsorm.Query {
+	return q.Where("active", 1).OrWhere("active", 2).OnlyTrashed()
 }
 
 type scrCase struct {
@@ -87,7 +78,7 @@ func runScrCases(t *testing.T, cases []scrCase) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			statement, bindings, err := tc.query.(*OrmBuilder).addGlobalScopes().compileSelect()
+			statement, bindings, err := tc.query.(*OrmBuilder).compileSelect()
 			require.NoError(t, err)
 			assert.Equal(t, tc.sql, statement)
 			if tc.bindings == nil {
@@ -106,15 +97,18 @@ func runScrCases(t *testing.T, cases []scrCase) {
 // scope's or-group). A caller's onlyTrashed / withTrashed removes the scope first (G4, G5), and
 // removing the user scope by name leaves the plain read (G6).
 func TestScopeComposition_OnlyTrashedInsideAGlobalScope(t *testing.T) {
-	trashedScope := func() *OrmBuilder { return compiledQuery(t, &scrSrUserTrashedScope{}, Conditions{}) }
+	trashedScope := func() *OrmBuilder {
+		return compiledQuery(t, &scrSrUserTrashedScope{}, Conditions{}).
+			ApplyScope("trashedOnly", scrTrashedOnlyScope).(*OrmBuilder)
+	}
 
 	runScrCases(t, []scrCase{
 		{"G1 scope calls onlyTrashed", trashedScope().Where("email", "a"), `select * from "sr_users" where "email" = ? and "sr_users"."deleted_at" is null and "sr_users"."deleted_at" is not null`, []any{"a"}},
-		{"G2 onlyTrashed between the scope's own wheres", compiledQuery(t, &scrSrUserTrashedMidScope{}, Conditions{}).Where("email", "a").OrWhere("email", "b"), `select * from "sr_users" where ("email" = ? or "email" = ?) and "sr_users"."deleted_at" is null and "active" = ? and "sr_users"."deleted_at" is not null and "id" = ?`, []any{"a", "b", 1, 9}},
-		{"G3 onlyTrashed inside the scope's or-group", compiledQuery(t, &scrSrUserTrashedOrScope{}, Conditions{}).Where("email", "a"), `select * from "sr_users" where "email" = ? and "sr_users"."deleted_at" is null and ("active" = ? or "active" = ? and "sr_users"."deleted_at" is not null)`, []any{"a", 1, 2}},
+		{"G2 onlyTrashed between the scope's own wheres", compiledQuery(t, &scrSrUserTrashedMidScope{}, Conditions{}).ApplyScope("activeTrashed", scrActiveTrashedScope).(*OrmBuilder).Where("email", "a").OrWhere("email", "b"), `select * from "sr_users" where ("email" = ? or "email" = ?) and "sr_users"."deleted_at" is null and "active" = ? and "sr_users"."deleted_at" is not null and "id" = ?`, []any{"a", "b", 1, 9}},
+		{"G3 onlyTrashed inside the scope's or-group", compiledQuery(t, &scrSrUserTrashedOrScope{}, Conditions{}).ApplyScope("orTrashed", scrOrTrashedScope).(*OrmBuilder).Where("email", "a"), `select * from "sr_users" where "email" = ? and "sr_users"."deleted_at" is null and ("active" = ? or "active" = ? and "sr_users"."deleted_at" is not null)`, []any{"a", 1, 2}},
 		{"G4 caller onlyTrashed and scope onlyTrashed", trashedScope().OnlyTrashed().Where("email", "a"), `select * from "sr_users" where "sr_users"."deleted_at" is not null and "email" = ? and "sr_users"."deleted_at" is not null`, []any{"a"}},
 		{"G5 caller withTrashed and scope onlyTrashed", trashedScope().WithTrashed().Where("email", "a"), `select * from "sr_users" where "email" = ? and "sr_users"."deleted_at" is not null`, []any{"a"}},
-		{"G6 the scope removed by name", trashedScope().WithoutGlobalScopes("trashedOnly").Where("email", "a"), `select * from "sr_users" where "email" = ? and "sr_users"."deleted_at" is null`, []any{"a"}},
+		{"G6 the scope removed by name", trashedScope().RemoveScope("trashedOnly").Where("email", "a"), `select * from "sr_users" where "email" = ? and "sr_users"."deleted_at" is null`, []any{"a"}},
 	})
 }
 
@@ -175,7 +169,7 @@ func TestScopeComposition_WhereHasInsideAWhereClosure(t *testing.T) {
 func TestScopeComposition_WhereClosureGroupWithTheModelFromTheDestination(t *testing.T) {
 	destOnly := func() *OrmBuilder { return compiledQuery(t, nil, Conditions{}) }
 	compile := func(q contractsorm.Query, dest any) (string, []any) {
-		statement, bindings, err := q.(*OrmBuilder).dest(dest).addGlobalScopes().compileSelect()
+		statement, bindings, err := q.(*OrmBuilder).dest(dest).compileSelect()
 		require.NoError(t, err)
 
 		return statement, bindings
@@ -187,7 +181,10 @@ func TestScopeComposition_WhereClosureGroupWithTheModelFromTheDestination(t *tes
 	assert.Equal(t, `select * from "sd_users" where "id" = ? and ("email" = ? and exists (select * from "sd_posts" where "sd_users"."id" = "sd_posts"."sd_user_id" and "sd_posts"."deleted_at" is null)) and "sd_users"."deleted_at" is null`, statement)
 	assert.Equal(t, []any{1, "a"}, bindings)
 
-	statement, bindings = compile(destOnly().Where("id", 1).Where(func(q contractsorm.Query) contractsorm.Query {
+	// The scope the model used to declare is mounted here: a dest-only query resolves its model from
+	// the destination (the soft-delete predicate below proves it), and the mount lands after the
+	// caller's wheres the way a deferred scope does.
+	statement, bindings = compile(destOnly().ApplyScope("trashedOnly", scrTrashedOnlyScope).Where("id", 1).Where(func(q contractsorm.Query) contractsorm.Query {
 		return q.Where("email", "a").OnlyTrashed()
 	}), &[]scrSrUserTrashedScope{})
 	assert.Equal(t, `select * from "sr_users" where "id" = ? and ("email" = ? and "sr_users"."deleted_at" is not null) and "sr_users"."deleted_at" is null and "sr_users"."deleted_at" is not null`, statement)
@@ -271,16 +268,29 @@ type scrOfManyOwner struct {
 
 func (scrOfManyOwner) TableName() string { return "rel_deep_owners" }
 
+// scrActiveScope is the related model's "active" scope mounted explicitly: scopes mount on the
+// builder with ApplyScope now, so the relation's default query mounts it the way the model
+// used to declare it.
+func scrActiveScope(q contractsorm.Query) contractsorm.Query { return q.Where("active", 1) }
+
 func (scrOfManyOwner) Relations() map[string]contractsorm.Relation {
 	return map[string]contractsorm.Relation{
 		"RmAfter": contractsorm.HasOne{Related: &relDeepMid{}, ForeignKey: "owner_id",
-			OnQuery: func(q contractsorm.Query) contractsorm.Query { return q.OfMany("", "").WithoutGlobalScopes("active") }},
+			OnQuery: func(q contractsorm.Query) contractsorm.Query {
+				return q.ApplyScope("active", scrActiveScope).OfMany("", "").WithoutGlobalScopes("active")
+			}},
 		"RmAllAfter": contractsorm.HasOne{Related: &relDeepMid{}, ForeignKey: "owner_id",
-			OnQuery: func(q contractsorm.Query) contractsorm.Query { return q.OfMany("", "").WithoutGlobalScopes() }},
+			OnQuery: func(q contractsorm.Query) contractsorm.Query {
+				return q.ApplyScope("active", scrActiveScope).OfMany("", "").WithoutGlobalScopes()
+			}},
 		"WtAfter": contractsorm.HasOne{Related: &relDeepMid{}, ForeignKey: "owner_id",
-			OnQuery: func(q contractsorm.Query) contractsorm.Query { return q.OfMany("", "").WithTrashed() }},
+			OnQuery: func(q contractsorm.Query) contractsorm.Query {
+				return q.ApplyScope("active", scrActiveScope).OfMany("", "").WithTrashed()
+			}},
 		"OtAfter": contractsorm.HasOne{Related: &relDeepMid{}, ForeignKey: "owner_id",
-			OnQuery: func(q contractsorm.Query) contractsorm.Query { return q.OfMany("", "").OnlyTrashed() }},
+			OnQuery: func(q contractsorm.Query) contractsorm.Query {
+				return q.ApplyScope("active", scrActiveScope).OfMany("", "").OnlyTrashed()
+			}},
 		"WtBefore": contractsorm.HasOne{Related: &relDeepMid{}, ForeignKey: "owner_id",
 			OnQuery: func(q contractsorm.Query) contractsorm.Query { return q.WithTrashed().OfMany("", "") }},
 		"OtWhere": contractsorm.HasMany{Related: &relDeepMid{}, ForeignKey: "owner_id",
@@ -450,11 +460,9 @@ type scrEagerPost struct {
 
 func (scrEagerPost) TableName() string { return "ro_posts" }
 
-func (scrEagerPost) GlobalScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{
-		{Name: "visible", Scope: func(q contractsorm.Query) contractsorm.Query { return q.Where("visible", 1) }},
-	}
-}
+// scrVisibleScope is the "visible" scope the eager fixtures used to declare on the related model;
+// the relations below mount it on their own query, which is where the scope belongs now.
+func scrVisibleScope(q contractsorm.Query) contractsorm.Query { return q.Where("visible", 1) }
 
 type scrEagerUser struct {
 	ID    uint
@@ -466,14 +474,17 @@ func (scrEagerUser) TableName() string { return "ro_users" }
 
 func (scrEagerUser) Relations() map[string]contractsorm.Relation {
 	return map[string]contractsorm.Relation{
-		"Posts": contractsorm.HasMany{Related: &scrEagerPost{}, ForeignKey: "user_id"},
-		"Post":  contractsorm.HasOne{Related: &scrEagerPost{}, ForeignKey: "user_id"},
+		"Posts": contractsorm.HasMany{Related: &scrEagerPost{}, ForeignKey: "user_id",
+			OnQuery: func(q contractsorm.Query) contractsorm.Query { return q.ApplyScope("visible", scrVisibleScope) }},
+		"Post": contractsorm.HasOne{Related: &scrEagerPost{}, ForeignKey: "user_id",
+			OnQuery: func(q contractsorm.Query) contractsorm.Query { return q.ApplyScope("visible", scrVisibleScope) }},
 	}
 }
 
 // TestScopeComposition_PlainEagerReadOfASoftDeletableScopedModel pins the plain (non-of-many) eager
-// read of a related model carrying both the framework soft delete and a user scope: the soft-delete
-// predicate, as the first applied scope, precedes the user scope after the eager key list (oracle
+// read of a relation whose related model carries the framework soft delete and whose own query
+// carries a mounted user scope: the soft-delete predicate, as the first mounted rule, precedes the
+// scope after the eager key list (oracle
 // E1/E2: `where "ro_posts"."user_id" in (1) and "ro_posts"."deleted_at" is null and "visible" = ?`;
 // the port binds the eager keys, the shape every eager pin in this package asserts).
 func TestScopeComposition_PlainEagerReadOfASoftDeletableScopedModel(t *testing.T) {
@@ -624,9 +635,17 @@ type scrTrashedScopePost struct {
 
 func (scrTrashedScopePost) TableName() string { return "sd_posts" }
 
+// scrTrashedOnlyPostScope is the "trashedOnly" scope of the related fixtures. The model still
+// declares it, because the existence / count bodies read it through the related-model replay
+// (applyRelatedGlobalScopes, removed in the next step); the lazy reads below mount it on the relation
+// query, which is where a plain read picks a scope up now.
+func scrTrashedOnlyPostScope(q contractsorm.Query) contractsorm.Query {
+	return q.Where("id", ">", 0).OnlyTrashed()
+}
+
 func (scrTrashedScopePost) GlobalScopes() []contractsorm.GlobalScope {
 	return []contractsorm.GlobalScope{
-		{Name: "trashedOnly", Scope: func(q contractsorm.Query) contractsorm.Query { return q.Where("id", ">", 0).OnlyTrashed() }},
+		{Name: "trashedOnly", Scope: scrTrashedOnlyPostScope},
 	}
 }
 
@@ -692,10 +711,18 @@ func TestScopeComposition_RelatedScopeCallingOnlyTrashedInsideASubquery(t *testi
 
 	t.Run("E4 lazy read", func(t *testing.T) {
 		rel := newRelQueryWith(t, &scrTrashedScopePost{}).Related(&scrTrashedScopeUser{ID: 1}, "Tposts")
+		// The scope the related model used to declare mounts on the relation query here: the lazy
+		// read is a plain read, and a plain read carries the mounts the builder has.
+		built, ok := ormBuilderOf(rel)
+		require.True(t, ok)
+		built.ApplyScope("trashedOnly", scrTrashedOnlyPostScope)
 		assert.Equal(t, `select * from "sd_posts" where "sd_posts"."sd_user_id" = ? and "sd_posts"."sd_user_id" is not null and "sd_posts"."deleted_at" is null and "id" > ? and "sd_posts"."deleted_at" is not null`, newRelationSQL(t, rel, &[]scrTrashedScopePost{}))
 	})
 	t.Run("E9 lazy of-many read", func(t *testing.T) {
 		rel := newRelQueryWith(t, &scrTrashedScopePost{}).Related(&scrTrashedScopeUser{ID: 1}, "LatestTpost")
+		built, ok := ormBuilderOf(rel)
+		require.True(t, ok)
+		built.ApplyScope("trashedOnly", scrTrashedOnlyPostScope)
 		assert.Equal(t, `select "sd_posts".* from "sd_posts" inner join (select MAX("sd_posts"."id") as "id_aggregate", "sd_posts"."sd_user_id" from "sd_posts" where "sd_posts"."sd_user_id" = ? and "sd_posts"."sd_user_id" is not null and "sd_posts"."deleted_at" is null and "id" > ? and "sd_posts"."deleted_at" is not null group by "sd_posts"."sd_user_id") as "latest_tpost" on "latest_tpost"."id_aggregate" = "sd_posts"."id" and "latest_tpost"."sd_user_id" = "sd_posts"."sd_user_id" where "sd_posts"."sd_user_id" = ? and "sd_posts"."sd_user_id" is not null and "sd_posts"."deleted_at" is null and "id" > ? and "sd_posts"."deleted_at" is not null`, newRelationSQL(t, rel, &[]scrTrashedScopePost{}))
 	})
 }

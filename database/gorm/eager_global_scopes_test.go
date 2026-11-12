@@ -12,18 +12,20 @@ import (
 	"github.com/gradii/framework/database/gorm/relations"
 )
 
-// A related model's USER-DEFINED global scopes must reach every eager read, exactly as Laravel's do:
-// Relation::noConstraints builds the eager child from the related model's newQuery(), whose
-// registered global scopes applyScopes() folds in when the read runs (Builder::eagerLoadRelation ->
-// Relation::getEager -> get()). The compiled eager runners (runRelatedQueryCompiled /
-// runMany2ManyQueryCompiled) bind the related model and queue its scopes through addGlobalScopes —
-// the same path the non-eager relation read (Related(...).Get) already uses — gated by the query's
-// own removals (WithoutGlobalScopes()/WithoutGlobalScope(name)).
+// Scopes a RELATION declares on its own query must reach every eager read of it, exactly as a
+// model's registered global scopes used to: Laravel reaches the same statement with
+// withGlobalScope() on the relation's query — through the eager callback or the relation's own
+// declaration (Relation::noConstraints builds the eager child from the related model's newQuery(),
+// whose registered scopes applyScopes() folds in when the read runs). The port's relation queries
+// carry the mount instead (ApplyScope on the relation's OnQuery), and the compiled eager runners
+// (runRelatedQueryCompiled / runMany2ManyQueryCompiled) keep it on the child, gated by the removals
+// the callback or the relation expresses (RemoveScope(name), or the "*" wildcard WithoutGlobalScopes
+// records).
 //
 // Oracle (illuminate/database v12.55.1, real sqlite, /tmp/r10/global_scope_eager_probe.php):
 //   E1  User::with('posts')  -> `select * from "gs_posts" where "gs_posts"."user_id" in (1, 2) and
 //       "visible" = ? and "archived_at" is null` (binds [1]) — the scopes land after the eager IN
-//       constraint, in declaration order.
+//       constraint, in mount order.
 //   E8  belongsTo eager       -> `... where "gs_groups"."id" in (1) and "visible" = ?`.
 //   E9  m2m eager             -> the joined read appends `and "visible" = ?` after the pivot IN.
 //   E11 through eager         -> the related child appends `and "visible" = ?`.
@@ -32,9 +34,9 @@ import (
 // These pins drive the loaders directly, so the assertion is on the statement the loader built and
 // ran rather than on a child the test rebuilt by hand.
 
-// eagerScopePost is the related model the hasMany / through eager reads point at: it declares the
-// two user global scopes the oracle probe mirrors, in the order Laravel's booted() registers them.
-// It carries no soft-delete field, so only the user scopes reach the statement.
+// eagerScopePost is the related model the hasMany / through eager reads point at: the relation that
+// reads it mounts the two scopes the oracle probe mirrors (eagerScopeScopes), in that order. It
+// carries no soft-delete field, so only those scopes reach the statement.
 type eagerScopePost struct {
 	ID         uint
 	UserID     uint
@@ -44,10 +46,6 @@ type eagerScopePost struct {
 }
 
 func (eagerScopePost) TableName() string { return "eager_scope_posts" }
-
-func (eagerScopePost) GlobalScopes() []contractsorm.GlobalScope {
-	return eagerScopeScopes()
-}
 
 // eagerScopeRole is the related model the many-to-many eager read points at, with the same scopes.
 type eagerScopeRole struct {
@@ -59,10 +57,6 @@ type eagerScopeRole struct {
 
 func (eagerScopeRole) TableName() string { return "eager_scope_roles" }
 
-func (eagerScopeRole) GlobalScopes() []contractsorm.GlobalScope {
-	return eagerScopeScopes()
-}
-
 // eagerScopeAuthor is the related model the belongsTo eager read points at, with the same scopes.
 type eagerScopeAuthor struct {
 	ID         uint
@@ -72,10 +66,6 @@ type eagerScopeAuthor struct {
 }
 
 func (eagerScopeAuthor) TableName() string { return "eager_scope_authors" }
-
-func (eagerScopeAuthor) GlobalScopes() []contractsorm.GlobalScope {
-	return eagerScopeScopes()
-}
 
 // eagerScopeTPost is the related model the through eager read points at, with the same scopes.
 type eagerScopeTPost struct {
@@ -88,21 +78,19 @@ type eagerScopeTPost struct {
 
 func (eagerScopeTPost) TableName() string { return "eager_scope_tposts" }
 
-func (eagerScopeTPost) GlobalScopes() []contractsorm.GlobalScope {
-	return eagerScopeScopes()
+// eagerScopeScopes mounts the pair every scoped relation carries: a plain where ("visible_scope")
+// then an is-null predicate ("archived_scope"), in mount order. It is what the relation's OnQuery
+// runs, so the scopes reach every eager read of that relation and the callback that reads the child
+// can remove them by name.
+func eagerScopeScopes(q contractsorm.Query) contractsorm.Query {
+	return q.
+		ApplyScope("visible_scope", func(q contractsorm.Query) contractsorm.Query { return q.Where("visible", 1) }).
+		ApplyScope("archived_scope", func(q contractsorm.Query) contractsorm.Query { return q.WhereNull("archived_at") })
 }
 
-// eagerScopeScopes is the pair every scoped fixture declares: a plain where ("visible_scope") then an
-// is-null predicate ("archived_scope"), in declaration order.
-func eagerScopeScopes() []contractsorm.GlobalScope {
-	return []contractsorm.GlobalScope{
-		{Name: "visible_scope", Scope: func(q contractsorm.Query) contractsorm.Query { return q.Where("visible", 1) }},
-		{Name: "archived_scope", Scope: func(q contractsorm.Query) contractsorm.Query { return q.WhereNull("archived_at") }},
-	}
-}
-
-// eagerScopeUser is the parent of the has-many and many-to-many eager reads. PostsPlain / PostsNoVisible
-// declare the scope removal on the relation itself (Laravel's relation-level withoutGlobalScopes()).
+// eagerScopeUser is the parent of the has-many and many-to-many eager reads. PostsNoVisible declares
+// the scope removal on the relation itself — the relation-level withoutGlobalScope() shape, expressed
+// as RemoveScope on the query the relation mounts its scopes on.
 type eagerScopeUser struct {
 	ID             uint
 	Name           string
@@ -116,12 +104,14 @@ func (eagerScopeUser) TableName() string { return "eager_scope_users" }
 
 func (eagerScopeUser) Relations() map[string]contractsorm.Relation {
 	return map[string]contractsorm.Relation{
-		"Posts": contractsorm.HasMany{Related: &eagerScopePost{}, ForeignKey: "user_id"},
-		"PostsPlain": contractsorm.HasMany{Related: &eagerScopePost{}, ForeignKey: "user_id",
-			OnQuery: func(q contractsorm.Query) contractsorm.Query { return q.WithoutGlobalScopes() }},
+		"Posts": contractsorm.HasMany{Related: &eagerScopePost{}, ForeignKey: "user_id",
+			OnQuery: eagerScopeScopes},
 		"PostsNoVisible": contractsorm.HasMany{Related: &eagerScopePost{}, ForeignKey: "user_id",
-			OnQuery: func(q contractsorm.Query) contractsorm.Query { return q.WithoutGlobalScopes("visible_scope") }},
-		"Roles": contractsorm.Many2Many{Related: &eagerScopeRole{}, Table: "eager_scope_role_user"},
+			OnQuery: func(q contractsorm.Query) contractsorm.Query {
+				return eagerScopeScopes(q).RemoveScope("visible_scope")
+			}},
+		"Roles": contractsorm.Many2Many{Related: &eagerScopeRole{}, Table: "eager_scope_role_user",
+			OnQuery: eagerScopeScopes},
 	}
 }
 
@@ -136,7 +126,8 @@ func (eagerScopeBook) TableName() string { return "eager_scope_books" }
 
 func (eagerScopeBook) Relations() map[string]contractsorm.Relation {
 	return map[string]contractsorm.Relation{
-		"Author": contractsorm.BelongsTo{Related: &eagerScopeAuthor{}, ForeignKey: "author_id"},
+		"Author": contractsorm.BelongsTo{Related: &eagerScopeAuthor{}, ForeignKey: "author_id",
+			OnQuery: eagerScopeScopes},
 	}
 }
 
@@ -156,6 +147,7 @@ func (eagerScopeCountry) Relations() map[string]contractsorm.Relation {
 			Through:   &eagerScopeTUser{},
 			FirstKey:  "eager_scope_country_id",
 			SecondKey: "eager_scope_user_id",
+			OnQuery:   eagerScopeScopes,
 		},
 	}
 }
@@ -175,8 +167,8 @@ func eagerScopeParents() []reflect.Value {
 	}
 }
 
-// TestEagerGlobalScopes_HasMany pins the has-many eager child: the related model's scopes are
-// appended after the eager IN constraint, in declaration order (oracle E1).
+// TestEagerGlobalScopes_HasMany pins the has-many eager child: the relation's scopes are
+// appended after the eager IN constraint, in mount order (oracle E1).
 func TestEagerGlobalScopes_HasMany(t *testing.T) {
 	q, recorder := newRecordingRelQuery(t, &eagerScopeUser{})
 	desc, err := relations.ResolveRelation(&eagerScopeUser{}, "Posts")
@@ -257,8 +249,9 @@ func TestEagerGlobalScopes_Through(t *testing.T) {
 }
 
 // TestEagerGlobalScopes_Removal pins every removal shape on the has-many eager read: the callback
-// (withoutGlobalScopes() drops all, withoutGlobalScope(name) drops one) and the same declared on the
-// relation (oracle E3/E4/E5/E6).
+// (the "*" wildcard drops all, RemoveScope(name) drops one) and the same declared on the relation
+// (oracle E3/E4/E5/E6). A relation that declares no scope needs no removal — there is nothing
+// automatic left to drop — so the old "relation removes every scope" case has no subject.
 func TestEagerGlobalScopes_Removal(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -277,14 +270,8 @@ func TestEagerGlobalScopes_Removal(t *testing.T) {
 		{
 			name:     "callback removes one named scope",
 			relation: "Posts",
-			callback: func(query contractsorm.Query) contractsorm.Query { return query.WithoutGlobalScopes("visible_scope") },
+			callback: func(query contractsorm.Query) contractsorm.Query { return query.RemoveScope("visible_scope") },
 			sql:      `select * from "eager_scope_posts" where "eager_scope_posts"."user_id" in (?) and "archived_at" is null`,
-			bindings: driverBindings([]any{uint(1)}),
-		},
-		{
-			name:     "relation removes every scope",
-			relation: "PostsPlain",
-			sql:      `select * from "eager_scope_posts" where "eager_scope_posts"."user_id" in (?)`,
 			bindings: driverBindings([]any{uint(1)}),
 		},
 		{
@@ -311,8 +298,8 @@ func TestEagerGlobalScopes_Removal(t *testing.T) {
 	}
 }
 
-// TestEagerGlobalScopes_UnscopedModelUnchanged is the control: a related model that declares no
-// user scopes reads exactly as before, so the change adds clauses only where Laravel does.
+// TestEagerGlobalScopes_UnscopedModelUnchanged is the control: a relation that mounts no scope reads
+// exactly as before, so the change adds clauses only where Laravel does.
 func TestEagerGlobalScopes_UnscopedModelUnchanged(t *testing.T) {
 	q, recorder := newRecordingRelQuery(t, &relUser{})
 	desc, err := relations.ResolveRelation(&relUser{}, "Books")

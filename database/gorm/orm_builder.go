@@ -262,7 +262,7 @@ func (r *OrmBuilder) Count() (int64, error) {
 // count() semantics — a single aggregate over the grouped result — which is why the paginator
 // reads its total here instead.
 func (r *OrmBuilder) GetCountForPagination(columns ...string) (int64, error) {
-	query := r.addGlobalScopes().buildConditions()
+	query := r.buildConditions()
 
 	builder, err := query.newBuilder()
 	if err != nil {
@@ -320,7 +320,7 @@ func (r *OrmBuilder) Chunk(size uint64, dest any, callback func(page int) error)
 		return errors.QueryPaginationOverflow
 	}
 
-	query := r.orderedForChunk().addGlobalScopes()
+	query := r.orderedForChunk()
 
 	skip, _ := query.query.OffsetValue()
 	remaining, limited := query.query.LimitValue()
@@ -411,12 +411,10 @@ func (r *OrmBuilder) chunkById(size uint64, dest any, callback func(page int) er
 		return errors.QueryPaginationOverflow
 	}
 
-	query := r.addGlobalScopes()
+	keyColumn, alias := r.chunkByIdColumn(column)
 
-	keyColumn, alias := query.chunkByIdColumn(column)
-
-	skip, hasSkip := query.query.OffsetValue()
-	remaining, hasLimit := query.query.LimitValue()
+	skip, hasSkip := r.query.OffsetValue()
+	remaining, hasLimit := r.query.LimitValue()
 
 	var lastID any
 
@@ -429,7 +427,7 @@ func (r *OrmBuilder) chunkById(size uint64, dest any, callback func(page int) er
 			return nil
 		}
 
-		pageQuery := query.clone()
+		pageQuery := r.clone()
 		if hasSkip && skip > 0 && page > 1 {
 			pageQuery.query.Offset(0)
 		}
@@ -546,7 +544,7 @@ func (r *OrmBuilder) Lazy(dest any, callback func(index int) error, chunkSize ..
 		return errors.QueryInvalidChunkSize
 	}
 
-	query := r.orderedForChunk().addGlobalScopes()
+	query := r.orderedForChunk()
 
 	page, model, err := newElementPage(dest)
 	if err != nil {
@@ -614,9 +612,7 @@ func (r *OrmBuilder) lazyById(size uint64, dest any, callback func(index int) er
 		return errors.QueryInvalidChunkSize
 	}
 
-	query := r.addGlobalScopes()
-
-	keyColumn, alias := query.chunkByIdColumn(column)
+	keyColumn, alias := r.chunkByIdColumn(column)
 
 	page, model, err := newElementPage(dest)
 	if err != nil {
@@ -627,7 +623,7 @@ func (r *OrmBuilder) lazyById(size uint64, dest any, callback func(index int) er
 	seen := 0
 
 	for {
-		pageQuery := query.clone()
+		pageQuery := r.clone()
 		if descending {
 			pageQuery.query.ForPageBeforeId(int(size), lastID, keyColumn)
 		} else {
@@ -950,7 +946,7 @@ func newElementPage(dest any) (reflect.Value, reflect.Value, error) {
 }
 
 func (r *OrmBuilder) Cursor() chan contractsdb.Row {
-	query := r.addGlobalScopes().buildConditions()
+	query := r.buildConditions()
 
 	cursorChan := make(chan contractsdb.Row)
 	go func() {
@@ -1015,9 +1011,9 @@ func (r *OrmBuilder) Delete(dests ...any) (*contractsdb.Result, error) {
 
 	if len(dests) > 0 {
 		dest = dests[0]
-		query = r.dest(dest).addGlobalScopes().buildConditions()
+		query = r.dest(dest).buildConditions()
 	} else {
-		query = r.addGlobalScopes().buildConditions()
+		query = r.buildConditions()
 	}
 
 	if err := query.deleting(dest); err != nil {
@@ -1071,7 +1067,7 @@ func (r *OrmBuilder) Exec(statement string, values ...any) (*contractsdb.Result,
 // select list for whatever runs next (oracle, illuminate/database v12.55.1, real sqlite, MySQL 9.7,
 // PostgreSQL 18.3: `$q->exists(); $q->get()` still reads every row).
 func (r *OrmBuilder) Exists() (bool, error) {
-	query := r.addGlobalScopes().buildConditions()
+	query := r.buildConditions()
 
 	statement, bindings, err := query.compileExists()
 	if err != nil {
@@ -1105,7 +1101,7 @@ func (r *OrmBuilder) Exists() (bool, error) {
 func (r *OrmBuilder) Find(dest any, conds ...any) error {
 	// A read compiles from a copy, so the query keeps none of the read's own clauses - its key
 	// condition, order or limit - for whatever runs on it next.
-	query := r.clone().dest(dest).addGlobalScopes().buildConditions()
+	query := r.clone().dest(dest).buildConditions()
 
 	if err := filterFindConditions(conds...); err != nil {
 		return err
@@ -1241,7 +1237,7 @@ func (r *OrmBuilder) FindOrFail(dest any, conds ...any) error {
 
 	// A read compiles from a copy, so the query keeps none of the read's own clauses - its key
 	// condition, order or limit - for whatever runs on it next.
-	query := r.clone().dest(dest).addGlobalScopes().buildConditions()
+	query := r.clone().dest(dest).buildConditions()
 
 	if err := filterFindConditions(conds...); err != nil {
 		return err
@@ -1292,7 +1288,7 @@ func (r *OrmBuilder) FindOr(dest any, id any, callback func() error) error {
 
 	// A read compiles from a copy, so the query keeps none of the read's own clauses - its key
 	// condition, order or limit - for whatever runs on it next.
-	query := r.clone().dest(dest).addGlobalScopes().buildConditions()
+	query := r.clone().dest(dest).buildConditions()
 
 	if err := filterFindConditions(id); err != nil {
 		return err
@@ -1370,7 +1366,7 @@ func (r *OrmBuilder) readKeyList(dest any, keys []any) (bool, error) {
 
 	// A read compiles from a copy, so the query keeps none of the read's own clauses - its key
 	// condition, order or limit - for whatever runs on it next.
-	query := r.clone().dest(dest).addGlobalScopes().buildConditions()
+	query := r.clone().dest(dest).buildConditions()
 
 	scoped := query.WhereKey(keys)
 	listQuery, ok := scoped.(*OrmBuilder)
@@ -1454,7 +1450,7 @@ func (r *OrmBuilder) First(dest any) error {
 func (r *OrmBuilder) firstRow(dest any) (bool, error) {
 	// A read compiles from a copy, so the query keeps none of the read's own clauses - its key
 	// condition, order or limit - for whatever runs on it next.
-	query := r.clone().dest(dest).addGlobalScopes().buildConditions()
+	query := r.clone().dest(dest).buildConditions()
 
 	statement, bindings, err := query.compileFirst()
 	if err != nil {
@@ -1580,9 +1576,9 @@ func (r *OrmBuilder) ForceDelete(dests ...any) (*contractsdb.Result, error) {
 
 	if len(dests) > 0 {
 		dest = dests[0]
-		query = r.dest(dest).WithTrashed().(*OrmBuilder).addGlobalScopes().buildConditions()
+		query = r.dest(dest).WithTrashed().(*OrmBuilder).buildConditions()
 	} else {
-		query = r.WithTrashed().(*OrmBuilder).addGlobalScopes().buildConditions()
+		query = r.WithTrashed().(*OrmBuilder).buildConditions()
 	}
 
 	if err := query.forceDeleting(dest); err != nil {
@@ -1630,7 +1626,7 @@ func (r *OrmBuilder) Get(dest any, columns ...any) error {
 	// rows carry only name; scope select('name') + get(['email']) compiles `select "name" from
 	// "users"`). withScopesApplied hands back a private copy, so the install never reaches the
 	// receiver and the scopes are marked applied for the Find below.
-	query := r.dest(dest).addGlobalScopes().withScopesApplied()
+	query := r.dest(dest).withScopesApplied()
 
 	if !hasSelectColumns(query) {
 		for _, col := range columnsToStrings(columns) {
@@ -2248,7 +2244,7 @@ func (r *OrmBuilder) CursorPaginate(perPage int, cursor string, dest any) (contr
 		return contractsdb.CursorPaginator{}, err
 	}
 
-	query := r.dest(dest).addGlobalScopes().buildConditions()
+	query := r.dest(dest).buildConditions()
 
 	builder, err := query.cursorBuilder()
 	if err != nil {
@@ -2497,9 +2493,9 @@ func (r *OrmBuilder) Restore(dests ...any) (*contractsdb.Result, error) {
 
 	if len(dests) > 0 {
 		dest = dests[0]
-		query = r.dest(dest).addGlobalScopes().buildConditions()
+		query = r.dest(dest).buildConditions()
 	} else {
-		query = r.addGlobalScopes().buildConditions()
+		query = r.buildConditions()
 	}
 
 	var deletedAtColumnName string
@@ -2554,7 +2550,7 @@ func (r *OrmBuilder) Save(dest any) error {
 
 	var query *OrmBuilder
 	if update {
-		query = r.dest(dest).addGlobalScopes().buildConditions()
+		query = r.dest(dest).buildConditions()
 	} else {
 		query = r.dest(dest).buildConditions()
 	}
@@ -2741,7 +2737,7 @@ func (r *OrmBuilder) aggregate(function string, column string, dest any) error {
 		return errors.DatabaseUnsupportedType.Args(destValue.Kind(), "pointer")
 	}
 
-	query := r.addGlobalScopes().buildConditions()
+	query := r.buildConditions()
 
 	statement, bindings, err := query.compileAggregate(function, []any{column})
 	if err != nil {
@@ -2772,7 +2768,7 @@ func (r *OrmBuilder) ToRawSql() contractsorm.ToSql {
 }
 
 func (r *OrmBuilder) Update(column any, value ...any) (*contractsdb.Result, error) {
-	query := r.addGlobalScopes().buildConditions()
+	query := r.buildConditions()
 
 	if _, ok := column.(string); !ok && len(value) > 0 {
 		return nil, errors.OrmQueryInvalidParameter
@@ -2881,8 +2877,6 @@ func (r *OrmBuilder) firstOrInit(dest any, find any, attrs []any, assigns []any)
 
 		query = folded
 	}
-
-	query = query.addGlobalScopes()
 
 	found, err := query.firstRow(dest)
 	if err != nil {
@@ -3631,69 +3625,6 @@ func (r *OrmBuilder) OnlyTrashed() contractsorm.Query {
 	return r
 }
 
-func (r *OrmBuilder) addGlobalScopes() *OrmBuilder {
-	// Scopes are registered once per statement: a query that already folded its queued scopes in
-	// (withScopesApplied) must not queue them again, or the read that continues on it — get()'s
-	// Find, for one — would apply every scope a second time.
-	if r.conditions.scopesApplied {
-		return r
-	}
-
-	if slices.Contains(r.conditions.removedScopes, "*") {
-		return r
-	}
-
-	var model any
-
-	if r.conditions.model != nil {
-		model = r.conditions.model
-	} else if r.conditions.dest != nil {
-		model = r.conditions.dest
-	} else {
-		return r
-	}
-
-	model, err := modelToStruct(model)
-	if err != nil {
-		return r
-	}
-
-	modelWithGlobalScopes, ok := model.(contractsorm.ModelWithGlobalScopes)
-	if !ok {
-		return r
-	}
-
-	modelGlobalScopes := modelWithGlobalScopes.GlobalScopes()
-	if len(modelGlobalScopes) == 0 {
-		return r
-	}
-
-	mounted := make([]mountedScope, 0, len(modelGlobalScopes))
-
-	// The scopes keep the order the model declared them — Laravel's registration order, the order
-	// its boot() added its scopes in. Each travels under the name the model gave it, which is what
-	// RemoveScope and WithoutGlobalScopes address it by: a removal already recorded is skipped here,
-	// and withScopesApplied skips it again for a removal recorded after the queue was filled (the
-	// remove-before-resolve rule would otherwise only hold for one of the two orders).
-	for _, globalScope := range modelGlobalScopes {
-		if slices.Contains(r.conditions.removedScopes, globalScope.Name) {
-			continue
-		}
-
-		mounted = append(mounted, mountedScope{name: globalScope.Name, scope: globalScope.Scope})
-	}
-
-	// Global scopes are deferred the way Laravel defers them: withGlobalScope() registers the scope
-	// and applyScopes() applies it when a statement compiles, which is where withScopesApplied folds
-	// it in. The caller's own Scopes() call applies immediately instead (Builder::scopes), so the
-	// entries queued here are the model's global scopes and the caller's ApplyScope mounts.
-	query := r.clone()
-	conditions := query.conditions
-	conditions.scopes = append(conditions.scopes, mounted...)
-
-	return query.setConditions(conditions)
-}
-
 // addNestedWhereQuery runs a where callback the way Eloquent's Builder::where() does: the callback
 // receives a new query without relationships, its eager loads merge into this query (array_merge of
 // getEagerLoads()), and its wheres join this query's clause as one nested group through the inner
@@ -3959,8 +3890,13 @@ func (r *OrmBuilder) withScopesApplied() *OrmBuilder {
 		// A caller who mounts a scope under the built-in soft-delete name says what that name means
 		// for this query, so the predicate the framework would have mounted is skipped and the mount
 		// is what runs — withGlobalScope(SoftDeletingScope::class, ...) replaces the model's
-		// registration by key in Laravel the same way.
-		if !query.scopesRemoveSoftDeletingScope(scopes) && !mountsScopeName(scopes, contractsorm.SoftDeletingScope) {
+		// registration by key in Laravel the same way. A mount that merely REMOVES the name runs too
+		// late to matter, since the predicate is written before the mounts run: Laravel's
+		// SoftDeletingScope registers first, so a later withGlobalScope that unsets it leaves the
+		// predicate in place (oracle, /Users/dog/.claude/jobs/013c27a0/tmp/phaseb/trial_execution_probe.php
+		// -> trial_execution_probe.out: `where "deleted_at" is null`, and a mount calling onlyTrashed
+		// compiles both predicates).
+		if !mountsScopeName(scopes, contractsorm.SoftDeletingScope) {
 			if err := query.applySoftDelete(query.query); err != nil {
 				query.conditions.err = err
 			}
@@ -3990,33 +3926,6 @@ func (r *OrmBuilder) withScopesApplied() *OrmBuilder {
 	r.conditions.eagerLoad = query.conditions.eagerLoad
 
 	return query
-}
-
-// scopesRemoveSoftDeletingScope reports whether one of the queued scopes lifts the built-in
-// soft-delete predicate (WithTrashed, or a removal of SoftDeletingScope / every scope). Laravel's
-// applyScopes skips a scope a previously applied scope removed, and a model can register such a
-// scope before bootSoftDeletes runs (the corpus's GlobalScopeCanBeRemovedByOtherGlobalScope). The
-// port always applies the predicate first, so the queued scopes are dry-run on a throwaway copy to
-// learn whether any of them removes it; the dry run's clauses are discarded.
-func (r *OrmBuilder) scopesRemoveSoftDeletingScope(scopes []mountedScope) bool {
-	if len(scopes) == 0 || !r.usesFrameworkSoftDelete() {
-		return false
-	}
-
-	probe := r.clone()
-	for _, mounted := range scopes {
-		if probe.scopeRemoved(mounted.name) {
-			continue
-		}
-
-		probe = probe.applyScope(mounted.scope)
-	}
-
-	if probe.conditions.onlyTrashed {
-		return false
-	}
-
-	return probe.conditions.withTrashed || probe.scopeRemoved(contractsorm.SoftDeletingScope)
 }
 
 // applyScope runs one scope the way Eloquent's Builder::callScope does: the wheres on the query
@@ -4501,7 +4410,7 @@ func buildSelectForCount(query *OrmBuilder) *OrmBuilder {
 	// limited query still counts every matching row.
 	query.query.CloneWithout("orders", "limit", "offset")
 
-	return query.addGlobalScopes().buildConditions()
+	return query.buildConditions()
 }
 
 func filterFindConditions(conds ...any) error {

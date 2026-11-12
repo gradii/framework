@@ -104,7 +104,7 @@ func TestExistenceSelfAlias_CallbackClausesCorrelateToTheAlias(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			statement, bindings, err := tc.query.(*OrmBuilder).addGlobalScopes().compileSelect()
+			statement, bindings, err := tc.query.(*OrmBuilder).compileSelect()
 			require.NoError(t, err)
 			assert.Equal(t, tc.sql, sacAlias.ReplaceAllString(statement, "R"))
 			if tc.bindings == nil {

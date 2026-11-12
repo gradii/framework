@@ -184,7 +184,7 @@ func assertOfmClosureRegressionSQL(t *testing.T, built *OrmBuilder, wantSQL stri
 
 	// Reusing the same relation must preserve the closure's clauses and bindings.
 	for attempt := range 2 {
-		statement, bindings, err := built.addGlobalScopes().compileSelect()
+		statement, bindings, err := built.compileSelect()
 		require.NoError(t, err, "compile %d", attempt+1)
 		assert.Equal(t, wantSQL, statement, "compile %d", attempt+1)
 		assert.Equal(t, wantBindings, bindings, "compile %d", attempt+1)
